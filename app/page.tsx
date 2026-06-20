@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { DiscordLoginButton } from "@/components/auth/discord-login-button";
-import { TopBar } from "@/components/layout/top-bar";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { getCaseConfig } from "@/lib/cases-config";
+import { type Rarity } from "@/lib/cases";
+import { isAdmin } from "@/lib/admin";
 import { Gamepad2 } from "lucide-react";
 
 export default async function Home() {
@@ -9,7 +12,7 @@ export default async function Home() {
 
   if (!user) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-8 bg-[#0b0b12] px-4 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center gap-8 px-4 text-center">
         <div className="flex items-center gap-3">
           <Gamepad2 className="h-10 w-10 text-purple-400" />
           <h1 className="text-4xl font-extrabold text-zinc-100">
@@ -27,7 +30,7 @@ export default async function Home() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits")
+    .select("credits, streak_days, username, role")
     .eq("id", user.id)
     .single();
 
@@ -36,15 +39,53 @@ export default async function Home() {
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id);
 
+  const { data: topProfiles } = await supabase
+    .from("profiles")
+    .select("id, username, credits")
+    .order("credits", { ascending: false })
+    .limit(10);
+
+  const caseGroups = await getCaseConfig();
+
+  const caseGroupPreviews = await Promise.all(
+    caseGroups.map(async (group) => {
+      // A tier can narrow its pool below the group default via the admin
+      // panel — union both tiers so the preview reel reflects everything
+      // actually reachable in this group, not just the static default.
+      const types = Array.from(
+        new Set([
+          ...(group.standard.itemTypes ?? group.itemTypes),
+          ...(group.premium.itemTypes ?? group.itemTypes),
+        ])
+      );
+
+      const { data: pool, count } = await supabase
+        .from("items")
+        .select("rarity, type, name", { count: "exact" })
+        .in("type", types)
+        .limit(100);
+
+      return {
+        groupId: group.id,
+        poolSize: count ?? 0,
+        previewPool: (pool ?? []).map((item) => ({
+          rarity: item.rarity as Rarity,
+          type: item.type,
+          name: item.name,
+        })),
+      };
+    })
+  );
+
   return (
-    <div className="flex flex-1 flex-col bg-[#0b0b12]">
-      <TopBar
-        credits={profile?.credits ?? 0}
-        inventoryCount={inventoryCount ?? 0}
-      />
-      <main className="flex flex-1 items-center justify-center text-zinc-500">
-        Willkommen zurück, {user.user_metadata?.full_name ?? user.email}.
-      </main>
-    </div>
+    <DashboardShell
+      initialCredits={profile?.credits ?? 0}
+      inventoryCount={inventoryCount ?? 0}
+      streakDays={profile?.streak_days ?? 0}
+      leaderboard={topProfiles ?? []}
+      caseGroups={caseGroups}
+      caseGroupPreviews={caseGroupPreviews}
+      isAdmin={isAdmin(profile)}
+    />
   );
 }

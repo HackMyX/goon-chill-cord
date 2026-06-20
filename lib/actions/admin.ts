@@ -1,0 +1,384 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdmin, type ProfileRole } from "@/lib/admin";
+import type { Rarity } from "@/lib/cases";
+
+export interface AdminActionResult {
+  success: boolean;
+  error?: string;
+}
+
+async function requireAdmin() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("username, role")
+    .eq("id", user.id)
+    .single();
+
+  if (!isAdmin(profile)) return null;
+  return user;
+}
+
+async function logAdminAction(userId: string, action: string, payload: unknown) {
+  try {
+    await createAdminClient().from("audit_logs").insert({ user_id: userId, action, payload });
+  } catch {
+    // Logging must never block the actual admin action.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Economy / case tiers
+// ---------------------------------------------------------------------------
+
+export interface UpdateCaseTierInput {
+  tierId: string;
+  price: number;
+  rarityWeights: Partial<Record<Rarity, number>>;
+  enabled: boolean;
+  itemTypes: string[];
+}
+
+export async function updateCaseTier(input: UpdateCaseTierInput): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  let { data, error } = await admin
+    .from("case_tiers")
+    .update({
+      price: input.price,
+      rarity_weights: input.rarityWeights,
+      enabled: input.enabled,
+      item_types: input.itemTypes,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.tierId)
+    .select("id");
+
+  // `item_types` column may not exist yet (one-time SQL not run) — retry
+  // without it rather than failing price/weights/enabled saves entirely.
+  if (error?.message?.includes("item_types")) {
+    const retry = await admin
+      .from("case_tiers")
+      .update({
+        price: input.price,
+        rarity_weights: input.rarityWeights,
+        enabled: input.enabled,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.tierId)
+      .select("id");
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error || !data || data.length === 0) {
+    return {
+      success: false,
+      error: "Tier nicht gefunden — wurde scripts/seed-case-tiers.mjs schon ausgeführt?",
+    };
+  }
+
+  await logAdminAction(user.id, "admin_economy_update", input);
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// User management
+// ---------------------------------------------------------------------------
+
+export async function updateUserCredits(
+  targetUserId: string,
+  credits: number
+): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+  if (!Number.isFinite(credits) || credits < 0) {
+    return { success: false, error: "Ungültiger Wert." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ credits: Math.floor(credits) })
+    .eq("id", targetUserId);
+
+  if (error) return { success: false, error: "Update fehlgeschlagen." };
+
+  await logAdminAction(user.id, "admin_set_credits", { targetUserId, credits });
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function updateUserRole(
+  targetUserId: string,
+  role: ProfileRole
+): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("profiles").update({ role }).eq("id", targetUserId);
+
+  if (error) return { success: false, error: "Update fehlgeschlagen." };
+
+  await logAdminAction(user.id, "admin_set_role", { targetUserId, role });
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Item catalogue CRUD
+// ---------------------------------------------------------------------------
+
+export interface ItemInput {
+  id?: string;
+  name: string;
+  rarity: Rarity;
+  type: string;
+  price_cr: number;
+}
+
+export interface UpsertItemResult extends AdminActionResult {
+  item?: { id: string; name: string; rarity: Rarity; type: string; price_cr: number };
+}
+
+export async function upsertItem(input: ItemInput): Promise<UpsertItemResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+  if (!input.name.trim() || !input.type.trim()) {
+    return { success: false, error: "Name und Typ sind erforderlich." };
+  }
+
+  const admin = createAdminClient();
+  const payload = {
+    name: input.name.trim(),
+    rarity: input.rarity,
+    type: input.type.trim(),
+    price_cr: Math.max(0, Math.floor(input.price_cr) || 0),
+  };
+
+  const { data, error } = input.id
+    ? await admin.from("items").update(payload).eq("id", input.id).select().single()
+    : await admin.from("items").insert(payload).select().single();
+
+  if (error || !data) return { success: false, error: "Speichern fehlgeschlagen." };
+
+  await logAdminAction(user.id, input.id ? "admin_item_update" : "admin_item_create", data);
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { success: true, item: data };
+}
+
+export async function deleteItem(itemId: string): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("items").delete().eq("id", itemId);
+
+  if (error) {
+    return {
+      success: false,
+      error: "Löschen fehlgeschlagen — Item evtl. noch im Inventar eines Users.",
+    };
+  }
+
+  await logAdminAction(user.id, "admin_item_delete", { itemId });
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Per-user detail (inventory management + personal log)
+// ---------------------------------------------------------------------------
+
+export interface UserInventoryRow {
+  id: string;
+  equipped: boolean;
+  item: { id: string; name: string; rarity: Rarity; type: string };
+}
+
+export interface UserDetail {
+  inventory: UserInventoryRow[];
+  logs: { id: string; action: string; payload: unknown; created_at: string }[];
+  banned: boolean;
+}
+
+export interface GetUserDetailResult extends AdminActionResult {
+  detail?: UserDetail;
+}
+
+export async function getUserDetail(targetUserId: string): Promise<GetUserDetailResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+
+  const [{ data: inventory }, { data: logs }, { data: authUser }] = await Promise.all([
+    admin
+      .from("inventory")
+      .select("id, equipped, item:items(id, name, rarity, type)")
+      .eq("user_id", targetUserId)
+      .order("obtained_at", { ascending: false }),
+    // Personal log: actions this user performed themselves (user_id match)
+    // OR admin actions targeting them (payload.targetUserId match) — admin
+    // actions are logged under the *admin's* user_id, not the target's.
+    admin
+      .from("audit_logs")
+      .select("id, action, payload, created_at")
+      .or(`user_id.eq.${targetUserId},payload->>targetUserId.eq.${targetUserId}`)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    admin.auth.admin.getUserById(targetUserId),
+  ]);
+
+  const bannedUntil = authUser?.user?.banned_until;
+  const banned = !!bannedUntil && new Date(bannedUntil).getTime() > Date.now();
+
+  return {
+    success: true,
+    detail: {
+      inventory: (inventory ?? []) as unknown as UserInventoryRow[],
+      logs: logs ?? [],
+      banned,
+    },
+  };
+}
+
+export async function searchItems(
+  query: string
+): Promise<{ id: string; name: string; rarity: Rarity; type: string }[]> {
+  const user = await requireAdmin();
+  if (!user || !query.trim()) return [];
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("items")
+    .select("id, name, rarity, type")
+    .ilike("name", `%${query.trim()}%`)
+    .limit(20);
+
+  return data ?? [];
+}
+
+export async function grantItemToUser(
+  targetUserId: string,
+  itemId: string
+): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("inventory")
+    .insert({ user_id: targetUserId, item_id: itemId });
+
+  if (error) return { success: false, error: "Vergeben fehlgeschlagen." };
+
+  await logAdminAction(user.id, "admin_grant_item", { targetUserId, itemId });
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function removeUserItem(inventoryId: string): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("inventory").delete().eq("id", inventoryId);
+
+  if (error) return { success: false, error: "Entfernen fehlgeschlagen." };
+
+  await logAdminAction(user.id, "admin_remove_item", { inventoryId });
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Moderation
+// ---------------------------------------------------------------------------
+
+/**
+ * Real ban via Supabase's own auth.admin API (`ban_duration`), not a custom
+ * DB flag — GoTrue rejects sign-ins/refreshes for banned users itself, and
+ * our server code already treats "no user" as logged-out everywhere.
+ */
+export async function setUserBanned(
+  targetUserId: string,
+  banned: boolean
+): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(targetUserId, {
+    ban_duration: banned ? "876000h" : "none",
+  });
+
+  if (error) return { success: false, error: "Aktion fehlgeschlagen." };
+
+  await logAdminAction(user.id, "admin_ban_user", { targetUserId, banned });
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+/**
+ * "Force Logout" / "Kick": there's no direct "kill all sessions for this
+ * user id" call in the Supabase JS admin API (`auth.signOut` only revokes a
+ * session by its own JWT). A short, self-expiring ban achieves the same
+ * practical effect: `supabase.auth.getUser()` revalidates against the Auth
+ * server on every request (that's why our server code uses it instead of
+ * the locally-decoded `getSession()`), so the user is rejected on their very
+ * next request and automatically usable again once the 30s window passes.
+ */
+export async function kickUser(targetUserId: string): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(targetUserId, {
+    ban_duration: "30s",
+  });
+
+  if (error) return { success: false, error: "Aktion fehlgeschlagen." };
+
+  await logAdminAction(user.id, "admin_kick_user", { targetUserId });
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function wipeUserInventory(targetUserId: string): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("inventory")
+    .delete()
+    .eq("user_id", targetUserId)
+    .select("id");
+
+  if (error) return { success: false, error: "Aktion fehlgeschlagen." };
+
+  await logAdminAction(user.id, "admin_wipe_inventory", {
+    targetUserId,
+    count: data?.length ?? 0,
+  });
+  revalidatePath("/admin");
+  return { success: true };
+}

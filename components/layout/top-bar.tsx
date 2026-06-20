@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Gamepad2,
   Link2,
@@ -17,6 +18,7 @@ import {
 import { IconButton } from "@/components/layout/icon-button";
 import { LiveClock } from "@/components/layout/live-clock";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { useSoundManager } from "@/lib/sound-manager";
 
 interface TopBarProps {
   credits: number;
@@ -30,17 +32,23 @@ export function TopBar({
   streakDays = 2,
 }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
+  const sound = useSoundManager();
 
   return (
-    <header className="sticky top-0 z-50 flex items-center justify-between gap-4 border-b border-white/5 bg-[#0b0b12]/95 px-4 py-2 backdrop-blur">
+    <header className="sticky top-0 z-50 flex items-center justify-between gap-4 border-b border-white/5 bg-[#030305]/95 px-4 py-2 backdrop-blur">
       {/* Left: logo + credits */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
+        <Link
+          href="/"
+          onMouseEnter={sound.hover}
+          onClick={sound.click}
+          className="flex items-center gap-2"
+        >
           <Gamepad2 className="h-6 w-6 text-purple-400" />
           <span className="hidden font-bold text-zinc-100 sm:inline">
             Goon&apos;n Chill Cord
           </span>
-        </div>
+        </Link>
         <div className="flex items-center gap-1 rounded-full bg-purple-600/90 px-3 py-1 text-sm font-semibold text-white">
           <span>{creditsLabel} CR</span>
           <Link2 className="h-3.5 w-3.5 opacity-80" />
@@ -62,7 +70,11 @@ export function TopBar({
 
       {/* Right-center: inventory */}
       <div className="flex items-center">
-        <button className="relative flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-purple-500/20 hover:text-purple-300">
+        <button
+          onMouseEnter={sound.hover}
+          onClick={sound.click}
+          className="relative flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-purple-500/20 hover:text-purple-300"
+        >
           <Backpack className="h-4 w-4" />
           Inventar
           {inventoryCount > 0 && (
@@ -76,10 +88,10 @@ export function TopBar({
       {/* Right: secondary icons */}
       <div className="flex items-center gap-2">
         <IconButton icon={Users} label="Community" />
-        <IconButton icon={Globe} label="3D-Welt" />
+        <IconButton icon={Globe} label="3D-Welt" href="/world" />
         <IconButton icon={Swords} label="Games" />
-        <IconButton icon={Shirt} label="Garderobe" />
-        <IconButton icon={UserRound} label="Profil" />
+        <IconButton icon={Shirt} label="Garderobe" href="/garderobe" />
+        <IconButton icon={UserRound} label="Profil" href="/account" />
         <LogoutButton />
       </div>
     </header>

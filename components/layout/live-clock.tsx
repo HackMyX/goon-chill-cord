@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Flame } from "lucide-react";
+import { useHydrated } from "@/lib/use-hydrated";
 
 function getMidnightCountdown() {
   const now = new Date();
@@ -19,9 +20,11 @@ function getMidnightCountdown() {
 }
 
 export function LiveClock({ streakDays = 2 }: { streakDays?: number }) {
-  const [time, setTime] = useState<string | null>(null);
+  const hydrated = useHydrated();
+  const [time, setTime] = useState("--:--:--");
 
   useEffect(() => {
+    if (!hydrated) return;
     const tick = () => setTime(getMidnightCountdown());
     const timeout = setTimeout(tick, 0);
     const interval = setInterval(tick, 1000);
@@ -29,13 +32,11 @@ export function LiveClock({ streakDays = 2 }: { streakDays?: number }) {
       clearTimeout(timeout);
       clearInterval(interval);
     };
-  }, []);
+  }, [hydrated]);
 
   return (
     <div className="flex flex-col items-center rounded-2xl bg-white/5 px-6 py-2">
-      <span className="font-mono text-sm tabular-nums text-zinc-200">
-        {time ?? "--:--:--"}
-      </span>
+      <span className="font-mono text-sm tabular-nums text-zinc-200">{time}</span>
       <span className="flex items-center gap-1 text-xs text-orange-400">
         <Flame className="h-3 w-3" />
         Streak: {streakDays} Tage
