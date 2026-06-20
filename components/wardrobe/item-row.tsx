@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { RARITY_STYLES, type Rarity } from "@/lib/cases";
+import { RARITY_STYLES, getTypeLabel, type Rarity } from "@/lib/cases";
 import { ItemRenderer } from "@/components/items/item-renderer";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -40,6 +40,7 @@ function ItemRowComponent({ id, name, rarity, type, equipped, onToggle }: ItemRo
         </div>
         <div>
           <p className="font-semibold text-zinc-100">{name}</p>
+          <p className="text-[11px] tracking-wide text-zinc-500 uppercase">{getTypeLabel(type)}</p>
           <RarityBadge rarity={rarity} className="mt-1" />
         </div>
       </div>

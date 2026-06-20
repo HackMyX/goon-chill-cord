@@ -4,16 +4,16 @@ export type FxSound = "win" | "ultraWin" | "click" | "error" | "flip";
 export type InterruptSound = "tick" | "hover";
 
 const FX_SRC: Record<FxSound, string> = {
-  win: "/sounds/win.mp3",
-  ultraWin: "/sounds/ultra-win.mp3",
-  click: "/sounds/click.mp3",
-  error: "/sounds/error.mp3",
-  flip: "/sounds/flip.mp3",
+  win: "/sounds/win.wav",
+  ultraWin: "/sounds/ultra-win.wav",
+  click: "/sounds/click.wav",
+  error: "/sounds/error.wav",
+  flip: "/sounds/flip.wav",
 };
 
 const INTERRUPT_SRC: Record<InterruptSound, string> = {
-  tick: "/sounds/tick.mp3",
-  hover: "/sounds/hover.mp3",
+  tick: "/sounds/tick.wav",
+  hover: "/sounds/hover.wav",
 };
 
 const HOVER_THROTTLE_MS = 70;

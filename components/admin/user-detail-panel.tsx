@@ -15,6 +15,7 @@ import {
 import { ItemRenderer } from "@/components/items/item-renderer";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { AuditTimeline } from "@/components/admin/audit-timeline";
+import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 
 export function UserDetailPanel({ userId }: { userId: string }) {
@@ -24,6 +25,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   const [results, setResults] = useState<{ id: string; name: string; rarity: Rarity; type: string }[]>([]);
   const [modAction, setModAction] = useState<string | null>(null);
   const [modMessage, setModMessage] = useState<string | null>(null);
+  const sound = useSoundManager();
 
   async function refresh() {
     const res = await getUserDetail(userId);
@@ -124,6 +126,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.03] p-3">
         <span className="mr-1 text-xs font-semibold tracking-wide text-red-300">MODERATION</span>
         <button
+          onMouseEnter={sound.hover}
           onClick={handleKick}
           disabled={modAction !== null}
           className="flex items-center gap-1.5 rounded-lg border border-orange-500/40 px-3 py-1.5 text-xs font-semibold text-orange-300 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
@@ -132,6 +135,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           Force Logout / Kick
         </button>
         <button
+          onMouseEnter={sound.hover}
           onClick={handleBanToggle}
           disabled={modAction !== null}
           className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
@@ -144,6 +148,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           {detail.banned ? "Entbannen" : "User bannen"}
         </button>
         <button
+          onMouseEnter={sound.hover}
           onClick={handleWipe}
           disabled={modAction !== null}
           className="flex items-center gap-1.5 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-semibold text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50"
@@ -177,7 +182,9 @@ export function UserDetailPanel({ userId }: { userId: string }) {
                 {results.map((item) => (
                   <button
                     key={item.id}
+                    onMouseEnter={sound.hover}
                     onClick={() => {
+                      sound.click();
                       handleGrant(item.id);
                       setQuery("");
                       setResults([]);
@@ -213,7 +220,11 @@ export function UserDetailPanel({ userId }: { userId: string }) {
                   <RarityBadge rarity={row.item.rarity} className="ml-1" />
                 </span>
                 <button
-                  onClick={() => handleRemove(row.id)}
+                  onMouseEnter={sound.hover}
+                  onClick={() => {
+                    sound.click();
+                    handleRemove(row.id);
+                  }}
                   className="text-red-400 hover:text-red-300"
                 >
                   <Trash2 className="h-4 w-4" />

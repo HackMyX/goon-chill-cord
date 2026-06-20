@@ -1,10 +1,10 @@
 import type { Rarity } from "@/lib/cases";
 
 /**
- * Raw hex values for rarity tints — shared between the 2D SVG avatar
- * (components/avatar/avatar-renderer.tsx) and the 3D world character
- * (components/world/player.tsx) so an equipped item reads as the exact same
- * color everywhere, regardless of which renderer is drawing it.
+ * Raw hex values for rarity tints — shared between the Garderobe's 3D
+ * preview (components/wardrobe/character-preview-3d.tsx) and the 3D world
+ * character (components/world/player.tsx) so an equipped item reads as the
+ * exact same color everywhere, regardless of which renderer is drawing it.
  */
 export const RARITY_HEX: Record<Rarity, string> = {
   normal: "#3b82f6",
@@ -16,6 +16,10 @@ export const RARITY_HEX: Record<Rarity, string> = {
 export interface EquippedItem {
   name: string;
   rarity: Rarity;
+  /** Inventory row id — optional because CharacterModel/Player only need
+   * name+rarity for rendering, but UI that offers an unequip action
+   * (the Garderobe's equipped-summary list) needs it to call toggleEquip. */
+  id?: string;
 }
 
 export function rarityColorFor(item: EquippedItem | undefined, fallback: string): string {

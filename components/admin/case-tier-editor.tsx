@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Save } from "lucide-react";
 import { updateCaseTier } from "@/lib/actions/admin";
 import { RARITY_LABELS, RARITY_ORDER, ALL_ITEM_TYPES, findCaseTier, type Rarity } from "@/lib/cases";
+import { useSoundManager } from "@/lib/sound-manager";
 import type { CaseTierRow } from "@/components/admin/admin-shell";
 
 export function CaseTierEditor({ tier }: { tier: CaseTierRow }) {
@@ -15,6 +16,7 @@ export function CaseTierEditor({ tier }: { tier: CaseTierRow }) {
   );
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const sound = useSoundManager();
 
   function toggleType(type: string) {
     setItemTypes((curr) =>
@@ -46,7 +48,11 @@ export function CaseTierEditor({ tier }: { tier: CaseTierRow }) {
           </p>
         </div>
         <button
-          onClick={() => setEnabled((v) => !v)}
+          onMouseEnter={sound.hover}
+          onClick={() => {
+            sound.click();
+            setEnabled((v) => !v);
+          }}
           className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
             enabled
               ? "border-emerald-400/50 text-emerald-300"
@@ -91,7 +97,11 @@ export function CaseTierEditor({ tier }: { tier: CaseTierRow }) {
         {ALL_ITEM_TYPES.map((type) => (
           <button
             key={type}
-            onClick={() => toggleType(type)}
+            onMouseEnter={sound.hover}
+            onClick={() => {
+              sound.click();
+              toggleType(type);
+            }}
             className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
               itemTypes.includes(type)
                 ? "border-purple-400/60 bg-purple-500/15 text-purple-200"
@@ -105,6 +115,7 @@ export function CaseTierEditor({ tier }: { tier: CaseTierRow }) {
 
       <div className="mt-3 flex items-center gap-3">
         <button
+          onMouseEnter={sound.hover}
           onClick={handleSave}
           disabled={saving}
           className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_10px_rgba(147,51,234,0.5)] transition-colors hover:bg-purple-500 disabled:opacity-50"

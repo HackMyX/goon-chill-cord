@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useSoundManager } from "@/lib/sound-manager";
 
 export function DiscordLoginButton() {
   const [loading, setLoading] = useState(false);
+  const sound = useSoundManager();
 
   async function handleLogin() {
+    sound.click();
     setLoading(true);
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
@@ -19,6 +22,7 @@ export function DiscordLoginButton() {
 
   return (
     <button
+      onMouseEnter={sound.hover}
       onClick={handleLogin}
       disabled={loading}
       className="flex items-center gap-3 rounded-full bg-[#5865F2] px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-[#5865F2]/30 transition-all hover:scale-105 hover:bg-[#4752c4] disabled:opacity-60"

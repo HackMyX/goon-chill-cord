@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Coins, Package, Sparkles, ShieldCheck, Pencil, Check, X } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { updateUsername } from "@/lib/actions/account";
+import { useSoundManager } from "@/lib/sound-manager";
 
 interface AccountShellProps {
   username: string;
@@ -32,6 +33,7 @@ export function AccountShell({
   const [displayName, setDisplayName] = useState(username);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sound = useSoundManager();
 
   async function handleSave() {
     setSaving(true);
@@ -59,6 +61,8 @@ export function AccountShell({
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
         <Link
           href="/"
+          onMouseEnter={sound.hover}
+          onClick={sound.click}
           className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -85,6 +89,7 @@ export function AccountShell({
                   className="w-40 rounded-lg border border-purple-400/50 bg-black/40 px-2 py-1 text-lg font-bold text-zinc-100 outline-none"
                 />
                 <button
+                  onMouseEnter={sound.hover}
                   onClick={handleSave}
                   disabled={saving}
                   className="rounded-full bg-emerald-600/80 p-1.5 text-white hover:bg-emerald-500"
@@ -92,7 +97,9 @@ export function AccountShell({
                   <Check className="h-4 w-4" />
                 </button>
                 <button
+                  onMouseEnter={sound.hover}
                   onClick={() => {
+                    sound.click();
                     setEditing(false);
                     setDraft(displayName);
                     setError(null);
@@ -106,7 +113,11 @@ export function AccountShell({
               <h1 className="glow-text flex items-center gap-2 text-2xl font-extrabold text-zinc-50">
                 {displayName}
                 <button
-                  onClick={() => setEditing(true)}
+                  onMouseEnter={sound.hover}
+                  onClick={() => {
+                    sound.click();
+                    setEditing(true);
+                  }}
                   className="text-zinc-500 transition-colors hover:text-purple-300"
                   title="Namen bearbeiten"
                 >
@@ -148,12 +159,16 @@ export function AccountShell({
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             href="/garderobe"
+            onMouseEnter={sound.hover}
+            onClick={sound.click}
             className="flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_16px_rgba(147,51,234,0.5)] transition-transform hover:scale-105"
           >
             Garderobe
           </Link>
           <Link
             href="/#case-opening"
+            onMouseEnter={sound.hover}
+            onClick={sound.click}
             className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-5 py-2.5 text-sm font-semibold text-zinc-200 transition-colors hover:border-white/30"
           >
             Case Opening

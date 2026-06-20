@@ -13,7 +13,7 @@ export default async function WorldPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days")
+    .select("credits, streak_days, username")
     .eq("id", user.id)
     .single();
 
@@ -40,6 +40,7 @@ export default async function WorldPage() {
       inventoryCount={inventoryCount ?? 0}
       equippedByCategory={equippedByCategory}
       gender="m"
+      username={profile?.username ?? "Spieler"}
     />
   );
 }

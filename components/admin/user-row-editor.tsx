@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Save, ChevronDown, ChevronUp } from "lucide-react";
 import { updateUserCredits, updateUserRole } from "@/lib/actions/admin";
 import { UserDetailPanel } from "@/components/admin/user-detail-panel";
+import { useSoundManager } from "@/lib/sound-manager";
 import type { ProfileRole } from "@/lib/admin";
 import type { ProfileRow } from "@/components/admin/admin-shell";
 
@@ -15,6 +16,7 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [expanded, setExpanded] = useState(false);
+  const sound = useSoundManager();
 
   async function handleSave() {
     setSaving(true);
@@ -31,7 +33,11 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
     <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 transition-all duration-200 hover:border-purple-400/30 hover:shadow-[0_0_24px_rgba(168,85,247,0.12)]">
       <div className="flex flex-wrap items-center gap-3">
         <button
-          onClick={() => setExpanded((v) => !v)}
+          onMouseEnter={sound.hover}
+          onClick={() => {
+            sound.click();
+            setExpanded((v) => !v);
+          }}
           className="flex min-w-[140px] flex-1 items-center gap-2 text-left"
         >
           {expanded ? (
@@ -59,6 +65,7 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
           Rolle
           <select
             value={role}
+            onMouseEnter={sound.hover}
             onChange={(e) => setRole(e.target.value as ProfileRole)}
             className="w-32 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
           >
@@ -71,6 +78,7 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
         </label>
 
         <button
+          onMouseEnter={sound.hover}
           onClick={handleSave}
           disabled={saving}
           className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_10px_rgba(147,51,234,0.5)] transition-colors hover:bg-purple-500 disabled:opacity-50"

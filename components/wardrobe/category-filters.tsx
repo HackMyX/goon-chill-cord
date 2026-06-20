@@ -1,19 +1,20 @@
 "use client";
 
-import { WARDROBE_CATEGORIES } from "@/lib/wardrobe";
+import type { WardrobeCategory } from "@/lib/wardrobe";
 import { useSoundManager } from "@/lib/sound-manager";
 
 interface CategoryFiltersProps {
+  categories: WardrobeCategory[];
   active: string;
   onSelect: (categoryId: string) => void;
 }
 
-export function CategoryFilters({ active, onSelect }: CategoryFiltersProps) {
+export function CategoryFilters({ categories, active, onSelect }: CategoryFiltersProps) {
   const sound = useSoundManager();
 
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {WARDROBE_CATEGORIES.map((category) => {
+      {categories.map((category) => {
         const Icon = category.icon;
         return (
           <button

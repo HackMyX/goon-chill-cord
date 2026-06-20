@@ -9,7 +9,7 @@ import { CharacterViewer, type EquippedItem } from "@/components/wardrobe/charac
 import { CategoryFilters } from "@/components/wardrobe/category-filters";
 import { ItemRow } from "@/components/wardrobe/item-row";
 import { toggleEquip } from "@/lib/actions/wardrobe";
-import { getCategoryByDbType, WARDROBE_CATEGORIES } from "@/lib/wardrobe";
+import { getCategoryByDbType, getCategoriesForGender, WARDROBE_CATEGORIES } from "@/lib/wardrobe";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 
@@ -47,7 +47,21 @@ export function WardrobeShell({
   const inventoryRef = useRef(inventory);
   inventoryRef.current = inventory;
 
-  const currentCategory = WARDROBE_CATEGORIES.find((c) => c.id === activeCategory)!;
+  const categoriesForGender = useMemo(() => getCategoriesForGender(gender), [gender]);
+  const currentCategory =
+    categoriesForGender.find((c) => c.id === activeCategory) ?? categoriesForGender[0];
+
+  const handleGenderChange = useCallback(
+    (next: "m" | "w") => {
+      sound.click();
+      setGender(next);
+      // Hair is gender-locked (hair_m vs hair_f) — if the player was looking
+      // at "their" hair slot when switching gender, follow them to the new
+      // gender's hair slot instead of silently falling back to category 0.
+      setActiveCategory((curr) => (curr === "hair_m" || curr === "hair_f" ? `hair_${next}` : curr));
+    },
+    [sound]
+  );
 
   const visibleItems = useMemo(
     () => inventory.filter((row) => row.item.type === currentCategory.dbType),
@@ -58,7 +72,7 @@ export function WardrobeShell({
     const map: Record<string, EquippedItem | undefined> = {};
     for (const row of inventory) {
       if (row.equipped) {
-        map[row.item.type] = { name: row.item.name, rarity: row.item.rarity };
+        map[row.item.type] = { id: row.id, name: row.item.name, rarity: row.item.rarity };
       }
     }
     return map;
@@ -118,13 +132,15 @@ export function WardrobeShell({
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
           <CharacterViewer
             gender={gender}
-            onGenderChange={setGender}
+            onGenderChange={handleGenderChange}
             equippedByCategory={equippedByCategory}
+            onUnequip={handleToggle}
           />
 
           <div className="flex flex-col gap-4">
             <CategoryFilters
-              active={activeCategory}
+              categories={categoriesForGender}
+              active={currentCategory.id}
               onSelect={(id) => {
                 sound.click();
                 setActiveCategory(id);

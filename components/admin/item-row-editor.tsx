@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Save, Trash2 } from "lucide-react";
 import { upsertItem, deleteItem } from "@/lib/actions/admin";
-import { RARITY_ORDER, RARITY_LABELS, RARITY_STYLES, type Rarity } from "@/lib/cases";
+import { RARITY_ORDER, RARITY_LABELS, RARITY_STYLES, getTypeLabel, type Rarity } from "@/lib/cases";
 import { hasItemIcon, KNOWN_ICON_TYPES } from "@/lib/item-icons";
 import { ItemRenderer } from "@/components/items/item-renderer";
+import { useSoundManager } from "@/lib/sound-manager";
 import type { ItemRow } from "@/components/admin/admin-shell";
 
 interface ItemRowEditorProps {
@@ -21,6 +22,7 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const sound = useSoundManager();
 
   async function handleSave() {
     setSaving(true);
@@ -55,6 +57,7 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
 
         <select
           value={rarity}
+          onMouseEnter={sound.hover}
           onChange={(e) => setRarity(e.target.value as Rarity)}
           className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
         >
@@ -72,6 +75,9 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
           list="known-item-types"
           className="w-28 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
         />
+        <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2.5 py-1 text-xs font-semibold text-purple-200">
+          {getTypeLabel(type)}
+        </span>
         <datalist id="known-item-types">
           {KNOWN_ICON_TYPES.map((t) => (
             <option key={t} value={t} />
@@ -86,6 +92,7 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
         />
 
         <button
+          onMouseEnter={sound.hover}
           onClick={handleSave}
           disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-sm font-semibold text-white shadow-[0_0_10px_rgba(147,51,234,0.5)] transition-colors hover:bg-purple-500 disabled:opacity-50"
@@ -93,6 +100,7 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
           <Save className="h-4 w-4" />
         </button>
         <button
+          onMouseEnter={sound.hover}
           onClick={handleDelete}
           disabled={deleting}
           className="flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-2 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50"

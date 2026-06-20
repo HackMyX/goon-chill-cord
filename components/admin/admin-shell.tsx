@@ -6,9 +6,9 @@ import { ArrowLeft, ScrollText, Coins, Users, Package } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
-import { ItemRowEditor } from "@/components/admin/item-row-editor";
-import { NewItemForm } from "@/components/admin/new-item-form";
+import { ItemsTab } from "@/components/admin/items-tab";
 import { AuditTimeline } from "@/components/admin/audit-timeline";
+import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 
 export interface AuditLogEntry {
@@ -74,6 +74,7 @@ export function AdminShell({
 }: AdminShellProps) {
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
+  const sound = useSoundManager();
 
   return (
     <div className="flex flex-1 flex-col">
@@ -82,6 +83,8 @@ export function AdminShell({
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
         <Link
           href="/"
+          onMouseEnter={sound.hover}
+          onClick={sound.click}
           className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -93,7 +96,11 @@ export function AdminShell({
           {TABS.map((t) => (
             <button
               key={t.id}
-              onClick={() => setTab(t.id)}
+              onMouseEnter={sound.hover}
+              onClick={() => {
+                sound.click();
+                setTab(t.id);
+              }}
               className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
                 tab === t.id
                   ? "border-purple-400 bg-purple-500/15 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.45)]"
@@ -130,18 +137,7 @@ export function AdminShell({
           </div>
         )}
 
-        {tab === "items" && (
-          <div className="flex flex-col gap-3">
-            <NewItemForm onCreated={(item) => setItems((prev) => [item, ...prev])} />
-            {items.map((item) => (
-              <ItemRowEditor
-                key={item.id}
-                item={item}
-                onDeleted={(id) => setItems((prev) => prev.filter((i) => i.id !== id))}
-              />
-            ))}
-          </div>
-        )}
+        {tab === "items" && <ItemsTab items={items} setItems={setItems} />}
 
         {tab === "audit" && (
           <AuditTimeline

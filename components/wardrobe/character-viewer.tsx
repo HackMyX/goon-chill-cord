@@ -1,7 +1,9 @@
 "use client";
 
-import { WARDROBE_CATEGORIES } from "@/lib/wardrobe";
-import { AvatarRenderer, type EquippedItem } from "@/components/avatar/avatar-renderer";
+import { X } from "lucide-react";
+import { getCategoriesForGender } from "@/lib/wardrobe";
+import { CharacterPreview3D } from "@/components/wardrobe/character-preview-3d";
+import type { EquippedItem } from "@/lib/rarity-colors";
 
 export type { EquippedItem };
 
@@ -9,20 +11,25 @@ interface CharacterViewerProps {
   gender: "m" | "w";
   onGenderChange: (gender: "m" | "w") => void;
   equippedByCategory: Record<string, EquippedItem | undefined>;
+  /** Unequip straight from this summary list — id of the inventory row. */
+  onUnequip: (id: string) => void;
 }
 
 export function CharacterViewer({
   gender,
   onGenderChange,
   equippedByCategory,
+  onUnequip,
 }: CharacterViewerProps) {
+  const categories = getCategoriesForGender(gender);
+
   return (
     <div className="rounded-2xl border border-purple-500/20 bg-black/30 p-5">
       <h3 className="text-center text-sm font-semibold tracking-wide text-zinc-300">
         Dein Charakter
       </h3>
 
-      <AvatarRenderer gender={gender} equippedByCategory={equippedByCategory} />
+      <CharacterPreview3D gender={gender} equippedByCategory={equippedByCategory} />
 
       <div className="mt-6 grid grid-cols-2 gap-2">
         <button
@@ -48,7 +55,7 @@ export function CharacterViewer({
       </div>
 
       <div className="mt-5 space-y-1.5">
-        {WARDROBE_CATEGORIES.map((category) => {
+        {categories.map((category) => {
           const Icon = category.icon;
           const equipped = equippedByCategory[category.dbType];
           return (
@@ -60,8 +67,19 @@ export function CharacterViewer({
                 <Icon className="h-3.5 w-3.5 text-zinc-500" />
                 {category.label}
               </span>
-              <span className="truncate pl-2 text-right text-xs text-zinc-500">
-                {equipped?.name ?? "—"}
+              <span className="flex items-center gap-1.5 pl-2">
+                <span className="truncate text-right text-xs text-zinc-500">
+                  {equipped?.name ?? "—"}
+                </span>
+                {equipped?.id && (
+                  <button
+                    onClick={() => onUnequip(equipped.id!)}
+                    title="Ablegen"
+                    className="rounded-full bg-white/5 p-1 text-zinc-500 transition-colors hover:bg-red-500/20 hover:text-red-300"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
               </span>
             </div>
           );

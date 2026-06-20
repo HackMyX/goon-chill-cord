@@ -6,16 +6,13 @@ import {
   Link2,
   ShoppingBag,
   Gavel,
-  Pickaxe,
   Repeat,
-  Backpack,
   Users,
-  Globe,
-  Swords,
   Shirt,
   UserRound,
 } from "lucide-react";
 import { IconButton } from "@/components/layout/icon-button";
+import { GamesMenu } from "@/components/layout/games-menu";
 import { LiveClock } from "@/components/layout/live-clock";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -26,18 +23,20 @@ interface TopBarProps {
   streakDays?: number;
 }
 
-export function TopBar({
-  credits,
-  inventoryCount = 0,
-  streakDays = 2,
-}: TopBarProps) {
+export function TopBar({ credits, inventoryCount = 0, streakDays = 2 }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
 
   return (
-    <header className="sticky top-0 z-50 flex items-center justify-between gap-4 border-b border-white/5 bg-[#030305]/95 px-4 py-2 backdrop-blur">
+    // `minmax(0,1fr)` (not bare `1fr`) on both side columns forces them to
+    // *true* equal width regardless of how much content either side holds
+    // — content that doesn't fit wraps/overflows inside its own column
+    // instead of stretching that column wider, which is what let the
+    // Streak clock and the Games dropdown collide before. The center
+    // column is `auto`, so the clock always gets exactly its own space.
+    <header className="sticky top-0 z-50 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-b border-white/5 bg-[#030305]/95 px-4 py-2 backdrop-blur">
       {/* Left: logo + credits */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 justify-self-start">
         <Link
           href="/"
           onMouseEnter={sound.hover}
@@ -55,42 +54,23 @@ export function TopBar({
         </div>
       </div>
 
-      {/* Left-center: action icons */}
-      <div className="flex items-center gap-2">
-        <IconButton icon={ShoppingBag} label="Shop" />
-        <IconButton icon={Gavel} label="Auktionshaus" />
-        <IconButton icon={Pickaxe} label="Mine" />
-        <IconButton icon={Repeat} label="Trading" />
-      </div>
-
-      {/* Center: clock + streak */}
-      <div className="absolute left-1/2 -translate-x-1/2">
+      {/* Center: clock + streak — always its own column, never overlapped */}
+      <div className="justify-self-center">
         <LiveClock streakDays={streakDays} />
       </div>
 
-      {/* Right-center: inventory */}
-      <div className="flex items-center">
-        <button
-          onMouseEnter={sound.hover}
-          onClick={sound.click}
-          className="relative flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-purple-500/20 hover:text-purple-300"
-        >
-          <Backpack className="h-4 w-4" />
-          Inventar
-          {inventoryCount > 0 && (
-            <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-purple-600 px-1 text-[10px] font-bold text-white">
-              {inventoryCount}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Right: secondary icons */}
-      <div className="flex items-center gap-2">
-        <IconButton icon={Users} label="Community" />
-        <IconButton icon={Globe} label="3D-Welt" href="/world" />
-        <IconButton icon={Swords} label="Games" />
-        <IconButton icon={Shirt} label="Garderobe" href="/garderobe" />
+      {/* Right: non-game features (hidden on small screens) + games + core nav */}
+      <div className="flex items-center gap-1.5 justify-self-end overflow-hidden">
+        <div className="hidden items-center gap-1.5 lg:flex">
+          <IconButton icon={ShoppingBag} label="Shop" />
+          <IconButton icon={Gavel} label="Auktionshaus" />
+          <IconButton icon={Repeat} label="Trading" />
+          <IconButton icon={Users} label="Community" />
+        </div>
+        <div className="hidden md:block">
+          <GamesMenu />
+        </div>
+        <IconButton icon={Shirt} label="Garderobe" href="/garderobe" badge={inventoryCount} />
         <IconButton icon={UserRound} label="Profil" href="/account" />
         <LogoutButton />
       </div>

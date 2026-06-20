@@ -119,6 +119,36 @@ export const ALL_ITEM_TYPES = [
   "amulet",
 ] as const;
 
+/** Human-readable category label per dbType — shown next to item names
+ * (case-win reveal, admin item rows) so it's clear what slot/category an
+ * item belongs to, not just its rarity. Unknown future types fall back to
+ * a capitalized version of the raw string instead of nothing. */
+const TYPE_LABELS: Record<string, string> = {
+  hat: "Mütze",
+  jacket: "Jacke",
+  pants: "Hose",
+  shoes: "Schuhe",
+  trail: "Spur",
+  shield_cosmetic: "Schild",
+  aura: "Aura",
+  face: "Maske",
+  hair_m: "Männerhaare",
+  hair_f: "Frauenhaare",
+  pet: "Haustier",
+  weapon_cosmetic: "Waffe",
+  weapon: "Waffe",
+  shield: "Schild",
+  helmet: "Helm",
+  armor: "Rüstung",
+  cape: "Umhang",
+  ring: "Ring",
+  amulet: "Amulett",
+};
+
+export function getTypeLabel(type: string): string {
+  return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
+}
+
 export interface CaseGroup {
   id: string;
   title: string;
@@ -157,18 +187,24 @@ export const CASE_GROUPS: CaseGroup[] = [
       "armor",
       "cape",
     ],
+    // Both tiers' weights now sum to a clean 100, and premium (5x the
+    // price of standard) consistently buys a 5x better shot at Ultra in
+    // both case groups — with the in-between rarities improving by a
+    // smaller, still-meaningful multiplier. Rarer tier = bigger relative
+    // payoff for paying the premium price, which is the whole point of a
+    // premium tier existing at all.
     standard: {
       id: "cosmetics-standard",
       label: "CASE ÖFFNEN",
       price: 100,
-      rarityWeights: { normal: 92, selten: 6, mythisch: 2, ultra: 0.05 },
+      rarityWeights: { normal: 90, selten: 8, mythisch: 1.9, ultra: 0.1 },
     },
     premium: {
       id: "cosmetics-premium",
       label: "PREMIUM",
       sublabel: "NOCH MEHR CHANCE",
       price: 500,
-      rarityWeights: { normal: 84.8, selten: 9, mythisch: 6, ultra: 0.2 },
+      rarityWeights: { normal: 80, selten: 14, mythisch: 5.5, ultra: 0.5 },
     },
   },
   {
@@ -177,18 +213,22 @@ export const CASE_GROUPS: CaseGroup[] = [
     subtitle: "Gewinne Waffen für den 3D-World-Kampf — ab 2.000 CR",
     iconName: "swords",
     itemTypes: ["weapon", "shield", "weapon_cosmetic"],
+    // Same 5x-price -> 5x-better-Ultra rule as the cosmetics group, just
+    // anchored at noticeably better base odds throughout (this case costs
+    // 20x what the cosmetics standard case does, so its floor odds should
+    // actually feel like it).
     standard: {
       id: "weapons-standard",
       label: "WAFFEN CASE",
       price: 2000,
-      rarityWeights: { normal: 80, selten: 15, mythisch: 4.5, ultra: 0.5 },
+      rarityWeights: { normal: 75, selten: 18, mythisch: 6, ultra: 1 },
     },
     premium: {
       id: "weapons-premium",
       label: "PREMIUM WAFFE",
       sublabel: "ULTRA SELTENE WAFFEN",
       price: 10000,
-      rarityWeights: { normal: 65, selten: 25, mythisch: 9, ultra: 1 },
+      rarityWeights: { normal: 55, selten: 30, mythisch: 10, ultra: 5 },
     },
   },
 ];

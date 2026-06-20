@@ -9,18 +9,75 @@ import { ChanceBar } from "@/components/dashboard/chance-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { ItemRenderer } from "@/components/items/item-renderer";
 import { openCase, type WonItem } from "@/lib/actions/cases";
-import { RARITY_ORDER, type CaseGroup, type CaseTier, type Rarity } from "@/lib/cases";
+import { RARITY_ORDER, getTypeLabel, type CaseGroup, type CaseTier, type Rarity } from "@/lib/cases";
 import { getCaseIcon } from "@/lib/case-icons";
 import { useSoundManager } from "@/lib/sound-manager";
+import { debugLog } from "@/lib/debug";
+import { RARITY_HEX } from "@/lib/rarity-colors";
 
-function fireUltraConfetti() {
-  confetti({
-    particleCount: 130,
-    spread: 95,
-    startVelocity: 45,
-    origin: { y: 0.55 },
-    colors: ["#ff3b3b", "#ff8a00", "#ffe600", "#3bff5e", "#00e5ff", "#b14bff"],
-  });
+const CONFETTI_BY_RARITY: Record<Rarity, () => void> = {
+  normal: () => {
+    confetti({
+      particleCount: 22,
+      spread: 50,
+      startVelocity: 22,
+      origin: { y: 0.6 },
+      colors: ["#3b82f6", "#93c5fd", "#e0f2fe"],
+    });
+  },
+  selten: () => {
+    confetti({
+      particleCount: 50,
+      spread: 65,
+      startVelocity: 32,
+      origin: { y: 0.58 },
+      colors: ["#a855f7", "#d8b4fe", "#f3e8ff"],
+    });
+  },
+  mythisch: () => {
+    confetti({
+      particleCount: 85,
+      spread: 80,
+      startVelocity: 38,
+      origin: { y: 0.56 },
+      colors: ["#f59e0b", "#fbbf24", "#fff7ed"],
+    });
+    setTimeout(
+      () =>
+        confetti({
+          particleCount: 35,
+          spread: 100,
+          startVelocity: 28,
+          origin: { y: 0.56 },
+          colors: ["#f59e0b", "#fde68a"],
+        }),
+      150
+    );
+  },
+  ultra: () => {
+    confetti({
+      particleCount: 130,
+      spread: 95,
+      startVelocity: 45,
+      origin: { y: 0.55 },
+      colors: ["#ff3b3b", "#ff8a00", "#ffe600", "#3bff5e", "#00e5ff", "#b14bff"],
+    });
+    setTimeout(
+      () =>
+        confetti({
+          particleCount: 80,
+          spread: 120,
+          startVelocity: 50,
+          origin: { y: 0.5 },
+          colors: ["#ff3b3b", "#ff8a00", "#ffe600", "#3bff5e", "#00e5ff", "#b14bff"],
+        }),
+      180
+    );
+  },
+};
+
+function fireWinCelebration(rarity: Rarity) {
+  CONFETTI_BY_RARITY[rarity]();
 }
 
 interface PreviewItem {
@@ -129,6 +186,7 @@ export function CaseOpeningSection({
     const result = await openCase(tier.id);
     fetchingRef.current = false;
     setIsFetching(false);
+    debugLog("CaseOpening", `server result for tier "${tier.id}"`, result);
 
     if (!result.success || !result.item) {
       setError(result.error ?? "Unbekannter Fehler.");
@@ -155,6 +213,11 @@ export function CaseOpeningSection({
     setPhase("spinning");
     setSpinToken((t) => t + 1);
     onCreditsChange(result.newCredits!);
+    debugLog("CaseOpening", "reel built", {
+      targetIndex: before.length,
+      target,
+      reelLength: before.length + 1 + after.length,
+    });
   }
 
   function handleContinue() {
@@ -190,12 +253,13 @@ export function CaseOpeningSection({
           onTick={sound.tick}
           onSpinComplete={() => {
             setPhase((p) => (p === "spinning" ? "result" : p));
-            if (wonItem?.rarity === "ultra") {
+            if (!wonItem) return;
+            if (wonItem.rarity === "ultra") {
               sound.ultraWin();
-              fireUltraConfetti();
             } else {
               sound.win();
             }
+            fireWinCelebration(wonItem.rarity as Rarity);
           }}
         />
 
@@ -206,11 +270,20 @@ export function CaseOpeningSection({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={handleContinue}
-              className="absolute inset-0 z-30 flex cursor-pointer items-center justify-center rounded-xl bg-[#030305]/90"
+              className="absolute inset-0 z-30 flex cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-[#030305]/90"
             >
+              <motion.div
+                initial={{ opacity: 0.9, scale: 0.3 }}
+                animate={{ opacity: 0, scale: 1.8 }}
+                transition={{ duration: 0.7, ease: "easeOut" }}
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background: `radial-gradient(circle, ${RARITY_HEX[wonItem.rarity as Rarity]} 0%, transparent 65%)`,
+                }}
+              />
               <button
                 onClick={handleContinue}
-                className="absolute top-2 right-2 rounded-full bg-white/5 p-1.5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                className="absolute top-2 right-2 z-10 rounded-full bg-white/5 p-1.5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
               >
                 <CloseIcon className="h-4 w-4" />
               </button>
@@ -218,10 +291,13 @@ export function CaseOpeningSection({
                 initial={{ scale: 0.7, y: 10 }}
                 animate={{ scale: 1, y: 0 }}
                 transition={{ type: "spring", stiffness: 260, damping: 18 }}
-                className="flex flex-col items-center gap-2"
+                className="relative z-10 flex flex-col items-center gap-2"
               >
                 <ItemRenderer type={wonItem.type} rarity={wonItem.rarity as Rarity} size="lg" />
                 <span className="glow-text text-lg font-bold text-zinc-50">{wonItem.name}</span>
+                <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                  {getTypeLabel(wonItem.type)}
+                </span>
                 <RarityBadge rarity={wonItem.rarity as Rarity} />
               </motion.div>
             </motion.div>

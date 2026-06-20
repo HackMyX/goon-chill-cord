@@ -4,8 +4,20 @@ import { useEffect, useRef, useState } from "react";
 import { motion, useMotionValue, animate } from "framer-motion";
 import { RARITY_STYLES, type Rarity } from "@/lib/cases";
 import { ItemRenderer } from "@/components/items/item-renderer";
+import { debugLog } from "@/lib/debug";
 
 export const ITEM_WIDTH = 116;
+// Must match the track's actual flex `gap` below — every prior version of
+// this component computed translateX/tick-index using ITEM_WIDTH alone
+// while the track also had a `gap-2` (8px) between items. That mismatch
+// grows with the target's index (up to ~400px off at index 48), which
+// visually misaligned the amber focus window from the mathematically
+// correct target — i.e. the bug where "the item under the arrow isn't the
+// one you actually get". STEP is now the single source of truth for both
+// the visual gap and all position math; there is no separate leading
+// padding on the track to avoid a second, harder-to-see fudge factor.
+const GAP = 8;
+const STEP = ITEM_WIDTH + GAP;
 
 export interface ReelEntry {
   key: string;
@@ -50,7 +62,7 @@ export function CaseReel({
     return () => observer.disconnect();
   }, []);
 
-  const translateX = -(targetIndex * ITEM_WIDTH) + (containerWidth / 2 - ITEM_WIDTH / 2);
+  const translateX = -(targetIndex * STEP) + (containerWidth / 2 - ITEM_WIDTH / 2);
 
   useEffect(() => {
     if (!spinning) {
@@ -58,20 +70,51 @@ export function CaseReel({
       return;
     }
 
-    let lastTickIndex = Math.round(x.get() / -ITEM_WIDTH);
+    // `targetIndex` is always the same constant (the filler array is always
+    // built the same length), so translateX is identical on every spin —
+    // meaning x is usually *already sitting exactly there* from the last
+    // landing. Without this jump, stage 1 would have ~0px left to travel
+    // and the whole "spin" would collapse into the small stage-2 snap: a
+    // tiny jiggle that "suddenly" reveals an item instead of a real spin.
+    // Jumping backward by a randomized number of items first (instantly,
+    // no animation — happens before the browser paints this frame)
+    // guarantees a real, satisfying travel distance every single time,
+    // regardless of where the previous spin happened to land.
+    const BACKTRACK_ITEMS = 30 + Math.floor(Math.random() * 8); // 30..37
+    x.set(translateX + BACKTRACK_ITEMS * STEP);
+
+    debugLog("CaseReel", "spin start", {
+      targetIndex,
+      itemAtTarget: items[targetIndex]?.name,
+      translateX,
+      startX: x.get(),
+      backtrackItems: BACKTRACK_ITEMS,
+      containerWidth,
+      reelLength: items.length,
+    });
+
+    let lastTickIndex = Math.round(x.get() / -STEP);
     let activeControls: ReturnType<typeof animate> | null = null;
 
     const trackTicks = (latest: number) => {
-      const idx = Math.round(latest / -ITEM_WIDTH);
+      const idx = Math.round(latest / -STEP);
       if (idx !== lastTickIndex) {
         lastTickIndex = idx;
         onTick?.();
       }
     };
 
-    // Stage 1: high-speed bulk travel, decelerating to just short of the
-    // target so stage 2 always has a real (small) distance left to snap.
-    const SNAP_DISTANCE = ITEM_WIDTH * 0.9;
+    // Stage 1: high-speed bulk travel, decelerating to *just barely* short
+    // of the target. This used to stop short by 0.9 of an item-width —
+    // visually that's basically a whole neighboring item, so stage 1's slow
+    // deceleration would settle on index (target-1) for long enough that
+    // the eye reads *that* as the winner, and then stage 2 would slide one
+    // more item over to reveal the real target — exactly the "it grants
+    // the item to the right of the arrow, not the one under it" bug. A
+    // small fraction of an item-width still gives stage 2 a real distance
+    // to snap (so it doesn't feel like a hard cut), but it's now too small
+    // for any neighboring item to ever look "settled" in the window.
+    const SNAP_DISTANCE = STEP * 0.12;
     const bulkTarget = translateX + SNAP_DISTANCE;
 
     activeControls = animate(x, bulkTarget, {
@@ -79,15 +122,23 @@ export function CaseReel({
       ease: [0.16, 1, 0.3, 1],
       onUpdate: trackTicks,
       onComplete: () => {
-        // Stage 2: short, slightly bouncy spring snap onto the exact pixel
-        // target — the tactile "click" feel, without sacrificing precision.
+        // Stage 2: short, near-critically-damped spring snap onto the exact
+        // pixel target — a crisp stop with a faint tactile "give", but no
+        // visible bounce/oscillation past the target (that bounce was the
+        // other half of the "it jumps around" complaint).
         activeControls = animate(x, translateX, {
           type: "spring",
-          stiffness: 320,
-          damping: 22,
-          mass: 0.9,
+          stiffness: 260,
+          damping: 30,
+          mass: 1,
           onUpdate: trackTicks,
           onComplete: () => {
+            debugLog("CaseReel", "spin landed", {
+              targetIndex,
+              itemAtTarget: items[targetIndex]?.name,
+              finalX: x.get(),
+              expectedX: translateX,
+            });
             setJustLanded(true);
             onSpinComplete?.();
             setTimeout(() => setJustLanded(false), 520);
@@ -103,7 +154,7 @@ export function CaseReel({
   return (
     <div
       ref={containerRef}
-      className={`relative h-[130px] w-full overflow-hidden rounded-xl border border-white/10 bg-[#08081e] shadow-[inset_0_2px_12px_rgba(0,0,0,0.6),inset_0_0_0_1px_rgba(255,255,255,0.03)] ${
+      className={`relative h-[130px] w-full overflow-hidden rounded-xl bg-transparent ${
         justLanded ? "animate-case-shake" : ""
       }`}
     >
@@ -115,7 +166,7 @@ export function CaseReel({
       <div className="pointer-events-none absolute -top-[2px] left-1/2 z-20 h-0 w-0 -translate-x-1/2 border-x-[8px] border-t-[10px] border-x-transparent border-t-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
       <div className="pointer-events-none absolute -bottom-[2px] left-1/2 z-20 h-0 w-0 -translate-x-1/2 border-x-[8px] border-b-[10px] border-x-transparent border-b-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
 
-      <motion.div ref={trackRef} className="flex h-full items-center gap-2 px-1" style={{ x }}>
+      <motion.div ref={trackRef} className="flex h-full items-center" style={{ x, gap: GAP }}>
         {items.map((entry, i) => {
           const style = RARITY_STYLES[entry.rarity];
           const isTarget = i === targetIndex;
@@ -127,7 +178,7 @@ export function CaseReel({
               className="flex h-full shrink-0 items-center justify-center"
             >
               <div
-                className={`relative flex h-[112px] w-full flex-col items-center justify-center gap-1.5 overflow-hidden rounded-lg border bg-[#0d0c1c] transition-all duration-300 ${
+                className={`relative flex h-[112px] w-full flex-col items-center justify-center gap-1.5 overflow-hidden rounded-lg border bg-black/25 backdrop-blur-[2px] transition-all duration-300 ${
                   style.rainbow ? "border-transparent" : style.border
                 } ${
                   isTarget

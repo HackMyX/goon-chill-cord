@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { upsertItem } from "@/lib/actions/admin";
-import { RARITY_ORDER, RARITY_LABELS, type Rarity } from "@/lib/cases";
+import { RARITY_ORDER, RARITY_LABELS, getTypeLabel, type Rarity } from "@/lib/cases";
 import { hasItemIcon, KNOWN_ICON_TYPES } from "@/lib/item-icons";
 import { ItemRenderer } from "@/components/items/item-renderer";
+import { useSoundManager } from "@/lib/sound-manager";
 import type { ItemRow } from "@/components/admin/admin-shell";
 
 export function NewItemForm({ onCreated }: { onCreated: (item: ItemRow) => void }) {
@@ -15,6 +16,7 @@ export function NewItemForm({ onCreated }: { onCreated: (item: ItemRow) => void 
   const [priceCr, setPriceCr] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sound = useSoundManager();
 
   async function handleCreate() {
     setSaving(true);
@@ -47,6 +49,7 @@ export function NewItemForm({ onCreated }: { onCreated: (item: ItemRow) => void 
         />
         <select
           value={rarity}
+          onMouseEnter={sound.hover}
           onChange={(e) => setRarity(e.target.value as Rarity)}
           className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
         >
@@ -68,6 +71,11 @@ export function NewItemForm({ onCreated }: { onCreated: (item: ItemRow) => void 
             <option key={t} value={t} />
           ))}
         </datalist>
+        {type && (
+          <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2.5 py-1 text-xs font-semibold text-purple-200">
+            {getTypeLabel(type)}
+          </span>
+        )}
         <input
           type="number"
           value={priceCr}
@@ -76,6 +84,7 @@ export function NewItemForm({ onCreated }: { onCreated: (item: ItemRow) => void 
           className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
         />
         <button
+          onMouseEnter={sound.hover}
           onClick={handleCreate}
           disabled={saving || !name.trim() || !type.trim()}
           className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_10px_rgba(147,51,234,0.5)] transition-colors hover:bg-purple-500 disabled:opacity-50"
