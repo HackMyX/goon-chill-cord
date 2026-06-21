@@ -76,7 +76,7 @@ export function TopBar({ credits, inventoryCount = 0, streakDays = 2 }: TopBarPr
           <IconButton icon={ShoppingBag} label="Shop" />
           <IconButton icon={Gavel} label="Auktionshaus" />
           <IconButton icon={Repeat} label="Trading" />
-          <IconButton icon={Users} label="Community" />
+          <IconButton icon={Users} label="Community" href="/community" />
         </div>
         <IconButton icon={Shirt} label="Garderobe" href="/garderobe" badge={inventoryCount} />
         <IconButton icon={UserRound} label="Profil" href="/account" />

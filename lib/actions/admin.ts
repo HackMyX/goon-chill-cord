@@ -123,6 +123,32 @@ export async function updateUserCredits(
   return { success: true };
 }
 
+/**
+ * Manual gender override for moderation/support — bypasses the player-
+ * facing one-way lock entirely (lib/actions/wardrobe.ts updateGender),
+ * since this exists specifically for "they misclicked and it's now
+ * permanently wrong" support requests where the normal lock is exactly
+ * the thing standing in the way.
+ */
+export async function setUserGender(
+  targetUserId: string,
+  gender: "m" | "w"
+): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("profiles").update({ gender }).eq("id", targetUserId);
+
+  if (error) return { success: false, error: "Update fehlgeschlagen." };
+
+  await logAdminAction(user.id, "admin_set_gender", { targetUserId, gender });
+  revalidatePath("/admin");
+  revalidatePath("/garderobe");
+  revalidatePath("/world");
+  return { success: true };
+}
+
 export async function updateUserRole(
   targetUserId: string,
   role: ProfileRole
@@ -217,6 +243,7 @@ export interface UserDetail {
   inventory: UserInventoryRow[];
   logs: { id: string; action: string; payload: unknown; created_at: string }[];
   banned: boolean;
+  gender: "m" | "w";
 }
 
 export interface GetUserDetailResult extends AdminActionResult {
@@ -229,23 +256,25 @@ export async function getUserDetail(targetUserId: string): Promise<GetUserDetail
 
   const admin = createAdminClient();
 
-  const [{ data: inventory }, { data: logs }, { data: authUser }] = await Promise.all([
-    admin
-      .from("inventory")
-      .select("id, equipped, item:items(id, name, rarity, type)")
-      .eq("user_id", targetUserId)
-      .order("obtained_at", { ascending: false }),
-    // Personal log: actions this user performed themselves (user_id match)
-    // OR admin actions targeting them (payload.targetUserId match) — admin
-    // actions are logged under the *admin's* user_id, not the target's.
-    admin
-      .from("audit_logs")
-      .select("id, action, payload, created_at")
-      .or(`user_id.eq.${targetUserId},payload->>targetUserId.eq.${targetUserId}`)
-      .order("created_at", { ascending: false })
-      .limit(50),
-    admin.auth.admin.getUserById(targetUserId),
-  ]);
+  const [{ data: inventory }, { data: logs }, { data: authUser }, { data: profile }] =
+    await Promise.all([
+      admin
+        .from("inventory")
+        .select("id, equipped, item:items(id, name, rarity, type)")
+        .eq("user_id", targetUserId)
+        .order("obtained_at", { ascending: false }),
+      // Personal log: actions this user performed themselves (user_id match)
+      // OR admin actions targeting them (payload.targetUserId match) — admin
+      // actions are logged under the *admin's* user_id, not the target's.
+      admin
+        .from("audit_logs")
+        .select("id, action, payload, created_at")
+        .or(`user_id.eq.${targetUserId},payload->>targetUserId.eq.${targetUserId}`)
+        .order("created_at", { ascending: false })
+        .limit(50),
+      admin.auth.admin.getUserById(targetUserId),
+      admin.from("profiles").select("gender").eq("id", targetUserId).single(),
+    ]);
 
   const bannedUntil = authUser?.user?.banned_until;
   const banned = !!bannedUntil && new Date(bannedUntil).getTime() > Date.now();
@@ -256,6 +285,7 @@ export async function getUserDetail(targetUserId: string): Promise<GetUserDetail
       inventory: (inventory ?? []) as unknown as UserInventoryRow[],
       logs: logs ?? [],
       banned,
+      gender: (profile?.gender as "m" | "w") ?? "m",
     },
   };
 }

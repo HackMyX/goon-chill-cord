@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AmbientGlow } from "@/components/layout/ambient-glow";
 import { GlobalErrorLogger } from "@/components/debug/global-error-logger";
+import { ConfirmDialogProvider } from "@/components/layout/confirm-dialog-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -32,7 +33,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <GlobalErrorLogger />
         <AmbientGlow />
-        {children}
+        <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
       </body>
     </html>
   );

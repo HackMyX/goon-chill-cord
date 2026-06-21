@@ -22,6 +22,7 @@ import {
   RingVariant,
   AmuletVariant,
   BareFoot,
+  DefaultFace,
 } from "@/components/world/item-variants";
 
 export interface CharacterModelProps {
@@ -254,12 +255,12 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
           <meshStandardMaterial color={SKIN} />
         </mesh>
 
-        {/* face / mask — variant shape picked deterministically from the item name */}
-        {face && (
-          <group position={[0, 2.05, 0.29]}>
-            <FaceVariant item={face} />
-          </group>
-        )}
+        {/* face / mask — variant shape picked deterministically from the
+            item name; falls back to a plain default face (eyes/nose/mouth)
+            so the head is never a featureless blank cube */}
+        <group position={[0, 2.05, 0.29]}>
+          {face ? <FaceVariant item={face} /> : <DefaultFace skin={SKIN} />}
+        </group>
 
         {/* hair — same catalogue item for every gender; the *shape* adapts
             to the body wearing it (item-variants.tsx HairVariant), not the

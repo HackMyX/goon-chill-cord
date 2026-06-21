@@ -474,6 +474,35 @@ function NinjaFace({ color }: { color: string }) {
 
 const FACE_VARIANTS = [VisorFace, BandanaFace, GogglesFace, GasmaskFace, SkullFace, NinjaFace];
 
+/** The bare head used to be a featureless skin-colored cube — no eyes, no
+ * mouth, nothing — whenever no mask/face item was equipped, which is most
+ * of the time for most players. Rendered in character-model.tsx exactly
+ * when `face` is unset, so equipping a real mask still fully replaces it
+ * (no double-rendering underneath). */
+export function DefaultFace({ skin }: { skin: string }) {
+  const shade = "#3a2a1f";
+  return (
+    <group>
+      <mesh position={[-0.12, 0.03, 0]}>
+        <boxGeometry args={[0.09, 0.07, 0.03]} />
+        <meshStandardMaterial color={shade} />
+      </mesh>
+      <mesh position={[0.12, 0.03, 0]}>
+        <boxGeometry args={[0.09, 0.07, 0.03]} />
+        <meshStandardMaterial color={shade} />
+      </mesh>
+      <mesh position={[0, -0.05, 0.01]}>
+        <boxGeometry args={[0.07, 0.07, 0.04]} />
+        <meshStandardMaterial color={skin} />
+      </mesh>
+      <mesh position={[0, -0.16, 0]}>
+        <boxGeometry args={[0.16, 0.035, 0.02]} />
+        <meshStandardMaterial color={shade} />
+      </mesh>
+    </group>
+  );
+}
+
 export function FaceVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
   const Variant = FACE_VARIANTS[variantIndex(item.name, FACE_VARIANTS.length)];
@@ -1268,7 +1297,87 @@ function PonytailHair({ color, gender }: { color: string; gender: "m" | "w" }) {
   );
 }
 
-const HAIR_VARIANTS = [ShortHair, LongHair, MohawkHair, PonytailHair];
+function BuzzcutHair({ color, gender }: { color: string; gender: "m" | "w" }) {
+  // A thin, low-profile shell over the scalp — the "shortest" of the
+  // styles, barely thicker than the head itself, with a subtle widow's
+  // peak notch for "w" so it doesn't read as identical to the male cut.
+  return (
+    <group>
+      <mesh position={[0, 2.26, -0.03]}>
+        <boxGeometry args={[0.59, 0.1, 0.6]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      {gender === "w" && (
+        <mesh position={[0, 2.2, 0.26]}>
+          <boxGeometry args={[0.1, 0.06, 0.06]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+function AfroHair({ color, gender }: { color: string; gender: "m" | "w" }) {
+  const radius = gender === "w" ? 0.42 : 0.36;
+  return (
+    <mesh position={[0, 2.34, -0.02]}>
+      <sphereGeometry args={[radius, 14, 12]} />
+      <meshStandardMaterial color={color} roughness={1} />
+    </mesh>
+  );
+}
+
+function BunHair({ color, gender }: { color: string; gender: "m" | "w" }) {
+  // Cap + a rolled-up bun at the back — bigger/higher bun for "w" (classic
+  // top-knot/dancer-bun silhouette), small tight one for "m".
+  const bunRadius = gender === "w" ? 0.16 : 0.11;
+  return (
+    <group>
+      <mesh position={[0, 2.28, -0.05]}>
+        <boxGeometry args={[0.56, 0.16, 0.56]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      <mesh position={[0, 2.3 + bunRadius * 0.4, -0.36]}>
+        <sphereGeometry args={[bunRadius, 12, 12]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+    </group>
+  );
+}
+
+function BraidHair({ color, gender }: { color: string; gender: "m" | "w" }) {
+  // Segmented braid (stacked rings give it a woven look instead of a
+  // smooth cylinder) — one long braid for "w", a shorter single plait for
+  // "m" so it still reads as a deliberate style, not a scaled-down copy.
+  const segments = gender === "w" ? 6 : 3;
+  return (
+    <group>
+      <mesh position={[0, 2.28, -0.05]}>
+        <boxGeometry args={[0.58, 0.18, 0.58]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      <group position={[0, 1.98, -0.4]} rotation={[0.15, 0, 0]}>
+        {Array.from({ length: segments }).map((_, i) => (
+          <mesh key={i} position={[0, -i * 0.13, 0]}>
+            <sphereGeometry args={[0.07 - i * 0.003, 8, 8]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+const HAIR_VARIANTS = [
+  ShortHair,
+  LongHair,
+  MohawkHair,
+  PonytailHair,
+  BuzzcutHair,
+  AfroHair,
+  BunHair,
+  BraidHair,
+];
 
 export function HairVariant({ item, gender }: { item: EquippedItem; gender: "m" | "w" }) {
   const color = rarityColorFor(item, "#404040");

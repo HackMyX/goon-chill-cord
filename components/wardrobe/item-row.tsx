@@ -26,8 +26,8 @@ function ItemRowComponent({ id, name, rarity, type, equipped, onToggle, onPrevie
       onMouseEnter={sound.hover}
       className={`flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0f0e18] px-4 py-3 transition-all duration-200 ${style.hoverRing} ${style.hoverGlow}`}
     >
-      <div className="flex items-center gap-3">
-        <div className="relative flex h-11 w-11 items-center justify-center">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
           {style.pulseGlow && (
             <span aria-hidden className={`absolute inset-0 rounded-lg ${style.pulseGlow}`} />
           )}
@@ -40,14 +40,21 @@ function ItemRowComponent({ id, name, rarity, type, equipped, onToggle, onPrevie
             <ItemRenderer type={type} rarity={rarity} size="sm" />
           </div>
         </div>
-        <div>
-          <p className="font-semibold text-zinc-100">{name}</p>
+        <div className="min-w-0">
+          {/* `truncate` is load-bearing, not cosmetic — the wardrobe list
+              is virtualized with a fixed per-row height estimate
+              (ROW_HEIGHT in wardrobe-shell.tsx). A long name wrapping to a
+              second line makes the *actual* rendered row taller than that
+              estimate, so the next absolutely-positioned row overlaps and
+              paints over the bottom half of this row's hover ring/glow —
+              exactly the "border only goes half-way around" symptom. */}
+          <p className="truncate font-semibold text-zinc-100">{name}</p>
           <p className="text-[11px] tracking-wide text-zinc-500 uppercase">{getTypeLabel(type)}</p>
           <RarityBadge rarity={rarity} className="mt-1" />
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1.5">
         <button
           onMouseEnter={sound.hover}
           onClick={() => {

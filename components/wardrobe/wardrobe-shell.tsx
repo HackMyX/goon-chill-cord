@@ -13,6 +13,7 @@ import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
 import { toggleEquip, updateGender } from "@/lib/actions/wardrobe";
 import { getCategoryByDbType, getCategories, ALL_CATEGORY } from "@/lib/wardrobe";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { debugLog, debugWarn } from "@/lib/debug";
 import { RARITY_ORDER, type Rarity } from "@/lib/cases";
 
@@ -63,6 +64,7 @@ export function WardrobeShell({
   const [sort, setSort] = useState<SortKey>("rarity-desc");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const sound = useSoundManager();
+  const confirm = useConfirm();
 
   const toggleRarityFilter = useCallback((rarity: Rarity) => {
     setActiveRarities((curr) => {
@@ -80,18 +82,21 @@ export function WardrobeShell({
   const currentCategory = categories.find((c) => c.id === activeCategory) ?? categories[0];
 
   const handleGenderChange = useCallback(
-    (next: "m" | "w") => {
+    async (next: "m" | "w") => {
       // One-way door: once locked, this is purely informational — the
       // server rejects it anyway (lib/actions/wardrobe.ts), but bailing out
       // here means clicking the disabled-looking button doesn't even fire
-      // a request, and the confirm() dialog below only ever has to ask
+      // a request, and the confirm dialog below only ever has to ask
       // about something that's actually still changeable.
       if (genderLocked && !isAdmin) return;
       if (
         !isAdmin &&
-        !confirm(
-          `Geschlecht endgültig auf "${next === "m" ? "Männlich" : "Weiblich"}" festlegen? Das kann später nicht mehr geändert werden.`
-        )
+        !(await confirm({
+          title: "Geschlecht festlegen",
+          message: `Geschlecht endgültig auf "${next === "m" ? "Männlich" : "Weiblich"}" festlegen? Das kann später nicht mehr geändert werden.`,
+          confirmLabel: "Festlegen",
+          danger: true,
+        }))
       ) {
         return;
       }
@@ -116,7 +121,7 @@ export function WardrobeShell({
         }
       });
     },
-    [sound, genderLocked, gender, isAdmin]
+    [sound, genderLocked, gender, isAdmin, confirm]
   );
 
   const visibleItems = useMemo(() => {

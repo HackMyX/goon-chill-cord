@@ -129,8 +129,13 @@ export function Player({ equippedByCategory, gender, name, cameraControls }: Pla
     // there's no same-frame feedback between "which way can I walk" and
     // "where is the camera easing to", just a single, imperceptible frame
     // of lag.
+    // Camera-right derived from three.js's actual lookAt convention
+    // (right = up × -forward, with up=(0,1,0)), not just "forward rotated
+    // 90°" — that shortcut had the wrong sign here, which is exactly why
+    // A/D felt swapped: pressing D was moving *away* from the camera's
+    // true right, not toward it.
     forwardVec.current.set(Math.sin(cc.yaw), 0, Math.cos(cc.yaw));
-    rightVec.current.set(Math.sin(cc.yaw + Math.PI / 2), 0, Math.cos(cc.yaw + Math.PI / 2));
+    rightVec.current.set(-Math.cos(cc.yaw), 0, Math.sin(cc.yaw));
 
     const moveX = (keys.state.current.right ? 1 : 0) - (keys.state.current.left ? 1 : 0);
     const moveZ = (keys.state.current.forward ? 1 : 0) - (keys.state.current.backward ? 1 : 0);
@@ -159,12 +164,18 @@ export function Player({ equippedByCategory, gender, name, cameraControls }: Pla
       g.position.z *= scale;
     }
 
-    // The character's *own* body rotation — purely cosmetic (which way the
-    // model visually faces), completely separate from the camera now. It
-    // still turns to face wherever it's actually moving, same as before.
-    if (velocity.current.lengthSq() > 0.01) {
-      const targetAngle = Math.atan2(velocity.current.x, velocity.current.z);
-      g.rotation.y = lerpAngle(g.rotation.y, targetAngle, Math.min(1, delta * ROTATE_RATE));
+    // The character's *own* body rotation — turns to face the camera's
+    // forward direction (cc.yaw) whenever moving, *not* the raw velocity
+    // vector. That distinction is exactly what fixes backpedaling: under
+    // the old velocity-based version, holding only S gave a velocity
+    // vector pointing straight at the camera, so the character spun a
+    // full 180° to "run" backward facing away from it — and the camera's
+    // own auto-follow below was chasing that same now-reversed angle,
+    // which is what made S read as "buggy". Facing the camera direction
+    // instead means backpedaling now looks like backpedaling (character
+    // still faces forward, walks backward) instead of an about-face.
+    if (moving) {
+      g.rotation.y = lerpAngle(g.rotation.y, cc.yaw, Math.min(1, delta * ROTATE_RATE));
     }
 
     // Jump: one-shot impulse, the hook itself clears the flag when consumed
@@ -211,12 +222,15 @@ export function Player({ equippedByCategory, gender, name, cameraControls }: Pla
       moving && grounded.current ? Math.abs(Math.sin(walkClock.current * 2)) * 0.04 : 0;
     g.position.y = baseY.current + footBob;
 
-    // Camera auto-follow: only while genuinely moving (above a real speed,
-    // not just twitching) and not mid-drag, slowly rotate the camera's own
-    // persistent yaw toward "behind the direction of travel". Slow and
-    // angle-wraparound-safe (lerpAngle) on purpose — see CAMERA_AUTO_
-    // FOLLOW_RATE above for why.
-    if (!cc.dragging && moving && velocity.current.lengthSq() > AUTO_FOLLOW_MIN_SPEED_SQ) {
+    // Camera auto-follow: only while actually *running forward* (moveZ>0 —
+    // holding W, optionally with a strafe mixed in) above a real speed and
+    // not mid-drag. Gated on forward specifically, not just "moving" —
+    // backpedaling (S) or pure strafing (A/D alone) must never auto-rotate
+    // the camera, or it ends up swinging around to face wherever you're
+    // retreating to, which is the other half of the old "S is buggy"
+    // complaint. Slow and angle-wraparound-safe (lerpAngle) on purpose —
+    // see CAMERA_AUTO_FOLLOW_RATE above for why.
+    if (!cc.dragging && moveZ > 0 && velocity.current.lengthSq() > AUTO_FOLLOW_MIN_SPEED_SQ) {
       const travelYaw = Math.atan2(velocity.current.x, velocity.current.z);
       applyAutoFollowYaw(cc, travelYaw, Math.min(1, delta * CAMERA_AUTO_FOLLOW_RATE));
     }

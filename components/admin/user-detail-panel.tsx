@@ -9,6 +9,7 @@ import {
   grantAllItemsToUser,
   removeUserItem,
   setUserBanned,
+  setUserGender,
   kickUser,
   wipeUserInventory,
   type UserDetail,
@@ -17,6 +18,7 @@ import { ItemRenderer } from "@/components/items/item-renderer";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { AuditTimeline } from "@/components/admin/audit-timeline";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import type { Rarity } from "@/lib/cases";
 
 export function UserDetailPanel({ userId }: { userId: string }) {
@@ -27,6 +29,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   const [modAction, setModAction] = useState<string | null>(null);
   const [modMessage, setModMessage] = useState<string | null>(null);
   const sound = useSoundManager();
+  const confirm = useConfirm();
 
   async function refresh() {
     const res = await getUserDetail(userId);
@@ -68,7 +71,12 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   }
 
   async function handleKick() {
-    if (!confirm("User wirklich sofort ausloggen? Er kann sich nach ~30s wieder anmelden.")) return;
+    const ok = await confirm({
+      title: "Force Logout",
+      message: "User wirklich sofort ausloggen? Er kann sich nach ~30s wieder anmelden.",
+      confirmLabel: "Ausloggen",
+    });
+    if (!ok) return;
     setModAction("kick");
     const res = await kickUser(userId);
     setModAction(null);
@@ -78,14 +86,15 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   async function handleBanToggle() {
     if (!detail) return;
     const next = !detail.banned;
-    if (
-      !confirm(
-        next
-          ? "User wirklich permanent bannen? Er kann sich danach nicht mehr einloggen."
-          : "Bann wirklich aufheben?"
-      )
-    )
-      return;
+    const ok = await confirm({
+      title: next ? "User bannen" : "Bann aufheben",
+      message: next
+        ? "User wirklich permanent bannen? Er kann sich danach nicht mehr einloggen."
+        : "Bann wirklich aufheben?",
+      confirmLabel: next ? "Bannen" : "Entbannen",
+      danger: next,
+    });
+    if (!ok) return;
     setModAction("ban");
     const res = await setUserBanned(userId, next);
     setModAction(null);
@@ -98,8 +107,13 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   }
 
   async function handleWipe() {
-    if (!confirm("Inventar dieses Users wirklich komplett leeren? Das kann nicht rückgängig gemacht werden."))
-      return;
+    const ok = await confirm({
+      title: "Inventar wipen",
+      message: "Inventar dieses Users wirklich komplett leeren? Das kann nicht rückgängig gemacht werden.",
+      confirmLabel: "Leeren",
+      danger: true,
+    });
+    if (!ok) return;
     setModAction("wipe");
     const res = await wipeUserInventory(userId);
     setModAction(null);
@@ -112,14 +126,37 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   }
 
   async function handleGrantAll() {
-    if (!confirm("Diesem User wirklich ALLE Items aus dem Katalog geben (alles, was er noch nicht hat)?"))
-      return;
+    const ok = await confirm({
+      title: "Alle Items geben",
+      message: "Diesem User wirklich ALLE Items aus dem Katalog geben (alles, was er noch nicht hat)?",
+      confirmLabel: "Vergeben",
+    });
+    if (!ok) return;
     setModAction("grant-all");
     const res = await grantAllItemsToUser(userId);
     setModAction(null);
     if (res.success) {
       await refresh();
       setModMessage("Alle Items vergeben.");
+    } else {
+      setModMessage(res.error ?? "Fehler.");
+    }
+  }
+
+  async function handleGenderOverride(gender: "m" | "w") {
+    if (!detail || detail.gender === gender) return;
+    const ok = await confirm({
+      title: "Geschlecht manuell ändern",
+      message: `Geschlecht dieses Users manuell auf "${gender === "m" ? "Männlich" : "Weiblich"}" setzen? Admin-Override — umgeht die normale Sperre, z.B. falls sich der User vertippt/verklickt hat.`,
+      confirmLabel: "Ändern",
+    });
+    if (!ok) return;
+    setModAction("gender");
+    const res = await setUserGender(userId, gender);
+    setModAction(null);
+    if (res.success) {
+      setDetail({ ...detail, gender });
+      setModMessage("Geschlecht geändert.");
     } else {
       setModMessage(res.error ?? "Fehler.");
     }
@@ -180,6 +217,38 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           <PackagePlus className="h-3.5 w-3.5" />
           Alle Items geben
         </button>
+
+        {/* Manual gender override — for "User hat sich vertippt/verklickt"
+            support requests, bypasses the player-facing permanent lock
+            entirely (lib/actions/admin.ts setUserGender). */}
+        <div className="flex items-center gap-1 rounded-lg border border-white/10 p-0.5">
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => handleGenderOverride("m")}
+            disabled={modAction !== null}
+            title="Geschlecht manuell auf Männlich setzen"
+            className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
+              detail.gender === "m"
+                ? "bg-purple-500/25 text-purple-200"
+                : "text-zinc-400 hover:bg-white/5"
+            }`}
+          >
+            ♂ M
+          </button>
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => handleGenderOverride("w")}
+            disabled={modAction !== null}
+            title="Geschlecht manuell auf Weiblich setzen"
+            className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
+              detail.gender === "w"
+                ? "bg-purple-500/25 text-purple-200"
+                : "text-zinc-400 hover:bg-white/5"
+            }`}
+          >
+            ♀ W
+          </button>
+        </div>
         {detail.banned && (
           <span className="ml-auto rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
             GEBANNT
