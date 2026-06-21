@@ -295,6 +295,53 @@ export async function grantItemToUser(
   return { success: true };
 }
 
+/**
+ * Grants the user every item in the catalogue they don't already own, in
+ * one click — built for testing/QA so an admin can equip-check the entire
+ * item set on a real account instead of rolling cases hundreds of times.
+ * Skips items already in the user's inventory (no duplicates) and inserts
+ * in batches since the catalogue is 900+ rows.
+ */
+export async function grantAllItemsToUser(targetUserId: string): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+
+  const [{ data: allItems, error: itemsError }, { data: owned, error: ownedError }] =
+    await Promise.all([
+      admin.from("items").select("id"),
+      admin.from("inventory").select("item_id").eq("user_id", targetUserId),
+    ]);
+
+  if (itemsError || ownedError) {
+    return { success: false, error: "Katalog konnte nicht geladen werden." };
+  }
+
+  const ownedIds = new Set((owned ?? []).map((row) => row.item_id));
+  const missing = (allItems ?? []).filter((item) => !ownedIds.has(item.id));
+
+  if (missing.length === 0) {
+    return { success: true };
+  }
+
+  const BATCH_SIZE = 500;
+  for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+    const batch = missing
+      .slice(i, i + BATCH_SIZE)
+      .map((item) => ({ user_id: targetUserId, item_id: item.id }));
+    const { error } = await admin.from("inventory").insert(batch);
+    if (error) return { success: false, error: "Vergeben fehlgeschlagen." };
+  }
+
+  await logAdminAction(user.id, "admin_grant_all_items", {
+    targetUserId,
+    count: missing.length,
+  });
+  revalidatePath("/admin");
+  return { success: true };
+}
+
 export async function removeUserItem(inventoryId: string): Promise<AdminActionResult> {
   const user = await requireAdmin();
   if (!user) return { success: false, error: "Kein Zugriff." };

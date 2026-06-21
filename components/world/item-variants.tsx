@@ -229,7 +229,22 @@ const PET_VARIANTS = [DogPet, DragonPet, GhostPet, CatPet];
 
 export function PetVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
-  const Variant = PET_VARIANTS[variantIndex(item.name, PET_VARIANTS.length)];
+  // The pet's *noun* always wins over the hash fallback — equip something
+  // named "... Hund" and it must look like a dog, not whatever shape the
+  // hash happened to land on. Only names with no recognized noun (shouldn't
+  // happen given the current catalogue, but a future admin-added pet might)
+  // fall back to the old hash-based pick. Written as a plain ternary chain
+  // (not a helper function returning a component) so the React Compiler can
+  // statically see this only ever selects among the fixed components above.
+  const Variant = /Hund/.test(item.name)
+    ? DogPet
+    : /Katze/.test(item.name)
+      ? CatPet
+      : /Drache|Phönix/.test(item.name)
+        ? DragonPet
+        : /Schatten|Geist/.test(item.name)
+          ? GhostPet
+          : PET_VARIANTS[variantIndex(item.name, PET_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
@@ -441,12 +456,187 @@ function StaffWeapon({ color, emissive }: { color: string; emissive: string }) {
   );
 }
 
+// --- The rest of the curated weapon catalogue (lib WEAPON_NAMES/ULTRA_NAMES
+// in scripts/generate-all-items.js) each get their *own* shape instead of
+// being shoved into whichever of the 4 shapes above the name hash landed
+// on — "Dolch" must look like a short dagger, "Glasflasche" like a bottle,
+// not a recolored axe.
+
+function PipeWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <mesh position={[0, 0.4, 0]}>
+      <cylinderGeometry args={[0.045, 0.045, 0.88, 12]} />
+      <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.25} />
+    </mesh>
+  );
+}
+
+function PlankWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh position={[0, -0.05, 0]}>
+        <boxGeometry args={[0.07, 0.12, 0.05]} />
+        <meshStandardMaterial color="#5b3a21" />
+      </mesh>
+      <mesh position={[0, 0.4, 0]}>
+        <boxGeometry args={[0.5, 0.78, 0.04]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.15} />
+      </mesh>
+    </group>
+  );
+}
+
+function BottleWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh position={[0, 0.3, 0]}>
+        <cylinderGeometry args={[0.1, 0.12, 0.5, 12]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={emissive}
+          emissiveIntensity={0.3}
+          transparent
+          opacity={0.65}
+        />
+      </mesh>
+      <mesh position={[0, 0.62, 0]}>
+        <cylinderGeometry args={[0.045, 0.07, 0.16, 10]} />
+        <meshStandardMaterial color={color} transparent opacity={0.65} />
+      </mesh>
+    </group>
+  );
+}
+
+function DaggerWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh position={[0, -0.05, 0]}>
+        <boxGeometry args={[0.045, 0.1, 0.045]} />
+        <meshStandardMaterial color="#3f3f46" />
+      </mesh>
+      <mesh position={[0, 0.18, 0]}>
+        <boxGeometry args={[0.065, 0.38, 0.05]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+function HandShieldWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <mesh position={[0, 0.18, 0]} rotation={[0, 0, Math.PI / 2]}>
+      <cylinderGeometry args={[0.22, 0.22, 0.06, 16]} />
+      <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.25} />
+    </mesh>
+  );
+}
+
+function MacheteWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh position={[0, -0.06, 0]}>
+        <boxGeometry args={[0.05, 0.14, 0.05]} />
+        <meshStandardMaterial color="#3f3f46" />
+      </mesh>
+      <mesh position={[0, 0.34, 0]}>
+        <boxGeometry args={[0.16, 0.6, 0.05]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+function ThrowingStarWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group position={[0, 0.22, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh>
+        <boxGeometry args={[0.32, 0.32, 0.025]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.35} />
+      </mesh>
+      <mesh rotation={[0, 0, Math.PI / 4]}>
+        <boxGeometry args={[0.32, 0.32, 0.025]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.35} />
+      </mesh>
+    </group>
+  );
+}
+
+function ButterflyWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh position={[0, -0.04, 0]}>
+        <boxGeometry args={[0.04, 0.08, 0.04]} />
+        <meshStandardMaterial color="#3f3f46" />
+      </mesh>
+      <mesh position={[0.03, 0.18, 0]} rotation={[0, 0, -0.18]}>
+        <boxGeometry args={[0.045, 0.36, 0.03]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.35} />
+      </mesh>
+      <mesh position={[-0.03, 0.18, 0]} rotation={[0, 0, 0.18]}>
+        <boxGeometry args={[0.045, 0.36, 0.03]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.35} />
+      </mesh>
+    </group>
+  );
+}
+
+function BatWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <mesh position={[0, 0.42, 0]}>
+      <cylinderGeometry args={[0.1, 0.035, 0.86, 12]} />
+      <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.2} />
+    </mesh>
+  );
+}
+
+function ShardWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group position={[0, 0.46, 0]}>
+      <mesh position={[0, 0.2, 0]}>
+        <coneGeometry args={[0.13, 0.4, 6]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.6} />
+      </mesh>
+      <mesh position={[0, -0.12, 0]} rotation={[Math.PI, 0, 0]}>
+        <coneGeometry args={[0.13, 0.24, 6]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
 const WEAPON_VARIANTS = [SwordWeapon, AxeWeapon, HammerWeapon, StaffWeapon];
+
+/** Exact match against the curated names in scripts/generate-all-items.js
+ * (WEAPON_NAMES + ULTRA_NAMES.weapon_cosmetic) — these are a small, fixed
+ * vocabulary, not a color matrix, so a direct lookup is both simpler and
+ * more correct than hashing. Anything not in this table (a future
+ * admin-added weapon) still falls back to the original hash-based pick. */
+const EXACT_WEAPON_SHAPE: Record<string, typeof SwordWeapon> = {
+  "Rohr": PipeWeapon,
+  "Stahlrohr": PipeWeapon,
+  "Holzbrett": PlankWeapon,
+  "Rostige Klinge": SwordWeapon,
+  "Holzschwert": SwordWeapon,
+  "Messer": DaggerWeapon,
+  "Flammenschwert": SwordWeapon,
+  "Glasflasche": BottleWeapon,
+  "Dolch": DaggerWeapon,
+  "Stahlschild": HandShieldWeapon,
+  "Machete": MacheteWeapon,
+  "Wurfstern": ThrowingStarWeapon,
+  "Butterfly": ButterflyWeapon,
+  "Baseballschläger": BatWeapon,
+  "Donnerhammer": HammerWeapon,
+  "Voidklinge": SwordWeapon,
+  "Götterschwert": SwordWeapon,
+  "Sternensplitter": ShardWeapon,
+};
 
 export function WeaponVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#e5e7eb");
   const emissive = rarityColorFor(item, "#000000");
-  const Variant = WEAPON_VARIANTS[variantIndex(item.name, WEAPON_VARIANTS.length)];
+  const Variant =
+    EXACT_WEAPON_SHAPE[item.name] ?? WEAPON_VARIANTS[variantIndex(item.name, WEAPON_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} emissive={emissive} />

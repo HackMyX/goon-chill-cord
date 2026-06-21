@@ -46,7 +46,9 @@ class SoundManager {
     let audio = this.interruptAudio.get(name);
     if (!audio) {
       audio = new Audio(INTERRUPT_SRC[name]);
-      audio.volume = name === "hover" ? 0.25 : 0.45;
+      // hover/tick fire constantly (mouse movement, reel spin) — kept quiet
+      // so a session of moving the mouse around doesn't wear the ears down.
+      audio.volume = name === "hover" ? 0.16 : 0.3;
       this.interruptAudio.set(name, audio);
     }
     return audio;
@@ -57,7 +59,7 @@ class SoundManager {
     let audio = this.fxPool.get(name);
     if (!audio) {
       audio = new Audio(FX_SRC[name]);
-      audio.volume = name === "click" ? 0.4 : 0.7;
+      audio.volume = name === "click" ? 0.32 : 0.55;
       this.fxPool.set(name, audio);
     }
     return audio;

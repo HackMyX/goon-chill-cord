@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trash2, Plus, Loader2, LogOut, Ban, ShieldOff, Eraser } from "lucide-react";
+import { Trash2, Plus, Loader2, LogOut, Ban, ShieldOff, Eraser, PackagePlus } from "lucide-react";
 import {
   getUserDetail,
   searchItems,
   grantItemToUser,
+  grantAllItemsToUser,
   removeUserItem,
   setUserBanned,
   kickUser,
@@ -110,6 +111,20 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     }
   }
 
+  async function handleGrantAll() {
+    if (!confirm("Diesem User wirklich ALLE Items aus dem Katalog geben (alles, was er noch nicht hat)?"))
+      return;
+    setModAction("grant-all");
+    const res = await grantAllItemsToUser(userId);
+    setModAction(null);
+    if (res.success) {
+      await refresh();
+      setModMessage("Alle Items vergeben.");
+    } else {
+      setModMessage(res.error ?? "Fehler.");
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8 text-zinc-500">
@@ -155,6 +170,15 @@ export function UserDetailPanel({ userId }: { userId: string }) {
         >
           <Eraser className="h-3.5 w-3.5" />
           Inventar wipen
+        </button>
+        <button
+          onMouseEnter={sound.hover}
+          onClick={handleGrantAll}
+          disabled={modAction !== null}
+          className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
+        >
+          <PackagePlus className="h-3.5 w-3.5" />
+          Alle Items geben
         </button>
         {detail.banned && (
           <span className="ml-auto rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
