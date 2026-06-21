@@ -21,6 +21,7 @@ import {
   ChestShape,
   RingVariant,
   AmuletVariant,
+  BareFoot,
 } from "@/components/world/item-variants";
 
 export interface CharacterModelProps {
@@ -77,7 +78,7 @@ const BUILD = {
 export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>(
   function CharacterModel({ equippedByCategory, gender, name }, ref) {
     const hat = equippedByCategory.hat;
-    const hair = equippedByCategory[gender === "m" ? "hair_m" : "hair_f"];
+    const hair = equippedByCategory.hair;
     const jacket = equippedByCategory.jacket;
     const pants = equippedByCategory.pants;
     const shoes = equippedByCategory.shoes;
@@ -108,8 +109,7 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
     useEffect(() => {
       const handled = new Set([
         "hat",
-        "hair_m",
-        "hair_f",
+        "hair",
         "jacket",
         "pants",
         "shoes",
@@ -155,7 +155,7 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
         <group ref={legL} position={[-build.legX, HIP_Y, 0]}>
           {pants ? <PantsVariant item={pants} /> : <SkinnyFallbackLeg />}
           <group position={[0, -1, 0]}>
-            {shoes && <ShoeVariant item={shoes} />}
+            {shoes ? <ShoeVariant item={shoes} /> : <BareFoot skin={SKIN} />}
           </group>
         </group>
 
@@ -163,7 +163,7 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
         <group ref={legR} position={[build.legX, HIP_Y, 0]}>
           {pants ? <PantsVariant item={pants} /> : <SkinnyFallbackLeg />}
           <group position={[0, -1, 0]}>
-            {shoes && <ShoeVariant item={shoes} />}
+            {shoes ? <ShoeVariant item={shoes} /> : <BareFoot skin={SKIN} />}
           </group>
         </group>
 
@@ -187,10 +187,11 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
           </group>
         )}
 
-        {/* amulet — sits on top of the chest/jacket at collar height, just
+        {/* amulet — the neck-loop sits right at the collar (head bottom is
+            at y=1.775), pendant hangs down onto the chest from there, just
             in front of the torso so it never gets swallowed inside it */}
         {amulet && (
-          <group position={[0, 1.62, build.torsoDepth / 2 + 0.06]}>
+          <group position={[0, 1.72, build.torsoDepth / 2 + 0.06]}>
             <AmuletVariant item={amulet} />
           </group>
         )}
@@ -260,8 +261,10 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
           </group>
         )}
 
-        {/* hair — variant style picked deterministically from the item name */}
-        {hair && <HairVariant item={hair} />}
+        {/* hair — same catalogue item for every gender; the *shape* adapts
+            to the body wearing it (item-variants.tsx HairVariant), not the
+            item itself */}
+        {hair && <HairVariant item={hair} gender={gender} />}
 
         {/* hat — variant shape picked deterministically from the item name */}
         {hat && (

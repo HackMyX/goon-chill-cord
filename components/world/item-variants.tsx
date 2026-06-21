@@ -791,14 +791,21 @@ function PaddedJacket({ color, width, depth }: { color: string; width: number; d
 }
 
 function LongCoatJacket({ color, width, depth }: { color: string; width: number; depth: number }) {
+  // The coat tail used to reach world-y ~0.475 (this group sits at y=1.35
+  // in character-model.tsx, pants run from y=0 at the feet to y=1.0 at the
+  // hip) — covering essentially the entire upper leg, which is exactly the
+  // "you can't see the pants at all anymore" bug. Shortened so the tail
+  // bottoms out at world-y ~0.78: still visibly longer than the other
+  // jacket variants, but always leaves the lower ~3/4 of the pants/legs
+  // showing no matter what's equipped underneath.
   return (
     <group>
       <mesh>
         <boxGeometry args={[width, 0.8, depth]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0, -0.55, 0]}>
-        <boxGeometry args={[width * 0.9, 0.65, depth * 0.8]} />
+      <mesh position={[0, -0.34, 0]}>
+        <boxGeometry args={[width * 0.9, 0.46, depth * 0.8]} />
         <meshStandardMaterial color={color} />
       </mesh>
     </group>
@@ -968,6 +975,19 @@ function SandalShoe({ color }: { color: string }) {
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.2} />
       </mesh>
     </group>
+  );
+}
+
+/** No shoes equipped used to mean *nothing* rendered at all — the leg just
+ * stopped dead at the ankle with no foot shape, floating above the ground.
+ * Rendered in character-model.tsx exactly where a shoe would go, so the
+ * silhouette is always complete regardless of what's equipped. */
+export function BareFoot({ skin }: { skin: string }) {
+  return (
+    <mesh position={[0, 0.05, 0.06]}>
+      <boxGeometry args={[0.24, 0.12, 0.34]} />
+      <meshStandardMaterial color={skin} />
+    </mesh>
   );
 }
 
@@ -1169,50 +1189,79 @@ export function AmuletVariant({ item }: { item: EquippedItem }) {
   );
 }
 
-// --- Hair: 4 distinct styles ----------------------------------------------
+// --- Hair: 4 distinct styles, each gender-adapted -------------------------
+// Hair is a single unisex catalogue item now (lib/wardrobe.ts — one "hair"
+// dbType, no more hair_m/hair_f) — the exact same item shows up, by the
+// same name, regardless of who's wearing it, which is what makes it
+// tradeable as one listing. What *does* still differ is purely the
+// rendered shape: every style below takes `gender` and adapts its
+// proportions (fuller/longer for "w", a bit shorter/blockier for "m"),
+// same as a real hairstyle naturally reads differently on different body
+// types — never a different item, never a different name.
 
-function ShortHair({ color }: { color: string }) {
-  return (
-    <mesh position={[0, 2.28, -0.05]}>
-      <boxGeometry args={[0.58, 0.18, 0.58]} />
-      <meshStandardMaterial color={color} />
-    </mesh>
-  );
-}
-
-function LongHair({ color }: { color: string }) {
+function ShortHair({ color, gender }: { color: string; gender: "m" | "w" }) {
+  const sideLength = gender === "w" ? 0.22 : 0;
   return (
     <group>
       <mesh position={[0, 2.28, -0.05]}>
         <boxGeometry args={[0.58, 0.18, 0.58]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0, 1.95, -0.28]}>
-        <boxGeometry args={[0.5, 0.55, 0.16]} />
+      {gender === "w" && (
+        <>
+          <mesh position={[-0.27, 2.28 - sideLength / 2 - 0.02, 0.05]}>
+            <boxGeometry args={[0.08, sideLength, 0.2]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+          <mesh position={[0.27, 2.28 - sideLength / 2 - 0.02, 0.05]}>
+            <boxGeometry args={[0.08, sideLength, 0.2]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+        </>
+      )}
+    </group>
+  );
+}
+
+function LongHair({ color, gender }: { color: string; gender: "m" | "w" }) {
+  const flowHeight = gender === "w" ? 0.85 : 0.55;
+  const flowY = 2.28 - flowHeight / 2 - 0.07;
+  return (
+    <group>
+      <mesh position={[0, 2.28, -0.05]}>
+        <boxGeometry args={[0.58, 0.18, 0.58]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      <mesh position={[0, flowY, -0.28]}>
+        <boxGeometry args={[gender === "w" ? 0.54 : 0.5, flowHeight, 0.16]} />
         <meshStandardMaterial color={color} />
       </mesh>
     </group>
   );
 }
 
-function MohawkHair({ color }: { color: string }) {
+function MohawkHair({ color, gender }: { color: string; gender: "m" | "w" }) {
+  // Unisex punk style by design — same blocky peak either way, just a hair
+  // (pun intended) narrower on the female head to match its slimmer build.
+  const width = gender === "w" ? 0.5 : 0.56;
   return (
     <mesh position={[0, 2.42, 0]}>
-      <boxGeometry args={[0.12, 0.3, 0.56]} />
+      <boxGeometry args={[0.12, 0.3, width]} />
       <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.15} />
     </mesh>
   );
 }
 
-function PonytailHair({ color }: { color: string }) {
+function PonytailHair({ color, gender }: { color: string; gender: "m" | "w" }) {
+  const tailLength = gender === "w" ? 0.68 : 0.4;
   return (
     <group>
       <mesh position={[0, 2.28, -0.05]}>
         <boxGeometry args={[0.58, 0.18, 0.58]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0, 2.05, -0.42]} rotation={[0.3, 0, 0]}>
-        <cylinderGeometry args={[0.06, 0.04, 0.5, 8]} />
+      <mesh position={[0, 2.05 - (tailLength - 0.5) * 0.3, -0.42]} rotation={[0.3, 0, 0]}>
+        <cylinderGeometry args={[0.06, 0.04, tailLength, 8]} />
         <meshStandardMaterial color={color} />
       </mesh>
     </group>
@@ -1221,12 +1270,12 @@ function PonytailHair({ color }: { color: string }) {
 
 const HAIR_VARIANTS = [ShortHair, LongHair, MohawkHair, PonytailHair];
 
-export function HairVariant({ item }: { item: EquippedItem }) {
+export function HairVariant({ item, gender }: { item: EquippedItem; gender: "m" | "w" }) {
   const color = rarityColorFor(item, "#404040");
   const Variant = HAIR_VARIANTS[variantIndex(item.name, HAIR_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
-      <Variant color={color} />
+      <Variant color={color} gender={gender} />
     </RarityFX>
   );
 }

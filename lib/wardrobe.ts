@@ -43,8 +43,12 @@ export const WARDROBE_CATEGORIES: WardrobeCategory[] = [
   { id: "shield", label: "Schild", icon: Shield, dbType: "shield_cosmetic" },
   { id: "aura", label: "Aura", icon: Sparkles, dbType: "aura" },
   { id: "face", label: "Gesicht", icon: Smile, dbType: "face" },
-  { id: "hair_m", label: "Haare", icon: User, dbType: "hair_m" },
-  { id: "hair_f", label: "Haare", icon: User, dbType: "hair_f" },
+  // Hair is one unisex catalogue type now ("hair", not hair_m/hair_f) — the
+  // same item shows up for every player regardless of gender, and renders
+  // through a gender-adapted shape (item-variants.tsx HairVariant). That's
+  // what makes hair tradeable/sellable as one listing instead of two
+  // separate, gender-locked items with the same color.
+  { id: "hair", label: "Haare", icon: User, dbType: "hair" },
   { id: "pet", label: "Haustier", icon: PawPrint, dbType: "pet" },
   { id: "weapon", label: "Waffe", icon: Sword, dbType: "weapon_cosmetic" },
   { id: "ring", label: "Ring", icon: Circle, dbType: "ring" },
@@ -55,17 +59,9 @@ export function getCategoryByDbType(dbType: string): WardrobeCategory | undefine
   return WARDROBE_CATEGORIES.find((c) => c.dbType === dbType);
 }
 
-/** Hair is gender-locked at the data level (hair_m vs hair_f are different
- * dbTypes, and CharacterModel only ever reads one of them per gender) — so
- * the category list shown to the player should only ever offer the slot
- * that's actually relevant to their selected gender, never both at once. */
-export function getCategoriesForGender(gender: "m" | "w"): WardrobeCategory[] {
-  return [
-    ALL_CATEGORY,
-    ...WARDROBE_CATEGORIES.filter((c) => {
-      if (c.dbType === "hair_m") return gender === "m";
-      if (c.dbType === "hair_f") return gender === "w";
-      return true;
-    }),
-  ];
+/** Every category is gender-neutral now (including hair) — this used to
+ * filter hair_m/hair_f by gender, but the catalogue itself is unisex these
+ * days, so there's nothing left to filter. */
+export function getCategories(): WardrobeCategory[] {
+  return [ALL_CATEGORY, ...WARDROBE_CATEGORIES];
 }

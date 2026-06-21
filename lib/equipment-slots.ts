@@ -45,8 +45,7 @@ const DB_TYPE_TO_SLOT: Record<string, EquipmentSlot> = {
   pants: "Legs",
   shoes: "Feet",
   hat: "Head",
-  hair_m: "Head",
-  hair_f: "Head",
+  hair: "Head",
   trail: "Back",
   weapon_cosmetic: "Weapon",
 };

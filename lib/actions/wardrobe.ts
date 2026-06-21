@@ -65,10 +65,10 @@ export async function toggleEquip(
  * One-way door for regular players: the *first* call also sets
  * `gender_locked = true`, and every call after that is rejected server-side
  * regardless of what the client sends. This is deliberately not just a
- * client-side disabled button — gender determines which hair slot
- * (hair_m/hair_f) a player can ever see, win from a case, or be granted, so
- * the lock has to be enforced where it can't be bypassed by calling the
- * action directly.
+ * client-side disabled button — gender determines which body shape and
+ * silhouette every equipped item (hair included) renders as, so the lock
+ * has to be enforced where it can't be bypassed by calling the action
+ * directly.
  *
  * Admins are exempt from the lock entirely (and never get `gender_locked`
  * set on their own switches) — they need to freely flip between both bodies

@@ -31,8 +31,7 @@ const ITEM_TYPE_ICONS: Record<string, LucideIcon> = {
   shield_cosmetic: Shield,
   aura: Sparkles,
   face: Smile,
-  hair_m: User,
-  hair_f: User,
+  hair: User,
   pet: PawPrint,
   weapon_cosmetic: Sword,
 };

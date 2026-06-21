@@ -1,26 +1,34 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import * as THREE from "three";
 
 export interface CameraControlState {
-  /** Horizontal orbit offset from "directly behind the player", radians. */
+  /** Absolute world yaw the camera currently *looks toward* (i.e. the
+   * direction from the camera to the player) — not a delta from the
+   * player's facing. Changed directly by right-mouse-drag, and (only while
+   * moving and not currently being dragged) eased slowly toward the
+   * player's movement direction by Player's own useFrame loop. Keeping
+   * this as one persistent absolute value — instead of a delta re-applied
+   * on top of the player's every-frame-changing rotation, which is what
+   * this used to be — is what stops the camera from violently swinging
+   * every time the player's heading changes quickly. */
   yaw: number;
-  /** Vertical orbit offset, radians, clamped so the camera can't flip
-   * through the floor or straight overhead. */
+  /** Vertical look angle, radians, clamped so the camera can't flip
+   * through the floor or straight overhead. Purely manual — unlike yaw,
+   * nothing ever auto-adjusts this, so the camera never fights a pitch the
+   * player explicitly set. */
   pitch: number;
   /** Distance from the player, world units, adjusted by the scroll wheel. */
   distance: number;
-  /** True whenever the right mouse button is *not* currently held — tells
-   * Player's per-frame loop to ease yaw/pitch back toward DEFAULT_YAW/
-   * DEFAULT_PITCH instead of holding the free-look angle indefinitely.
-   * Zoom distance is a separate preference and is deliberately left alone
-   * on release. */
-  returning: boolean;
+  /** True exactly while the right mouse button is held. Player's auto-
+   * follow (easing yaw toward the movement direction) is fully suspended
+   * whenever this is true, so manual control always wins outright and
+   * never fights the auto-follow for the same frame. */
+  dragging: boolean;
 }
 
 export const DEFAULT_YAW = 0;
-export const DEFAULT_PITCH = 0.35;
+export const DEFAULT_PITCH = 0.32;
 const DEFAULT_DISTANCE = 6.5;
 
 const YAW_SENSITIVITY = 0.006;
@@ -40,11 +48,6 @@ const ZOOM_SENSITIVITY = 0.0025;
  */
 export interface CameraControls {
   state: React.RefObject<CameraControlState>;
-  /** Call once per frame from Player's useFrame — eases yaw/pitch back
-   * toward the default look direction while `returning` is true (i.e. RMB
-   * isn't held). Defined here, not in Player, so Player never has to
-   * mutate `state.current` directly from outside the hook. */
-  easeReturn: (delta: number) => void;
 }
 
 export function useCameraControls(
@@ -54,26 +57,24 @@ export function useCameraControls(
     yaw: DEFAULT_YAW,
     pitch: DEFAULT_PITCH,
     distance: DEFAULT_DISTANCE,
-    returning: true,
+    dragging: false,
   });
 
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
 
-    let dragging = false;
     let lastX = 0;
     let lastY = 0;
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 2) return;
-      dragging = true;
-      state.current.returning = false;
+      state.current.dragging = true;
       lastX = e.clientX;
       lastY = e.clientY;
     };
     const onPointerMove = (e: PointerEvent) => {
-      if (!dragging) return;
+      if (!state.current.dragging) return;
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       lastX = e.clientX;
@@ -85,9 +86,7 @@ export function useCameraControls(
       );
     };
     const onPointerUp = () => {
-      if (!dragging) return;
-      dragging = false;
-      state.current.returning = true;
+      state.current.dragging = false;
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -97,12 +96,19 @@ export function useCameraControls(
       );
     };
     const onContextMenu = (e: MouseEvent) => e.preventDefault();
+    // Losing focus mid-drag (alt-tab, a browser permission popup, etc.)
+    // never fires `pointerup` — without this the camera would think RMB is
+    // still held forever, permanently disabling auto-follow.
+    const onBlur = () => {
+      state.current.dragging = false;
+    };
 
     el.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
     el.addEventListener("wheel", onWheel, { passive: false });
     el.addEventListener("contextmenu", onContextMenu);
+    window.addEventListener("blur", onBlur);
 
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
@@ -110,15 +116,9 @@ export function useCameraControls(
       window.removeEventListener("pointerup", onPointerUp);
       el.removeEventListener("wheel", onWheel);
       el.removeEventListener("contextmenu", onContextMenu);
+      window.removeEventListener("blur", onBlur);
     };
   }, [canvasRef]);
 
-  function easeReturn(delta: number) {
-    if (!state.current.returning) return;
-    const t = Math.min(1, delta * 4);
-    state.current.yaw = THREE.MathUtils.lerp(state.current.yaw, DEFAULT_YAW, t);
-    state.current.pitch = THREE.MathUtils.lerp(state.current.pitch, DEFAULT_PITCH, t);
-  }
-
-  return { state, easeReturn };
+  return { state };
 }

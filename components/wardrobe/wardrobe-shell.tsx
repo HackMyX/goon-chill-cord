@@ -11,7 +11,7 @@ import { WardrobeFilters, type SortKey } from "@/components/wardrobe/wardrobe-fi
 import { ItemRow } from "@/components/wardrobe/item-row";
 import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
 import { toggleEquip, updateGender } from "@/lib/actions/wardrobe";
-import { getCategoryByDbType, getCategoriesForGender, ALL_CATEGORY } from "@/lib/wardrobe";
+import { getCategoryByDbType, getCategories, ALL_CATEGORY } from "@/lib/wardrobe";
 import { useSoundManager } from "@/lib/sound-manager";
 import { debugLog, debugWarn } from "@/lib/debug";
 import { RARITY_ORDER, type Rarity } from "@/lib/cases";
@@ -76,9 +76,8 @@ export function WardrobeShell({
   const inventoryRef = useRef(inventory);
   inventoryRef.current = inventory;
 
-  const categoriesForGender = useMemo(() => getCategoriesForGender(gender), [gender]);
-  const currentCategory =
-    categoriesForGender.find((c) => c.id === activeCategory) ?? categoriesForGender[0];
+  const categories = useMemo(() => getCategories(), []);
+  const currentCategory = categories.find((c) => c.id === activeCategory) ?? categories[0];
 
   const handleGenderChange = useCallback(
     (next: "m" | "w") => {
@@ -100,10 +99,6 @@ export function WardrobeShell({
       sound.click();
       setGender(next);
       if (!isAdmin) setGenderLocked(true);
-      // Hair is gender-locked (hair_m vs hair_f) — if the player was looking
-      // at "their" hair slot when switching gender, follow them to the new
-      // gender's hair slot instead of silently falling back to category 0.
-      setActiveCategory((curr) => (curr === "hair_m" || curr === "hair_f" ? `hair_${next}` : curr));
       debugLog("Wardrobe", isAdmin ? "gender change (admin, not locking)" : "gender change (locking permanently)", { next });
       // Persisted server-side so the World page (and a future reload of the
       // Garderobe itself) shows the same body instead of always falling
@@ -126,14 +121,7 @@ export function WardrobeShell({
 
   const visibleItems = useMemo(() => {
     const trimmedQuery = query.trim().toLowerCase();
-    // Defense in depth for the "Alle" view: the per-gender category list
-    // (getCategoriesForGender) already hides the wrong-gender hair *button*,
-    // but "Alle" bypasses category filtering entirely — without this, any
-    // hair_m/hair_f item from before the gender-aware case drop fix
-    // (lib/actions/cases.ts) would still surface there.
-    const wrongGenderHairType = gender === "w" ? "hair_m" : "hair_f";
     const filtered = inventory.filter((row) => {
-      if (row.item.type === wrongGenderHairType) return false;
       if (currentCategory.dbType !== "*" && row.item.type !== currentCategory.dbType) return false;
       if (equippedOnly && !row.equipped) return false;
       if (activeRarities.size > 0 && !activeRarities.has(row.item.rarity)) return false;
@@ -166,7 +154,7 @@ export function WardrobeShell({
     });
 
     return sorted;
-  }, [inventory, currentCategory, query, activeRarities, equippedOnly, sort, gender]);
+  }, [inventory, currentCategory, query, activeRarities, equippedOnly, sort]);
 
   const equippedByCategory = useMemo(() => {
     const map: Record<string, EquippedItem | undefined> = {};
@@ -242,6 +230,7 @@ export function WardrobeShell({
           <CharacterViewer
             gender={gender}
             genderLocked={genderLocked && !isAdmin}
+            isAdmin={isAdmin}
             onGenderChange={handleGenderChange}
             equippedByCategory={equippedByCategory}
             onUnequip={handleToggle}
@@ -249,7 +238,7 @@ export function WardrobeShell({
 
           <div className="flex flex-col gap-4">
             <CategoryFilters
-              categories={categoriesForGender}
+              categories={categories}
               active={currentCategory.id}
               onSelect={(id) => {
                 sound.click();

@@ -1,7 +1,7 @@
 "use client";
 
 import { X, Lock } from "lucide-react";
-import { getCategoriesForGender } from "@/lib/wardrobe";
+import { getCategories } from "@/lib/wardrobe";
 import { CharacterPreview3D } from "@/components/wardrobe/character-preview-3d";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -13,6 +13,9 @@ interface CharacterViewerProps {
    * enforces this server-side too) — the toggle below becomes a read-only
    * display instead of a control. */
   genderLocked: boolean;
+  /** Admins never actually lock — shown a plain toggle with no "this is
+   * forever" warning, since for them it genuinely isn't. */
+  isAdmin?: boolean;
   onGenderChange: (gender: "m" | "w") => void;
   equippedByCategory: Record<string, EquippedItem | undefined>;
   /** Unequip straight from this summary list — id of the inventory row. */
@@ -22,6 +25,7 @@ interface CharacterViewerProps {
 export function CharacterViewer({
   gender,
   genderLocked,
+  isAdmin = false,
   onGenderChange,
   equippedByCategory,
   onUnequip,
@@ -29,7 +33,7 @@ export function CharacterViewer({
   // The "Alle" pseudo-category (lib/wardrobe.ts ALL_CATEGORY) only makes
   // sense as a browsing filter in the item list — it isn't a real equip
   // slot, so it has no place in this equipped-summary list.
-  const categories = getCategoriesForGender(gender).filter((c) => c.dbType !== "*");
+  const categories = getCategories().filter((c) => c.dbType !== "*");
 
   return (
     <div className="rounded-2xl border border-purple-500/20 bg-black/30 p-5">
@@ -39,38 +43,48 @@ export function CharacterViewer({
 
       <CharacterPreview3D gender={gender} equippedByCategory={equippedByCategory} />
 
-      <div className="mt-6 grid grid-cols-2 gap-2">
-        <button
-          onClick={() => onGenderChange("m")}
-          disabled={genderLocked}
-          title={genderLocked ? "Geschlecht ist permanent festgelegt" : undefined}
-          className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
-            gender === "m"
-              ? "border-purple-400 bg-purple-500/20 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.4)]"
-              : "border-white/10 text-zinc-400 hover:border-white/30"
-          } ${genderLocked ? "cursor-not-allowed opacity-70" : ""}`}
-        >
-          ♂ Männlich
-          {genderLocked && gender === "m" && <Lock className="h-3 w-3" />}
-        </button>
-        <button
-          onClick={() => onGenderChange("w")}
-          disabled={genderLocked}
-          title={genderLocked ? "Geschlecht ist permanent festgelegt" : undefined}
-          className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
-            gender === "w"
-              ? "border-purple-400 bg-purple-500/20 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.4)]"
-              : "border-white/10 text-zinc-400 hover:border-white/30"
-          } ${genderLocked ? "cursor-not-allowed opacity-70" : ""}`}
-        >
-          ♀ Weiblich
-          {genderLocked && gender === "w" && <Lock className="h-3 w-3" />}
-        </button>
-      </div>
-      {!genderLocked && (
-        <p className="mt-2 text-center text-[11px] text-amber-300/80">
-          Achtung: Diese Wahl ist endgültig und kann später nicht mehr geändert werden.
-        </p>
+      {genderLocked ? (
+        // Locked players don't get a disabled-but-visible control — they
+        // never had a choice to begin with once it's set, so there's
+        // nothing here to interact with, just what's already true.
+        <div className="mt-6 flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm font-semibold text-zinc-300">
+          <Lock className="h-3.5 w-3.5 text-zinc-500" />
+          {gender === "m" ? "♂ Männlich" : "♀ Weiblich"}
+        </div>
+      ) : (
+        <>
+          <div className="mt-6 grid grid-cols-2 gap-2">
+            <button
+              onClick={() => onGenderChange("m")}
+              className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                gender === "m"
+                  ? "border-purple-400 bg-purple-500/20 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.4)]"
+                  : "border-white/10 text-zinc-400 hover:border-white/30"
+              }`}
+            >
+              ♂ Männlich
+            </button>
+            <button
+              onClick={() => onGenderChange("w")}
+              className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                gender === "w"
+                  ? "border-purple-400 bg-purple-500/20 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.4)]"
+                  : "border-white/10 text-zinc-400 hover:border-white/30"
+              }`}
+            >
+              ♀ Weiblich
+            </button>
+          </div>
+          {isAdmin ? (
+            <p className="mt-2 text-center text-[11px] text-zinc-500">
+              Admin: frei wechselbar zum Testen, wird nicht festgelegt.
+            </p>
+          ) : (
+            <p className="mt-2 text-center text-[11px] text-amber-300/80">
+              Achtung: Diese Wahl ist endgültig und kann später nicht mehr geändert werden.
+            </p>
+          )}
+        </>
       )}
 
       <div className="mt-5 space-y-1.5">
