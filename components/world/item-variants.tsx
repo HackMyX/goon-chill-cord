@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { RARITY_HEX, rarityColorFor, type EquippedItem } from "@/lib/rarity-colors";
@@ -19,6 +19,116 @@ function hashString(s: string): number {
 
 function variantIndex(name: string, count: number): number {
   return hashString(name) % count;
+}
+
+// --- Rarity FX: universal per-rarity glow/pulse/RGB-cycle wrapper --------
+//
+// Wraps any solid-mesh variant (hat, jacket, pants, shoes, face, weapon,
+// shield, hair, pet) and drives its materials every frame based on rarity,
+// without each individual variant having to know or care:
+//   normal   -> untouched, exactly the solid rarity color it already had
+//   selten   -> a static color-matched glow (emissive = own color, low intensity)
+//   mythisch -> a stronger glow that slowly pulses
+//   ultra    -> full animated RGB hue-cycle (color *and* glow) + a fast pulse
+//               + a small rotating sparkle-particle boost
+//
+// This is what makes "every Ultra item is animated/RGB" true across all
+// ~900 generated items at once, instead of hand-authoring it per item.
+function applyRarityMaterial(mat: THREE.Material, rarity: Rarity, t: number) {
+  if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+  if (rarity === "ultra") {
+    const hue = (t * 0.18) % 1;
+    mat.color.setHSL(hue, 0.85, 0.55);
+    mat.emissive.setHSL(hue, 0.9, 0.5);
+    mat.emissiveIntensity = 0.7 + Math.sin(t * 7) * 0.35;
+  } else if (rarity === "mythisch") {
+    mat.emissive.copy(mat.color);
+    mat.emissiveIntensity = 0.35 + Math.sin(t * 2.4) * 0.2;
+  } else if (rarity === "selten") {
+    mat.emissive.copy(mat.color);
+    mat.emissiveIntensity = 0.22;
+  }
+}
+
+/** Shared by every aura/trail particle loop below — when `rarity` is
+ * "ultra" each particle gets its own slowly-drifting hue instead of one
+ * flat color, so Ultra auras/trails read as animated rainbow effects too,
+ * not just oversized normal-tier ones. No-op (returns false) for every
+ * other rarity, which already gets its correct static RARITY_HEX color
+ * from the JSX `color={color}` prop at mount. */
+function applyUltraParticleColor(
+  mat: THREE.MeshBasicMaterial,
+  rarity: Rarity,
+  t: number,
+  seed: number
+): boolean {
+  if (rarity !== "ultra") return false;
+  const hue = (((t * 0.3 + seed * 0.09) % 1) + 1) % 1;
+  mat.color.setHSL(hue, 1, 0.6);
+  return true;
+}
+
+function UltraSparkles() {
+  const refs = useRef<(THREE.Mesh | null)[]>([]);
+  const count = 6;
+  const seeds = useMemo(
+    () => Array.from({ length: count }, (_, i) => ({ angle: (i / count) * Math.PI * 2, phase: i * 0.9 })),
+    [count]
+  );
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    for (let i = 0; i < refs.current.length; i++) {
+      const m = refs.current[i];
+      if (!m) continue;
+      const s = seeds[i];
+      const hue = ((t * 0.3 + s.phase * 0.15) % 1 + 1) % 1;
+      (m.material as THREE.MeshBasicMaterial).color.setHSL(hue, 1, 0.6);
+      m.position.set(
+        Math.cos(t * 1.4 + s.angle) * 0.32,
+        Math.sin(t * 2.1 + s.phase) * 0.18,
+        Math.sin(t * 1.4 + s.angle) * 0.32
+      );
+    }
+  });
+
+  return (
+    <group>
+      {seeds.map((_, i) => (
+        <mesh
+          key={i}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
+        >
+          <sphereGeometry args={[0.03, 6, 6]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.9} toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function RarityFX({ rarity, children }: { rarity: Rarity; children: ReactNode }) {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (rarity === "normal" || !groupRef.current) return;
+    const t = state.clock.elapsedTime;
+    groupRef.current.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of mats) applyRarityMaterial(mat, rarity, t);
+    });
+  });
+
+  return (
+    <group ref={groupRef}>
+      {children}
+      {rarity === "ultra" && <UltraSparkles />}
+    </group>
+  );
 }
 
 // --- Pets: 4 distinct low-poly silhouettes ------------------------------
@@ -120,7 +230,11 @@ const PET_VARIANTS = [DogPet, DragonPet, GhostPet, CatPet];
 export function PetVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
   const Variant = PET_VARIANTS[variantIndex(item.name, PET_VARIANTS.length)];
-  return <Variant color={color} />;
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} />
+    </RarityFX>
+  );
 }
 
 // --- Hats: 4 distinct silhouettes ----------------------------------------
@@ -184,7 +298,11 @@ const HAT_VARIANTS = [CapHat, BeanieHat, TopHat, CrownHat];
 export function HatVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#6d28d9");
   const Variant = HAT_VARIANTS[variantIndex(item.name, HAT_VARIANTS.length)];
-  return <Variant color={color} />;
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} />
+    </RarityFX>
+  );
 }
 
 // --- Faces/masks: 4 distinct looks ---------------------------------------
@@ -246,7 +364,11 @@ const FACE_VARIANTS = [VisorFace, BandanaFace, GogglesFace, GasmaskFace];
 export function FaceVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
   const Variant = FACE_VARIANTS[variantIndex(item.name, FACE_VARIANTS.length)];
-  return <Variant color={color} />;
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} />
+    </RarityFX>
+  );
 }
 
 // --- Weapons: 4 distinct silhouettes -------------------------------------
@@ -325,7 +447,11 @@ export function WeaponVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#e5e7eb");
   const emissive = rarityColorFor(item, "#000000");
   const Variant = WEAPON_VARIANTS[variantIndex(item.name, WEAPON_VARIANTS.length)];
-  return <Variant color={color} emissive={emissive} />;
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} emissive={emissive} />
+    </RarityFX>
+  );
 }
 
 // --- Jackets: 4 distinct torso silhouettes -------------------------------
@@ -393,18 +519,44 @@ function LongCoatJacket({ color, width, depth }: { color: string; width: number;
 
 const JACKET_VARIANTS = [PlainJacket, CollaredJacket, PaddedJacket, LongCoatJacket];
 
+/** Female chest silhouette — two slightly-flattened spheres bulging out of
+ * the torso's front face (+z). Used both by the bare-torso fallback and by
+ * JacketVariant below so the female build reads as female with or without
+ * a jacket equipped, instead of being a unisex box either way. */
+export function ChestShape({ depth, color }: { depth: number; color: string }) {
+  return (
+    <group position={[0, 0.16, depth / 2 - 0.02]}>
+      <mesh position={[-0.12, 0, 0]} scale={[1, 0.9, 0.75]}>
+        <sphereGeometry args={[0.13, 12, 12]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      <mesh position={[0.12, 0, 0]} scale={[1, 0.9, 0.75]}>
+        <sphereGeometry args={[0.13, 12, 12]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+    </group>
+  );
+}
+
 export function JacketVariant({
   item,
   width,
   depth,
+  gender,
 }: {
   item: EquippedItem;
   width: number;
   depth: number;
+  gender: "m" | "w";
 }) {
   const color = rarityColorFor(item, "#0e7490");
   const Variant = JACKET_VARIANTS[variantIndex(item.name, JACKET_VARIANTS.length)];
-  return <Variant color={color} width={width} depth={depth} />;
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} width={width} depth={depth} />
+      {gender === "w" && <ChestShape depth={depth} color={color} />}
+    </RarityFX>
+  );
 }
 
 // --- Pants: 4 distinct leg silhouettes ------------------------------------
@@ -466,7 +618,11 @@ const PANTS_VARIANTS = [SkinnyPants, BaggyPants, ShortsPants, StripedPants];
 export function PantsVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#1e3a8a");
   const Variant = PANTS_VARIANTS[variantIndex(item.name, PANTS_VARIANTS.length)];
-  return <Variant color={color} />;
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} />
+    </RarityFX>
+  );
 }
 
 // --- Shoes: 4 distinct footwear silhouettes -------------------------------
@@ -532,7 +688,11 @@ const SHOE_VARIANTS = [SneakerShoe, BootShoe, CleatShoe, SandalShoe];
 export function ShoeVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#1e293b");
   const Variant = SHOE_VARIANTS[variantIndex(item.name, SHOE_VARIANTS.length)];
-  return <Variant color={color} />;
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} />
+    </RarityFX>
+  );
 }
 
 // --- Shields: 4 distinct silhouettes (left arm) ---------------------------
@@ -579,7 +739,11 @@ export function ShieldVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#52525b");
   const emissive = rarityColorFor(item, "#000000");
   const Variant = SHIELD_VARIANTS[variantIndex(item.name, SHIELD_VARIANTS.length)];
-  return <Variant color={color} emissive={emissive} />;
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} emissive={emissive} />
+    </RarityFX>
+  );
 }
 
 // --- Hair: 4 distinct styles ----------------------------------------------
@@ -637,7 +801,11 @@ const HAIR_VARIANTS = [ShortHair, LongHair, MohawkHair, PonytailHair];
 export function HairVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#404040");
   const Variant = HAIR_VARIANTS[variantIndex(item.name, HAIR_VARIANTS.length)];
-  return <Variant color={color} />;
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} />
+    </RarityFX>
+  );
 }
 
 // --- Auras: 4 dramatically different effects ------------------------------
@@ -655,6 +823,7 @@ function OrbitAura({ rarity }: { rarity: Rarity }) {
       const p = particleRefs.current[i];
       if (!p) continue;
       p.position.y = 0.25 + Math.sin(t * 2.4 + i * 1.3) * 0.22;
+      applyUltraParticleColor(p.material as THREE.MeshBasicMaterial, rarity, t, i);
     }
   });
 
@@ -710,6 +879,7 @@ function EmberAura({ rarity }: { rarity: Rarity }) {
       m.position.z = Math.sin(s.angle) * s.radius * (1 - cycle * 0.4);
       const mat = m.material as THREE.MeshBasicMaterial;
       mat.opacity = 0.9 * (1 - cycle);
+      applyUltraParticleColor(mat, rarity, t, i);
     }
   });
 
@@ -733,11 +903,18 @@ function EmberAura({ rarity }: { rarity: Rarity }) {
 
 function BladeAura({ rarity }: { rarity: Rarity }) {
   const groupRef = useRef<THREE.Group>(null);
+  const refs = useRef<(THREE.Mesh | null)[]>([]);
   const color = RARITY_HEX[rarity];
   const count = 6;
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (groupRef.current) groupRef.current.rotation.y -= delta * 2.2;
+    const t = state.clock.elapsedTime;
+    for (let i = 0; i < refs.current.length; i++) {
+      const m = refs.current[i];
+      if (!m) continue;
+      applyUltraParticleColor(m.material as THREE.MeshBasicMaterial, rarity, t, i);
+    }
   });
 
   return (
@@ -748,6 +925,9 @@ function BladeAura({ rarity }: { rarity: Rarity }) {
         return (
           <mesh
             key={i}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
             position={[Math.cos(angle) * radius, 0, Math.sin(angle) * radius]}
             rotation={[0, -angle, Math.PI / 2.3]}
           >
@@ -763,23 +943,28 @@ function BladeAura({ rarity }: { rarity: Rarity }) {
 function DoubleRingAura({ rarity }: { rarity: Rarity }) {
   const ringA = useRef<THREE.Group>(null);
   const ringB = useRef<THREE.Group>(null);
+  const meshA = useRef<THREE.Mesh>(null);
+  const meshB = useRef<THREE.Mesh>(null);
   const color = RARITY_HEX[rarity];
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (ringA.current) ringA.current.rotation.y += delta * 1.6;
     if (ringB.current) ringB.current.rotation.y -= delta * 1.2;
+    const t = state.clock.elapsedTime;
+    if (meshA.current) applyUltraParticleColor(meshA.current.material as THREE.MeshBasicMaterial, rarity, t, 0);
+    if (meshB.current) applyUltraParticleColor(meshB.current.material as THREE.MeshBasicMaterial, rarity, t, 5);
   });
 
   return (
     <>
       <group ref={ringA} position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <mesh>
+        <mesh ref={meshA}>
           <torusGeometry args={[0.5, 0.025, 8, 32]} />
           <meshBasicMaterial color={color} transparent opacity={0.8} toneMapped={false} />
         </mesh>
       </group>
       <group ref={ringB} position={[0, 1.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <mesh>
+        <mesh ref={meshB}>
           <torusGeometry args={[0.38, 0.02, 8, 32]} />
           <meshBasicMaterial color={color} transparent opacity={0.7} toneMapped={false} />
         </mesh>
@@ -813,6 +998,7 @@ function GlowCirclesTrail({ rarity }: { rarity: Rarity }) {
       if (!m) continue;
       const mat = m.material as THREE.MeshBasicMaterial;
       mat.opacity = segments[i].opacity * (0.7 + 0.3 * Math.sin(t * 4 + i));
+      applyUltraParticleColor(mat, rarity, t, i);
     }
   });
 
@@ -858,6 +1044,7 @@ function SparkTrail({ rarity }: { rarity: Rarity }) {
       m.position.y = 0.05 + Math.abs(Math.sin(t * 3 + s.phase)) * 0.12;
       const mat = m.material as THREE.MeshBasicMaterial;
       mat.opacity = 0.7 * (0.5 + 0.5 * Math.sin(t * 3 + s.phase));
+      applyUltraParticleColor(mat, rarity, t, i);
     }
   });
 
@@ -890,6 +1077,7 @@ function RibbonTrail({ rarity }: { rarity: Rarity }) {
       const m = refs.current[i];
       if (!m) continue;
       m.position.y = 0.15 + Math.sin(t * 3 + i * 0.8) * 0.06;
+      applyUltraParticleColor(m.material as THREE.MeshBasicMaterial, rarity, t, i);
     }
   });
 
@@ -932,6 +1120,7 @@ function SmokePuffTrail({ rarity }: { rarity: Rarity }) {
       m.scale.setScalar(scale);
       const mat = m.material as THREE.MeshBasicMaterial;
       mat.opacity = Math.max(0, 0.5 - cycle * 0.25);
+      applyUltraParticleColor(mat, rarity, t, i);
     }
   });
 

@@ -50,5 +50,39 @@ export async function toggleEquip(
   }
 
   revalidatePath("/garderobe");
+  revalidatePath("/world");
+  return { success: true };
+}
+
+/**
+ * Persists the player's chosen body/gender ("m" | "w") to profiles.gender so
+ * it's the same in the Garderobe preview, the 3D World, and after a reload —
+ * previously this only lived in WardrobeShell's local useState and the World
+ * page hard-coded "m", so picking "w" in the Garderobe never actually showed
+ * up anywhere else.
+ */
+export async function updateGender(gender: "m" | "w"): Promise<ToggleEquipResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "Du musst eingeloggt sein." };
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ gender })
+    .eq("id", user.id);
+
+  if (error) {
+    return { success: false, error: "Geschlecht konnte nicht gespeichert werden." };
+  }
+
+  revalidatePath("/garderobe");
+  revalidatePath("/world");
+  revalidatePath("/account");
+  revalidatePath("/");
   return { success: true };
 }

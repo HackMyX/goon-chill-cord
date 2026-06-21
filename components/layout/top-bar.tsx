@@ -59,16 +59,17 @@ export function TopBar({ credits, inventoryCount = 0, streakDays = 2 }: TopBarPr
         <LiveClock streakDays={streakDays} />
       </div>
 
-      {/* Right: non-game features (hidden on small screens) + games + core nav */}
+      {/* Right: games (widest control, sits outermost-left of this group) +
+          non-game features (hidden on small screens) + core nav */}
       <div className="flex items-center gap-1.5 justify-self-end overflow-hidden">
+        <div className="hidden md:block">
+          <GamesMenu />
+        </div>
         <div className="hidden items-center gap-1.5 lg:flex">
           <IconButton icon={ShoppingBag} label="Shop" />
           <IconButton icon={Gavel} label="Auktionshaus" />
           <IconButton icon={Repeat} label="Trading" />
           <IconButton icon={Users} label="Community" />
-        </div>
-        <div className="hidden md:block">
-          <GamesMenu />
         </div>
         <IconButton icon={Shirt} label="Garderobe" href="/garderobe" badge={inventoryCount} />
         <IconButton icon={UserRound} label="Profil" href="/account" />

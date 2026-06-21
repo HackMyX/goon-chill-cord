@@ -8,9 +8,10 @@ import { TopBar } from "@/components/layout/top-bar";
 import { CharacterViewer, type EquippedItem } from "@/components/wardrobe/character-viewer";
 import { CategoryFilters } from "@/components/wardrobe/category-filters";
 import { ItemRow } from "@/components/wardrobe/item-row";
-import { toggleEquip } from "@/lib/actions/wardrobe";
+import { toggleEquip, updateGender } from "@/lib/actions/wardrobe";
 import { getCategoryByDbType, getCategoriesForGender, WARDROBE_CATEGORIES } from "@/lib/wardrobe";
 import { useSoundManager } from "@/lib/sound-manager";
+import { debugLog, debugWarn } from "@/lib/debug";
 import type { Rarity } from "@/lib/cases";
 
 export interface InventoryRow {
@@ -29,6 +30,7 @@ interface WardrobeShellProps {
   inventoryCount: number;
   streakDays: number;
   initialInventory: InventoryRow[];
+  initialGender: "m" | "w";
 }
 
 const ROW_HEIGHT = 76; // row height incl. gap, used by the virtualizer's size estimate
@@ -38,10 +40,11 @@ export function WardrobeShell({
   inventoryCount,
   streakDays,
   initialInventory,
+  initialGender,
 }: WardrobeShellProps) {
   const [inventory, setInventory] = useState(initialInventory);
   const [activeCategory, setActiveCategory] = useState(WARDROBE_CATEGORIES[0].id);
-  const [gender, setGender] = useState<"m" | "w">("m");
+  const [gender, setGender] = useState<"m" | "w">(initialGender);
   const sound = useSoundManager();
 
   const inventoryRef = useRef(inventory);
@@ -59,6 +62,16 @@ export function WardrobeShell({
       // at "their" hair slot when switching gender, follow them to the new
       // gender's hair slot instead of silently falling back to category 0.
       setActiveCategory((curr) => (curr === "hair_m" || curr === "hair_f" ? `hair_${next}` : curr));
+      debugLog("Wardrobe", "gender change", { next });
+      // Persisted server-side so the World page (and a future reload of the
+      // Garderobe itself) shows the same body instead of always falling
+      // back to "m" — previously this was only ever local component state.
+      updateGender(next).then((res) => {
+        if (!res.success) {
+          debugWarn("Wardrobe", "updateGender failed", res.error);
+          sound.error();
+        }
+      });
     },
     [sound]
   );
@@ -89,6 +102,7 @@ export function WardrobeShell({
     const dbType = row.item.type;
     const previous = inventoryRef.current;
     sound.click();
+    debugLog("Wardrobe", "toggleEquip start", { id, name: row.item.name, dbType, nextEquipped });
 
     setInventory((curr) =>
       curr.map((r) => {
@@ -99,10 +113,16 @@ export function WardrobeShell({
     );
 
     const category = getCategoryByDbType(dbType);
+    if (!category) {
+      debugWarn("Wardrobe", "toggleEquip: no WardrobeCategory found for dbType", dbType);
+    }
     const res = await toggleEquip(id, category?.dbType ?? dbType, nextEquipped);
     if (!res.success) {
+      debugWarn("Wardrobe", "toggleEquip failed, rolling back optimistic update", res.error);
       setInventory(previous);
       sound.error();
+    } else {
+      debugLog("Wardrobe", "toggleEquip confirmed", { id, nextEquipped });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally stable; latest state read via inventoryRef
   }, []);

@@ -14,7 +14,7 @@ export default async function GarderobePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days")
+    .select("credits, streak_days, gender")
     .eq("id", user.id)
     .single();
 
@@ -31,6 +31,7 @@ export default async function GarderobePage() {
       inventoryCount={inventoryRows.length}
       streakDays={profile?.streak_days ?? 0}
       initialInventory={inventoryRows}
+      initialGender={(profile?.gender as "m" | "w") ?? "m"}
     />
   );
 }

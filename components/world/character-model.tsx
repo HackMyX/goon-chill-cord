@@ -1,9 +1,10 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 import { Billboard, Text } from "@react-three/drei";
 import { type EquippedItem } from "@/lib/rarity-colors";
+import { debugWarn } from "@/lib/debug";
 import {
   PetVariant,
   HatVariant,
@@ -16,6 +17,7 @@ import {
   HairVariant,
   AuraVariant,
   TrailVariant,
+  ChestShape,
 } from "@/components/world/item-variants";
 
 export interface CharacterModelProps {
@@ -93,6 +95,37 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
     // ref-of-refs object instead so a parent can reach each limb joint.
     useImperativeHandle(ref, () => ({ legL, legR, armL, armR }), []);
 
+    // Every dbType this component actually knows how to render — anything
+    // equipped outside this set (e.g. a legacy "ring"/"amulet"/"helmet"
+    // type from lib/cases.ts ALL_ITEM_TYPES that has no 3D variant yet)
+    // silently vanishes instead of erroring, which is correct behavior but
+    // invisible when debugging "why isn't my item showing up".
+    useEffect(() => {
+      const handled = new Set([
+        "hat",
+        "hair_m",
+        "hair_f",
+        "jacket",
+        "pants",
+        "shoes",
+        "aura",
+        "face",
+        "weapon_cosmetic",
+        "shield_cosmetic",
+        "trail",
+        "pet",
+      ]);
+      for (const type of Object.keys(equippedByCategory)) {
+        if (equippedByCategory[type] && !handled.has(type)) {
+          debugWarn(
+            "CharacterModel",
+            `equipped item type "${type}" has no 3D render path — it will not appear on the character`,
+            equippedByCategory[type]
+          );
+        }
+      }
+    }, [equippedByCategory]);
+
     return (
       <group>
         {name && (
@@ -130,13 +163,21 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
         {/* torso */}
         {jacket ? (
           <group position={[0, 1.35, 0]}>
-            <JacketVariant item={jacket} width={build.torsoWidth} depth={build.torsoDepth} />
+            <JacketVariant
+              item={jacket}
+              width={build.torsoWidth}
+              depth={build.torsoDepth}
+              gender={gender}
+            />
           </group>
         ) : (
-          <mesh position={[0, 1.35, 0]}>
-            <boxGeometry args={[build.torsoWidth, 0.8, build.torsoDepth]} />
-            <meshStandardMaterial color="#0e7490" />
-          </mesh>
+          <group position={[0, 1.35, 0]}>
+            <mesh>
+              <boxGeometry args={[build.torsoWidth, 0.8, build.torsoDepth]} />
+              <meshStandardMaterial color="#0e7490" />
+            </mesh>
+            {gender === "w" && <ChestShape depth={build.torsoDepth} color={SKIN} />}
+          </group>
         )}
 
         {/* left arm: shoulder-pivoted group, shield (if any) rides on it */}
