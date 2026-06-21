@@ -120,6 +120,30 @@ function finalize(floatSamples) {
   return out;
 }
 
+/**
+ * Every sound used to just stop dead at the end of its buffer — the
+ * exponential decay envelopes in `note()`/`sweep()` are nowhere near zero
+ * by the time the fixed `durationMs` runs out (e.g. hover's old envelope
+ * was still at ~48% amplitude at cutoff), which is an audible click/thud
+ * every single time. This forces a smooth cosine ease-out over the last
+ * stretch of *every* generated sound regardless of its own envelope, so
+ * nothing ever ends on a hard edge — this is what "abrupt"/"kacke" sounding
+ * endings actually were, independent of pitch or timbre.
+ */
+function fadeTail(samples, { maxMs = 35, minMs = 8, fraction = 0.18 } = {}) {
+  const totalMs = (samples.length / SAMPLE_RATE) * 1000;
+  const fadeMs = Math.min(maxMs, Math.max(minMs, totalMs * fraction));
+  const fadeSamples = Math.min(samples.length, Math.round((fadeMs / 1000) * SAMPLE_RATE));
+  const out = Float32Array.from(samples);
+  const start = out.length - fadeSamples;
+  for (let i = 0; i < fadeSamples; i++) {
+    const t = i / fadeSamples;
+    const gain = 0.5 * (1 + Math.cos(Math.PI * t)); // 1 -> 0, smooth (no kink at either end)
+    out[start + i] *= gain;
+  }
+  return out;
+}
+
 function writeWav(filename, floatSamples) {
   const numSamples = floatSamples.length;
   const byteRate = SAMPLE_RATE * 2;
@@ -159,98 +183,118 @@ function writeWav(filename, floatSamples) {
 
 writeWav(
   "hover.wav",
-  finalize(
-    mixLayers(
-      [note(340, 35, { attack: 0.002, decay: 0.045, peak: 0.22, harmonics: [[1, 1], [0.5, 0.3]] })],
-      45
+  fadeTail(
+    finalize(
+      mixLayers(
+        [note(340, 35, { attack: 0.002, decay: 0.045, peak: 0.22, harmonics: [[1, 1], [0.5, 0.3]] })],
+        45
+      )
     )
   )
 );
 
 writeWav(
   "click.wav",
-  finalize(
-    applyEcho(
-      mixLayers(
-        [
-          note(260, 55, { attack: 0.002, decay: 0.06, peak: 0.42, harmonics: [[1, 1], [0.5, 0.4], [2, 0.1]] }),
-          note(130, 60, { attack: 0.002, decay: 0.07, peak: 0.22, harmonics: [[1, 1]] }),
-        ],
-        80
-      ),
-      { delayMs: 55, decay: 0.15, repeats: 2 }
+  fadeTail(
+    finalize(
+      applyEcho(
+        mixLayers(
+          [
+            note(260, 55, { attack: 0.002, decay: 0.06, peak: 0.42, harmonics: [[1, 1], [0.5, 0.4], [2, 0.1]] }),
+            note(130, 60, { attack: 0.002, decay: 0.07, peak: 0.22, harmonics: [[1, 1]] }),
+          ],
+          80
+        ),
+        { delayMs: 55, decay: 0.15, repeats: 2 }
+      )
     )
   )
 );
 
 writeWav(
   "tick.wav",
-  finalize(
-    mixLayers(
-      [note(220, 28, { attack: 0.001, decay: 0.028, peak: 0.36, harmonics: [[1, 1], [0.5, 0.25]] })],
-      38
+  fadeTail(
+    finalize(
+      mixLayers(
+        [note(220, 28, { attack: 0.001, decay: 0.028, peak: 0.36, harmonics: [[1, 1], [0.5, 0.25]] })],
+        38
+      )
     )
   )
 );
 
 writeWav(
   "win.wav",
-  finalize(
-    applyEcho(
-      mixLayers(
-        [
-          note(349.23, 180, { decay: 0.24, peak: 0.4, startMs: 0, harmonics: [[1, 1], [2, 0.18]] }),
-          note(440.0, 180, { decay: 0.24, peak: 0.42, startMs: 100, harmonics: [[1, 1], [2, 0.18]] }),
-          note(523.25, 250, { decay: 0.3, peak: 0.48, startMs: 200, harmonics: [[1, 1], [2, 0.2]] }),
-          note(698.46, 210, { decay: 0.32, peak: 0.2, startMs: 200, harmonics: [[1, 1], [2, 0.15]] }),
-        ],
-        460
-      ),
-      { delayMs: 95, decay: 0.22, repeats: 2 }
+  fadeTail(
+    finalize(
+      applyEcho(
+        mixLayers(
+          [
+            note(349.23, 180, { decay: 0.24, peak: 0.4, startMs: 0, harmonics: [[1, 1], [2, 0.18]] }),
+            note(440.0, 180, { decay: 0.24, peak: 0.42, startMs: 100, harmonics: [[1, 1], [2, 0.18]] }),
+            note(523.25, 250, { decay: 0.3, peak: 0.48, startMs: 200, harmonics: [[1, 1], [2, 0.2]] }),
+            note(698.46, 210, { decay: 0.32, peak: 0.2, startMs: 200, harmonics: [[1, 1], [2, 0.15]] }),
+          ],
+          460
+        ),
+        { delayMs: 95, decay: 0.22, repeats: 2 }
+      )
     )
   )
 );
 
 writeWav(
   "ultra-win.wav",
-  finalize(
-    applyEcho(
-      mixLayers(
-        [
-          thump(190, { peak: 0.6 }),
-          note(261.6, 170, { decay: 0.27, peak: 0.4, startMs: 60, harmonics: [[1, 1], [2, 0.2]] }),
-          note(349.23, 170, { decay: 0.27, peak: 0.42, startMs: 150, harmonics: [[1, 1], [2, 0.2]] }),
-          note(440.0, 170, { decay: 0.27, peak: 0.44, startMs: 240, harmonics: [[1, 1], [2, 0.2]] }),
-          note(523.25, 200, { decay: 0.3, peak: 0.48, startMs: 330, harmonics: [[1, 1], [2, 0.22]] }),
-          note(698.46, 400, { decay: 0.48, peak: 0.5, startMs: 430, harmonics: [[1, 1], [2, 0.25]] }),
-          // shimmer layer, slightly detuned for a richer fanfare/chorus feel —
-          // kept an octave lower than before so it reads as warm, not shrill.
-          note(698.46, 400, { decay: 0.48, peak: 0.2, startMs: 430, detuneCents: 12 }),
-          note(880.0, 360, { decay: 0.45, peak: 0.26, startMs: 460, harmonics: [[1, 1], [2, 0.2]] }),
-        ],
-        870
-      ),
-      { delayMs: 120, decay: 0.3, repeats: 3 }
+  fadeTail(
+    finalize(
+      applyEcho(
+        mixLayers(
+          [
+            thump(190, { peak: 0.6 }),
+            note(261.6, 170, { decay: 0.27, peak: 0.4, startMs: 60, harmonics: [[1, 1], [2, 0.2]] }),
+            note(349.23, 170, { decay: 0.27, peak: 0.42, startMs: 150, harmonics: [[1, 1], [2, 0.2]] }),
+            note(440.0, 170, { decay: 0.27, peak: 0.44, startMs: 240, harmonics: [[1, 1], [2, 0.2]] }),
+            note(523.25, 200, { decay: 0.3, peak: 0.48, startMs: 330, harmonics: [[1, 1], [2, 0.22]] }),
+            note(698.46, 400, { decay: 0.48, peak: 0.5, startMs: 430, harmonics: [[1, 1], [2, 0.25]] }),
+            // shimmer layer, slightly detuned for a richer fanfare/chorus feel —
+            // kept an octave lower than before so it reads as warm, not shrill.
+            note(698.46, 400, { decay: 0.48, peak: 0.2, startMs: 430, detuneCents: 12 }),
+            note(880.0, 360, { decay: 0.45, peak: 0.26, startMs: 460, harmonics: [[1, 1], [2, 0.2]] }),
+          ],
+          870
+        ),
+        { delayMs: 120, decay: 0.3, repeats: 3 }
+      )
     )
   )
 );
 
 writeWav(
   "error.wav",
-  finalize(
-    mixLayers(
-      [
-        note(220, 140, { decay: 0.16, peak: 0.4, startMs: 0, harmonics: [[1, 1], [1.03, 0.5]] }),
-        note(140, 190, { decay: 0.2, peak: 0.42, startMs: 130, harmonics: [[1, 1], [1.03, 0.5]] }),
-      ],
-      340
+  fadeTail(
+    finalize(
+      mixLayers(
+        [
+          note(220, 140, { decay: 0.16, peak: 0.4, startMs: 0, harmonics: [[1, 1], [1.03, 0.5]] }),
+          note(140, 190, { decay: 0.2, peak: 0.42, startMs: 130, harmonics: [[1, 1], [1.03, 0.5]] }),
+        ],
+        340
+      )
     )
   )
 );
 
 writeWav(
   "flip.wav",
-  finalize(applyEcho(mixLayers([sweep(220, 620, 170, { peak: 0.44, decay: 0.22 })], 190), { delayMs: 65, decay: 0.18, repeats: 2 }))
+  fadeTail(
+    finalize(
+      applyEcho(mixLayers([sweep(220, 620, 170, { peak: 0.44, decay: 0.22 })], 190), {
+        delayMs: 65,
+        decay: 0.18,
+        repeats: 2,
+      })
+    )
+  )
 );
 
 console.log("Done.");

@@ -7,21 +7,24 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { TopBar } from "@/components/layout/top-bar";
 import { CharacterViewer, type EquippedItem } from "@/components/wardrobe/character-viewer";
 import { CategoryFilters } from "@/components/wardrobe/category-filters";
+import { WardrobeFilters, type SortKey } from "@/components/wardrobe/wardrobe-filters";
 import { ItemRow } from "@/components/wardrobe/item-row";
 import { toggleEquip, updateGender } from "@/lib/actions/wardrobe";
 import { getCategoryByDbType, getCategoriesForGender, WARDROBE_CATEGORIES } from "@/lib/wardrobe";
 import { useSoundManager } from "@/lib/sound-manager";
 import { debugLog, debugWarn } from "@/lib/debug";
-import type { Rarity } from "@/lib/cases";
+import { RARITY_ORDER, type Rarity } from "@/lib/cases";
 
 export interface InventoryRow {
   id: string;
   equipped: boolean;
+  obtained_at?: string;
   item: {
     id: string;
     name: string;
     rarity: Rarity;
     type: string;
+    price_cr?: number;
   };
 }
 
@@ -45,7 +48,20 @@ export function WardrobeShell({
   const [inventory, setInventory] = useState(initialInventory);
   const [activeCategory, setActiveCategory] = useState(WARDROBE_CATEGORIES[0].id);
   const [gender, setGender] = useState<"m" | "w">(initialGender);
+  const [query, setQuery] = useState("");
+  const [activeRarities, setActiveRarities] = useState<Set<Rarity>>(new Set());
+  const [equippedOnly, setEquippedOnly] = useState(false);
+  const [sort, setSort] = useState<SortKey>("rarity-desc");
   const sound = useSoundManager();
+
+  const toggleRarityFilter = useCallback((rarity: Rarity) => {
+    setActiveRarities((curr) => {
+      const next = new Set(curr);
+      if (next.has(rarity)) next.delete(rarity);
+      else next.add(rarity);
+      return next;
+    });
+  }, []);
 
   const inventoryRef = useRef(inventory);
   inventoryRef.current = inventory;
@@ -76,10 +92,42 @@ export function WardrobeShell({
     [sound]
   );
 
-  const visibleItems = useMemo(
-    () => inventory.filter((row) => row.item.type === currentCategory.dbType),
-    [inventory, currentCategory]
-  );
+  const visibleItems = useMemo(() => {
+    const trimmedQuery = query.trim().toLowerCase();
+    const filtered = inventory.filter((row) => {
+      if (row.item.type !== currentCategory.dbType) return false;
+      if (equippedOnly && !row.equipped) return false;
+      if (activeRarities.size > 0 && !activeRarities.has(row.item.rarity)) return false;
+      if (trimmedQuery && !row.item.name.toLowerCase().includes(trimmedQuery)) return false;
+      return true;
+    });
+
+    const rarityRank = (r: Rarity) => RARITY_ORDER.indexOf(r);
+    const sorted = [...filtered].sort((a, b) => {
+      switch (sort) {
+        case "rarity-desc":
+          return rarityRank(b.item.rarity) - rarityRank(a.item.rarity);
+        case "rarity-asc":
+          return rarityRank(a.item.rarity) - rarityRank(b.item.rarity);
+        case "name-asc":
+          return a.item.name.localeCompare(b.item.name, "de");
+        case "name-desc":
+          return b.item.name.localeCompare(a.item.name, "de");
+        case "value-desc":
+          return (b.item.price_cr ?? 0) - (a.item.price_cr ?? 0);
+        case "value-asc":
+          return (a.item.price_cr ?? 0) - (b.item.price_cr ?? 0);
+        case "newest":
+          return (b.obtained_at ?? "").localeCompare(a.obtained_at ?? "");
+        case "oldest":
+          return (a.obtained_at ?? "").localeCompare(b.obtained_at ?? "");
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [inventory, currentCategory, query, activeRarities, equippedOnly, sort]);
 
   const equippedByCategory = useMemo(() => {
     const map: Record<string, EquippedItem | undefined> = {};
@@ -167,9 +215,21 @@ export function WardrobeShell({
               }}
             />
 
+            <WardrobeFilters
+              query={query}
+              onQueryChange={setQuery}
+              activeRarities={activeRarities}
+              onToggleRarity={toggleRarityFilter}
+              equippedOnly={equippedOnly}
+              onToggleEquippedOnly={() => setEquippedOnly((v) => !v)}
+              sort={sort}
+              onSortChange={setSort}
+              resultCount={visibleItems.length}
+            />
+
             {visibleItems.length === 0 ? (
               <p className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-8 text-center text-sm text-zinc-500">
-                Keine Items in der Kategorie &quot;{currentCategory.label}&quot;.
+                Keine Items gefunden — Filter anpassen oder zurücksetzen.
               </p>
             ) : (
               <div ref={scrollParentRef} className="h-[70vh] overflow-y-auto pr-1">

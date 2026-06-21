@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSoundManager } from "@/lib/sound-manager";
+import { getURL } from "@/lib/get-url";
 
 export function DiscordLoginButton() {
   const [loading, setLoading] = useState(false);
@@ -11,12 +12,21 @@ export function DiscordLoginButton() {
   async function handleLogin() {
     sound.click();
     setLoading(true);
+    const redirectTo = `${getURL()}/auth/callback`;
+    // Logged client-side so you can see in the browser console exactly
+    // which origin is being sent to Supabase *before* it redirects away —
+    // if this ever prints anything other than your current address bar's
+    // origin, that's the bug. If it's correct here but you still land on
+    // the wrong domain after login, the redirect is being rejected by
+    // Supabase's Authentication -> URL Configuration -> Redirect URLs
+    // allowlist (it must contain this exact origin) and it's silently
+    // falling back to the project's Site URL — not something fixable from
+    // application code.
+    console.log("[DiscordLogin] redirectTo:", redirectTo);
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: "discord",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { redirectTo },
     });
   }
 

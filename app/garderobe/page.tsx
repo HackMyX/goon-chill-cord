@@ -20,7 +20,7 @@ export default async function GarderobePage() {
 
   const { data: inventory } = await supabase
     .from("inventory")
-    .select("id, equipped, item:items(id, name, rarity, type)")
+    .select("id, equipped, obtained_at, item:items(id, name, rarity, type, price_cr)")
     .eq("user_id", user.id);
 
   const inventoryRows = (inventory ?? []) as unknown as InventoryRow[];

@@ -60,8 +60,15 @@ export function TopBar({ credits, inventoryCount = 0, streakDays = 2 }: TopBarPr
       </div>
 
       {/* Right: games (widest control, sits outermost-left of this group) +
-          non-game features (hidden on small screens) + core nav */}
-      <div className="flex items-center gap-1.5 justify-self-end overflow-hidden">
+          non-game features (hidden on small screens) + core nav.
+          No `overflow-hidden` here on purpose — it used to clip the top
+          sliver of the Garderobe badge (IconButton positions it at
+          `-top-1 -right-1`, just outside the button's own box, and a tight
+          `overflow-hidden` wrapper cut that off). The responsive `hidden
+          md:block` / `hidden lg:flex` groups above already keep this row
+          from ever actually overflowing its grid column on narrow screens,
+          so there's nothing left for `overflow-hidden` to protect against. */}
+      <div className="flex items-center gap-1.5 justify-self-end">
         <div className="hidden md:block">
           <GamesMenu />
         </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
 import { Billboard, Text } from "@react-three/drei";
 import { type EquippedItem } from "@/lib/rarity-colors";
 import { debugWarn } from "@/lib/debug";
@@ -196,7 +197,16 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
             <meshStandardMaterial color={SKIN} />
           </mesh>
           {weapon && (
-            <group position={[0.02, -0.73, 0.08]}>
+            // The forearm box below is [0.22, 0.75, 0.22], spanning
+            // y:[-0.75,0] z:[-0.11,0.11] in this group's local space — the
+            // old z=0.08 offset sat *inside* that box, so the blade (which
+            // extends straight up from its own local origin) visually grew
+            // up through the forearm itself instead of looking like
+            // something held in the fist. Pushed to z=0.2 (clear of the
+            // 0.11 half-depth) and y=-0.78 (right at the fist, just past
+            // the hand tip) so it reads as gripped in the hand, blade
+            // straight up, not fused into the arm.
+            <group position={[0.04, -0.78, 0.2]}>
               <WeaponVariant item={weapon} />
             </group>
           )}
@@ -228,16 +238,50 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
         {/* pet companion — independent, doesn't ride the body. Equip a
             "dog"-named pet and a different-named pet and they'll actually
             look like different animals, not just a differently-tinted
-            sphere. */}
-        {pet && (
-          <group position={[0.9, 0, 0.6]}>
-            <PetVariant item={pet} />
-          </group>
-        )}
+            sphere, and now it actually wanders/orbits around its owner
+            instead of sitting frozen in one spot. */}
+        {pet && <PetCompanion item={pet} />}
       </group>
     );
   }
 );
+
+/** Deterministic phase offset from the pet's name — without this, every
+ * equipped pet across every player would orbit perfectly in sync (same
+ * clock, same formula), which reads as obviously fake. A per-name phase
+ * makes each pet's loop start at a different point in its cycle. */
+function namePhase(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return (h % 1000) / 1000 * Math.PI * 2;
+}
+
+/** Pets used to sit frozen at a single fixed offset — equip one and it
+ * looked like a decoration bolted to your hip, not a companion. Now it
+ * wanders in a lazy ellipse around its owner with a bit of bob and faces
+ * its direction of travel, while still being purely cosmetic (no
+ * collision, no pathing) since it's only ever rendered relative to the
+ * character's own local origin. */
+function PetCompanion({ item }: { item: EquippedItem }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const phase = useMemo(() => namePhase(item.name), [item.name]);
+
+  useFrame((state) => {
+    const g = groupRef.current;
+    if (!g) return;
+    const t = state.clock.elapsedTime * 0.55 + phase;
+    const x = Math.cos(t) * 1.05;
+    const z = Math.sin(t) * 0.85 + 0.55;
+    g.position.set(x, Math.max(0, Math.sin(t * 4)) * 0.08, z);
+    g.rotation.y = -t + Math.PI / 2;
+  });
+
+  return (
+    <group ref={groupRef}>
+      <PetVariant item={item} />
+    </group>
+  );
+}
 
 /** Bare-legs fallback when no pants are equipped — keeps the silhouette
  * intact instead of leaving a gap. */
