@@ -2,16 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import { ItemsTab } from "@/components/admin/items-tab";
 import { AuditTimeline } from "@/components/admin/audit-timeline";
 import { StreakConfigEditor } from "@/components/admin/streak-config-editor";
+import { ShopTab } from "@/components/admin/shop-tab";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 import type { StreakConfig } from "@/lib/streak";
+import type { ShopSettings } from "@/lib/shop";
+import type { AdminShopListing } from "@/lib/actions/shop";
 
 export interface AuditLogEntry {
   id: string;
@@ -56,13 +59,17 @@ interface AdminShellProps {
   profiles: ProfileRow[];
   items: ItemRow[];
   streakConfig: StreakConfig;
+  shopSettings: ShopSettings;
+  todayShopListings: AdminShopListing[];
+  tomorrowShopListings: AdminShopListing[];
 }
 
-type Tab = "economy" | "streak" | "users" | "items" | "audit";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "audit";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
   { id: "streak", label: "Daily-Streak", icon: Flame },
+  { id: "shop", label: "Shop", icon: Store },
   { id: "users", label: "User-Management", icon: Users },
   { id: "items", label: "Items", icon: Package },
   { id: "audit", label: "Audit-Log", icon: ScrollText },
@@ -76,6 +83,9 @@ export function AdminShell({
   profiles,
   items: initialItems,
   streakConfig,
+  shopSettings,
+  todayShopListings,
+  tomorrowShopListings,
 }: AdminShellProps) {
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
@@ -135,6 +145,15 @@ export function AdminShell({
         )}
 
         {tab === "streak" && <StreakConfigEditor config={streakConfig} />}
+
+        {tab === "shop" && (
+          <ShopTab
+            settings={shopSettings}
+            todayListings={todayShopListings}
+            tomorrowListings={tomorrowShopListings}
+            items={items}
+          />
+        )}
 
         {tab === "users" && (
           <div className="flex flex-col gap-3">

@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { computeListingFee, MIN_DURATION_HOURS, MAX_DURATION_HOURS, MIN_BID_INCREMENT } from "@/lib/auctions";
+import {
+  computeListingFee,
+  MIN_DURATION_HOURS,
+  MAX_DURATION_HOURS,
+  MIN_BID_INCREMENT,
+  MAX_ACTIVE_AUCTIONS_PER_USER,
+} from "@/lib/auctions";
 import { notifyUser } from "@/lib/notifications-internal";
 import type { Rarity } from "@/lib/cases";
 
@@ -29,6 +35,15 @@ export interface AuctionActionResult {
   error?: string;
 }
 
+/** Plain `console.error`, not lib/debug.ts's `debugError` — that helper is
+ * a deliberate no-op on the server (`if (typeof window === "undefined")
+ * return`). This is what actually shows up in the `next dev` terminal,
+ * which matters here specifically because `auctions`/`trades` are brand
+ * new tables with no RLS policies — using the regular per-user client
+ * against them used to fail silently with no visible cause at all. */
+function logServerError(scope: string, message: string, detail?: string) {
+  console.error(`[${scope}] ${message}`, detail ?? "");
+}
 
 /**
  * Finalizes every auction whose `ends_at` has passed — there's no cron
@@ -40,12 +55,13 @@ export interface AuctionActionResult {
  */
 export async function sweepExpiredAuctions(): Promise<void> {
   const admin = createAdminClient();
-  const { data: expired } = await admin
+  const { data: expired, error: expiredError } = await admin
     .from("auctions")
     .select("id, seller_id, inventory_id, current_bid, current_bidder_id, item:items(name)")
     .eq("status", "active")
     .lt("ends_at", new Date().toISOString());
 
+  if (expiredError) logServerError("Auctions", "sweep query failed", expiredError.message);
   if (!expired || expired.length === 0) return;
 
   for (const auction of expired) {
@@ -127,6 +143,14 @@ export async function sweepExpiredAuctions(): Promise<void> {
   }
 }
 
+/**
+ * All `auctions`-table reads/writes here go through the service-role
+ * client, not the regular RLS-bound one — same reasoning as
+ * lib/actions/trading.ts: `auctions` is a brand-new table with no RLS
+ * policies, so the regular per-user client has no defined access to it.
+ * Ownership/affordability is still fully checked against the caller's own
+ * verified session before anything is written.
+ */
 export async function createAuction(input: {
   inventoryId: string;
   startingBid: number;
@@ -146,15 +170,30 @@ export async function createAuction(input: {
     Math.max(MIN_DURATION_HOURS, Math.floor(input.durationHours))
   );
 
-  const { data: invRow } = await supabase
+  const admin = createAdminClient();
+
+  const { count: activeCount, error: activeCountError } = await admin
+    .from("auctions")
+    .select("*", { count: "exact", head: true })
+    .eq("seller_id", user.id)
+    .eq("status", "active");
+  if (activeCountError) logServerError("Auctions", "active-count query failed", activeCountError.message);
+  if ((activeCount ?? 0) >= MAX_ACTIVE_AUCTIONS_PER_USER) {
+    return {
+      success: false,
+      error: `Du kannst maximal ${MAX_ACTIVE_AUCTIONS_PER_USER} Items gleichzeitig im Auktionshaus haben.`,
+    };
+  }
+
+  const { data: invRow } = await admin
     .from("inventory")
-    .select("id, equipped")
+    .select("id, item:items(id)")
     .eq("id", input.inventoryId)
     .eq("user_id", user.id)
     .single();
   if (!invRow) return { success: false, error: "Dieses Item gehört dir nicht." };
 
-  const { count: alreadyListed } = await supabase
+  const { count: alreadyListed } = await admin
     .from("auctions")
     .select("*", { count: "exact", head: true })
     .eq("inventory_id", input.inventoryId)
@@ -164,20 +203,14 @@ export async function createAuction(input: {
   }
 
   const fee = computeListingFee(input.startingBid);
-  const { data: profile } = await supabase.from("profiles").select("credits").eq("id", user.id).single();
+  const { data: profile } = await admin.from("profiles").select("credits").eq("id", user.id).single();
   if (!profile || profile.credits < fee) {
     return { success: false, error: `Du brauchst ${fee} CR Einstellgebühr, um diese Auktion zu starten.` };
   }
 
-  const { data: itemRow } = await supabase
-    .from("inventory")
-    .select("item:items(id)")
-    .eq("id", input.inventoryId)
-    .single();
-  const itemId = (itemRow?.item as unknown as { id: string } | null)?.id;
+  const itemId = (invRow.item as unknown as { id: string } | null)?.id;
   if (!itemId) return { success: false, error: "Item konnte nicht aufgelöst werden." };
 
-  const admin = createAdminClient();
   await admin.from("profiles").update({ credits: profile.credits - fee }).eq("id", user.id);
   // Unequip it — can't keep wearing something that's up for auction.
   await admin.from("inventory").update({ equipped: false }).eq("id", input.inventoryId);
@@ -194,6 +227,7 @@ export async function createAuction(input: {
   });
 
   if (error) {
+    logServerError("Auctions", "createAuction insert failed", error.message);
     // Roll back the fee charge since the listing itself never happened.
     await admin.from("profiles").update({ credits: profile.credits }).eq("id", user.id);
     return { success: false, error: "Auktion konnte nicht erstellt werden." };
@@ -220,7 +254,9 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Du musst eingeloggt sein." };
 
-  const { data: auction } = await supabase
+  const admin = createAdminClient();
+
+  const { data: auction } = await admin
     .from("auctions")
     .select("seller_id, current_bid, current_bidder_id, status, ends_at, item:items(name)")
     .eq("id", auctionId)
@@ -239,12 +275,11 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
     return { success: false, error: `Gebot muss mindestens ${auction.current_bid + MIN_BID_INCREMENT} CR sein.` };
   }
 
-  const { data: profile } = await supabase.from("profiles").select("credits").eq("id", user.id).single();
+  const { data: profile } = await admin.from("profiles").select("credits").eq("id", user.id).single();
   if (!profile || profile.credits < amount) {
     return { success: false, error: "Nicht genug Credits für dieses Gebot." };
   }
 
-  const admin = createAdminClient();
   const { error } = await admin
     .from("auctions")
     .update({ current_bid: Math.floor(amount), current_bidder_id: user.id })
@@ -252,10 +287,13 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
     .eq("status", "active")
     .lt("current_bid", amount);
 
-  if (error) return { success: false, error: "Gebot konnte nicht platziert werden." };
+  if (error) {
+    logServerError("Auctions", "placeBid update failed", error.message);
+    return { success: false, error: "Gebot konnte nicht platziert werden." };
+  }
 
   const itemName = (auction.item as unknown as { name: string } | null)?.name ?? "ein Item";
-  const { data: bidderProfile } = await supabase
+  const { data: bidderProfile } = await admin
     .from("profiles")
     .select("username")
     .eq("id", user.id)
@@ -290,7 +328,8 @@ export async function cancelAuction(auctionId: string): Promise<AuctionActionRes
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Du musst eingeloggt sein." };
 
-  const { data: auction } = await supabase
+  const admin = createAdminClient();
+  const { data: auction } = await admin
     .from("auctions")
     .select("seller_id, current_bidder_id, status")
     .eq("id", auctionId)
@@ -303,13 +342,16 @@ export async function cancelAuction(auctionId: string): Promise<AuctionActionRes
     return { success: false, error: "Eine Auktion mit aktivem Gebot kann nicht mehr abgebrochen werden." };
   }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from("auctions")
     .update({ status: "cancelled", resolved_at: new Date().toISOString() })
     .eq("id", auctionId)
     .eq("seller_id", user.id);
 
-  if (error) return { success: false, error: "Abbruch fehlgeschlagen." };
+  if (error) {
+    logServerError("Auctions", "cancelAuction failed", error.message);
+    return { success: false, error: "Abbruch fehlgeschlagen." };
+  }
 
   revalidatePath("/auctions");
   return { success: true };

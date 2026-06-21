@@ -79,7 +79,7 @@ export function TopBar({ credits, inventoryCount = 0, streakDays = 2, onCreditsC
           <GamesMenu />
         </div>
         <div className="hidden items-center gap-1.5 lg:flex">
-          <IconButton icon={ShoppingBag} label="Shop" />
+          <IconButton icon={ShoppingBag} label="Shop" href="/shop" />
           <IconButton icon={Gavel} label="Auktionshaus" href="/auctions" />
           <IconButton icon={Repeat} label="Trading" href="/trading" />
           <IconButton icon={Users} label="Community" href="/community" />

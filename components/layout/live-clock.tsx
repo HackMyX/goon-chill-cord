@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Flame, Gift, Loader2 } from "lucide-react";
 import { useHydrated } from "@/lib/use-hydrated";
 import { getClaimStatus, claimDailyReward } from "@/lib/actions/streak";
+import { DEFAULT_STREAK_CONFIG } from "@/lib/streak";
+import { StreakInfoPopover } from "@/components/layout/streak-info-popover";
 import { useSoundManager } from "@/lib/sound-manager";
 import { debugLog, debugWarn } from "@/lib/debug";
 
@@ -45,6 +47,8 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
   const hydrated = useHydrated();
   const [time, setTime] = useState("--:--:--");
   const [streakDays, setStreakDays] = useState(initialStreakDays);
+  const [bestStreakDays, setBestStreakDays] = useState(0);
+  const [streakConfig, setStreakConfig] = useState(DEFAULT_STREAK_CONFIG);
   const [canClaim, setCanClaim] = useState(false);
   const [previewReward, setPreviewReward] = useState(0);
   const [claiming, setClaiming] = useState(false);
@@ -70,6 +74,8 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
       setCanClaim(status.canClaim);
       setPreviewReward(status.previewReward);
       setStreakDays(status.streakDays);
+      setBestStreakDays(status.bestStreakDays);
+      setStreakConfig(status.config);
     });
     return () => {
       active = false;
@@ -87,6 +93,7 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
       sound.win();
       setCanClaim(false);
       setStreakDays(res.newStreak ?? streakDays);
+      setBestStreakDays((best) => Math.max(best, res.newStreak ?? 0));
       setJustClaimed(res.reward ?? null);
       debugLog("Streak", "claim success", res);
       if (res.newCredits !== undefined) onClaimed?.(res.newCredits);
@@ -104,6 +111,9 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
         <span className="flex items-center gap-1 text-xs text-orange-400">
           <Flame className="h-3 w-3" />
           Streak: {streakDays} Tage
+          {hydrated && (
+            <StreakInfoPopover streakDays={streakDays} bestStreakDays={bestStreakDays} config={streakConfig} />
+          )}
         </span>
       </div>
 

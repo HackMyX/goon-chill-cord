@@ -10,6 +10,9 @@ export const LISTING_FEE_MIN = 50;
 export const MIN_DURATION_HOURS = 1;
 export const MAX_DURATION_HOURS = 72;
 export const MIN_BID_INCREMENT = 1;
+/** A player can have at most this many *active* listings at once — trading
+ * has no such cap, the auction house does. */
+export const MAX_ACTIVE_AUCTIONS_PER_USER = 2;
 
 export function computeListingFee(startingBid: number): number {
   return Math.max(LISTING_FEE_MIN, Math.round(startingBid * LISTING_FEE_RATE));

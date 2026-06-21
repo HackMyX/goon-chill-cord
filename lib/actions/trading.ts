@@ -6,6 +6,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications-internal";
 import type { Rarity } from "@/lib/cases";
 
+/** Plain `console.error`, not lib/debug.ts's `debugError` — that helper is
+ * guarded with `if (typeof window === "undefined") return`, i.e. it's a
+ * deliberate no-op on the server. These calls run inside "use server"
+ * actions, so a `debugError` here would silently log nothing; this is
+ * what actually shows up in the `next dev` terminal. */
+function logServerError(scope: string, message: string, detail?: string) {
+  console.error(`[${scope}] ${message}`, detail ?? "");
+}
+
 export interface TradeItemSummary {
   id: string;
   name: string;
@@ -73,6 +82,15 @@ export async function getPlayerInventoryForTrade(
  * re-check happens again in respondToTrade() at accept time, since
  * ownership can change between offer and response (e.g. the sender sells
  * the offered item elsewhere in the meantime).
+ *
+ * Everything here runs on the service-role client, not the regular
+ * RLS-bound one — `trades` is a brand-new table with no RLS policies of
+ * its own, so a regular `authenticated`-role client has no defined access
+ * to it at all and every query against it would silently fail. Ownership
+ * is still fully checked (against the *caller's own* id, taken from their
+ * verified session) before anything is written, so this isn't bypassing
+ * any actual authorization — it's just not relying on RLS for a table
+ * that was never configured to use it.
  */
 export async function createTradeOffer(input: {
   receiverId: string;
@@ -102,12 +120,15 @@ export async function createTradeOffer(input: {
     return { success: false, error: "Ungültiger Credits-Betrag." };
   }
 
-  const { count: pendingCount } = await supabase
+  const admin = createAdminClient();
+
+  const { count: pendingCount, error: pendingError } = await admin
     .from("trades")
     .select("*", { count: "exact", head: true })
     .eq("status", "pending")
     .eq("sender_id", user.id)
     .eq("receiver_id", input.receiverId);
+  if (pendingError) logServerError("Trading", "pending-count query failed", pendingError.message);
 
   if ((pendingCount ?? 0) >= MAX_PENDING_TRADES_PER_PAIR) {
     return {
@@ -117,7 +138,7 @@ export async function createTradeOffer(input: {
   }
 
   if (input.offeredItemIds.length > 0) {
-    const { data: ownedItems } = await supabase
+    const { data: ownedItems } = await admin
       .from("inventory")
       .select("id")
       .eq("user_id", user.id)
@@ -127,7 +148,7 @@ export async function createTradeOffer(input: {
     }
   }
   if (input.offeredCredits > 0) {
-    const { data: profile } = await supabase
+    const { data: profile } = await admin
       .from("profiles")
       .select("credits")
       .eq("id", user.id)
@@ -137,7 +158,7 @@ export async function createTradeOffer(input: {
     }
   }
 
-  const { error } = await supabase.from("trades").insert({
+  const { error } = await admin.from("trades").insert({
     sender_id: user.id,
     receiver_id: input.receiverId,
     offered_item_ids: input.offeredItemIds,
@@ -147,9 +168,12 @@ export async function createTradeOffer(input: {
     status: "pending",
   });
 
-  if (error) return { success: false, error: "Trade konnte nicht erstellt werden." };
+  if (error) {
+    logServerError("Trading", "createTradeOffer insert failed", error.message);
+    return { success: false, error: "Trade konnte nicht erstellt werden." };
+  }
 
-  const { data: senderProfile } = await supabase
+  const { data: senderProfile } = await admin
     .from("profiles")
     .select("username")
     .eq("id", user.id)
@@ -173,14 +197,18 @@ export async function cancelTrade(tradeId: string): Promise<TradingActionResult>
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Du musst eingeloggt sein." };
 
-  const { error } = await supabase
+  const admin = createAdminClient();
+  const { error } = await admin
     .from("trades")
     .update({ status: "cancelled", resolved_at: new Date().toISOString() })
     .eq("id", tradeId)
     .eq("sender_id", user.id)
     .eq("status", "pending");
 
-  if (error) return { success: false, error: "Trade konnte nicht abgebrochen werden." };
+  if (error) {
+    logServerError("Trading", "cancelTrade failed", error.message);
+    return { success: false, error: "Trade konnte nicht abgebrochen werden." };
+  }
 
   revalidatePath("/trading");
   return { success: true };
@@ -191,9 +219,10 @@ export async function cancelTrade(tradeId: string): Promise<TradingActionResult>
  * one truly destructive/transactional path here: both item lists are
  * re-validated against live ownership (not just trusted from when the
  * offer was created), then inventory rows are reassigned and credits
- * moved both ways. Uses the service-role client for the actual transfer
- * since it touches two different users' rows, which RLS would otherwise
- * block a regular user's client from doing to the *other* party.
+ * moved both ways. Runs entirely on the service-role client for the same
+ * "trades has no RLS policies" reason as createTradeOffer above — and
+ * additionally because this step touches *two different users'* rows,
+ * which a regular per-user client could never do regardless.
  */
 export async function respondToTrade(
   tradeId: string,
@@ -205,7 +234,9 @@ export async function respondToTrade(
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Du musst eingeloggt sein." };
 
-  const { data: trade, error: tradeError } = await supabase
+  const admin = createAdminClient();
+
+  const { data: trade, error: tradeError } = await admin
     .from("trades")
     .select("*")
     .eq("id", tradeId)
@@ -214,17 +245,18 @@ export async function respondToTrade(
     .single();
 
   if (tradeError || !trade) {
+    if (tradeError) logServerError("Trading", "respondToTrade lookup failed", tradeError.message);
     return { success: false, error: "Trade nicht gefunden oder nicht mehr offen." };
   }
 
-  const { data: receiverProfileForNotice } = await supabase
+  const { data: receiverProfileForNotice } = await admin
     .from("profiles")
     .select("username")
     .eq("id", user.id)
     .single();
 
   if (!accept) {
-    await supabase
+    await admin
       .from("trades")
       .update({ status: "declined", resolved_at: new Date().toISOString() })
       .eq("id", tradeId);
@@ -238,8 +270,6 @@ export async function respondToTrade(
     revalidatePath("/trading");
     return { success: true };
   }
-
-  const admin = createAdminClient();
 
   // Re-validate ownership *now*, not at offer-creation time.
   if (trade.offered_item_ids.length > 0) {

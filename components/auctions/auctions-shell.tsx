@@ -9,7 +9,7 @@ import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { createAuction, placeBid, cancelAuction } from "@/lib/actions/auctions";
-import { computeListingFee } from "@/lib/auctions";
+import { computeListingFee, MAX_ACTIVE_AUCTIONS_PER_USER } from "@/lib/auctions";
 import type { Rarity } from "@/lib/cases";
 
 export interface OwnedItem {
@@ -317,6 +317,8 @@ export function AuctionsShell({ credits, streakDays, viewerId, myItems, auctions
 
   const active = auctions.filter((a) => a.status === "active");
   const history = auctions.filter((a) => a.status !== "active");
+  const myActiveCount = active.filter((a) => a.sellerId === viewerId).length;
+  const atLimit = myActiveCount >= MAX_ACTIVE_AUCTIONS_PER_USER;
 
   function refresh() {
     setCreating(false);
@@ -339,18 +341,31 @@ export function AuctionsShell({ credits, streakDays, viewerId, myItems, auctions
         </Link>
 
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="glow-text flex items-center gap-2 text-2xl font-extrabold text-zinc-50">
-            <Gavel className="h-6 w-6 text-purple-400" />
-            Auktionshaus
-          </h1>
+          <div>
+            <h1 className="glow-text flex items-center gap-2 text-2xl font-extrabold text-zinc-50">
+              <Gavel className="h-6 w-6 text-purple-400" />
+              Auktionshaus
+            </h1>
+            <p
+              className={`mt-1 text-xs font-semibold ${atLimit ? "text-amber-400" : "text-zinc-500"}`}
+            >
+              {myActiveCount}/{MAX_ACTIVE_AUCTIONS_PER_USER} aktive Auktionen belegt
+            </p>
+          </div>
           {!creating && (
             <button
               onMouseEnter={sound.hover}
               onClick={() => {
+                if (atLimit) {
+                  sound.error();
+                  return;
+                }
                 sound.click();
                 setCreating(true);
               }}
-              className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500"
+              disabled={atLimit}
+              title={atLimit ? `Maximal ${MAX_ACTIVE_AUCTIONS_PER_USER} aktive Auktionen gleichzeitig` : undefined}
+              className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
             >
               <Plus className="h-4 w-4" />
               Item inserieren

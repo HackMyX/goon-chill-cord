@@ -11,6 +11,7 @@ interface FieldDef {
   label: string;
   hint: string;
   suffix?: string;
+  step?: number;
 }
 
 const NUMBER_FIELDS: FieldDef[] = [
@@ -20,6 +21,7 @@ const NUMBER_FIELDS: FieldDef[] = [
   { key: "gracePeriodHours", label: "Gnadenfrist", hint: "Stunden nach Mitternacht, in denen ein verpasster Tag noch nachgeholt werden kann", suffix: "h" },
   { key: "milestoneInterval", label: "Meilenstein-Intervall", hint: "Jeder Nte Tag löst einen Bonus aus (0 = aus)", suffix: "Tage" },
   { key: "milestoneBonus", label: "Meilenstein-Bonus", hint: "Einmaliger Extra-Bonus an Meilenstein-Tagen", suffix: "CR" },
+  { key: "weekendMultiplier", label: "Wochenend-Multiplikator", hint: "Multipliziert den Tagesreward Samstag & Sonntag (1.0 = aus)", suffix: "x", step: 0.1 },
 ];
 
 /**
@@ -54,6 +56,11 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
   }
 
   const previewDays = Array.from({ length: 14 }, (_, i) => i + 1);
+  // A fixed Monday and a fixed Saturday — enough to preview both the
+  // weekday and weekend curve without needing a real calendar picker.
+  const weekdayPreviewDate = new Date("2024-01-01T12:00:00Z");
+  const weekendPreviewDate = new Date("2024-01-06T12:00:00Z");
+  const [previewWeekend, setPreviewWeekend] = useState(false);
 
   return (
     <div className="flex flex-col gap-4">
@@ -84,6 +91,7 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
                 <input
                   type="number"
                   min={0}
+                  step={field.step ?? 1}
                   value={form[field.key] as number}
                   onChange={(e) => setField(field.key, Number(e.target.value) as never)}
                   className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
@@ -129,12 +137,36 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#0f0e18] p-5">
-        <h4 className="mb-3 text-sm font-bold text-zinc-300">
-          Vorschau — erste 14 Streak-Tage mit aktuellen Werten
-        </h4>
+        <div className="mb-3 flex items-center justify-between">
+          <h4 className="text-sm font-bold text-zinc-300">
+            Vorschau — erste 14 Streak-Tage mit aktuellen Werten
+          </h4>
+          <div className="flex items-center gap-1 rounded-full bg-white/5 p-1 text-xs">
+            <button
+              onClick={() => setPreviewWeekend(false)}
+              className={`rounded-full px-2.5 py-1 font-semibold transition-colors ${
+                !previewWeekend ? "bg-purple-500/30 text-purple-200" : "text-zinc-500"
+              }`}
+            >
+              Werktag
+            </button>
+            <button
+              onClick={() => setPreviewWeekend(true)}
+              className={`rounded-full px-2.5 py-1 font-semibold transition-colors ${
+                previewWeekend ? "bg-purple-500/30 text-purple-200" : "text-zinc-500"
+              }`}
+            >
+              Wochenende
+            </button>
+          </div>
+        </div>
         <div className="flex gap-2">
           {previewDays.map((day) => {
-            const result = computeStreakReward(day, form);
+            const result = computeStreakReward(
+              day,
+              form,
+              previewWeekend ? weekendPreviewDate : weekdayPreviewDate
+            );
             return (
               <div
                 key={day}

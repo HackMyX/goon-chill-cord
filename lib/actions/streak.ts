@@ -21,6 +21,7 @@ interface StreakConfigRow {
   milestone_interval: number;
   milestone_bonus: number;
   reset_on_miss: boolean;
+  weekend_multiplier: number | null;
 }
 
 function rowToConfig(row: StreakConfigRow): StreakConfig {
@@ -33,22 +34,39 @@ function rowToConfig(row: StreakConfigRow): StreakConfig {
     milestoneInterval: row.milestone_interval,
     milestoneBonus: row.milestone_bonus,
     resetOnMiss: row.reset_on_miss,
+    weekendMultiplier: row.weekend_multiplier ?? DEFAULT_STREAK_CONFIG.weekendMultiplier,
   };
 }
 
 /** Falls back to the code defaults whenever the table doesn't exist yet
  * or is empty — same defensive pattern as lib/cases-config.ts, since the
  * daily-claim flow must never hard-fail just because a migration hasn't
- * run. */
+ * run. Uses the service-role client, not the regular one: `streak_config`
+ * has RLS enabled with no policies (true of every brand-new table in this
+ * project — see lib/actions/trading.ts for the same issue, confirmed live
+ * with a 42501 error on `trades`), so the regular client silently got
+ * zero rows back on *every* read and this always fell through to
+ * defaults — meaning admin-saved settings never actually applied to a
+ * real claim, even though the admin panel looked like it saved fine. */
 export async function getStreakConfig(): Promise<StreakConfig> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const admin = createAdminClient();
+  const baseColumns =
+    "enabled, base_reward, daily_increment, max_reward, grace_period_hours, milestone_interval, milestone_bonus, reset_on_miss";
+
+  // `weekend_multiplier` may not exist yet — try with it first, and if
+  // that specific column is the problem, fall back to the columns that
+  // were always there instead of losing every other admin-saved setting
+  // just because one newer column isn't migrated yet.
+  let { data, error } = await admin
     .from("streak_config")
-    .select(
-      "enabled, base_reward, daily_increment, max_reward, grace_period_hours, milestone_interval, milestone_bonus, reset_on_miss"
-    )
+    .select(`${baseColumns}, weekend_multiplier`)
     .eq("id", "default")
     .single();
+  if (error) {
+    const retry = await admin.from("streak_config").select(baseColumns).eq("id", "default").single();
+    data = retry.data ? { ...retry.data, weekend_multiplier: null } : null;
+    error = retry.error;
+  }
 
   if (error || !data) return DEFAULT_STREAK_CONFIG;
   return rowToConfig(data as StreakConfigRow);
@@ -58,44 +76,78 @@ export interface ClaimStatus {
   canClaim: boolean;
   enabled: boolean;
   streakDays: number;
+  bestStreakDays: number;
   previewReward: number;
   previewIsMilestone: boolean;
+  previewIsWeekend: boolean;
+  config: StreakConfig;
 }
 
 /** Read-only check the UI polls to decide whether to show an active
  * "Claim" button — never mutates anything, safe to call as often as the
- * client wants (e.g. on every TopBar mount). */
+ * client wants (e.g. on every TopBar mount). Also feeds the player-facing
+ * info popover (LiveClock's "i" button), which is why it returns the full
+ * config + best streak, not just the bare minimum the claim button needs. */
 export async function getClaimStatus(): Promise<ClaimStatus> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const config = await getStreakConfig();
+
   if (!user) {
-    return { canClaim: false, enabled: true, streakDays: 0, previewReward: 0, previewIsMilestone: false };
+    return {
+      canClaim: false,
+      enabled: config.enabled,
+      streakDays: 0,
+      bestStreakDays: 0,
+      previewReward: 0,
+      previewIsMilestone: false,
+      previewIsWeekend: false,
+      config,
+    };
   }
 
-  const [{ data: profile }, config] = await Promise.all([
-    supabase.from("profiles").select("streak_days, last_claim_date").eq("id", user.id).single(),
-    getStreakConfig(),
-  ]);
+  // Same fallback as claimDailyReward() — `best_streak_days` may not
+  // exist yet if that migration hasn't run; degrade instead of breaking
+  // the entire claim-status check (which would otherwise make every
+  // claim look "never done" since the whole select() errors as one unit).
+  let profile = await supabase
+    .from("profiles")
+    .select("streak_days, best_streak_days, last_claim_date")
+    .eq("id", user.id)
+    .single()
+    .then((r) => r.data);
+  if (!profile) {
+    const fallback = await supabase
+      .from("profiles")
+      .select("streak_days, last_claim_date")
+      .eq("id", user.id)
+      .single();
+    profile = fallback.data ? { ...fallback.data, best_streak_days: 0 } : null;
+  }
 
   const streakDays = profile?.streak_days ?? 0;
   const lastClaimDate = profile?.last_claim_date ?? null;
-  const today = dateKey(new Date());
+  const now = new Date();
+  const today = dateKey(now);
   const canClaim = config.enabled && lastClaimDate !== today;
 
   const decision = canClaim
-    ? decideStreak(lastClaimDate, streakDays, new Date(), config)
+    ? decideStreak(lastClaimDate, streakDays, now, config)
     : { continues: true, newStreak: streakDays };
-  const preview = computeStreakReward(decision.newStreak, config);
+  const preview = computeStreakReward(decision.newStreak, config, now);
 
   return {
     canClaim,
     enabled: config.enabled,
     streakDays,
+    bestStreakDays: profile?.best_streak_days ?? 0,
     previewReward: preview.totalCredits,
     previewIsMilestone: preview.isMilestone,
+    previewIsWeekend: now.getUTCDay() === 0 || now.getUTCDay() === 6,
+    config,
   };
 }
 
@@ -121,13 +173,28 @@ export async function claimDailyReward(): Promise<ClaimResult> {
     return { success: false, error: "Der Daily-Reward ist aktuell deaktiviert." };
   }
 
-  const { data: profile, error: profileError } = await supabase
+  // `best_streak_days` is a newer column (added alongside the weekend
+  // multiplier) — select with a fallback so a not-yet-run migration
+  // degrades to "no best-streak tracking" instead of breaking the claim
+  // entirely, same defensive pattern as app/admin/page.tsx's item_types.
+  let hasBestStreakColumn = true;
+  let profile = await supabase
     .from("profiles")
-    .select("credits, streak_days, last_claim_date")
+    .select("credits, streak_days, best_streak_days, last_claim_date")
     .eq("id", user.id)
-    .single();
+    .single()
+    .then((r) => r.data);
+  if (!profile) {
+    hasBestStreakColumn = false;
+    const fallback = await supabase
+      .from("profiles")
+      .select("credits, streak_days, last_claim_date")
+      .eq("id", user.id)
+      .single();
+    profile = fallback.data ? { ...fallback.data, best_streak_days: 0 } : null;
+  }
 
-  if (profileError || !profile) {
+  if (!profile) {
     return { success: false, error: "Profil konnte nicht geladen werden." };
   }
 
@@ -139,24 +206,36 @@ export async function claimDailyReward(): Promise<ClaimResult> {
   }
 
   const decision = decideStreak(profile.last_claim_date, profile.streak_days ?? 0, now, config);
-  const result = computeStreakReward(decision.newStreak, config);
+  const result = computeStreakReward(decision.newStreak, config, now);
   const newCredits = profile.credits + result.totalCredits;
+  const newBestStreak = Math.max(profile.best_streak_days ?? 0, decision.newStreak);
 
-  const { data: updatedRows, error: updateError } = await supabase
+  // `.eq("last_claim_date", null)` is *not* the same as `IS NULL` in
+  // Postgres/PostgREST — `column = NULL` is never true, so for any
+  // player who had never claimed before (last_claim_date actually NULL),
+  // this guard used to match zero rows on every single attempt, forever.
+  // That's not a double-click edge case, that's the daily claim being
+  // permanently broken for first-time claimers — exactly the "Abholen
+  // funktioniert nicht" report. `.is()` is the correct operator for NULL.
+  let updateQuery = supabase
     .from("profiles")
     .update({
       credits: newCredits,
       streak_days: decision.newStreak,
+      ...(hasBestStreakColumn ? { best_streak_days: newBestStreak } : {}),
       last_claim_date: today,
     })
-    .eq("id", user.id)
-    .eq("last_claim_date", profile.last_claim_date as string | null ?? null)
-    .select("credits");
+    .eq("id", user.id);
+  updateQuery =
+    profile.last_claim_date === null
+      ? updateQuery.is("last_claim_date", null)
+      : updateQuery.eq("last_claim_date", profile.last_claim_date);
 
-  // The `.eq("last_claim_date", ...)` guard means a double-click (two
+  // The guard above (whichever form it took) means a double-click (two
   // claims firing before the first one's response lands) can't both
   // succeed — the second write affects zero rows instead of double-
   // crediting the reward.
+  const { data: updatedRows, error: updateError } = await updateQuery.select("credits");
   if (updateError || !updatedRows || updatedRows.length === 0) {
     return { success: false, error: "Reward konnte nicht abgeholt werden — bitte erneut versuchen." };
   }
@@ -198,6 +277,7 @@ export async function updateStreakConfig(input: {
   milestoneInterval: number;
   milestoneBonus: number;
   resetOnMiss: boolean;
+  weekendMultiplier: number;
 }): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   const {
@@ -218,21 +298,34 @@ export async function updateStreakConfig(input: {
     }
   }
 
+  if (!Number.isFinite(input.weekendMultiplier) || input.weekendMultiplier < 0) {
+    return { success: false, error: "Ungültiger Wert für weekendMultiplier." };
+  }
+
   const admin = createAdminClient();
-  const { error } = await admin
+  const baseRow = {
+    id: "default",
+    enabled: input.enabled,
+    base_reward: Math.floor(input.baseReward),
+    daily_increment: Math.floor(input.dailyIncrement),
+    max_reward: Math.floor(input.maxReward),
+    grace_period_hours: Math.floor(input.gracePeriodHours),
+    milestone_interval: Math.floor(input.milestoneInterval),
+    milestone_bonus: Math.floor(input.milestoneBonus),
+    reset_on_miss: input.resetOnMiss,
+    updated_at: new Date().toISOString(),
+  };
+
+  // `weekend_multiplier` may not exist yet if that migration hasn't run —
+  // try with it first, and if the column genuinely doesn't exist, fall
+  // back to saving everything else rather than failing the whole save.
+  let { error } = await admin
     .from("streak_config")
-    .upsert({
-      id: "default",
-      enabled: input.enabled,
-      base_reward: Math.floor(input.baseReward),
-      daily_increment: Math.floor(input.dailyIncrement),
-      max_reward: Math.floor(input.maxReward),
-      grace_period_hours: Math.floor(input.gracePeriodHours),
-      milestone_interval: Math.floor(input.milestoneInterval),
-      milestone_bonus: Math.floor(input.milestoneBonus),
-      reset_on_miss: input.resetOnMiss,
-      updated_at: new Date().toISOString(),
-    });
+    .upsert({ ...baseRow, weekend_multiplier: input.weekendMultiplier });
+  if (error) {
+    const retry = await admin.from("streak_config").upsert(baseRow);
+    error = retry.error;
+  }
 
   if (error) return { success: false, error: "Speichern fehlgeschlagen." };
 

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getStreakConfig } from "@/lib/actions/streak";
+import { getShopSettings, getAdminShopListings, getTodayShop } from "@/lib/actions/shop";
 import {
   AdminShell,
   type AuditLogEntry,
@@ -45,26 +46,43 @@ export default async function AdminPage() {
     return (withoutTypes.data ?? []).map((row) => ({ ...row, item_types: null }));
   }
 
-  const [{ data: auditRows }, tierRows, { data: profileRows }, { data: itemRows }, streakConfig] =
-    await Promise.all([
-      admin
-        .from("audit_logs")
-        .select("id, action, payload, created_at, profiles(username)")
-        .order("created_at", { ascending: false })
-        .limit(50),
-      fetchTierRows(),
-      admin
-        .from("profiles")
-        .select("id, username, credits, role, cases_opened")
-        .order("credits", { ascending: false })
-        .limit(200),
-      admin
-        .from("items")
-        .select("id, name, rarity, type, price_cr")
-        .order("name", { ascending: true })
-        .limit(1000),
-      getStreakConfig(),
-    ]);
+  // getTodayShop() is what actually triggers that day's auto-generation
+  // (lib/actions/shop.ts's ensureShopGenerated) — calling it here means
+  // visiting /admin first (before any player visits /shop) still rotates
+  // the shop on schedule, not just whichever page happens to load first.
+  await getTodayShop();
+
+  const [
+    { data: auditRows },
+    tierRows,
+    { data: profileRows },
+    { data: itemRows },
+    streakConfig,
+    shopSettings,
+    todayShopListings,
+    tomorrowShopListings,
+  ] = await Promise.all([
+    admin
+      .from("audit_logs")
+      .select("id, action, payload, created_at, profiles(username)")
+      .order("created_at", { ascending: false })
+      .limit(50),
+    fetchTierRows(),
+    admin
+      .from("profiles")
+      .select("id, username, credits, role, cases_opened")
+      .order("credits", { ascending: false })
+      .limit(200),
+    admin
+      .from("items")
+      .select("id, name, rarity, type, price_cr")
+      .order("name", { ascending: true })
+      .limit(1000),
+    getStreakConfig(),
+    getShopSettings(),
+    getAdminShopListings(0),
+    getAdminShopListings(1),
+  ]);
 
   return (
     <AdminShell
@@ -75,6 +93,9 @@ export default async function AdminPage() {
       profiles={(profileRows ?? []) as unknown as ProfileRow[]}
       items={(itemRows ?? []) as unknown as ItemRow[]}
       streakConfig={streakConfig}
+      shopSettings={shopSettings}
+      todayShopListings={todayShopListings}
+      tomorrowShopListings={tomorrowShopListings}
     />
   );
 }

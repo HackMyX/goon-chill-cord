@@ -25,6 +25,10 @@ export interface StreakConfig {
    * instead of resetting to 1 — a deliberately gentler mode admins can
    * flip on. */
   resetOnMiss: boolean;
+  /** Multiplies the *day's reward* (not the milestone bonus) on Saturday
+   * and Sunday — a standing "weekend event" admins can tune or disable
+   * (1.0 = off) without having to remember to flip anything manually. */
+  weekendMultiplier: number;
 }
 
 export const DEFAULT_STREAK_CONFIG: StreakConfig = {
@@ -36,6 +40,7 @@ export const DEFAULT_STREAK_CONFIG: StreakConfig = {
   milestoneInterval: 7,
   milestoneBonus: 500,
   resetOnMiss: true,
+  weekendMultiplier: 1.5,
 };
 
 export interface StreakRewardResult {
@@ -53,10 +58,18 @@ export interface StreakRewardResult {
 /** Pure function — no DB/IO — so it's trivially unit-testable and reused
  * identically by the claim action and any admin "preview this curve"
  * panel. `newStreak` is 1-indexed (day 1 = first ever claim / first claim
- * after a reset). */
-export function computeStreakReward(newStreak: number, config: StreakConfig): StreakRewardResult {
+ * after a reset). `now` only matters for the weekend multiplier — defaults
+ * to the actual current time, but the admin preview panel passes an
+ * explicit day so it can show what *would* happen on a Saturday. */
+export function computeStreakReward(
+  newStreak: number,
+  config: StreakConfig,
+  now: Date = new Date()
+): StreakRewardResult {
   const growth = config.dailyIncrement * Math.max(0, newStreak - 1);
-  const reward = Math.min(config.baseReward + growth, config.maxReward);
+  const baseReward = Math.min(config.baseReward + growth, config.maxReward);
+  const isWeekend = now.getUTCDay() === 0 || now.getUTCDay() === 6;
+  const reward = isWeekend ? Math.round(baseReward * config.weekendMultiplier) : baseReward;
   const isMilestone = config.milestoneInterval > 0 && newStreak % config.milestoneInterval === 0;
   const milestoneBonus = isMilestone ? config.milestoneBonus : 0;
   return {

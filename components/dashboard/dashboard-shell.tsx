@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Zap, Shirt, Users, ShieldAlert } from "lucide-react";
@@ -8,8 +8,18 @@ import { TopBar } from "@/components/layout/top-bar";
 import { CaseOpeningSection } from "@/components/dashboard/case-opening-section";
 import { DoubleOrNothing } from "@/components/dashboard/double-or-nothing";
 import { Leaderboard, type LeaderboardEntry } from "@/components/dashboard/leaderboard";
+import { subscribeToPresence } from "@/lib/presence-client";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { CaseGroup, Rarity } from "@/lib/cases";
+
+/** Same Realtime presence roster the Community page uses (lib/presence-
+ * client.ts) — just counting it instead of listing names, for the small
+ * "X online" indicator on the "Spieler Liste" button. */
+function useOnlineCount(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => subscribeToPresence((ids) => setCount(ids.size)), []);
+  return count;
+}
 
 interface CaseGroupPreview {
   groupId: string;
@@ -39,6 +49,7 @@ export function DashboardShell({
   const [credits, setCredits] = useState(initialCredits);
   const router = useRouter();
   const sound = useSoundManager();
+  const onlineCount = useOnlineCount();
 
   function handleCreditsChange(newCredits: number) {
     setCredits(newCredits);
@@ -83,6 +94,12 @@ export function DashboardShell({
             >
               <Users className="h-4 w-4" />
               Spieler Liste
+              {onlineCount > 0 && (
+                <span className="flex items-center gap-1 text-xs text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                  {onlineCount}
+                </span>
+              )}
             </Link>
             {isAdmin && (
               <Link
