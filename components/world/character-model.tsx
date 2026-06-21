@@ -19,6 +19,8 @@ import {
   AuraVariant,
   TrailVariant,
   ChestShape,
+  RingVariant,
+  AmuletVariant,
 } from "@/components/world/item-variants";
 
 export interface CharacterModelProps {
@@ -85,6 +87,8 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
     const shield = equippedByCategory.shield_cosmetic;
     const trail = equippedByCategory.trail;
     const pet = equippedByCategory.pet;
+    const ring = equippedByCategory.ring;
+    const amulet = equippedByCategory.amulet;
     const build = BUILD[gender];
 
     const legL = useRef<THREE.Group>(null);
@@ -115,6 +119,8 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
         "shield_cosmetic",
         "trail",
         "pet",
+        "ring",
+        "amulet",
       ]);
       for (const type of Object.keys(equippedByCategory)) {
         if (equippedByCategory[type] && !handled.has(type)) {
@@ -181,6 +187,14 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
           </group>
         )}
 
+        {/* amulet — sits on top of the chest/jacket at collar height, just
+            in front of the torso so it never gets swallowed inside it */}
+        {amulet && (
+          <group position={[0, 1.62, build.torsoDepth / 2 + 0.06]}>
+            <AmuletVariant item={amulet} />
+          </group>
+        )}
+
         {/* left arm: shoulder-pivoted group, shield (if any) rides on it */}
         <group ref={armL} position={[-build.armX, SHOULDER_Y, 0]}>
           <mesh position={[0, -0.375, 0]}>
@@ -204,10 +218,31 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
             // up through the forearm itself instead of looking like
             // something held in the fist. Pushed to z=0.2 (clear of the
             // 0.11 half-depth) and y=-0.78 (right at the fist, just past
-            // the hand tip) so it reads as gripped in the hand, blade
-            // straight up, not fused into the arm.
-            <group position={[0.04, -0.78, 0.2]}>
+            // the hand tip) so it's gripped in the hand, not fused into the
+            // arm.
+            //
+            // `rotation={[Math.PI/2,0,0]}` is the other half of the fix:
+            // every WEAPON_VARIANTS/EXACT_WEAPON_SHAPE shape extends "up"
+            // from its grip along *its own* local Y — without this rotation
+            // that local-up stayed aligned with world-up, so at rest (arm
+            // hanging straight down, armR.rotation.x = 0) the weapon
+            // pointed straight up parallel to the now-vertical forearm,
+            // i.e. "looked exactly like the arm" instead of like something
+            // held in front of the body. Rotating +90° about X remaps
+            // local-up to world-forward (+Z, same convention as the chest/
+            // trail placement elsewhere in this file), so standing still
+            // the weapon juts straight out in front of the character —
+            // and still swings naturally with the arm during the walk
+            // cycle, since this group is nested inside armR.
+            <group position={[0.04, -0.78, 0.2]} rotation={[Math.PI / 2, 0, 0]}>
               <WeaponVariant item={weapon} />
+            </group>
+          )}
+          {/* ring — worn on the wrist, just above the weapon grip so it's
+              visible whether or not a weapon is equipped */}
+          {ring && (
+            <group position={[0, -0.62, 0]}>
+              <RingVariant item={ring} />
             </group>
           )}
         </group>

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { isAdmin } from "@/lib/admin";
 
 export interface ToggleEquipResult {
   success: boolean;
@@ -60,6 +61,18 @@ export async function toggleEquip(
  * previously this only lived in WardrobeShell's local useState and the World
  * page hard-coded "m", so picking "w" in the Garderobe never actually showed
  * up anywhere else.
+ *
+ * One-way door for regular players: the *first* call also sets
+ * `gender_locked = true`, and every call after that is rejected server-side
+ * regardless of what the client sends. This is deliberately not just a
+ * client-side disabled button — gender determines which hair slot
+ * (hair_m/hair_f) a player can ever see, win from a case, or be granted, so
+ * the lock has to be enforced where it can't be bypassed by calling the
+ * action directly.
+ *
+ * Admins are exempt from the lock entirely (and never get `gender_locked`
+ * set on their own switches) — they need to freely flip between both bodies
+ * to check the male/female Garderobe and World rendering while testing.
  */
 export async function updateGender(gender: "m" | "w"): Promise<ToggleEquipResult> {
   const supabase = await createClient();
@@ -71,9 +84,24 @@ export async function updateGender(gender: "m" | "w"): Promise<ToggleEquipResult
     return { success: false, error: "Du musst eingeloggt sein." };
   }
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("gender_locked, role, username")
+    .eq("id", user.id)
+    .single();
+
+  const admin = isAdmin(profile);
+
+  if (profile?.gender_locked && !admin) {
+    return {
+      success: false,
+      error: "Geschlecht ist bereits festgelegt und kann nicht mehr geändert werden.",
+    };
+  }
+
   const { error } = await supabase
     .from("profiles")
-    .update({ gender })
+    .update(admin ? { gender } : { gender, gender_locked: true })
     .eq("id", user.id);
 
   if (error) {

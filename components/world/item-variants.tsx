@@ -320,23 +320,55 @@ export function HatVariant({ item }: { item: EquippedItem }) {
   );
 }
 
-// --- Faces/masks: 4 distinct looks ---------------------------------------
+// --- Faces/masks: 6 distinct looks -----------------------------------------
+// These used to be a single flat box each — reads as "a box floating in
+// front of the face", not a mask. Every variant below is now built from
+// several shaped pieces that actually wrap around the head's contour
+// (angled side panels, rounded lenses, a brow ridge, etc).
 
 function VisorFace({ color }: { color: string }) {
   return (
-    <mesh>
-      <boxGeometry args={[0.42, 0.22, 0.06]} />
-      <meshStandardMaterial color="#15151c" emissive={color} emissiveIntensity={0.6} />
-    </mesh>
+    <group>
+      <mesh>
+        <boxGeometry args={[0.48, 0.17, 0.09]} />
+        <meshStandardMaterial color="#15151c" />
+      </mesh>
+      <mesh position={[0, 0, 0.04]}>
+        <boxGeometry args={[0.4, 0.06, 0.02]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.26, 0, -0.015]} rotation={[0, 0.6, 0]}>
+        <boxGeometry args={[0.12, 0.17, 0.07]} />
+        <meshStandardMaterial color="#15151c" />
+      </mesh>
+      <mesh position={[0.26, 0, -0.015]} rotation={[0, -0.6, 0]}>
+        <boxGeometry args={[0.12, 0.17, 0.07]} />
+        <meshStandardMaterial color="#15151c" />
+      </mesh>
+    </group>
   );
 }
 
 function BandanaFace({ color }: { color: string }) {
   return (
-    <mesh rotation={[0.15, 0, 0]}>
-      <boxGeometry args={[0.46, 0.26, 0.08]} />
-      <meshStandardMaterial color={color} />
-    </mesh>
+    <group rotation={[0.12, 0, 0]}>
+      <mesh>
+        <boxGeometry args={[0.46, 0.3, 0.11]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      <mesh position={[0, -0.02, 0.056]}>
+        <boxGeometry args={[0.44, 0.018, 0.01]} />
+        <meshStandardMaterial color="#000000" transparent opacity={0.35} />
+      </mesh>
+      <mesh position={[-0.25, -0.02, -0.07]}>
+        <sphereGeometry args={[0.05, 8, 8]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      <mesh position={[0.25, -0.02, -0.07]}>
+        <sphereGeometry args={[0.05, 8, 8]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+    </group>
   );
 }
 
@@ -344,16 +376,28 @@ function GogglesFace({ color }: { color: string }) {
   return (
     <group>
       <mesh position={[-0.13, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.1, 0.1, 0.06, 14]} />
+        <cylinderGeometry args={[0.105, 0.105, 0.07, 16]} />
         <meshStandardMaterial color="#1a1a22" emissive={color} emissiveIntensity={0.7} />
+      </mesh>
+      <mesh position={[-0.13, 0, 0.04]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.07, 0.07, 0.01, 14]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} toneMapped={false} />
       </mesh>
       <mesh position={[0.13, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.1, 0.1, 0.06, 14]} />
+        <cylinderGeometry args={[0.105, 0.105, 0.07, 16]} />
         <meshStandardMaterial color="#1a1a22" emissive={color} emissiveIntensity={0.7} />
       </mesh>
+      <mesh position={[0.13, 0, 0.04]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.07, 0.07, 0.01, 14]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} toneMapped={false} />
+      </mesh>
       <mesh>
-        <boxGeometry args={[0.5, 0.03, 0.03]} />
+        <boxGeometry args={[0.5, 0.035, 0.035]} />
         <meshStandardMaterial color="#1a1a22" />
+      </mesh>
+      <mesh position={[0, 0, -0.18]} rotation={[0, Math.PI / 2, 0]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.5, 6]} />
+        <meshStandardMaterial color="#2a2a30" />
       </mesh>
     </group>
   );
@@ -363,18 +407,72 @@ function GasmaskFace({ color }: { color: string }) {
   return (
     <group>
       <mesh>
-        <sphereGeometry args={[0.24, 14, 10]} />
+        <sphereGeometry args={[0.25, 16, 12]} />
         <meshStandardMaterial color="#22252b" />
       </mesh>
-      <mesh position={[0, -0.1, 0.16]}>
-        <cylinderGeometry args={[0.06, 0.06, 0.14, 10]} />
+      <mesh position={[-0.1, 0.03, 0.18]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.06, 0.06, 0.03, 12]} />
+        <meshStandardMaterial color="#0c0c10" emissive={color} emissiveIntensity={0.45} />
+      </mesh>
+      <mesh position={[0.1, 0.03, 0.18]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.06, 0.06, 0.03, 12]} />
+        <meshStandardMaterial color="#0c0c10" emissive={color} emissiveIntensity={0.45} />
+      </mesh>
+      <mesh position={[0, -0.12, 0.18]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.07, 0.07, 0.16, 10]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} />
       </mesh>
     </group>
   );
 }
 
-const FACE_VARIANTS = [VisorFace, BandanaFace, GogglesFace, GasmaskFace];
+function SkullFace({ color }: { color: string }) {
+  return (
+    <group>
+      <mesh>
+        <sphereGeometry args={[0.23, 14, 12]} />
+        <meshStandardMaterial color="#e8e4d8" />
+      </mesh>
+      <mesh position={[0, -0.13, 0.1]}>
+        <boxGeometry args={[0.18, 0.12, 0.16]} />
+        <meshStandardMaterial color="#e8e4d8" />
+      </mesh>
+      <mesh position={[-0.09, 0.02, 0.18]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.055, 0.055, 0.05, 10]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.85} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.09, 0.02, 0.18]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.055, 0.055, 0.05, 10]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.85} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function NinjaFace({ color }: { color: string }) {
+  return (
+    <group>
+      <mesh>
+        <boxGeometry args={[0.46, 0.34, 0.16]} />
+        <meshStandardMaterial color="#15151a" />
+      </mesh>
+      <mesh position={[0, 0.04, 0.085]}>
+        <boxGeometry args={[0.42, 0.07, 0.02]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} />
+      </mesh>
+      <mesh position={[-0.3, -0.02, -0.15]} rotation={[0, 0.5, 0.2]}>
+        <boxGeometry args={[0.18, 0.05, 0.05]} />
+        <meshStandardMaterial color="#15151a" />
+      </mesh>
+      <mesh position={[0.3, -0.02, -0.15]} rotation={[0, -0.5, -0.2]}>
+        <boxGeometry args={[0.18, 0.05, 0.05]} />
+        <meshStandardMaterial color="#15151a" />
+      </mesh>
+    </group>
+  );
+}
+
+const FACE_VARIANTS = [VisorFace, BandanaFace, GogglesFace, GasmaskFace, SkullFace, NinjaFace];
 
 export function FaceVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
@@ -936,6 +1034,141 @@ export function ShieldVariant({ item }: { item: EquippedItem }) {
   );
 }
 
+// --- Rings: worn on the right hand — band + 3 distinct gem cuts -----------
+// Equipping a ring/amulet used to do *nothing visible* — the dbType wasn't
+// even in CharacterModel's handled set, so it silently vanished into thin
+// air (exactly what the debugWarn there was built to catch). These two
+// categories now actually render on the body.
+
+function RoundGemRing({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.07, 0.012, 8, 20]} />
+        <meshStandardMaterial color="#d4af37" />
+      </mesh>
+      <mesh position={[0, 0.07, 0]}>
+        <sphereGeometry args={[0.032, 10, 10]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+function SignetRing({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.07, 0.014, 8, 20]} />
+        <meshStandardMaterial color="#8a8a92" />
+      </mesh>
+      <mesh position={[0, 0.07, 0]}>
+        <boxGeometry args={[0.06, 0.018, 0.06]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.55} />
+      </mesh>
+    </group>
+  );
+}
+
+function ShardRing({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.068, 0.01, 8, 20]} />
+        <meshStandardMaterial color="#b9bdc7" />
+      </mesh>
+      <mesh position={[0, 0.07, 0]} rotation={[0, 0, Math.PI / 4]}>
+        <octahedronGeometry args={[0.04, 0]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.65} />
+      </mesh>
+    </group>
+  );
+}
+
+const RING_VARIANTS = [RoundGemRing, SignetRing, ShardRing];
+
+/** Worn on the right hand, just below the weapon grip — visible whether or
+ * not a weapon is equipped since it sits on the wrist, not the fist. */
+export function RingVariant({ item }: { item: EquippedItem }) {
+  const color = rarityColorFor(item, "#a855f7");
+  const emissive = rarityColorFor(item, "#000000");
+  const Variant = RING_VARIANTS[variantIndex(item.name, RING_VARIANTS.length)];
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} emissive={emissive} />
+    </RarityFX>
+  );
+}
+
+// --- Amulets: a chain + pendant on the chest — 3 distinct pendant shapes --
+
+function GemPendantAmulet({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.13, 0.012, 8, 24]} />
+        <meshStandardMaterial color="#7a7a82" />
+      </mesh>
+      <mesh position={[0, -0.16, 0]} rotation={[0, 0, Math.PI / 4]}>
+        <boxGeometry args={[0.1, 0.1, 0.04]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+function CrossPendantAmulet({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.13, 0.012, 8, 24]} />
+        <meshStandardMaterial color="#7a7a82" />
+      </mesh>
+      <group position={[0, -0.18, 0]}>
+        <mesh>
+          <boxGeometry args={[0.035, 0.16, 0.03]} />
+          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.6} />
+        </mesh>
+        <mesh position={[0, 0.03, 0]}>
+          <boxGeometry args={[0.12, 0.035, 0.03]} />
+          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.6} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+function OrbPendantAmulet({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.13, 0.012, 8, 24]} />
+        <meshStandardMaterial color="#7a7a82" />
+      </mesh>
+      <mesh position={[0, -0.17, 0]}>
+        <sphereGeometry args={[0.06, 14, 14]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.8} transparent opacity={0.85} />
+      </mesh>
+    </group>
+  );
+}
+
+const AMULET_VARIANTS = [GemPendantAmulet, CrossPendantAmulet, OrbPendantAmulet];
+
+/** Worn around the neck, sitting on top of the chest/jacket — placed in
+ * character-model.tsx slightly in front of the torso so it never gets
+ * swallowed inside the jacket mesh. */
+export function AmuletVariant({ item }: { item: EquippedItem }) {
+  const color = rarityColorFor(item, "#a855f7");
+  const emissive = rarityColorFor(item, "#000000");
+  const Variant = AMULET_VARIANTS[variantIndex(item.name, AMULET_VARIANTS.length)];
+  return (
+    <RarityFX rarity={item.rarity}>
+      <Variant color={color} emissive={emissive} />
+    </RarityFX>
+  );
+}
+
 // --- Hair: 4 distinct styles ----------------------------------------------
 
 function ShortHair({ color }: { color: string }) {
@@ -1163,7 +1396,109 @@ function DoubleRingAura({ rarity }: { rarity: Rarity }) {
   );
 }
 
-const AURA_VARIANTS = [OrbitAura, EmberAura, BladeAura, DoubleRingAura];
+/** A streaking comet tail orbiting the body — a chain of shrinking, fading
+ * spheres trailing behind a bright head, sweeping around at shoulder
+ * height. This is the "Schweif" (tail) look the ring/orbit/ember/blade
+ * variants above didn't cover. */
+function CometAura({ rarity }: { rarity: Rarity }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const refs = useRef<(THREE.Mesh | null)[]>([]);
+  const color = RARITY_HEX[rarity];
+  const count = 9;
+  const seeds = useMemo(
+    () => Array.from({ length: count }, (_, i) => ({ trail: i / count })),
+    [count]
+  );
+
+  useFrame((state, delta) => {
+    if (groupRef.current) groupRef.current.rotation.y += delta * 1.4;
+    const t = state.clock.elapsedTime;
+    for (let i = 0; i < refs.current.length; i++) {
+      const m = refs.current[i];
+      if (!m) continue;
+      applyUltraParticleColor(m.material as THREE.MeshBasicMaterial, rarity, t, i);
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={[0, 1.1, 0]}>
+      {seeds.map((s, i) => {
+        const angle = -s.trail * 1.1;
+        const radius = 0.75 + s.trail * 0.18;
+        const scale = 1 - s.trail * 0.85;
+        return (
+          <mesh
+            key={i}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
+            position={[Math.cos(angle) * radius, Math.sin(s.trail * 3) * 0.1, Math.sin(angle) * radius]}
+            scale={scale}
+          >
+            <sphereGeometry args={[0.1, 10, 10]} />
+            <meshBasicMaterial
+              color={color}
+              transparent
+              opacity={0.85 * (1 - s.trail * 0.8)}
+              toneMapped={false}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+/** A pair of slowly-flapping, segmented wing silhouettes flaring out from
+ * the back — glowing feather-like slats instead of a flat plane, so it
+ * reads as wings rather than two boards. */
+function WingAura({ rarity }: { rarity: Rarity }) {
+  const refs = useRef<(THREE.Mesh | null)[]>([]);
+  const color = RARITY_HEX[rarity];
+  const feathersPerWing = 5;
+  const seeds = useMemo(
+    () =>
+      [-1, 1].flatMap((side) =>
+        Array.from({ length: feathersPerWing }, (_, i) => ({
+          side,
+          i,
+          spread: (i / (feathersPerWing - 1)) * 0.9 + 0.15,
+        }))
+      ),
+    [feathersPerWing]
+  );
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    const flap = Math.sin(t * 1.6) * 0.18;
+    for (let idx = 0; idx < refs.current.length; idx++) {
+      const m = refs.current[idx];
+      if (!m) continue;
+      const s = seeds[idx];
+      m.rotation.z = s.side * (0.5 + s.spread * 0.5 + flap);
+      applyUltraParticleColor(m.material as THREE.MeshBasicMaterial, rarity, t, idx);
+    }
+  });
+
+  return (
+    <group position={[0, 1.5, -0.12]}>
+      {seeds.map((s, idx) => (
+        <mesh
+          key={idx}
+          ref={(el) => {
+            refs.current[idx] = el;
+          }}
+          position={[s.side * 0.18, -s.spread * 0.12, -s.spread * 0.1]}
+        >
+          <boxGeometry args={[0.42 + s.spread * 0.22, 0.05, 0.03]} />
+          <meshBasicMaterial color={color} transparent opacity={0.75} toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+const AURA_VARIANTS = [OrbitAura, EmberAura, BladeAura, DoubleRingAura, CometAura, WingAura];
 
 export function AuraVariant({ item }: { item: EquippedItem }) {
   const Variant = AURA_VARIANTS[variantIndex(item.name, AURA_VARIANTS.length)];

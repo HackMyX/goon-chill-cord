@@ -175,18 +175,20 @@ function writeWav(filename, floatSamples) {
 
 // --- the actual sound effects ---
 //
-// Round 2: every tone moved down 1-2 octaves and the bright upper harmonics
-// were dialed back in favor of the fundamental + a sub layer. `hover` in
-// particular used to peak at 1600Hz and fires constantly on mouse movement —
-// exactly the frequency range that turns into ear fatigue over a session.
-// The goal is a duller, "thock"/"thud" character instead of a thin "beep".
+// Round 3: "casino" register — bright bell-like tones (strong 2nd harmonic
+// for that chime quality, not a buzzy wall of harmonics), pitched back up
+// out of the overly-dull range round 2 landed in, but every single one
+// still ends through `fadeTail()` so nothing clicks/cuts off abruptly.
+// win/ultra-win are ascending major arpeggios — the classic slot-machine
+// "jackpot" shape — which is what actually reads as a reward, more than
+// raw pitch does.
 
 writeWav(
   "hover.wav",
   fadeTail(
     finalize(
       mixLayers(
-        [note(340, 35, { attack: 0.002, decay: 0.045, peak: 0.22, harmonics: [[1, 1], [0.5, 0.3]] })],
+        [note(720, 35, { attack: 0.002, decay: 0.05, peak: 0.22, harmonics: [[1, 1], [2, 0.3]] })],
         45
       )
     )
@@ -200,12 +202,12 @@ writeWav(
       applyEcho(
         mixLayers(
           [
-            note(260, 55, { attack: 0.002, decay: 0.06, peak: 0.42, harmonics: [[1, 1], [0.5, 0.4], [2, 0.1]] }),
-            note(130, 60, { attack: 0.002, decay: 0.07, peak: 0.22, harmonics: [[1, 1]] }),
+            note(523.25, 55, { attack: 0.001, decay: 0.07, peak: 0.4, harmonics: [[1, 1], [2, 0.4], [3, 0.12]] }),
+            note(1046.5, 40, { attack: 0.001, decay: 0.04, peak: 0.16 }),
           ],
-          80
+          75
         ),
-        { delayMs: 55, decay: 0.15, repeats: 2 }
+        { delayMs: 50, decay: 0.18, repeats: 2 }
       )
     )
   )
@@ -216,8 +218,8 @@ writeWav(
   fadeTail(
     finalize(
       mixLayers(
-        [note(220, 28, { attack: 0.001, decay: 0.028, peak: 0.36, harmonics: [[1, 1], [0.5, 0.25]] })],
-        38
+        [note(660, 26, { attack: 0.001, decay: 0.03, peak: 0.34, harmonics: [[1, 1], [2, 0.28]] })],
+        36
       )
     )
   )
@@ -230,14 +232,14 @@ writeWav(
       applyEcho(
         mixLayers(
           [
-            note(349.23, 180, { decay: 0.24, peak: 0.4, startMs: 0, harmonics: [[1, 1], [2, 0.18]] }),
-            note(440.0, 180, { decay: 0.24, peak: 0.42, startMs: 100, harmonics: [[1, 1], [2, 0.18]] }),
-            note(523.25, 250, { decay: 0.3, peak: 0.48, startMs: 200, harmonics: [[1, 1], [2, 0.2]] }),
-            note(698.46, 210, { decay: 0.32, peak: 0.2, startMs: 200, harmonics: [[1, 1], [2, 0.15]] }),
+            note(523.25, 170, { decay: 0.24, peak: 0.4, startMs: 0, harmonics: [[1, 1], [2, 0.35], [3, 0.1]] }),
+            note(659.25, 170, { decay: 0.24, peak: 0.42, startMs: 95, harmonics: [[1, 1], [2, 0.35], [3, 0.1]] }),
+            note(783.99, 230, { decay: 0.3, peak: 0.48, startMs: 190, harmonics: [[1, 1], [2, 0.38], [3, 0.12]] }),
+            note(1046.5, 260, { decay: 0.34, peak: 0.32, startMs: 190, harmonics: [[1, 1], [2, 0.3]] }),
           ],
           460
         ),
-        { delayMs: 95, decay: 0.22, repeats: 2 }
+        { delayMs: 90, decay: 0.24, repeats: 2 }
       )
     )
   )
@@ -250,20 +252,19 @@ writeWav(
       applyEcho(
         mixLayers(
           [
-            thump(190, { peak: 0.6 }),
-            note(261.6, 170, { decay: 0.27, peak: 0.4, startMs: 60, harmonics: [[1, 1], [2, 0.2]] }),
-            note(349.23, 170, { decay: 0.27, peak: 0.42, startMs: 150, harmonics: [[1, 1], [2, 0.2]] }),
-            note(440.0, 170, { decay: 0.27, peak: 0.44, startMs: 240, harmonics: [[1, 1], [2, 0.2]] }),
-            note(523.25, 200, { decay: 0.3, peak: 0.48, startMs: 330, harmonics: [[1, 1], [2, 0.22]] }),
-            note(698.46, 400, { decay: 0.48, peak: 0.5, startMs: 430, harmonics: [[1, 1], [2, 0.25]] }),
-            // shimmer layer, slightly detuned for a richer fanfare/chorus feel —
-            // kept an octave lower than before so it reads as warm, not shrill.
-            note(698.46, 400, { decay: 0.48, peak: 0.2, startMs: 430, detuneCents: 12 }),
-            note(880.0, 360, { decay: 0.45, peak: 0.26, startMs: 460, harmonics: [[1, 1], [2, 0.2]] }),
+            thump(190, { peak: 0.55 }),
+            note(523.25, 160, { decay: 0.26, peak: 0.4, startMs: 60, harmonics: [[1, 1], [2, 0.32]] }),
+            note(659.25, 160, { decay: 0.26, peak: 0.42, startMs: 150, harmonics: [[1, 1], [2, 0.32]] }),
+            note(783.99, 160, { decay: 0.26, peak: 0.44, startMs: 240, harmonics: [[1, 1], [2, 0.34]] }),
+            note(1046.5, 200, { decay: 0.3, peak: 0.5, startMs: 330, harmonics: [[1, 1], [2, 0.36]] }),
+            note(1318.5, 420, { decay: 0.5, peak: 0.5, startMs: 430, harmonics: [[1, 1], [2, 0.3]] }),
+            // shimmer layer, slightly detuned for a richer fanfare/chorus feel
+            note(1318.5, 420, { decay: 0.5, peak: 0.2, startMs: 430, detuneCents: 12 }),
+            note(1568.0, 380, { decay: 0.46, peak: 0.26, startMs: 460, harmonics: [[1, 1], [2, 0.28]] }),
           ],
-          870
+          880
         ),
-        { delayMs: 120, decay: 0.3, repeats: 3 }
+        { delayMs: 110, decay: 0.32, repeats: 3 }
       )
     )
   )
@@ -288,7 +289,7 @@ writeWav(
   "flip.wav",
   fadeTail(
     finalize(
-      applyEcho(mixLayers([sweep(220, 620, 170, { peak: 0.44, decay: 0.22 })], 190), {
+      applyEcho(mixLayers([sweep(380, 980, 170, { peak: 0.44, decay: 0.22 })], 190), {
         delayMs: 65,
         decay: 0.18,
         repeats: 2,

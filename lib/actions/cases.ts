@@ -44,7 +44,7 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("credits, cases_opened")
+    .select("credits, cases_opened, gender")
     .eq("id", user.id)
     .single();
 
@@ -59,8 +59,15 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
   const rolledRarity = pickRarity(tier.rarityWeights);
   // A tier's own item_types (set via the admin panel) takes precedence over
   // the parent group's default pool, so admins can scope a specific tier
-  // (e.g. a future "Hut Case") to a subset of types.
-  const itemTypes = tier.itemTypes ?? group.itemTypes;
+  // (e.g. a future "Hut Case") to a subset of types. hair_m/hair_f are both
+  // in that pool by default (every case can drop *some* hair), but a player
+  // should only ever be able to win the hair slot that actually matches
+  // their own gender — never the other one, regardless of what the pool
+  // nominally contains.
+  const wrongGenderHairType = profile.gender === "w" ? "hair_m" : "hair_f";
+  const itemTypes = (tier.itemTypes ?? group.itemTypes).filter(
+    (t) => t !== wrongGenderHairType
+  );
 
   let { data: pool, error: poolError } = await supabase
     .from("items")

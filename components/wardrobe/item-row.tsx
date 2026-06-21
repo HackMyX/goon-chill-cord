@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { Eye } from "lucide-react";
 import { RARITY_STYLES, getTypeLabel, type Rarity } from "@/lib/cases";
 import { ItemRenderer } from "@/components/items/item-renderer";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
@@ -13,9 +14,10 @@ interface ItemRowProps {
   type: string;
   equipped: boolean;
   onToggle: (id: string) => void;
+  onPreview: (id: string) => void;
 }
 
-function ItemRowComponent({ id, name, rarity, type, equipped, onToggle }: ItemRowProps) {
+function ItemRowComponent({ id, name, rarity, type, equipped, onToggle, onPreview }: ItemRowProps) {
   const style = RARITY_STYLES[rarity];
   const sound = useSoundManager();
 
@@ -45,16 +47,29 @@ function ItemRowComponent({ id, name, rarity, type, equipped, onToggle }: ItemRo
         </div>
       </div>
 
-      <button
-        onClick={() => onToggle(id)}
-        className={
-          equipped
-            ? "rounded-full border border-red-500/50 px-4 py-1.5 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/10"
-            : "rounded-full bg-purple-600/90 px-4 py-1.5 text-sm font-semibold text-white shadow-[0_0_10px_rgba(147,51,234,0.5)] transition-colors hover:bg-purple-500"
-        }
-      >
-        {equipped ? "Ablegen" : "Anlegen"}
-      </button>
+      <div className="flex items-center gap-1.5">
+        <button
+          onMouseEnter={sound.hover}
+          onClick={() => {
+            sound.click();
+            onPreview(id);
+          }}
+          title="Solo-Vorschau am eigenen Charakter"
+          className="rounded-full border border-white/10 p-2 text-zinc-400 transition-colors hover:border-purple-400/40 hover:text-purple-200"
+        >
+          <Eye className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => onToggle(id)}
+          className={
+            equipped
+              ? "rounded-full border border-red-500/50 px-4 py-1.5 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/10"
+              : "rounded-full bg-purple-600/90 px-4 py-1.5 text-sm font-semibold text-white shadow-[0_0_10px_rgba(147,51,234,0.5)] transition-colors hover:bg-purple-500"
+          }
+        >
+          {equipped ? "Ablegen" : "Anlegen"}
+        </button>
+      </div>
     </div>
   );
 }

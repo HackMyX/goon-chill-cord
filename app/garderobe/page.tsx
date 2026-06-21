@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { WardrobeShell, type InventoryRow } from "@/components/wardrobe/wardrobe-shell";
+import { isAdmin } from "@/lib/admin";
 
 export default async function GarderobePage() {
   const supabase = await createClient();
@@ -14,7 +15,7 @@ export default async function GarderobePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days, gender")
+    .select("credits, streak_days, gender, gender_locked, role, username")
     .eq("id", user.id)
     .single();
 
@@ -32,6 +33,8 @@ export default async function GarderobePage() {
       streakDays={profile?.streak_days ?? 0}
       initialInventory={inventoryRows}
       initialGender={(profile?.gender as "m" | "w") ?? "m"}
+      genderLocked={(profile?.gender_locked ?? false) && !isAdmin(profile)}
+      isAdmin={isAdmin(profile)}
     />
   );
 }

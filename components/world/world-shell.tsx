@@ -88,7 +88,7 @@ export function WorldShell({
             className="absolute top-4 right-4 z-10 flex items-center gap-2 rounded-lg border border-purple-400/40 bg-purple-500/10 px-3 py-1.5 text-sm font-semibold text-purple-200 shadow-[0_0_16px_rgba(168,85,247,0.3)] backdrop-blur"
           >
             <Keyboard className="h-4 w-4" />
-            WASD laufen · Leertaste springen · Rechtsklick halten = Kamera · Scrollen = Zoom
+            WASD laufen · Shift sprinten · Leertaste springen · Rechtsklick halten = Kamera · Scrollen = Zoom
           </button>
         )}
 

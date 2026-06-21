@@ -9,8 +9,9 @@ import { CharacterViewer, type EquippedItem } from "@/components/wardrobe/charac
 import { CategoryFilters } from "@/components/wardrobe/category-filters";
 import { WardrobeFilters, type SortKey } from "@/components/wardrobe/wardrobe-filters";
 import { ItemRow } from "@/components/wardrobe/item-row";
+import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
 import { toggleEquip, updateGender } from "@/lib/actions/wardrobe";
-import { getCategoryByDbType, getCategoriesForGender, WARDROBE_CATEGORIES } from "@/lib/wardrobe";
+import { getCategoryByDbType, getCategoriesForGender, ALL_CATEGORY } from "@/lib/wardrobe";
 import { useSoundManager } from "@/lib/sound-manager";
 import { debugLog, debugWarn } from "@/lib/debug";
 import { RARITY_ORDER, type Rarity } from "@/lib/cases";
@@ -34,6 +35,11 @@ interface WardrobeShellProps {
   streakDays: number;
   initialInventory: InventoryRow[];
   initialGender: "m" | "w";
+  genderLocked: boolean;
+  /** Admins are exempt from the gender lock (lib/actions/wardrobe.ts
+   * enforces this server-side) — they need to freely flip between both
+   * bodies to test the male/female Garderobe and World rendering. */
+  isAdmin?: boolean;
 }
 
 const ROW_HEIGHT = 76; // row height incl. gap, used by the virtualizer's size estimate
@@ -44,14 +50,18 @@ export function WardrobeShell({
   streakDays,
   initialInventory,
   initialGender,
+  genderLocked: initialGenderLocked,
+  isAdmin = false,
 }: WardrobeShellProps) {
   const [inventory, setInventory] = useState(initialInventory);
-  const [activeCategory, setActiveCategory] = useState(WARDROBE_CATEGORIES[0].id);
+  const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY.id);
   const [gender, setGender] = useState<"m" | "w">(initialGender);
+  const [genderLocked, setGenderLocked] = useState(initialGenderLocked);
   const [query, setQuery] = useState("");
   const [activeRarities, setActiveRarities] = useState<Set<Rarity>>(new Set());
   const [equippedOnly, setEquippedOnly] = useState(false);
   const [sort, setSort] = useState<SortKey>("rarity-desc");
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const sound = useSoundManager();
 
   const toggleRarityFilter = useCallback((rarity: Rarity) => {
@@ -72,13 +82,29 @@ export function WardrobeShell({
 
   const handleGenderChange = useCallback(
     (next: "m" | "w") => {
+      // One-way door: once locked, this is purely informational — the
+      // server rejects it anyway (lib/actions/wardrobe.ts), but bailing out
+      // here means clicking the disabled-looking button doesn't even fire
+      // a request, and the confirm() dialog below only ever has to ask
+      // about something that's actually still changeable.
+      if (genderLocked && !isAdmin) return;
+      if (
+        !isAdmin &&
+        !confirm(
+          `Geschlecht endgültig auf "${next === "m" ? "Männlich" : "Weiblich"}" festlegen? Das kann später nicht mehr geändert werden.`
+        )
+      ) {
+        return;
+      }
+      const previousGender = gender;
       sound.click();
       setGender(next);
+      if (!isAdmin) setGenderLocked(true);
       // Hair is gender-locked (hair_m vs hair_f) — if the player was looking
       // at "their" hair slot when switching gender, follow them to the new
       // gender's hair slot instead of silently falling back to category 0.
       setActiveCategory((curr) => (curr === "hair_m" || curr === "hair_f" ? `hair_${next}` : curr));
-      debugLog("Wardrobe", "gender change", { next });
+      debugLog("Wardrobe", isAdmin ? "gender change (admin, not locking)" : "gender change (locking permanently)", { next });
       // Persisted server-side so the World page (and a future reload of the
       // Garderobe itself) shows the same body instead of always falling
       // back to "m" — previously this was only ever local component state.
@@ -86,16 +112,29 @@ export function WardrobeShell({
         if (!res.success) {
           debugWarn("Wardrobe", "updateGender failed", res.error);
           sound.error();
+          // Server rejected it (most likely: an already-locked profile, e.g.
+          // a stale page loaded before a lock set elsewhere) — roll the
+          // optimistic update back instead of leaving the UI claiming a
+          // change took effect when it didn't.
+          setGender(previousGender);
+          if (!isAdmin) setGenderLocked(false);
         }
       });
     },
-    [sound]
+    [sound, genderLocked, gender, isAdmin]
   );
 
   const visibleItems = useMemo(() => {
     const trimmedQuery = query.trim().toLowerCase();
+    // Defense in depth for the "Alle" view: the per-gender category list
+    // (getCategoriesForGender) already hides the wrong-gender hair *button*,
+    // but "Alle" bypasses category filtering entirely — without this, any
+    // hair_m/hair_f item from before the gender-aware case drop fix
+    // (lib/actions/cases.ts) would still surface there.
+    const wrongGenderHairType = gender === "w" ? "hair_m" : "hair_f";
     const filtered = inventory.filter((row) => {
-      if (row.item.type !== currentCategory.dbType) return false;
+      if (row.item.type === wrongGenderHairType) return false;
+      if (currentCategory.dbType !== "*" && row.item.type !== currentCategory.dbType) return false;
       if (equippedOnly && !row.equipped) return false;
       if (activeRarities.size > 0 && !activeRarities.has(row.item.rarity)) return false;
       if (trimmedQuery && !row.item.name.toLowerCase().includes(trimmedQuery)) return false;
@@ -127,7 +166,7 @@ export function WardrobeShell({
     });
 
     return sorted;
-  }, [inventory, currentCategory, query, activeRarities, equippedOnly, sort]);
+  }, [inventory, currentCategory, query, activeRarities, equippedOnly, sort, gender]);
 
   const equippedByCategory = useMemo(() => {
     const map: Record<string, EquippedItem | undefined> = {};
@@ -175,6 +214,8 @@ export function WardrobeShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally stable; latest state read via inventoryRef
   }, []);
 
+  const previewRow = previewId ? inventory.find((r) => r.id === previewId) : undefined;
+
   const scrollParentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: visibleItems.length,
@@ -200,6 +241,7 @@ export function WardrobeShell({
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
           <CharacterViewer
             gender={gender}
+            genderLocked={genderLocked && !isAdmin}
             onGenderChange={handleGenderChange}
             equippedByCategory={equippedByCategory}
             onUnequip={handleToggle}
@@ -258,6 +300,7 @@ export function WardrobeShell({
                           type={row.item.type}
                           equipped={row.equipped}
                           onToggle={handleToggle}
+                          onPreview={setPreviewId}
                         />
                       </div>
                     );
@@ -268,6 +311,14 @@ export function WardrobeShell({
           </div>
         </div>
       </main>
+
+      {previewRow && (
+        <ItemPreviewModal
+          item={previewRow.item}
+          gender={gender}
+          onClose={() => setPreviewId(null)}
+        />
+      )}
     </div>
   );
 }

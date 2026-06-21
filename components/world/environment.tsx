@@ -1,23 +1,10 @@
 "use client";
 
-// Fixed, hand-placed coordinates rather than Math.random() at render time —
-// the scene re-renders whenever equipped items change, and randomizing tree
-// positions on every render would make them visibly jump around.
-const TREE_SPOTS: [x: number, z: number, scale: number, hue: number][] = [
-  [-9, -6, 1.1, 0],
-  [-11, 2, 0.9, 1],
-  [-7, 9, 1.3, 0],
-  [8, -8, 1, 1],
-  [11, -2, 1.2, 0],
-  [9, 7, 0.95, 1],
-  [-14, -10, 1.4, 0],
-  [13, 11, 1.1, 1],
-  [-3, -14, 1, 0],
-  [4, 13, 1.25, 1],
-];
+import { useMemo } from "react";
+import { WORLD_RADIUS } from "@/lib/world-config";
 
 const TRUNK_COLOR = "#3b2a1d";
-const FOLIAGE_COLORS = ["#143d2b", "#1d4a35"];
+const FOLIAGE_COLORS = ["#143d2b", "#1d4a35", "#225a3d"];
 
 function PineTree({ x, z, scale, hue }: { x: number; z: number; scale: number; hue: number }) {
   return (
@@ -42,11 +29,6 @@ function PineTree({ x, z, scale, hue }: { x: number; z: number; scale: number; h
   );
 }
 
-const GRASS_SPOTS: [x: number, z: number][] = [
-  [-2, -3], [2.5, -2.2], [-3.4, 2.8], [3.6, 3.4], [-1.2, 5.2],
-  [4.8, -4.6], [-5.2, -1.4], [1.6, 6.4], [-4.6, 5.8], [5.8, 1.2],
-];
-
 function GrassTuft({ x, z }: { x: number; z: number }) {
   return (
     <group position={[x, 0, z]}>
@@ -60,19 +42,95 @@ function GrassTuft({ x, z }: { x: number; z: number }) {
   );
 }
 
-/** Minimal scenery for the spawn area — low-poly pine trees ringing the
- * clear walking area, plus small grass tufts scattered closer in. Kept
- * outside the ~10-unit radius the player actually walks in so nothing
- * blocks movement; this is explicitly a "standard world" first pass, not
- * the final environment design. */
+/** Glowing crystal pillars ringing the world border — the visual half of
+ * the boundary (player.tsx's circular position clamp is the physical
+ * half). Lets the edge of the world read as "a place", not an invisible
+ * wall you just bump into with no explanation. */
+function BorderCrystal({ x, z, scale }: { x: number; z: number; scale: number }) {
+  return (
+    <group position={[x, 0, z]} scale={scale}>
+      <mesh position={[0, 0.9, 0]}>
+        <coneGeometry args={[0.3, 1.8, 6]} />
+        <meshStandardMaterial color="#3b1e6d" emissive="#a855f7" emissiveIntensity={0.55} />
+      </mesh>
+      <mesh position={[0, 0.15, 0]}>
+        <cylinderGeometry args={[0.4, 0.45, 0.3, 8]} />
+        <meshStandardMaterial color="#1c1330" />
+      </mesh>
+    </group>
+  );
+}
+
+/** Mulberry32 — tiny, deterministic, seedable PRNG. Math.random() at
+ * render time would make every tree/grass tuft jump to a new spot on every
+ * re-render (equipping an item, etc. all re-render this tree); seeding a
+ * PRNG once inside useMemo gives the same "random-looking" scatter every
+ * time without that jumpiness, and without hand-placing 100+ coordinates. */
+function mulberry32(seed: number) {
+  let a = seed;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Scenery scaled to the world's actual size (lib/world-config.ts) instead
+ * of a fixed handful of hand-placed spots meant for a much smaller test
+ * area — trees and grass now scatter across the full playable radius (clear
+ * of the spawn circle), and a ring of glowing crystals marks the border. */
 export function Environment() {
+  const trees = useMemo(() => {
+    const rand = mulberry32(1337);
+    const innerRadius = 11;
+    const outerRadius = WORLD_RADIUS - 6;
+    return Array.from({ length: 70 }, () => {
+      const angle = rand() * Math.PI * 2;
+      const radius = innerRadius + rand() * (outerRadius - innerRadius);
+      return {
+        x: Math.cos(angle) * radius,
+        z: Math.sin(angle) * radius,
+        scale: 0.8 + rand() * 0.7,
+        hue: Math.floor(rand() * FOLIAGE_COLORS.length),
+      };
+    });
+  }, []);
+
+  const grassTufts = useMemo(() => {
+    const rand = mulberry32(4242);
+    const outerRadius = WORLD_RADIUS - 4;
+    return Array.from({ length: 90 }, () => {
+      const angle = rand() * Math.PI * 2;
+      const radius = 2 + rand() * (outerRadius - 2);
+      return { x: Math.cos(angle) * radius, z: Math.sin(angle) * radius };
+    });
+  }, []);
+
+  const borderCrystals = useMemo(() => {
+    const count = 28;
+    const rand = mulberry32(99);
+    return Array.from({ length: count }, (_, i) => {
+      const angle = (i / count) * Math.PI * 2;
+      return {
+        x: Math.cos(angle) * (WORLD_RADIUS - 1.5),
+        z: Math.sin(angle) * (WORLD_RADIUS - 1.5),
+        scale: 0.9 + rand() * 0.6,
+      };
+    });
+  }, []);
+
   return (
     <>
-      {TREE_SPOTS.map(([x, z, scale, hue], i) => (
-        <PineTree key={i} x={x} z={z} scale={scale} hue={hue} />
+      {trees.map((t, i) => (
+        <PineTree key={i} x={t.x} z={t.z} scale={t.scale} hue={t.hue} />
       ))}
-      {GRASS_SPOTS.map(([x, z], i) => (
-        <GrassTuft key={i} x={x} z={z} />
+      {grassTufts.map((g, i) => (
+        <GrassTuft key={i} x={g.x} z={g.z} />
+      ))}
+      {borderCrystals.map((c, i) => (
+        <BorderCrystal key={i} x={c.x} z={c.z} scale={c.scale} />
       ))}
     </>
   );

@@ -7,6 +7,7 @@ export interface KeyboardState {
   backward: boolean;
   left: boolean;
   right: boolean;
+  sprint: boolean;
   jumpPressed: boolean;
 }
 
@@ -39,6 +40,7 @@ export function useKeyboardControls(): KeyboardControls {
     backward: false,
     left: false,
     right: false,
+    sprint: false,
     jumpPressed: false,
   });
 
@@ -47,6 +49,7 @@ export function useKeyboardControls(): KeyboardControls {
     const onDown = (e: KeyboardEvent) => {
       const key = KEY_MAP[e.code];
       if (key) state.current[key] = true;
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") state.current.sprint = true;
       if (e.code === "Space" && !spaceHeld) {
         spaceHeld = true;
         state.current.jumpPressed = true;
@@ -55,13 +58,29 @@ export function useKeyboardControls(): KeyboardControls {
     const onUp = (e: KeyboardEvent) => {
       const key = KEY_MAP[e.code];
       if (key) state.current[key] = false;
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") state.current.sprint = false;
       if (e.code === "Space") spaceHeld = false;
     };
+    // Alt-tabbing (or any focus loss) away while a key is physically held
+    // never fires its `keyup` — without this, that key reads as permanently
+    // pressed until tapped again, which on `forward`/`sprint` means the
+    // character silently keeps running the instant focus returns.
+    const onBlur = () => {
+      state.current.forward = false;
+      state.current.backward = false;
+      state.current.left = false;
+      state.current.right = false;
+      state.current.sprint = false;
+      spaceHeld = false;
+    };
+
     window.addEventListener("keydown", onDown);
     window.addEventListener("keyup", onUp);
+    window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("keydown", onDown);
       window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", onBlur);
     };
   }, []);
 
