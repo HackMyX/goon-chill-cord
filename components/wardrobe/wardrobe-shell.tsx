@@ -213,6 +213,14 @@ export function WardrobeShell({
   const virtualizer = useVirtualizer({
     count: visibleItems.length,
     getScrollElement: () => scrollParentRef.current,
+    // ROW_HEIGHT is only the *initial guess* before a row has actually been
+    // measured — `measureElement` below corrects it against the real
+    // rendered height. A fixed estimate alone used to be the whole story,
+    // and it was wrong: a real row (icon + name + type label + rarity
+    // badge, with padding) renders taller than this guess, so the next
+    // absolutely-positioned row would overlap and paint over the bottom
+    // half of this one's hover ring — exactly the "border only goes
+    // half-way around" bug.
     estimateSize: () => ROW_HEIGHT,
     overscan: 8,
   });
@@ -277,12 +285,18 @@ export function WardrobeShell({
                     return (
                       <div
                         key={row.id}
+                        ref={virtualizer.measureElement}
+                        data-index={virtualRow.index}
                         style={{
                           position: "absolute",
                           top: 0,
                           left: 0,
                           width: "100%",
-                          height: virtualRow.size,
+                          // No fixed `height` here on purpose — letting the
+                          // row size itself naturally is what
+                          // `measureElement` actually measures. Forcing it
+                          // back to the (possibly still-wrong) estimate
+                          // would defeat the whole point of measuring.
                           transform: `translateY(${virtualRow.start}px)`,
                           paddingBottom: 8,
                         }}

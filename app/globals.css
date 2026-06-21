@@ -308,6 +308,82 @@
   animation: rgbBorder 2.4s linear infinite;
 }
 
+/* Case-opening section headings ("Case Opening", "Waffen Case") — a slow
+   shimmering gradient sweep across the text plus a gently bobbing icon,
+   so the heading itself feels alive instead of a static label sitting
+   above the reel. */
+@keyframes heading-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+.heading-shimmer {
+  background: linear-gradient(90deg, #e9d5ff, #f5a3ff, #93c5fd, #e9d5ff);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: heading-shimmer 4s linear infinite;
+}
+@keyframes heading-icon-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(-6deg);
+  }
+}
+.heading-icon-bob {
+  animation: heading-icon-bob 2.2s ease-in-out infinite;
+}
+
+/* TopBar logo — a slow-drifting purple/pink/blue gradient on the wordmark
+   (stays on-brand, unlike the Ultra-only rainbow above) that speeds up and
+   brightens on hover, plus a soft pulse ring behind the gamepad icon so
+   the whole lockup feels alive instead of a static icon+label. */
+.logo-text {
+  background: linear-gradient(90deg, #c084fc, #f0abfc, #818cf8, #c084fc);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: rgbBorder 6s linear infinite;
+  transition: filter 0.2s ease;
+}
+.group:hover .logo-text {
+  animation-duration: 1.6s;
+  filter: drop-shadow(0 0 10px rgba(192, 132, 252, 0.7));
+}
+@keyframes logo-icon-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+.logo-icon-glow {
+  position: absolute;
+  inset: -8px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.55) 0%, rgba(168, 85, 247, 0) 70%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.group:hover .logo-icon-glow {
+  opacity: 1;
+  animation: logo-icon-pulse 1.4s ease-in-out infinite;
+}
+
 /* Animated rainbow ring, mask-cut to a border. Use on a `position: relative`
    parent as an absolutely positioned, `aria-hidden` child sized via inset-0. */
 .rainbow-border {

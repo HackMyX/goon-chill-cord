@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { getStreakConfig } from "@/lib/actions/streak";
 import {
   AdminShell,
   type AuditLogEntry,
@@ -44,7 +45,7 @@ export default async function AdminPage() {
     return (withoutTypes.data ?? []).map((row) => ({ ...row, item_types: null }));
   }
 
-  const [{ data: auditRows }, tierRows, { data: profileRows }, { data: itemRows }] =
+  const [{ data: auditRows }, tierRows, { data: profileRows }, { data: itemRows }, streakConfig] =
     await Promise.all([
       admin
         .from("audit_logs")
@@ -62,6 +63,7 @@ export default async function AdminPage() {
         .select("id, name, rarity, type, price_cr")
         .order("name", { ascending: true })
         .limit(1000),
+      getStreakConfig(),
     ]);
 
   return (
@@ -72,6 +74,7 @@ export default async function AdminPage() {
       caseTiers={(tierRows ?? []) as unknown as CaseTierRow[]}
       profiles={(profileRows ?? []) as unknown as ProfileRow[]}
       items={(itemRows ?? []) as unknown as ItemRow[]}
+      streakConfig={streakConfig}
     />
   );
 }

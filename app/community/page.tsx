@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PlayerListShell, type PlayerCard } from "@/components/community/player-list-shell";
 import type { Rarity } from "@/lib/cases";
+import type { EquippedItem } from "@/lib/rarity-colors";
 
 export default async function CommunityPage() {
   const supabase = await createClient();
@@ -29,15 +30,20 @@ export default async function CommunityPage() {
   const [{ data: profiles }, { data: inventory }] = await Promise.all([
     admin
       .from("profiles")
-      .select("id, username, credits, role, last_claim_date, created_at")
+      .select("id, username, credits, role, created_at, gender")
       .order("credits", { ascending: false }),
-    admin.from("inventory").select("user_id, item:items(rarity)"),
+    admin
+      .from("inventory")
+      .select("user_id, equipped, item:items(id, name, rarity, type)"),
   ]);
 
   const rarityCountsByUser = new Map<string, Record<Rarity, number>>();
+  const equippedByUser = new Map<string, Record<string, EquippedItem | undefined>>();
+
   for (const row of (inventory ?? []) as unknown as {
     user_id: string;
-    item: { rarity: Rarity } | null;
+    equipped: boolean;
+    item: { id: string; name: string; rarity: Rarity; type: string } | null;
   }[]) {
     if (!row.item) continue;
     const counts =
@@ -45,6 +51,12 @@ export default async function CommunityPage() {
       ({ normal: 0, selten: 0, mythisch: 0, ultra: 0 } as Record<Rarity, number>);
     counts[row.item.rarity] += 1;
     rarityCountsByUser.set(row.user_id, counts);
+
+    if (row.equipped) {
+      const equipped = equippedByUser.get(row.user_id) ?? {};
+      equipped[row.item.type] = { id: row.item.id, name: row.item.name, rarity: row.item.rarity };
+      equippedByUser.set(row.user_id, equipped);
+    }
   }
 
   const players: PlayerCard[] = (profiles ?? []).map((p) => ({
@@ -52,8 +64,9 @@ export default async function CommunityPage() {
     username: p.username,
     credits: p.credits,
     role: p.role,
-    lastClaimDate: p.last_claim_date,
     memberSince: p.created_at,
+    gender: (p.gender as "m" | "w") ?? "m",
+    equippedByCategory: equippedByUser.get(p.id) ?? {},
     rarityCounts:
       rarityCountsByUser.get(p.id) ?? { normal: 0, selten: 0, mythisch: 0, ultra: 0 },
   }));

@@ -1,11 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Users, Search } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { ProfileModal } from "@/components/community/profile-modal";
+import { PlayerCardAvatar } from "@/components/community/player-card-avatar";
+import { subscribeToPresence } from "@/lib/presence-client";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, type Rarity } from "@/lib/cases";
+import type { EquippedItem } from "@/lib/rarity-colors";
 import { useSoundManager } from "@/lib/sound-manager";
 
 export interface PlayerCard {
@@ -13,8 +16,9 @@ export interface PlayerCard {
   username: string;
   credits: number;
   role: string;
-  lastClaimDate: string | null;
   memberSince: string;
+  gender: "m" | "w";
+  equippedByCategory: Record<string, EquippedItem | undefined>;
   rarityCounts: Record<Rarity, number>;
 }
 
@@ -29,20 +33,36 @@ function totalItems(counts: Record<Rarity, number>): number {
   return RARITY_ORDER.reduce((sum, r) => sum + counts[r], 0);
 }
 
-/** "Active today" is the closest honest signal we have without a real
- * presence system (no last_seen/heartbeat column exists) — the daily
- * credit claim already happens once per session, so it's a reasonable
- * proxy for "was here recently" without pretending to know live online
- * status. */
-function isActiveToday(lastClaimDate: string | null): boolean {
-  if (!lastClaimDate) return false;
-  return lastClaimDate === new Date().toISOString().slice(0, 10);
+/** Live "who's online" via Supabase Realtime Presence (lib/presence-
+ * client.ts) — components/layout/presence-heartbeat.tsx tracks every
+ * logged-in user on the same shared channel; this just listens for sync
+ * events. Not a "last active today" guess — this is the actual current
+ * set of connected tabs, so it's never wrong in a way a heuristic could
+ * be (and always includes the viewer themselves, since the heartbeat is
+ * mounted app-wide).
+ *
+ * Goes through the shared lib/presence-client.ts module rather than
+ * creating its own `supabase.channel(PRESENCE_CHANNEL)` — `createClient()`
+ * returns a cached singleton, so a second independent `.channel()` call
+ * for the same topic resolves to the *same* already-subscribed channel
+ * object the heartbeat created, and calling `.on("presence", ...)` on an
+ * already-subscribed channel throws ("cannot add presence callbacks after
+ * subscribe()"), which is exactly the runtime error this replaces. */
+function useOnlineUserIds(): Set<string> {
+  const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    return subscribeToPresence(setOnlineIds);
+  }, []);
+
+  return onlineIds;
 }
 
 export function PlayerListShell({ players, credits, streakDays, viewerId }: PlayerListShellProps) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const sound = useSoundManager();
+  const onlineIds = useOnlineUserIds();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -50,7 +70,7 @@ export function PlayerListShell({ players, credits, streakDays, viewerId }: Play
     return players.filter((p) => p.username.toLowerCase().includes(q));
   }, [players, query]);
 
-  const activeCount = players.filter((p) => isActiveToday(p.lastClaimDate)).length;
+  const activeCount = onlineIds.size;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -75,7 +95,7 @@ export function PlayerListShell({ players, credits, streakDays, viewerId }: Play
           </h1>
           <div className="flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-sm font-semibold text-emerald-300">
             <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-            {activeCount} heute aktiv
+            {activeCount} online
           </div>
         </div>
 
@@ -97,7 +117,7 @@ export function PlayerListShell({ players, credits, streakDays, viewerId }: Play
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filtered.map((player) => {
               const total = totalItems(player.rarityCounts);
-              const active = isActiveToday(player.lastClaimDate);
+              const active = onlineIds.has(player.id);
               return (
                 <button
                   key={player.id}
@@ -108,6 +128,13 @@ export function PlayerListShell({ players, credits, streakDays, viewerId }: Play
                   }}
                   className="group relative flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#0f0e18] p-4 text-left transition-all hover:border-purple-400/50 hover:shadow-[0_0_24px_rgba(168,85,247,0.25)]"
                 >
+                  <div className="h-32 w-full overflow-hidden rounded-xl border border-white/5 bg-[#08050f]">
+                    <PlayerCardAvatar
+                      gender={player.gender}
+                      equippedByCategory={player.equippedByCategory}
+                    />
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-zinc-100">{player.username}</span>
@@ -124,7 +151,7 @@ export function PlayerListShell({ players, credits, streakDays, viewerId }: Play
                     </div>
                     {active && (
                       <span
-                        title="Heute aktiv"
+                        title="Online"
                         className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]"
                       />
                     )}

@@ -231,9 +231,9 @@ export function CaseOpeningSection({
   return (
     <section className="mx-auto w-full max-w-4xl px-4 py-10">
       <div className="text-center">
-        <h2 className="glow-text flex items-center justify-center gap-2 text-2xl font-extrabold text-zinc-50">
-          {createElement(Icon, { className: "h-6 w-6 text-orange-400" })}
-          {group.title}
+        <h2 className="flex items-center justify-center gap-2 text-2xl font-extrabold">
+          {createElement(Icon, { className: "heading-icon-bob h-6 w-6 text-orange-400" })}
+          <span className="heading-shimmer">{group.title}</span>
         </h2>
         {group.subtitle && (
           <p className="mt-1 text-sm text-zinc-400">{group.subtitle}</p>

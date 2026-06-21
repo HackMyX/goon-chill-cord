@@ -3,28 +3,21 @@
 import { useEffect, useRef } from "react";
 
 export interface CameraControlState {
-  /** Absolute world yaw the camera currently *looks toward* (i.e. the
-   * direction from the camera to the player) — not a delta from the
-   * player's facing. Changed directly by right-mouse-drag, and (only while
-   * moving and not currently being dragged) eased slowly toward the
-   * player's movement direction by Player's own useFrame loop. Keeping
-   * this as one persistent absolute value — instead of a delta re-applied
-   * on top of the player's every-frame-changing rotation, which is what
-   * this used to be — is what stops the camera from violently swinging
-   * every time the player's heading changes quickly. */
+  /** Free-look offset from the character's own heading, radians. The
+   * character's heading itself lives in Player.tsx (driven by A/D turning,
+   * not by the camera) — this is purely "how far the camera is currently
+   * looking away from dead-ahead", changed by right-mouse-drag and eased
+   * back to 0 on release. */
   yaw: number;
   /** Vertical look angle, radians, clamped so the camera can't flip
-   * through the floor or straight overhead. Purely manual — unlike yaw,
-   * nothing ever auto-adjusts this, so the camera never fights a pitch the
-   * player explicitly set. */
+   * through the floor or straight overhead. */
   pitch: number;
   /** Distance from the player, world units, adjusted by the scroll wheel. */
   distance: number;
-  /** True exactly while the right mouse button is held. Player's auto-
-   * follow (easing yaw toward the movement direction) is fully suspended
-   * whenever this is true, so manual control always wins outright and
-   * never fights the auto-follow for the same frame. */
-  dragging: boolean;
+  /** True whenever the right mouse button is *not* currently held — tells
+   * Player's per-frame loop to ease `yaw` back toward 0 instead of holding
+   * the free-look angle indefinitely. */
+  returning: boolean;
 }
 
 export const DEFAULT_YAW = 0;
@@ -39,6 +32,13 @@ const DISTANCE_MIN = 3;
 const DISTANCE_MAX = 14;
 const ZOOM_SENSITIVITY = 0.0025;
 
+export interface CameraControls {
+  state: React.RefObject<CameraControlState>;
+  /** Call once per frame from Player's useFrame — eases `yaw` back toward
+   * 0 while `returning` is true (i.e. RMB isn't held). */
+  easeReturn: (delta: number) => void;
+}
+
 /**
  * Right-mouse-drag free look + scroll-wheel zoom for the 3D World — held
  * in a ref (not React state) so Player's per-frame camera math can read it
@@ -46,10 +46,6 @@ const ZOOM_SENSITIVITY = 0.0025;
  * for the camera (no context menu), which is why `world-shell.tsx` also
  * suppresses `onContextMenu` on the canvas wrapper.
  */
-export interface CameraControls {
-  state: React.RefObject<CameraControlState>;
-}
-
 export function useCameraControls(
   canvasRef: React.RefObject<HTMLElement | null>
 ): CameraControls {
@@ -57,24 +53,26 @@ export function useCameraControls(
     yaw: DEFAULT_YAW,
     pitch: DEFAULT_PITCH,
     distance: DEFAULT_DISTANCE,
-    dragging: false,
+    returning: true,
   });
 
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
 
+    let dragging = false;
     let lastX = 0;
     let lastY = 0;
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 2) return;
-      state.current.dragging = true;
+      dragging = true;
+      state.current.returning = false;
       lastX = e.clientX;
       lastY = e.clientY;
     };
     const onPointerMove = (e: PointerEvent) => {
-      if (!state.current.dragging) return;
+      if (!dragging) return;
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       lastX = e.clientX;
@@ -86,7 +84,9 @@ export function useCameraControls(
       );
     };
     const onPointerUp = () => {
-      state.current.dragging = false;
+      if (!dragging) return;
+      dragging = false;
+      state.current.returning = true;
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -98,9 +98,10 @@ export function useCameraControls(
     const onContextMenu = (e: MouseEvent) => e.preventDefault();
     // Losing focus mid-drag (alt-tab, a browser permission popup, etc.)
     // never fires `pointerup` — without this the camera would think RMB is
-    // still held forever, permanently disabling auto-follow.
+    // still held forever, permanently disabling the ease-back.
     const onBlur = () => {
-      state.current.dragging = false;
+      dragging = false;
+      state.current.returning = true;
     };
 
     el.addEventListener("pointerdown", onPointerDown);
@@ -120,5 +121,11 @@ export function useCameraControls(
     };
   }, [canvasRef]);
 
-  return { state };
+  function easeReturn(delta: number) {
+    if (!state.current.returning) return;
+    const t = Math.min(1, delta * 4);
+    state.current.yaw = state.current.yaw + (DEFAULT_YAW - state.current.yaw) * t;
+  }
+
+  return { state, easeReturn };
 }

@@ -190,18 +190,23 @@ export const CASE_GROUPS: CaseGroup[] = [
     // smaller, still-meaningful multiplier. Rarer tier = bigger relative
     // payoff for paying the premium price, which is the whole point of a
     // premium tier existing at all.
+    // Matches the original site's published odds exactly (Normal 87% /
+    // Selten 10% / Mythisch 3% / Ultra 0.1% standard, 78/14/7.5/0.5
+    // premium) — normal is shaved by the rounding remainder (86.9/91.95
+    // below) purely so each tier sums to exactly 100, not 100.05-100.1;
+    // it still displays as the same rounded percentage.
     standard: {
       id: "cosmetics-standard",
       label: "CASE ÖFFNEN",
       price: 100,
-      rarityWeights: { normal: 90, selten: 8, mythisch: 1.9, ultra: 0.1 },
+      rarityWeights: { normal: 86.9, selten: 10, mythisch: 3, ultra: 0.1 },
     },
     premium: {
       id: "cosmetics-premium",
       label: "PREMIUM",
       sublabel: "NOCH MEHR CHANCE",
       price: 500,
-      rarityWeights: { normal: 80, selten: 14, mythisch: 5.5, ultra: 0.5 },
+      rarityWeights: { normal: 78, selten: 14, mythisch: 7.5, ultra: 0.5 },
     },
   },
   {
@@ -210,22 +215,22 @@ export const CASE_GROUPS: CaseGroup[] = [
     subtitle: "Gewinne Waffen für den 3D-World-Kampf — ab 2.000 CR",
     iconName: "swords",
     itemTypes: ["weapon", "shield", "weapon_cosmetic"],
-    // Same 5x-price -> 5x-better-Ultra rule as the cosmetics group, just
-    // anchored at noticeably better base odds throughout (this case costs
-    // 20x what the cosmetics standard case does, so its floor odds should
-    // actually feel like it).
+    // Same "matches the original site's published odds exactly" note as
+    // the cosmetics group above (92/6/2/0.05 standard, 84.8/9/6/0.2
+    // premium, normal shaved by the rounding remainder so each tier sums
+    // to exactly 100).
     standard: {
       id: "weapons-standard",
       label: "WAFFEN CASE",
       price: 2000,
-      rarityWeights: { normal: 75, selten: 18, mythisch: 6, ultra: 1 },
+      rarityWeights: { normal: 91.95, selten: 6, mythisch: 2, ultra: 0.05 },
     },
     premium: {
       id: "weapons-premium",
       label: "PREMIUM WAFFE",
       sublabel: "ULTRA SELTENE WAFFEN",
       price: 10000,
-      rarityWeights: { normal: 55, selten: 30, mythisch: 10, ultra: 5 },
+      rarityWeights: { normal: 84.8, selten: 9, mythisch: 6, ultra: 0.2 },
     },
   },
 ];

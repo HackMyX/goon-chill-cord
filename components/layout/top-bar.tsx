@@ -14,6 +14,7 @@ import {
 import { IconButton } from "@/components/layout/icon-button";
 import { GamesMenu } from "@/components/layout/games-menu";
 import { LiveClock } from "@/components/layout/live-clock";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { useSoundManager } from "@/lib/sound-manager";
 
@@ -21,9 +22,11 @@ interface TopBarProps {
   credits: number;
   inventoryCount?: number;
   streakDays?: number;
+  /** Forwarded to LiveClock — see its own docs for why this is optional. */
+  onCreditsChange?: (newCredits: number) => void;
 }
 
-export function TopBar({ credits, inventoryCount = 0, streakDays = 2 }: TopBarProps) {
+export function TopBar({ credits, inventoryCount = 0, streakDays = 2, onCreditsChange }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
 
@@ -41,10 +44,13 @@ export function TopBar({ credits, inventoryCount = 0, streakDays = 2 }: TopBarPr
           href="/"
           onMouseEnter={sound.hover}
           onClick={sound.click}
-          className="flex items-center gap-2"
+          className="group flex items-center gap-2"
         >
-          <Gamepad2 className="h-6 w-6 text-purple-400" />
-          <span className="hidden font-bold text-zinc-100 sm:inline">
+          <span className="relative flex items-center justify-center">
+            <span aria-hidden className="logo-icon-glow" />
+            <Gamepad2 className="relative h-6 w-6 text-purple-400 transition-transform duration-300 group-hover:rotate-[-8deg] group-hover:scale-110" />
+          </span>
+          <span className="logo-text hidden font-extrabold tracking-tight sm:inline">
             Goon&apos;n Chill Cord
           </span>
         </Link>
@@ -56,7 +62,7 @@ export function TopBar({ credits, inventoryCount = 0, streakDays = 2 }: TopBarPr
 
       {/* Center: clock + streak — always its own column, never overlapped */}
       <div className="justify-self-center">
-        <LiveClock streakDays={streakDays} />
+        <LiveClock streakDays={streakDays} onClaimed={onCreditsChange} />
       </div>
 
       {/* Right: games (widest control, sits outermost-left of this group) +
@@ -74,11 +80,12 @@ export function TopBar({ credits, inventoryCount = 0, streakDays = 2 }: TopBarPr
         </div>
         <div className="hidden items-center gap-1.5 lg:flex">
           <IconButton icon={ShoppingBag} label="Shop" />
-          <IconButton icon={Gavel} label="Auktionshaus" />
-          <IconButton icon={Repeat} label="Trading" />
+          <IconButton icon={Gavel} label="Auktionshaus" href="/auctions" />
+          <IconButton icon={Repeat} label="Trading" href="/trading" />
           <IconButton icon={Users} label="Community" href="/community" />
         </div>
         <IconButton icon={Shirt} label="Garderobe" href="/garderobe" badge={inventoryCount} />
+        <NotificationsBell />
         <IconButton icon={UserRound} label="Profil" href="/account" />
         <LogoutButton />
       </div>

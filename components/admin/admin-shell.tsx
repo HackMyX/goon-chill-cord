@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import { ItemsTab } from "@/components/admin/items-tab";
 import { AuditTimeline } from "@/components/admin/audit-timeline";
+import { StreakConfigEditor } from "@/components/admin/streak-config-editor";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
+import type { StreakConfig } from "@/lib/streak";
 
 export interface AuditLogEntry {
   id: string;
@@ -53,12 +55,14 @@ interface AdminShellProps {
   caseTiers: CaseTierRow[];
   profiles: ProfileRow[];
   items: ItemRow[];
+  streakConfig: StreakConfig;
 }
 
-type Tab = "economy" | "users" | "items" | "audit";
+type Tab = "economy" | "streak" | "users" | "items" | "audit";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
+  { id: "streak", label: "Daily-Streak", icon: Flame },
   { id: "users", label: "User-Management", icon: Users },
   { id: "items", label: "Items", icon: Package },
   { id: "audit", label: "Audit-Log", icon: ScrollText },
@@ -71,6 +75,7 @@ export function AdminShell({
   caseTiers,
   profiles,
   items: initialItems,
+  streakConfig,
 }: AdminShellProps) {
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
@@ -128,6 +133,8 @@ export function AdminShell({
             )}
           </div>
         )}
+
+        {tab === "streak" && <StreakConfigEditor config={streakConfig} />}
 
         {tab === "users" && (
           <div className="flex flex-col gap-3">

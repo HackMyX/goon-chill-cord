@@ -175,54 +175,34 @@ function writeWav(filename, floatSamples) {
 
 // --- the actual sound effects ---
 //
-// Round 3: "casino" register — bright bell-like tones (strong 2nd harmonic
-// for that chime quality, not a buzzy wall of harmonics), pitched back up
-// out of the overly-dull range round 2 landed in, but every single one
-// still ends through `fadeTail()` so nothing clicks/cuts off abruptly.
-// win/ultra-win are ascending major arpeggios — the classic slot-machine
-// "jackpot" shape — which is what actually reads as a reward, more than
-// raw pitch does.
+// Round 4: "soft jump" register for the interaction sounds (hover/click/
+// tick/flip) — a quick upward pitch *sweep* instead of a flat tone, the
+// same shape as a mobile-game jump/hop blip (Stumble Guys etc.): rises,
+// peaks, and is gone before it can read as a "beep". hover/click/tick all
+// share this family now (same sweep shape, just different range/duration)
+// instead of each being an unrelated flat note. win/ultra-win are still
+// the ascending major-arpeggio "jackpot" fanfare — a different job
+// (reward, not UI feedback) — and error stays deliberately low/dissonant,
+// since a "happy jump" sound would undercut it being negative feedback.
+// Every sound still ends through `fadeTail()` so nothing clicks/cuts off.
 
 writeWav(
   "hover.wav",
-  fadeTail(
-    finalize(
-      mixLayers(
-        [note(720, 35, { attack: 0.002, decay: 0.05, peak: 0.22, harmonics: [[1, 1], [2, 0.3]] })],
-        45
-      )
-    )
-  )
+  fadeTail(finalize(mixLayers([sweep(420, 680, 60, { peak: 0.2, decay: 0.12 })], 70)))
 );
 
 writeWav(
   "click.wav",
   fadeTail(
     finalize(
-      applyEcho(
-        mixLayers(
-          [
-            note(523.25, 55, { attack: 0.001, decay: 0.07, peak: 0.4, harmonics: [[1, 1], [2, 0.4], [3, 0.12]] }),
-            note(1046.5, 40, { attack: 0.001, decay: 0.04, peak: 0.16 }),
-          ],
-          75
-        ),
-        { delayMs: 50, decay: 0.18, repeats: 2 }
-      )
+      mixLayers([sweep(360, 720, 90, { peak: 0.4, decay: 0.16 })], 100)
     )
   )
 );
 
 writeWav(
   "tick.wav",
-  fadeTail(
-    finalize(
-      mixLayers(
-        [note(660, 26, { attack: 0.001, decay: 0.03, peak: 0.34, harmonics: [[1, 1], [2, 0.28]] })],
-        36
-      )
-    )
-  )
+  fadeTail(finalize(mixLayers([sweep(340, 540, 32, { peak: 0.3, decay: 0.08 })], 40)))
 );
 
 writeWav(
@@ -289,7 +269,7 @@ writeWav(
   "flip.wav",
   fadeTail(
     finalize(
-      applyEcho(mixLayers([sweep(380, 980, 170, { peak: 0.44, decay: 0.22 })], 190), {
+      applyEcho(mixLayers([sweep(380, 820, 170, { peak: 0.44, decay: 0.22 })], 190), {
         delayMs: 65,
         decay: 0.18,
         repeats: 2,

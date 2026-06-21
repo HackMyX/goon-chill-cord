@@ -47,7 +47,12 @@ export function DashboardShell({
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={credits} inventoryCount={inventoryCount} streakDays={streakDays} />
+      <TopBar
+        credits={credits}
+        inventoryCount={inventoryCount}
+        streakDays={streakDays}
+        onCreditsChange={handleCreditsChange}
+      />
       <main className="flex-1">
         <section className="mx-auto w-full max-w-2xl px-4 pt-12 pb-4 text-center">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-[11px] font-semibold tracking-widest text-purple-300">
@@ -70,17 +75,15 @@ export function DashboardShell({
               <Shirt className="h-4 w-4" />
               Garderobe öffnen
             </Link>
-            <button
+            <Link
+              href="/community"
               onMouseEnter={sound.hover}
               onClick={sound.click}
               className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-5 py-2.5 text-sm font-semibold text-zinc-200 transition-colors hover:border-white/30"
             >
               <Users className="h-4 w-4" />
               Spieler Liste
-              <span className="flex items-center gap-1 text-xs text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />1
-              </span>
-            </button>
+            </Link>
             {isAdmin && (
               <Link
                 href="/admin"

@@ -134,26 +134,46 @@ function RarityFX({ rarity, children }: { rarity: Rarity; children: ReactNode })
 // --- Pets: 4 distinct low-poly silhouettes ------------------------------
 
 function DogPet({ color }: { color: string }) {
+  // Stocky body on four stubby legs, a snout that actually projects
+  // forward (not just a round head), floppy droop-eared (flattened boxes
+  // angled downward, not the same pointy cone shape cats get), and an
+  // upward-curled wagging tail — built to read as "dog" at a glance, not
+  // a reskinned generic quadruped.
   return (
     <group>
-      <mesh position={[0, 0.14, 0]}>
-        <boxGeometry args={[0.46, 0.22, 0.2]} />
+      <mesh position={[0, 0.22, 0]}>
+        <boxGeometry args={[0.42, 0.2, 0.22]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0.26, 0.22, 0]}>
-        <sphereGeometry args={[0.14, 12, 12]} />
+      {[
+        [0.16, 0.04, 0.08],
+        [0.16, 0.04, -0.08],
+        [-0.16, 0.04, 0.08],
+        [-0.16, 0.04, -0.08],
+      ].map(([x, y, z], i) => (
+        <mesh key={i} position={[x, y, z]}>
+          <boxGeometry args={[0.05, 0.16, 0.05]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+      ))}
+      <mesh position={[0.26, 0.26, 0]}>
+        <sphereGeometry args={[0.13, 12, 12]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0.32, 0.34, 0.07]} rotation={[0, 0, -0.3]}>
-        <coneGeometry args={[0.05, 0.12, 8]} />
+      <mesh position={[0.39, 0.23, 0]}>
+        <boxGeometry args={[0.14, 0.09, 0.1]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0.32, 0.34, -0.07]} rotation={[0, 0, -0.3]}>
-        <coneGeometry args={[0.05, 0.12, 8]} />
+      <mesh position={[0.32, 0.34, 0.08]} rotation={[0.5, 0, -0.1]}>
+        <boxGeometry args={[0.09, 0.13, 0.025]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[-0.26, 0.2, 0]} rotation={[0, 0, 0.9]}>
-        <coneGeometry args={[0.05, 0.22, 8]} />
+      <mesh position={[0.32, 0.34, -0.08]} rotation={[-0.5, 0, -0.1]}>
+        <boxGeometry args={[0.09, 0.13, 0.025]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      <mesh position={[-0.24, 0.32, 0]} rotation={[0, 0, 1.3]}>
+        <coneGeometry args={[0.04, 0.18, 8]} />
         <meshStandardMaterial color={color} />
       </mesh>
     </group>
@@ -199,28 +219,50 @@ function GhostPet({ color }: { color: string }) {
 }
 
 function CatPet({ color }: { color: string }) {
+  // Notably smaller/sleeker than the dog (thinner body, thinner legs), a
+  // small round head with ears sitting *on top* (not stuck to the front
+  // like a muzzle), and a long tail that curls upward at the tip instead
+  // of sticking out straight — the single most cat-specific silhouette
+  // cue versus every other quadruped pet.
   return (
     <group>
-      <mesh position={[0, 0.12, 0]}>
-        <boxGeometry args={[0.38, 0.18, 0.16]} />
+      <mesh position={[0, 0.16, 0]}>
+        <boxGeometry args={[0.32, 0.14, 0.13]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0.2, 0.18, 0]}>
-        <sphereGeometry args={[0.11, 12, 12]} />
+      {[
+        [0.11, 0.03, 0.05],
+        [0.11, 0.03, -0.05],
+        [-0.11, 0.03, 0.05],
+        [-0.11, 0.03, -0.05],
+      ].map(([x, y, z], i) => (
+        <mesh key={i} position={[x, y, z]}>
+          <boxGeometry args={[0.035, 0.13, 0.035]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+      ))}
+      <mesh position={[0.19, 0.22, 0]}>
+        <sphereGeometry args={[0.1, 12, 12]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0.24, 0.27, 0.05]} rotation={[0, 0, -0.2]}>
-        <coneGeometry args={[0.035, 0.08, 6]} />
+      <mesh position={[0.21, 0.32, 0.045]} rotation={[0, 0, -0.15]}>
+        <coneGeometry args={[0.03, 0.09, 6]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0.24, 0.27, -0.05]} rotation={[0, 0, -0.2]}>
-        <coneGeometry args={[0.035, 0.08, 6]} />
+      <mesh position={[0.21, 0.32, -0.045]} rotation={[0, 0, -0.15]}>
+        <coneGeometry args={[0.03, 0.09, 6]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[-0.22, 0.22, 0]} rotation={[0, 0, -0.6]}>
-        <boxGeometry args={[0.03, 0.26, 0.03]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
+      <group position={[-0.16, 0.2, 0]} rotation={[0, 0, -0.5]}>
+        <mesh>
+          <cylinderGeometry args={[0.018, 0.024, 0.24, 6]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+        <mesh position={[0, 0.15, 0]} rotation={[0, 0, 1]}>
+          <cylinderGeometry args={[0.014, 0.018, 0.1, 6]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+      </group>
     </group>
   );
 }
@@ -236,15 +278,23 @@ export function PetVariant({ item }: { item: EquippedItem }) {
   // fall back to the old hash-based pick. Written as a plain ternary chain
   // (not a helper function returning a component) so the React Compiler can
   // statically see this only ever selects among the fixed components above.
+  // Phönix checked *before* Drache/Schatten — "Mini-Phönix" used to match
+  // the same /Drache|Phönix/ branch as "Schatten-Drache" and render as an
+  // identical DragonPet, which is exactly the "two different items look
+  // the same" bug. A phoenix reads closer to "ghostly/ethereal glow" than
+  // "scaly wyvern" anyway, so it gets GhostPet instead — distinct shape,
+  // still thematically reasonable.
   const Variant = /Hund/.test(item.name)
     ? DogPet
     : /Katze/.test(item.name)
       ? CatPet
-      : /Drache|Phönix/.test(item.name)
-        ? DragonPet
-        : /Schatten|Geist/.test(item.name)
-          ? GhostPet
-          : PET_VARIANTS[variantIndex(item.name, PET_VARIANTS.length)];
+      : /Phönix/.test(item.name)
+        ? GhostPet
+        : /Drache/.test(item.name)
+          ? DragonPet
+          : /Schatten|Geist/.test(item.name)
+            ? GhostPet
+            : PET_VARIANTS[variantIndex(item.name, PET_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
@@ -310,9 +360,22 @@ function CrownHat({ color }: { color: string }) {
 
 const HAT_VARIANTS = [CapHat, BeanieHat, TopHat, CrownHat];
 
+/** The curated ultra hat names (scripts/generate-all-items.js ULTRA_NAMES.
+ * hat) would otherwise fall through the same hash as the color-matrix
+ * items and could coincidentally land on the same shape as each other —
+ * fine for color-matrix items (that's expected variety), not fine for
+ * three uniquely-named top-tier items. Exact-mapped to three guaranteed-
+ * distinct existing shapes instead. */
+const EXACT_HAT_SHAPE: Record<string, typeof CapHat> = {
+  "Kronen-Mütze": CrownHat,
+  "Voidkappe": BeanieHat,
+  "Sternenhelm": TopHat,
+};
+
 export function HatVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#6d28d9");
-  const Variant = HAT_VARIANTS[variantIndex(item.name, HAT_VARIANTS.length)];
+  const Variant =
+    EXACT_HAT_SHAPE[item.name] ?? HAT_VARIANTS[variantIndex(item.name, HAT_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
@@ -503,9 +566,15 @@ export function DefaultFace({ skin }: { skin: string }) {
   );
 }
 
+const EXACT_FACE_SHAPE: Record<string, typeof VisorFace> = {
+  "Gottes-Maske": SkullFace,
+  "Regenbogen-Visier": GogglesFace,
+};
+
 export function FaceVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
-  const Variant = FACE_VARIANTS[variantIndex(item.name, FACE_VARIANTS.length)];
+  const Variant =
+    EXACT_FACE_SHAPE[item.name] ?? FACE_VARIANTS[variantIndex(item.name, FACE_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
@@ -731,6 +800,149 @@ function ShardWeapon({ color, emissive }: { color: string; emissive: string }) {
   );
 }
 
+// "Rostige Klinge"/"Holzschwert"/"Flammenschwert"/"Voidklinge"/
+// "Götterschwert" all used to map to the exact same SwordWeapon mesh —
+// five different items rendering as one identical sword. Every one of
+// them now gets a genuinely different silhouette below, even though
+// they're all still recognizably "sword-class".
+
+function RustyBladeWeapon({ color, emissive }: { color: string; emissive: string }) {
+  // A jagged, notched edge (offset stacked boxes) instead of a clean
+  // rectangle — reads as chipped/corroded rather than a fresh blade.
+  return (
+    <group>
+      <mesh position={[0, -0.06, 0]}>
+        <boxGeometry args={[0.05, 0.14, 0.05]} />
+        <meshStandardMaterial color="#4a3a2a" />
+      </mesh>
+      <mesh position={[0, 0.4, 0]}>
+        <boxGeometry args={[0.07, 0.78, 0.05]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.15} roughness={1} />
+      </mesh>
+      {[0.18, 0.4, 0.62].map((y, i) => (
+        <mesh key={i} position={[i % 2 === 0 ? 0.045 : -0.045, y, 0]}>
+          <boxGeometry args={[0.03, 0.05, 0.05]} />
+          <meshStandardMaterial color={color} roughness={1} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function WoodenSwordWeapon({ color, emissive }: { color: string; emissive: string }) {
+  // Thick, blocky, matte — a training/toy sword, deliberately chunkier
+  // than every metal blade in this list and with a plain wood-tone grip.
+  return (
+    <group>
+      <mesh position={[0, -0.07, 0]}>
+        <boxGeometry args={[0.07, 0.16, 0.07]} />
+        <meshStandardMaterial color="#6b4a2c" />
+      </mesh>
+      <mesh position={[0, 0.06, 0]}>
+        <boxGeometry args={[0.22, 0.04, 0.05]} />
+        <meshStandardMaterial color="#6b4a2c" />
+      </mesh>
+      <mesh position={[0, 0.42, 0]}>
+        <boxGeometry args={[0.11, 0.72, 0.07]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.1} roughness={1} />
+      </mesh>
+    </group>
+  );
+}
+
+function FlameSwordWeapon({ color, emissive }: { color: string; emissive: string }) {
+  // A wavy, flickering silhouette — alternating-offset segments instead of
+  // one straight blade — plus a strong emissive glow to sell "on fire".
+  const segments = 5;
+  return (
+    <group>
+      <mesh position={[0, -0.06, 0]}>
+        <boxGeometry args={[0.05, 0.14, 0.05]} />
+        <meshStandardMaterial color="#3f3f46" />
+      </mesh>
+      {Array.from({ length: segments }).map((_, i) => (
+        <mesh key={i} position={[Math.sin(i * 1.3) * 0.035, 0.1 + i * 0.16, 0]}>
+          <boxGeometry args={[0.1 - i * 0.01, 0.18, 0.045]} />
+          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.9} toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function VoidBladeWeapon({ color, emissive }: { color: string; emissive: string }) {
+  // Thin, dark, faintly curved blade with a single glowing void-purple
+  // core line running down the center — reads as "absence of light" with
+  // a seam of energy, not a normal metal sword.
+  const segments = 6;
+  return (
+    <group>
+      <mesh position={[0, -0.05, 0]}>
+        <boxGeometry args={[0.04, 0.1, 0.04]} />
+        <meshStandardMaterial color="#0c0c12" />
+      </mesh>
+      {Array.from({ length: segments }).map((_, i) => (
+        <mesh key={i} position={[i * 0.012, 0.06 + i * 0.115, 0]}>
+          <boxGeometry args={[0.045, 0.13, 0.03]} />
+          <meshStandardMaterial color="#0c0c12" roughness={0.3} metalness={0.6} />
+        </mesh>
+      ))}
+      <mesh position={[0.03, 0.42, 0]}>
+        <boxGeometry args={[0.012, 0.7, 0.012]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={1} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function GodSwordWeapon({ color, emissive }: { color: string; emissive: string }) {
+  // Ornate winged crossguard + a glowing core gem in the hilt + the
+  // largest blade of the set — meant to immediately read as the most
+  // ceremonial/"chosen one" weapon in the catalogue.
+  return (
+    <group>
+      <mesh position={[0, -0.08, 0]}>
+        <boxGeometry args={[0.06, 0.18, 0.06]} />
+        <meshStandardMaterial color="#d4af37" metalness={0.7} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, 0.04, 0]}>
+        <sphereGeometry args={[0.045, 10, 10]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={1} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.16, 0.02, 0]} rotation={[0, 0, -0.4]}>
+        <coneGeometry args={[0.04, 0.22, 6]} />
+        <meshStandardMaterial color="#d4af37" metalness={0.7} roughness={0.3} />
+      </mesh>
+      <mesh position={[-0.16, 0.02, 0]} rotation={[0, 0, 0.4]}>
+        <coneGeometry args={[0.04, 0.22, 6]} />
+        <meshStandardMaterial color="#d4af37" metalness={0.7} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, 0.48, 0]}>
+        <boxGeometry args={[0.1, 0.92, 0.05]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.45} metalness={0.4} />
+      </mesh>
+    </group>
+  );
+}
+
+// "Messer" and "Dolch" both used to map to the same DaggerWeapon mesh —
+// kept Dolch as the slim stiletto, gave Messer its own slightly-curved
+// utility-knife silhouette so the two no longer look identical.
+function CurvedKnifeWeapon({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <mesh position={[0, -0.05, 0]}>
+        <boxGeometry args={[0.045, 0.1, 0.045]} />
+        <meshStandardMaterial color="#3f3f46" />
+      </mesh>
+      <mesh position={[0.02, 0.16, 0]} rotation={[0, 0, -0.18]}>
+        <boxGeometry args={[0.09, 0.32, 0.04]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
 const WEAPON_VARIANTS = [SwordWeapon, AxeWeapon, HammerWeapon, StaffWeapon];
 
 /** Exact match against the curated names in scripts/generate-all-items.js
@@ -742,10 +954,10 @@ const EXACT_WEAPON_SHAPE: Record<string, typeof SwordWeapon> = {
   "Rohr": PipeWeapon,
   "Stahlrohr": PipeWeapon,
   "Holzbrett": PlankWeapon,
-  "Rostige Klinge": SwordWeapon,
-  "Holzschwert": SwordWeapon,
-  "Messer": DaggerWeapon,
-  "Flammenschwert": SwordWeapon,
+  "Rostige Klinge": RustyBladeWeapon,
+  "Holzschwert": WoodenSwordWeapon,
+  "Messer": CurvedKnifeWeapon,
+  "Flammenschwert": FlameSwordWeapon,
   "Glasflasche": BottleWeapon,
   "Dolch": DaggerWeapon,
   "Stahlschild": HandShieldWeapon,
@@ -754,8 +966,8 @@ const EXACT_WEAPON_SHAPE: Record<string, typeof SwordWeapon> = {
   "Butterfly": ButterflyWeapon,
   "Baseballschläger": BatWeapon,
   "Donnerhammer": HammerWeapon,
-  "Voidklinge": SwordWeapon,
-  "Götterschwert": SwordWeapon,
+  "Voidklinge": VoidBladeWeapon,
+  "Götterschwert": GodSwordWeapon,
   "Sternensplitter": ShardWeapon,
 };
 
@@ -862,6 +1074,12 @@ export function ChestShape({ depth, color }: { depth: number; color: string }) {
   );
 }
 
+const EXACT_JACKET_SHAPE: Record<string, typeof PlainJacket> = {
+  "Drachenrüstung": PaddedJacket,
+  "Phönixmantel": CollaredJacket,
+  "Voidjacke": LongCoatJacket,
+};
+
 export function JacketVariant({
   item,
   width,
@@ -874,7 +1092,8 @@ export function JacketVariant({
   gender: "m" | "w";
 }) {
   const color = rarityColorFor(item, "#0e7490");
-  const Variant = JACKET_VARIANTS[variantIndex(item.name, JACKET_VARIANTS.length)];
+  const Variant =
+    EXACT_JACKET_SHAPE[item.name] ?? JACKET_VARIANTS[variantIndex(item.name, JACKET_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} width={width} depth={depth} />
@@ -939,9 +1158,15 @@ function StripedPants({ color }: { color: string }) {
 
 const PANTS_VARIANTS = [SkinnyPants, BaggyPants, ShortsPants, StripedPants];
 
+const EXACT_PANTS_SHAPE: Record<string, typeof SkinnyPants> = {
+  "Voidhose": SkinnyPants,
+  "Sternenstoff-Hose": BaggyPants,
+};
+
 export function PantsVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#1e3a8a");
-  const Variant = PANTS_VARIANTS[variantIndex(item.name, PANTS_VARIANTS.length)];
+  const Variant =
+    EXACT_PANTS_SHAPE[item.name] ?? PANTS_VARIANTS[variantIndex(item.name, PANTS_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
@@ -1022,9 +1247,15 @@ export function BareFoot({ skin }: { skin: string }) {
 
 const SHOE_VARIANTS = [SneakerShoe, BootShoe, CleatShoe, SandalShoe];
 
+const EXACT_SHOE_SHAPE: Record<string, typeof SneakerShoe> = {
+  "Lichtschritt-Stiefel": BootShoe,
+  "Voidtreter": CleatShoe,
+};
+
 export function ShoeVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#1e293b");
-  const Variant = SHOE_VARIANTS[variantIndex(item.name, SHOE_VARIANTS.length)];
+  const Variant =
+    EXACT_SHOE_SHAPE[item.name] ?? SHOE_VARIANTS[variantIndex(item.name, SHOE_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
@@ -1072,10 +1303,16 @@ function BucklerShield({ color, emissive }: { color: string; emissive: string })
 
 const SHIELD_VARIANTS = [KiteShield, RoundShield, TowerShield, BucklerShield];
 
+const EXACT_SHIELD_SHAPE: Record<string, typeof KiteShield> = {
+  "Voidschild": TowerShield,
+  "Drachenschild": KiteShield,
+};
+
 export function ShieldVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#52525b");
   const emissive = rarityColorFor(item, "#000000");
-  const Variant = SHIELD_VARIANTS[variantIndex(item.name, SHIELD_VARIANTS.length)];
+  const Variant =
+    EXACT_SHIELD_SHAPE[item.name] ?? SHIELD_VARIANTS[variantIndex(item.name, SHIELD_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} emissive={emissive} />
@@ -1136,12 +1373,19 @@ function ShardRing({ color, emissive }: { color: string; emissive: string }) {
 
 const RING_VARIANTS = [RoundGemRing, SignetRing, ShardRing];
 
+const EXACT_RING_SHAPE: Record<string, typeof RoundGemRing> = {
+  "Unendlichkeitsring": SignetRing,
+  "Voidring": ShardRing,
+  "Sternenring": RoundGemRing,
+};
+
 /** Worn on the right hand, just below the weapon grip — visible whether or
  * not a weapon is equipped since it sits on the wrist, not the fist. */
 export function RingVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
   const emissive = rarityColorFor(item, "#000000");
-  const Variant = RING_VARIANTS[variantIndex(item.name, RING_VARIANTS.length)];
+  const Variant =
+    EXACT_RING_SHAPE[item.name] ?? RING_VARIANTS[variantIndex(item.name, RING_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} emissive={emissive} />
@@ -1204,13 +1448,20 @@ function OrbPendantAmulet({ color, emissive }: { color: string; emissive: string
 
 const AMULET_VARIANTS = [GemPendantAmulet, CrossPendantAmulet, OrbPendantAmulet];
 
+const EXACT_AMULET_SHAPE: Record<string, typeof GemPendantAmulet> = {
+  "Amulett der Götter": CrossPendantAmulet,
+  "Void-Amulett": OrbPendantAmulet,
+  "Sternenamulett": GemPendantAmulet,
+};
+
 /** Worn around the neck, sitting on top of the chest/jacket — placed in
  * character-model.tsx slightly in front of the torso so it never gets
  * swallowed inside the jacket mesh. */
 export function AmuletVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
   const emissive = rarityColorFor(item, "#000000");
-  const Variant = AMULET_VARIANTS[variantIndex(item.name, AMULET_VARIANTS.length)];
+  const Variant =
+    EXACT_AMULET_SHAPE[item.name] ?? AMULET_VARIANTS[variantIndex(item.name, AMULET_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} emissive={emissive} />
@@ -1379,9 +1630,15 @@ const HAIR_VARIANTS = [
   BraidHair,
 ];
 
+const EXACT_HAIR_SHAPE: Record<string, typeof ShortHair> = {
+  "Void-Haare": AfroHair,
+  "Sternen-Haare": BraidHair,
+};
+
 export function HairVariant({ item, gender }: { item: EquippedItem; gender: "m" | "w" }) {
   const color = rarityColorFor(item, "#404040");
-  const Variant = HAIR_VARIANTS[variantIndex(item.name, HAIR_VARIANTS.length)];
+  const Variant =
+    EXACT_HAIR_SHAPE[item.name] ?? HAIR_VARIANTS[variantIndex(item.name, HAIR_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} gender={gender} />
@@ -1658,8 +1915,14 @@ function WingAura({ rarity }: { rarity: Rarity }) {
 
 const AURA_VARIANTS = [OrbitAura, EmberAura, BladeAura, DoubleRingAura, CometAura, WingAura];
 
+const EXACT_AURA_SHAPE: Record<string, typeof OrbitAura> = {
+  "Rainbow-Aura": CometAura,
+  "Void-Aura": DoubleRingAura,
+  "Sternen-Aura": WingAura,
+};
+
 export function AuraVariant({ item }: { item: EquippedItem }) {
-  const Variant = AURA_VARIANTS[variantIndex(item.name, AURA_VARIANTS.length)];
+  const Variant = EXACT_AURA_SHAPE[item.name] ?? AURA_VARIANTS[variantIndex(item.name, AURA_VARIANTS.length)];
   return <Variant rarity={item.rarity} />;
 }
 
@@ -1827,7 +2090,14 @@ function SmokePuffTrail({ rarity }: { rarity: Rarity }) {
 
 const TRAIL_VARIANTS = [GlowCirclesTrail, SparkTrail, RibbonTrail, SmokePuffTrail];
 
+const EXACT_TRAIL_SHAPE: Record<string, typeof GlowCirclesTrail> = {
+  "RGB-Spur": SparkTrail,
+  "Regenbogen-Spur": RibbonTrail,
+  "Galaxie-Spur": SmokePuffTrail,
+};
+
 export function TrailVariant({ item }: { item: EquippedItem }) {
-  const Variant = TRAIL_VARIANTS[variantIndex(item.name, TRAIL_VARIANTS.length)];
+  const Variant =
+    EXACT_TRAIL_SHAPE[item.name] ?? TRAIL_VARIANTS[variantIndex(item.name, TRAIL_VARIANTS.length)];
   return <Variant rarity={item.rarity} />;
 }
