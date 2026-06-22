@@ -240,8 +240,8 @@ export function AccountShell({
                   <Loader2 className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin text-zinc-300" />
                 ) : (
                   <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      acceptsTrades ? "translate-x-5" : "translate-x-0.5"
+                    className={`absolute top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      acceptsTrades ? "translate-x-[22px]" : "translate-x-[2px]"
                     }`}
                   />
                 )}
@@ -274,8 +274,8 @@ export function AccountShell({
                   <Loader2 className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin text-zinc-300" />
                 ) : (
                   <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      profileVisible ? "translate-x-5" : "translate-x-0.5"
+                    className={`absolute top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      profileVisible ? "translate-x-[22px]" : "translate-x-[2px]"
                     }`}
                   />
                 )}
