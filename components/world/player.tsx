@@ -80,7 +80,13 @@ interface PlayerProps {
   characterConfig: CharacterConfig;
 }
 
-const ACCEL_RATE = 8; // higher = snappier velocity response, still delta-scaled
+// Velocity smoothing rate — governs how quickly horizontal speed tracks the
+// target on both start (key pressed) and stop (key released). At 60 fps
+// with the exponential formula below, 14 ≈ 91 % of target velocity in
+// ~150 ms: responsive without feeling teleport-snappy. The old value of 8
+// needed ~267 ms to reach the same percentage, which read as "floaty" or
+// "sliding" on stop.
+const ACCEL_RATE = 14;
 /** Absolute world-space floor on the camera's Y position — scene.tsx's
  * ground plane sits at y≈-0.04 and is single-sided (invisible from
  * underneath), so this needs real clearance above that, not just "above
@@ -100,7 +106,12 @@ const STATS_SYNC_INTERVAL = 0.1;
 // visibly swings around to face wherever you're looking/walking instead of
 // snapping instantly — but movement itself is never delayed by that ease,
 // only the cosmetic body rotation is.
-const CHARACTER_TURN_RATE = 11;
+// Body heading ease-rate — higher = body snaps to camera yaw faster.
+// 15 gives ~221 ms to reach 91 % of target (was 11 → ~286 ms): the body
+// still visibly "swings" to follow the mouse rather than teleporting, but
+// no longer lags so far behind that it reads as the character walking
+// sideways or facing the wrong direction.
+const CHARACTER_TURN_RATE = 15;
 
 // Deliberately shorter than lib/combat.ts's ATTACK_COOLDOWN (0.45s): the
 // swing animation itself finishes a beat before the next attack is
@@ -424,7 +435,7 @@ export function Player({
     // the pointer isn't locked (menus, "click to play" overlay) input is
     // simply not read below, so the character just stands still facing
     // wherever it last faced.
-    g.rotation.y += angleDelta(g.rotation.y, cc.yaw) * Math.min(1, delta * CHARACTER_TURN_RATE);
+    g.rotation.y += angleDelta(g.rotation.y, cc.yaw) * (1 - Math.exp(-delta * CHARACTER_TURN_RATE));
 
     const moveForward =
       locked && alive ? (keys.state.current.forward ? 1 : 0) - (keys.state.current.backward ? 1 : 0) : 0;
@@ -481,7 +492,11 @@ export function Player({
       targetVelocity.current.set(0, 0, 0);
     }
 
-    velocity.current.lerp(targetVelocity.current, Math.min(1, delta * ACCEL_RATE));
+    // Exponential smoothing (1 − e^(−rate·dt)) is frame-rate-independent:
+    // the same time constant regardless of whether the game runs at 30 or
+    // 144 fps. Math.min(1, delta*rate) is a linear approximation that
+    // undershoots slightly at low fps and diverges at very high deltas.
+    velocity.current.lerp(targetVelocity.current, 1 - Math.exp(-delta * ACCEL_RATE));
     g.position.addScaledVector(velocity.current, delta);
 
     // World border: a hard circular clamp, paired with the visible ring +
@@ -508,13 +523,24 @@ export function Player({
     if (locked && alive && jumpRequested && grounded.current && jumpCooldown.current <= 0) {
       verticalVelocity.current = JUMP_VELOCITY * jumpMultiplier;
       grounded.current = false;
-      jumpCooldown.current = characterConfig.jumpCooldownSec;
+      // No cooldown set here — it is applied at touch-down (below) so that
+      // the full jumpCooldownSec wait is always AFTER landing, not from the
+      // moment of the jump itself. Starting it at jump-time meant a long
+      // perk-boosted jump could exhaust the 1 s timer mid-air and let the
+      // player jump again the instant they touched down (i.e. no cooldown at
+      // all from the player's perspective). Post-landing application
+      // guarantees the felt pause is always exactly jumpCooldownSec,
+      // regardless of how high or long the jump was.
     }
     verticalVelocity.current += GRAVITY * delta;
     baseY.current += verticalVelocity.current * delta;
     if (baseY.current <= 0) {
       baseY.current = 0;
       verticalVelocity.current = 0;
+      if (!grounded.current) {
+        // Just touched down — start the post-landing cooldown now.
+        jumpCooldown.current = characterConfig.jumpCooldownSec;
+      }
       grounded.current = true;
     }
     jumpPose.current = THREE.MathUtils.lerp(

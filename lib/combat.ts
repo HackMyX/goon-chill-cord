@@ -73,14 +73,15 @@ export const STAMINA_REGEN_PER_SEC = 14;
  * this, sitting exactly at the drain/regen breakeven point would flicker
  * sprint on/off every frame instead of cleanly cutting out. */
 export const STAMINA_MIN_TO_START_SPRINT = 15;
-/** Minimum time between jumps, seconds — not a stamina cost, just enough
- * to stop holding/mashing Space from bunny-hopping back-to-back forever,
- * while still letting jumping happen "as much as you want" otherwise (no
- * stamina cost at all, see its doc comment above). 0.35 still let a
- * continuous hop-hop-hop chain happen close enough together to feel
- * spammable; a full second is a real, felt beat between jumps without
- * making any single jump itself feel slow. */
-export const JUMP_COOLDOWN_SEC = 1;
+/** Minimum wait *after landing* before the next jump is allowed, seconds.
+ * Applied at touch-down (not at jump-time) in components/world/player.tsx
+ * so the felt delay is always exactly this long regardless of how high or
+ * how long the jump was (a jump_boost perk would otherwise push the total
+ * airtime past the old 1s cooldown, making it expire mid-air and giving
+ * zero post-landing delay). 0.4s is short enough to not feel restrictive
+ * but clearly perceptible — bunny-hop spam is prevented without making
+ * jump rhythm feel sluggish. */
+export const JUMP_COOLDOWN_SEC = 0.4;
 
 /** Slow passive regen so a fight's damage isn't permanent for the rest of
  * the session, but only once you've actually disengaged — otherwise
