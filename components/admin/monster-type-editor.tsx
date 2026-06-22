@@ -7,10 +7,10 @@ import { useSoundManager } from "@/lib/sound-manager";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 
 /**
- * Edits one of the 4 fixed monster variants (lib/monsters.ts) — same
+ * Edits one of the 8 fixed monster variants (lib/monsters.ts) — same
  * "fixed rows, full stat editing, no create/delete" shape as
  * CaseTierEditor. `type.id` is never editable since
- * lib/actions/monsters.ts' updateMonsterType() only accepts the 4 known
+ * lib/actions/monsters.ts' updateMonsterType() only accepts the 8 known
  * ids; this form can only ever change what one of them *does*.
  */
 export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
@@ -26,6 +26,11 @@ export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
   const [spawnWeight, setSpawnWeight] = useState(type.spawnWeight);
   const [colorHex, setColorHex] = useState(type.colorHex);
   const [enabled, setEnabled] = useState(type.enabled);
+  const [hasWeapon, setHasWeapon] = useState(type.hasWeapon ?? false);
+  const [canThrow, setCanThrow] = useState(type.canThrow ?? false);
+  const [throwDamage, setThrowDamage] = useState(type.throwDamage ?? 0);
+  const [throwCooldown, setThrowCooldown] = useState(type.throwCooldown ?? 2);
+  const [throwRange, setThrowRange] = useState(type.throwRange ?? Math.max(attackRange + 1, 5));
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const sound = useSoundManager();
@@ -47,6 +52,11 @@ export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
       spawnWeight,
       colorHex,
       enabled,
+      hasWeapon,
+      canThrow,
+      throwDamage,
+      throwCooldown,
+      throwRange,
     });
     setSaving(false);
     setStatus(res.success ? "saved" : "error");
@@ -202,6 +212,67 @@ export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
             className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
           />
         </label>
+      </div>
+
+      {/* Held weapon (purely cosmetic) + ranged throw — see
+          components/world/monster.tsx's MonsterWeapon/ThrownProjectile for
+          what these actually render/do in the World. */}
+      <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-white/10 pt-3">
+        <label className="flex items-center gap-2 text-xs text-zinc-400">
+          <input
+            type="checkbox"
+            checked={hasWeapon}
+            onChange={(e) => setHasWeapon(e.target.checked)}
+            className="h-4 w-4 rounded border-white/20 bg-black/30"
+          />
+          Trägt Waffe (nur visuell)
+        </label>
+        <label className="flex items-center gap-2 text-xs text-zinc-400">
+          <input
+            type="checkbox"
+            checked={canThrow}
+            onChange={(e) => setCanThrow(e.target.checked)}
+            className="h-4 w-4 rounded border-white/20 bg-black/30"
+          />
+          Kann werfen (Fernkampf)
+        </label>
+        {canThrow && (
+          <>
+            <label className="flex flex-col gap-1 text-xs text-zinc-400">
+              Wurfschaden
+              <input
+                type="number"
+                min={0}
+                value={throwDamage}
+                onChange={(e) => setThrowDamage(Math.max(0, Number(e.target.value) || 0))}
+                className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-zinc-400">
+              Wurf-Cooldown (s)
+              <input
+                type="number"
+                step="0.1"
+                min={0.2}
+                value={throwCooldown}
+                onChange={(e) => setThrowCooldown(Math.max(0.2, Number(e.target.value) || 0.2))}
+                className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-zinc-400">
+              Wurfreichweite
+              <input
+                type="number"
+                step="0.5"
+                min={0}
+                value={throwRange}
+                onChange={(e) => setThrowRange(Math.max(0, Number(e.target.value) || 0))}
+                className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+              />
+              <span className="text-[11px] text-zinc-500">Muss zwischen Angriffs- und Aggro-Reichweite liegen</span>
+            </label>
+          </>
+        )}
       </div>
 
       <div className="mt-3 flex items-center gap-3">

@@ -4,7 +4,8 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
-import { ArrowLeft, Keyboard, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf } from "lucide-react";
+import * as THREE from "three";
+import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { Scene } from "@/components/world/scene";
 import { DeathScreen } from "@/components/world/death-screen";
@@ -36,6 +37,16 @@ interface WorldShellProps {
   monsterTypes: MonsterTypeConfig[];
   petTypes: PetTypeConfig[];
   killStreakConfig: KillStreakConfig;
+  /** Admin Games tab setting (lib/world-session-config.ts) — was a bare
+   * hardcoded `10` before; defaults to 10 here too only as a final
+   * fallback in case a caller forgets to pass it. */
+  disconnectCountdownSec?: number;
+  /** Admin Games tab master switch — `false` makes attemptPvpHit (lib/
+   * actions/pvp.ts) reject hits server-side regardless of what the client
+   * does, so this prop alone is cosmetic-only (a cleaner UX than letting
+   * the player swing at someone and have it just silently no-op
+   * server-side); it doesn't need to be enforced client-side too. */
+  pvpEnabled?: boolean;
   isAdmin?: boolean;
 }
 
@@ -91,10 +102,10 @@ export function WorldShell({
   monsterTypes,
   petTypes,
   killStreakConfig,
+  disconnectCountdownSec = 10,
   isAdmin = false,
 }: WorldShellProps) {
   const [credits, setCredits] = useState(initialCredits);
-  const [showHint, setShowHint] = useState(true);
   const [attackFlash, setAttackFlash] = useState<"hit" | "miss" | null>(null);
   const [hp, setHp] = useState(PLAYER_MAX_HP);
   const [maxHp, setMaxHp] = useState(PLAYER_MAX_HP);
@@ -122,7 +133,55 @@ export function WorldShell({
   const [streakKillCount, setStreakKillCount] = useState(0);
   const [respawnSignal, setRespawnSignal] = useState(0);
   const [deathStats, setDeathStats] = useState<{ forfeitedCr: number; forfeitedKillCount: number } | null>(null);
-  const [disconnecting, setDisconnecting] = useState(false);
+  // Seconds left in the "leaving the World" countdown, or null while no
+  // disconnect is pending (this alone is the single source of truth for
+  // "is a disconnect in progress" — no separate boolean to keep in sync).
+  // The player stays fully playable/attackable the entire time on purpose
+  // — surviving the full countdown (not just clicking the button) is what
+  // actually secures a pending kill-streak, see handleDisconnect's doc
+  // comment below.
+  const [disconnectCountdown, setDisconnectCountdown] = useState<number | null>(null);
+  // Shown once the countdown actually completes and the streak is
+  // committed — a deliberate info screen the player has to click through
+  // (not a toast that fades on its own), so what was just secured is
+  // actually seen, not missed in the instant before navigating away.
+  const [disconnectSummary, setDisconnectSummary] = useState<{ securedCr: number; killCount: number } | null>(
+    null
+  );
+  const disconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelDisconnectCountdown = useCallback(() => {
+    if (disconnectTimeoutRef.current) {
+      clearTimeout(disconnectTimeoutRef.current);
+      disconnectTimeoutRef.current = null;
+    }
+    setDisconnectCountdown(null);
+  }, []);
+
+  // "Latest value" refs, synced via their own effect (never written during
+  // render itself — the React Compiler this project uses flags that
+  // outright) — read inside the countdown effect further below *instead
+  // of* depending on these values directly. This is the actual fix for
+  // the "10s feels like 20s" bug: pendingStreakCr/streakKillCount
+  // genuinely change mid-countdown (the player can still kill things
+  // while it counts down, on purpose), and an earlier version listed them
+  // as effect dependencies — so every kill during the countdown re-ran
+  // the effect, which tore down and rescheduled that tick's setTimeout
+  // from 0ms again, silently stretching out however long was actually
+  // left. Reading these via ref means the countdown effect's dependency
+  // array only ever needs `disconnectCountdown` itself, so one tick is
+  // always exactly 1000ms, full stop, regardless of anything else
+  // changing in this component while it's running.
+  const cancelDisconnectCountdownRef = useRef(cancelDisconnectCountdown);
+  const cameraControlsRef = useRef(cameraControls);
+  const pendingStreakCrRef = useRef(pendingStreakCr);
+  const streakKillCountRef = useRef(streakKillCount);
+  useEffect(() => {
+    cancelDisconnectCountdownRef.current = cancelDisconnectCountdown;
+    cameraControlsRef.current = cameraControls;
+    pendingStreakCrRef.current = pendingStreakCr;
+    streakKillCountRef.current = streakKillCount;
+  }, [cancelDisconnectCountdown, cameraControls, pendingStreakCr, streakKillCount]);
 
   const weapon = equippedByCategory.weapon_cosmetic;
   const weaponDamage = getEquippedDamage(weapon);
@@ -184,12 +243,23 @@ export function WorldShell({
   // death screen can show exactly what was lost) and only then shows the
   // overlay; `credits`/inventory are never touched here.
   const handleDeath = useCallback(() => {
+    // Dying mid-countdown forfeits exactly like any other death — but a
+    // disconnect that was already in flight must not *also* go on to
+    // commit/redirect once the timer would've otherwise hit 0, which is
+    // exactly what forfeitStreakOnDeath() below already just did to the
+    // same pending CR this would try to commit a few seconds later.
+    cancelDisconnectCountdown();
+    // Release the pointer lock immediately — without this, the death
+    // screen's buttons render but stay unclickable (cursor still hidden/
+    // captured) until the player presses Escape themselves first, which
+    // reads as "I died and now I'm just stuck looking at a frozen screen".
+    cameraControls.releaseLock();
     forfeitStreakOnDeath().then((res) => {
       setDeathStats({ forfeitedCr: res.forfeitedCr ?? 0, forfeitedKillCount: res.forfeitedKillCount ?? 0 });
       setPendingStreakCr(0);
       setStreakKillCount(0);
     });
-  }, []);
+  }, [cancelDisconnectCountdown, cameraControls]);
 
   const handleRespawn = useCallback(() => {
     sound.click();
@@ -197,25 +267,93 @@ export function WorldShell({
     setRespawnSignal((s) => s + 1);
   }, [sound]);
 
+  // The death screen's other option — leave straight from there instead
+  // of having to respawn first just to reach the "Zurück" link. No
+  // countdown needed here (unlike the Disconnect button): dying already
+  // forfeited whatever streak was pending (handleDeath's
+  // forfeitStreakOnDeath call), so there's nothing left to secure by
+  // staying — leaving immediately costs nothing further.
+  const handleLeaveAfterDeath = useCallback(() => {
+    sound.click();
+    router.push("/");
+  }, [sound, router]);
+
+  const handleConfirmDisconnectSummary = useCallback(() => {
+    sound.click();
+    router.push("/");
+  }, [sound, router]);
+
   // The "Disconnect" button — the only sanctioned way to actually cash out
   // a pending kill-streak. Closing the tab or clicking the plain "Zurück"
   // link instead leaves it uncommitted, which the next enterWorld() call
   // (this page's own mount effect, on whichever session comes next) wipes
   // for free.
+  //
+  // Clicking it no longer commits/redirects immediately — it starts a
+  // visible 10s countdown banner instead, while the World stays fully
+  // playable (movement/combat keep working exactly as normal, nothing
+  // here pauses or invulnerable-flags the player). Surviving the full 10s
+  // is what actually triggers the real commitStreakCr()+redirect at the
+  // bottom of the effect below; dying before then forfeits the streak the
+  // normal way instead (handleDeath's cancelDisconnectCountdown call).
+  // Clicking the button again while it's counting down cancels it (stay in
+  // the World, nothing committed) — backing out doesn't shortcut the risk,
+  // it just means never having taken it.
   const handleDisconnect = useCallback(() => {
-    setDisconnecting(true);
     sound.click();
-    commitStreakCr().then((res) => {
-      if (!res.success) {
-        setDisconnecting(false);
-        debugWarn("World", "commitStreakCr failed", res.error);
-        return;
-      }
-      setPendingStreakCr(0);
-      setStreakKillCount(0);
-      router.push("/");
-    });
-  }, [sound, router]);
+    if (disconnectCountdown !== null) {
+      cancelDisconnectCountdown();
+      return;
+    }
+    setDisconnectCountdown(disconnectCountdownSec);
+  }, [sound, disconnectCountdown, cancelDisconnectCountdown, disconnectCountdownSec]);
+
+  // Standard "one-shot setTimeout per tick" countdown: each render of this
+  // effect (one per second, since the timeout's only job is to decrement
+  // the state that this effect itself depends on) schedules exactly one
+  // further tick and cleans up after itself — never an actual *repeating*
+  // timer left running across ticks, so cancelDisconnectCountdown clearing
+  // `disconnectTimeoutRef.current` always has at most one real timeout to
+  // clear, never a stale one from an earlier tick.
+  //
+  // Dependency array is *only* `disconnectCountdown` — everything else
+  // this effect needs is read through the `*Ref` mirrors declared above
+  // instead of depending on the values directly, specifically so this
+  // effect doesn't re-run (tearing down and rescheduling the in-flight
+  // 1000ms timeout from 0 again) just because the player killed something
+  // and `pendingStreakCr`/`streakKillCount` ticked up mid-countdown. That
+  // was the actual "10s feels like 20s" bug: each such re-run silently
+  // stretched out whatever time was actually left on the current tick.
+  useEffect(() => {
+    if (disconnectCountdown === null) return;
+    if (disconnectCountdown <= 0) {
+      commitStreakCr().then((res) => {
+        if (!res.success) {
+          debugWarn("World", "commitStreakCr failed", res.error);
+          cancelDisconnectCountdownRef.current();
+          return;
+        }
+        // Shows the summary popup instead of navigating immediately — see
+        // its render block below for why this is an info screen the
+        // player has to actively dismiss, not a toast that disappears on
+        // its own. Captured before the reset below zeroes them. Same
+        // "release the lock so the button is immediately clickable"
+        // reasoning as handleDeath's cameraControls.releaseLock() call.
+        cameraControlsRef.current.releaseLock();
+        setDisconnectSummary({ securedCr: pendingStreakCrRef.current, killCount: streakKillCountRef.current });
+        setDisconnectCountdown(null);
+        setPendingStreakCr(0);
+        setStreakKillCount(0);
+      });
+      return;
+    }
+    disconnectTimeoutRef.current = setTimeout(() => {
+      setDisconnectCountdown((s) => (s === null ? null : s - 1));
+    }, 1000);
+    return () => {
+      if (disconnectTimeoutRef.current) clearTimeout(disconnectTimeoutRef.current);
+    };
+  }, [disconnectCountdown]);
 
   function engageLock() {
     sound.click();
@@ -288,26 +426,90 @@ export function WorldShell({
           {/* The only sanctioned way to actually cash out a pending
               kill-streak — "Zurück" above (or just closing the tab) leaves
               it uncommitted, forfeited for free the next time this player
-              enters the World (lib/actions/kill-streak.ts' enterWorld()). */}
+              enters the World (lib/actions/kill-streak.ts' enterWorld()).
+              Never `disabled` during the countdown — clicking again while
+              it's running is exactly how you cancel it (handleDisconnect's
+              own doc comment), so it has to stay clickable the whole time. */}
           <button
             onMouseEnter={sound.hover}
             onClick={handleDisconnect}
-            disabled={disconnecting}
             title={
-              pendingStreakCr > 0
-                ? `Sichert ${pendingStreakCr.toLocaleString("de-DE")} CR Kill-Streak-Guthaben`
-                : "Keine offene Kill-Streak"
+              disconnectCountdown !== null
+                ? "Abbrechen — im Spiel bleiben, nichts wird gesichert"
+                : pendingStreakCr > 0
+                  ? `Sichert ${pendingStreakCr.toLocaleString("de-DE")} CR Kill-Streak-Guthaben`
+                  : "Keine offene Kill-Streak"
             }
-            className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-sm font-semibold text-emerald-300 backdrop-blur transition-colors hover:border-emerald-400/60 disabled:opacity-50"
+            className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-semibold backdrop-blur transition-colors ${
+              disconnectCountdown !== null
+                ? "border-amber-400/40 bg-amber-500/15 text-amber-300 hover:border-amber-400/70"
+                : "border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/60"
+            }`}
           >
             <LogOut className="h-4 w-4" />
-            Disconnect
+            {disconnectCountdown !== null ? `Abbrechen (${disconnectCountdown}s)` : "Disconnect"}
           </button>
         </div>
 
+        {/* Disconnect countdown banner — top-center, impossible to miss,
+            since surviving the full countdown (not just having clicked the
+            button) is what actually secures the pending streak. The World
+            stays fully playable underneath this the entire time; nothing
+            here pauses input or grants invulnerability. */}
+        {disconnectCountdown !== null && (
+          <div className="pointer-events-none absolute top-4 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1 rounded-xl border border-amber-400/50 bg-black/70 px-5 py-2.5 text-center backdrop-blur">
+            <span className="text-sm font-bold text-amber-300">
+              Welt wird in {disconnectCountdown}s verlassen
+            </span>
+            <span className="text-xs text-zinc-400">Überlebe, um die Kill-Streak zu sichern!</span>
+          </div>
+        )}
+
+        {/* Disconnect summary — a real info screen the player has to
+            click through (not a toast that fades on its own), shown once
+            the countdown above actually completes and commitStreakCr()
+            has succeeded server-side, right before the redirect away from
+            /world. */}
+        {disconnectSummary && (
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-black/80 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full border border-emerald-500/50 bg-emerald-500/10 shadow-[0_0_40px_rgba(16,185,129,0.4)]">
+                <LogOut className="h-8 w-8 text-emerald-400" />
+              </span>
+              <h2 className="glow-text text-3xl font-extrabold text-emerald-300">Welt verlassen</h2>
+            </div>
+
+            {disconnectSummary.killCount > 0 ? (
+              <div className="flex flex-col items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.06] px-6 py-4">
+                <p className="text-sm text-zinc-400">Gesicherte Kill-Streak</p>
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5 text-lg font-bold text-amber-300">
+                    <Coins className="h-4 w-4" />+{disconnectSummary.securedCr.toLocaleString("de-DE")} CR
+                  </span>
+                  <span className="flex items-center gap-1.5 text-lg font-bold text-orange-300">
+                    <Flame className="h-4 w-4" />
+                    {disconnectSummary.killCount} Kills
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500">Keine offene Kill-Streak gesichert.</p>
+            )}
+
+            <button
+              onClick={handleConfirmDisconnectSummary}
+              className="flex items-center gap-2 rounded-lg bg-purple-600 px-6 py-3 text-base font-bold text-white shadow-[0_0_20px_rgba(147,51,234,0.5)] transition-colors hover:bg-purple-500"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Zurück zur Startseite
+            </button>
+          </div>
+        )}
+
         {/* HP/Stamina HUD — top-left, under the back link. Stamina is
-            intentionally only drained by sprinting/jumping (lib/combat.ts),
-            never by attacking. */}
+            intentionally only drained by sprinting (lib/combat.ts) — never
+            by attacking, and jumping no longer costs stamina at all (just
+            a flat per-jump cooldown instead, see JUMP_COOLDOWN_SEC). */}
         <div className="absolute top-16 left-4 z-10 flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/50 px-3 py-2.5 backdrop-blur">
           <StatBar
             icon={<Heart className="h-4 w-4 text-red-400" />}
@@ -390,22 +592,6 @@ export function WorldShell({
           }}
         />
 
-        {showHint && (
-          <button
-            onMouseEnter={sound.hover}
-            onClick={(e) => {
-              e.stopPropagation();
-              sound.click();
-              setShowHint(false);
-            }}
-            className="absolute top-4 right-4 z-20 flex items-center gap-2 rounded-lg border border-purple-400/40 bg-purple-500/10 px-3 py-1.5 text-sm font-semibold text-purple-200 shadow-[0_0_16px_rgba(168,85,247,0.3)] backdrop-blur"
-          >
-            <Keyboard className="h-4 w-4" />
-            WASD laufen · Maus schauen/zielen · Shift sprinten · Leertaste springen · Linksklick schlagen ·
-            Scrollen = Zoom
-          </button>
-        )}
-
         {/* Bottom-center HUD: always shows what a punch/swing right now
             would deal. Flashes green on a landed hit, red on a swing that
             found nothing in range — the actual damage numbers + monster
@@ -439,7 +625,7 @@ export function WorldShell({
           ))}
         </div>
 
-        {!cameraControls.locked && !deathStats && (
+        {!cameraControls.locked && !deathStats && !disconnectSummary && (
           <button
             onClick={engageLock}
             className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-3 bg-black/40 text-center backdrop-blur-[2px]"
@@ -457,11 +643,20 @@ export function WorldShell({
             forfeitedCr={deathStats.forfeitedCr}
             forfeitedKillCount={deathStats.forfeitedKillCount}
             onRespawn={handleRespawn}
+            onLeave={handleLeaveAfterDeath}
           />
         )}
 
         <Canvas
-          shadows
+          // r3f's bare `shadows` shorthand defaults to PCFSoftShadowMap —
+          // this three.js version has deprecated that type outright (it
+          // logs a WebGLShadowMap warning on every single shadow render
+          // pass, not just once, hence the console getting spammed every
+          // frame) and silently substitutes PCFShadowMap anyway. Setting
+          // the type explicitly gets the exact same shadow renderer
+          // without ever tripping the deprecation warning in the first
+          // place.
+          shadows={{ type: THREE.PCFShadowMap }}
           dpr={[1, 2]}
           camera={{ position: [0, 2.6, 6], fov: 55 }}
           className="absolute inset-0"

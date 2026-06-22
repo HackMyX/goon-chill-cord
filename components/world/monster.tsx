@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Billboard, Text } from "@react-three/drei";
@@ -8,6 +8,18 @@ import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { CombatSharedState, MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { applyIncomingDamage, ATTACK_HIT_RADIUS } from "@/lib/combat";
+import { WORLD_RADIUS } from "@/lib/world-config";
+
+/** One thrown-projectile request — fired upward via `onThrow` (Monster
+ * itself never renders its own throws, see that callback's doc comment in
+ * useFrame below for why). `origin`/`target` are plain world-space tuples,
+ * not THREE.Vector3, so this can cross the props boundary as plain data. */
+export interface ThrowRequest {
+  origin: [number, number, number];
+  target: [number, number, number];
+  damage: number;
+  color: string;
+}
 
 interface MonsterProps {
   id: string;
@@ -16,6 +28,7 @@ interface MonsterProps {
   combatRef: React.RefObject<CombatSharedState>;
   registryRef: MonsterRegistry;
   onDied: (typeId: string) => void;
+  onThrow: (request: ThrowRequest) => void;
 }
 
 let popupSeq = 0;
@@ -47,6 +60,135 @@ function FloatingDamageNumber({ amount }: { amount: number }) {
   );
 }
 
+/** Idle (no target in aggro range) drift speed, as a fraction of the
+ * variant's own chase `moveSpeed` — slow enough to read as "ambient
+ * patrol", never mistaken for an active chase, but real movement, not a
+ * statue. This is the fix for "I can just stand near spawn and nothing
+ * ever happens" — every monster keeps slowly circulating even with no
+ * target at all, so eventually one wanders within aggro range of any
+ * given spot instead of waiting forever for the player to walk to it. */
+const WANDER_SPEED_FRACTION = 0.32;
+const WANDER_MIN_INTERVAL_SEC = 3;
+const WANDER_MAX_INTERVAL_SEC = 7;
+
+/** World units/sec — deliberately faster than every lib/monsters.ts
+ * variant's own `moveSpeed` (max 6.4) so a thrown projectile can't just be
+ * outwalked at the exact same pace it travels, but still slow enough to
+ * visibly track and dodge by actually moving, not a hitscan snipe. */
+export const PROJECTILE_SPEED = 11;
+const PROJECTILE_HIT_RADIUS = 0.9;
+
+/** Per-visualKind held weapon prop, attached to `armR` only when
+ * `type.hasWeapon` — purely cosmetic, the actual damage number always
+ * comes from `type.attackDamage`/`throwDamage` regardless of what's
+ * rendered in-hand. Reuses the same "minimal extra geometry, not a whole
+ * new asset" approach as the tusks/horns in the render branch below. */
+function MonsterWeapon({ kind, color }: { kind: "skeleton" | "demon" | "club"; color: string }) {
+  if (kind === "skeleton") {
+    return (
+      <group position={[0, -0.78, 0.1]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.05, 0.5, 0.05]} />
+          <meshStandardMaterial color="#e8e4d8" />
+        </mesh>
+        <mesh position={[0, 0.2, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <boxGeometry args={[0.05, 0.2, 0.05]} />
+          <meshStandardMaterial color="#9c958a" />
+        </mesh>
+      </group>
+    );
+  }
+  if (kind === "demon") {
+    return (
+      <group position={[0, -0.88, 0.1]}>
+        <mesh castShadow>
+          <cylinderGeometry args={[0.025, 0.025, 0.65, 6]} />
+          <meshStandardMaterial color="#2a1010" metalness={0.3} roughness={0.6} />
+        </mesh>
+        <mesh position={[0, 0.4, 0]} rotation={[Math.PI, 0, 0]} castShadow>
+          <coneGeometry args={[0.09, 0.32, 4]} />
+          <meshStandardMaterial color="#7a1020" emissive="#7a1020" emissiveIntensity={0.4} metalness={0.4} />
+        </mesh>
+      </group>
+    );
+  }
+  return (
+    <group position={[0, -0.78, 0.08]}>
+      <mesh castShadow>
+        <cylinderGeometry args={[0.04, 0.1, 0.55, 8]} />
+        <meshStandardMaterial color={color} roughness={0.85} />
+      </mesh>
+    </group>
+  );
+}
+
+/** One-shot thrown projectile (rock/bone/fireball/spectral bolt depending
+ * on the thrower's visualKind) — straight-line travel from `origin` to
+ * `target` (the player's position *at throw time*, never updated again, so
+ * it's genuinely dodgeable by moving, not a homing/unfair hit) with a
+ * simple parabolic height arc for readability, then a single damage check
+ * against wherever the player *actually* is once it arrives. Rendered by
+ * MonstersField (not by Monster itself — see Monster's `onThrow` doc
+ * comment for why) into a short-lived state list there, same idiom as this
+ * file's own popups/blood-bursts, just owned one level up so it lands in
+ * real world space instead of inside any one monster's transformed group. */
+export function ThrownProjectile({
+  origin,
+  target,
+  damage,
+  color,
+  combatRef,
+}: {
+  origin: [number, number, number];
+  target: [number, number, number];
+  damage: number;
+  color: string;
+  combatRef: React.RefObject<CombatSharedState>;
+}) {
+  const ref = useRef<THREE.Mesh>(null);
+  const age = useRef(0);
+  const applied = useRef(false);
+  // Stable for this projectile's entire (short) lifetime — computed once,
+  // never per-frame, so this isn't a hot-path allocation concern.
+  const originVec = useMemo(() => new THREE.Vector3(...origin), [origin]);
+  const targetVec = useMemo(() => new THREE.Vector3(...target), [target]);
+  const travelTime = useMemo(
+    () => Math.max(0.05, originVec.distanceTo(targetVec) / PROJECTILE_SPEED),
+    [originVec, targetVec]
+  );
+
+  useFrame((_, delta) => {
+    age.current += delta;
+    const t = Math.min(1, age.current / travelTime);
+    const m = ref.current;
+    if (m) {
+      m.position.lerpVectors(originVec, targetVec, t);
+      m.position.y += Math.sin(t * Math.PI) * 0.6;
+      m.rotation.x += delta * 12;
+      m.rotation.z += delta * 9;
+    }
+    if (t >= 1 && !applied.current) {
+      applied.current = true;
+      // Where the player *actually* is right now, not where they were
+      // when this was thrown — landing where someone used to be standing
+      // shouldn't still hit them if they've since moved away.
+      const playerPos = combatRef.current.playerPos;
+      const dx = playerPos.x - targetVec.x;
+      const dz = playerPos.z - targetVec.z;
+      if (Math.hypot(dx, dz) <= PROJECTILE_HIT_RADIUS) {
+        applyIncomingDamage(combatRef.current, damage);
+      }
+    }
+  });
+
+  return (
+    <mesh ref={ref} position={origin}>
+      <sphereGeometry args={[0.12, 8, 8]} />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} toneMapped={false} />
+    </mesh>
+  );
+}
+
 /**
  * One spawned enemy — chases + melees the player when in range, shows a
  * floating health bar and damage-number popups, and plays a sink-and-fade
@@ -59,7 +201,7 @@ function FloatingDamageNumber({ amount }: { amount: number }) {
  * Player.tsx's attack scan can find and damage it without any prop
  * drilling back the other way — see components/world/combat-types.ts.
  */
-export function Monster({ id, type, initialPosition, combatRef, registryRef, onDied }: MonsterProps) {
+export function Monster({ id, type, initialPosition, combatRef, registryRef, onDied, onThrow }: MonsterProps) {
   const group = useRef<THREE.Group>(null);
   const upperBody = useRef<THREE.Group>(null);
   const legL = useRef<THREE.Group>(null);
@@ -77,17 +219,24 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
   // spawned monster doesn't attack/sway in lockstep, so "set once after
   // mount" is just as good as "set at construction".
   const attackCooldownLeft = useRef(0);
+  const throwCooldownLeft = useRef(0);
   const lunge = useRef(0);
   const walkClock = useRef(0);
   const deathT = useRef(0);
   const hitGlow = useRef(0);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
+  // Idle-wander state — see WANDER_SPEED_FRACTION's doc comment above.
+  const wanderAngle = useRef(0);
+  const wanderTimer = useRef(0);
   const [popups, setPopups] = useState<{ id: number; amount: number }[]>([]);
   const [bloodBursts, setBloodBursts] = useState<{ id: number }[]>([]);
 
   useEffect(() => {
     attackCooldownLeft.current = Math.random() * type.attackCooldown;
+    throwCooldownLeft.current = type.throwCooldown ? Math.random() * type.throwCooldown : 0;
     walkClock.current = Math.random() * 10;
+    wanderAngle.current = Math.random() * Math.PI * 2;
+    wanderTimer.current = WANDER_MIN_INTERVAL_SEC + Math.random() * (WANDER_MAX_INTERVAL_SEC - WANDER_MIN_INTERVAL_SEC);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only randomized once on mount
   }, []);
 
@@ -118,10 +267,31 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
         return amount;
       },
     };
-    const registry = registryRef.current;
-    registry.push(handle);
+    // Both the push below and the filter in this cleanup read/write
+    // `registryRef.current` *directly*, never through a local variable
+    // captured once at mount — capturing it (the previous version of this
+    // effect did: `const registry = registryRef.current; registry.push(...)`,
+    // then the cleanup filtered that same captured `registry`) is a real
+    // race: with up to MAX_ALIVE_MONSTERS monsters spawning/dying within
+    // seconds of each other, by the time *this* monster's cleanup finally
+    // ran, some other monster's mount/unmount had very likely already
+    // reassigned `registryRef.current` to a *different* array object in
+    // between. Filtering the stale captured snapshot and writing the
+    // result back then silently overwrote `.current` with a version of
+    // the registry that never saw whatever joined after this monster
+    // mounted — permanently dropping a perfectly alive, in-range monster
+    // out of the array Player.tsx's attack scan iterates, with no error,
+    // no warning, nothing to see except "this one mob just never gets
+    // hit" until the page reloads. This is the actual "random mobs
+    // sometimes just aren't hittable" bug — every previous aim/cone/radius
+    // fix was real and necessary, but none of them mattered for a monster
+    // that silently isn't in the array being scanned at all. Always
+    // touching `registryRef.current` live, on both ends, means every
+    // push/filter operates on whatever the array actually is *right now*,
+    // never a snapshot that can go stale.
+    registryRef.current.push(handle);
     return () => {
-      registryRef.current = registry.filter((h) => h !== handle);
+      registryRef.current = registryRef.current.filter((h) => h !== handle);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handle captures stable refs only, never needs to re-register
   }, []);
@@ -155,6 +325,18 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
   // Ghosts are translucent apparitions, not solid bodies — every body mesh
   // in the shared humanoid branch below gets this opacity instead of 1.
   const bodyOpacity = isGhost ? 0.5 : 1;
+  // Thrown-projectile color per visualKind — bone for skeletons, a dull
+  // rock tone for orcs, a glowing fireball for the demon, a pale spectral
+  // bolt for the ghost (matches its own eye/robe color).
+  const throwColor = isGhost
+    ? "#b9d6ff"
+    : isDemon
+      ? "#ff6b35"
+      : isOrc
+        ? "#8a8a6b"
+        : type.visualKind === "skeleton"
+          ? "#e8e4d8"
+          : "#ffffff";
 
   useFrame((_, delta) => {
     const g = group.current;
@@ -169,11 +351,28 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
       return;
     }
 
+    // The *player's* death, not this monster's own — freeze AI completely
+    // the instant the player dies (no chase, no attack, no idle wander)
+    // rather than continuing to swing at a corpse until the death screen's
+    // Respawn button resets everything. MonstersField additionally clears
+    // every spawn outright while this is true (see its own doc comment)
+    // — this check is the belt-and-suspenders half: that clear happens
+    // through React state and only takes effect next render, so this
+    // guards the handful of frames in between from landing one more
+    // pointless hit.
+    if (combatRef.current.dead) return;
+
     const playerPos = combatRef.current.playerPos;
     const dx = playerPos.x - g.position.x;
     const dz = playerPos.z - g.position.z;
     const dist = Math.hypot(dx, dz);
-    const moving = dist < type.aggroRange && dist > type.attackRange * 0.7;
+    // `hasTarget` (the player anywhere within aggro range at all) is
+    // broader than `moving` (still actively closing the distance) — a
+    // monster that's already point-blank also has `hasTarget` true but
+    // `moving` false (it stops closing in to melee instead), which is
+    // exactly when wandering below must *not* kick in despite not moving.
+    const hasTarget = dist < type.aggroRange;
+    const moving = hasTarget && dist > type.attackRange * 0.7;
 
     if (moving) {
       const dirX = dx / dist;
@@ -181,6 +380,30 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
       g.position.x += dirX * type.moveSpeed * delta;
       g.position.z += dirZ * type.moveSpeed * delta;
       g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, Math.atan2(dirX, dirZ), Math.min(1, delta * 6));
+    } else if (!hasTarget) {
+      // Idle wander — see WANDER_SPEED_FRACTION's doc comment for why this
+      // exists at all: without it, a monster with nobody in its aggro
+      // range just stood completely still forever, meaning a player who
+      // simply never approached one could stand around indefinitely with
+      // zero risk. Slowly drifts in `wanderAngle`, picking a fresh one
+      // every few seconds, and turns back toward the world center if it
+      // ever nears the edge instead of piling up against the border.
+      wanderTimer.current -= delta;
+      if (wanderTimer.current <= 0) {
+        wanderTimer.current =
+          WANDER_MIN_INTERVAL_SEC + Math.random() * (WANDER_MAX_INTERVAL_SEC - WANDER_MIN_INTERVAL_SEC);
+        wanderAngle.current = Math.random() * Math.PI * 2;
+      }
+      const distFromCenter = Math.hypot(g.position.x, g.position.z);
+      if (distFromCenter > WORLD_RADIUS - 4) {
+        wanderAngle.current = Math.atan2(-g.position.x, -g.position.z);
+      }
+      const wx = Math.sin(wanderAngle.current);
+      const wz = Math.cos(wanderAngle.current);
+      const wanderSpeed = type.moveSpeed * WANDER_SPEED_FRACTION;
+      g.position.x += wx * wanderSpeed * delta;
+      g.position.z += wz * wanderSpeed * delta;
+      g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, Math.atan2(wx, wz), Math.min(1, delta * 2));
     }
 
     attackCooldownLeft.current -= delta;
@@ -191,6 +414,37 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
       // handles armor reduction + shield absorption — see lib/combat.ts.
       applyIncomingDamage(combatRef.current, type.attackDamage);
     }
+
+    // Ranged throw — only for variants with `canThrow` (lib/monsters.ts),
+    // and only while the player is *between* melee reach and throwRange:
+    // too close and melee already handles it (attackCooldown above), too
+    // far and this variant hasn't even noticed them (`hasTarget` false).
+    // Without this, a player camping just outside `attackRange` forever
+    // was completely safe from anything that can't also reach them in
+    // melee — exactly the "stand around and nothing happens" complaint,
+    // just at melee range instead of aggro range.
+    //
+    // The actual projectile is owned by MonstersField, not rendered here —
+    // this group is positioned+scaled (`initialPosition`/`type.scale` on
+    // the root `<group>` below), so a child mesh given a *world-space*
+    // position (which `origin`/`target` are, read straight from
+    // `g.position`/`playerPos`) would get doubly transformed by this
+    // group's own offset and scale. `onThrow` just notifies upward; the
+    // sibling-level field (no transform of its own) renders it in real
+    // world space.
+    if (hasTarget && type.canThrow && type.throwDamage && type.throwCooldown && type.throwRange) {
+      throwCooldownLeft.current -= delta;
+      if (dist > type.attackRange && dist < type.throwRange && throwCooldownLeft.current <= 0) {
+        throwCooldownLeft.current = type.throwCooldown;
+        onThrow({
+          origin: [g.position.x, g.position.y + 1.1, g.position.z],
+          target: [playerPos.x, playerPos.y + 1, playerPos.z],
+          damage: type.throwDamage,
+          color: throwColor,
+        });
+      }
+    }
+
     lunge.current = Math.max(0, lunge.current - delta * 3.5);
     hitGlow.current = Math.max(0, hitGlow.current - delta * 4);
     // Hit-flash: a quick white-hot emissive pulse on the torso material,
@@ -348,6 +602,12 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
                 <boxGeometry args={[limbWidth, 0.62, limbWidth]} />
                 <meshStandardMaterial color={type.colorHex} transparent={isGhost} opacity={bodyOpacity} />
               </mesh>
+              {type.hasWeapon && (
+                <MonsterWeapon
+                  kind={isDemon ? "demon" : type.visualKind === "skeleton" ? "skeleton" : "club"}
+                  color={isOrc ? "#3f4a26" : "#4a3a28"}
+                />
+              )}
             </group>
           </group>
 

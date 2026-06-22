@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { broadcastToWorldRoom } from "@/lib/realtime-server";
 import { WORLD_CHANNEL_NAME } from "@/lib/world-realtime";
-import { getEquippedDamage, isWeaponType, momentumMultiplier, capsuleHitTest, ATTACK_RANGE } from "@/lib/combat";
+import { getEquippedDamage, isWeaponType, computePvpDamage, capsuleHitTest, ATTACK_RANGE } from "@/lib/combat";
+import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 export interface AttemptPvpHitInput {
@@ -53,6 +54,14 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
     return { success: false, error: "Du kannst dich nicht selbst treffen." };
   }
 
+  // Admin Games tab master switch (lib/world-session-config.ts) — checked
+  // here, not client-side, so it can't be bypassed by a client that just
+  // doesn't bother checking it. Returns `hit: false` rather than an error
+  // so the attacker's own swing/miss feedback still plays normally; it
+  // just never lands on another player while this is off.
+  const sessionConfig = await getWorldSessionConfig();
+  if (!sessionConfig.pvpEnabled) return { success: true, hit: false };
+
   const admin = createAdminClient();
 
   const { data: lastHit } = await admin
@@ -89,7 +98,13 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
     (row) => row.item && isWeaponType(row.item.type)
   );
   const baseDmg = getEquippedDamage(weaponRow?.item ?? null);
-  const damage = Math.round(baseDmg * momentumMultiplier(input.sprinting, input.airborne));
+  // computePvpDamage (not the bare PvE momentum math) — see its doc
+  // comment in lib/combat.ts for why PvP needs its own, separately
+  // dampened damage curve: a flat 100-HP human target has none of the
+  // per-tier HP headroom monsters are individually balanced around, so
+  // applying raw weapon/momentum numbers here would let a single
+  // sprint-jump hit from a top-tier weapon one-shot anyone outright.
+  const damage = computePvpDamage(baseDmg, input.sprinting, input.airborne);
 
   try {
     await admin.from("audit_logs").insert({

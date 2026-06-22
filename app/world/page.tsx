@@ -4,6 +4,7 @@ import { WorldShell } from "@/components/world/world-shell";
 import { getMonsterTypes } from "@/lib/actions/monsters";
 import { getPetConfigs } from "@/lib/actions/pets";
 import { getKillStreakConfig } from "@/lib/actions/kill-streak";
+import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import { isAdmin } from "@/lib/admin";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -20,6 +21,12 @@ export default async function WorldPage() {
     .select("credits, streak_days, username, gender, role")
     .eq("id", user.id)
     .single();
+
+  const worldSessionConfig = await getWorldSessionConfig();
+  // Admin Games tab master kill-switch — non-admins are bounced straight
+  // back to the homepage while it's off; admins can still walk in to
+  // verify things/flip it back on without locking themselves out.
+  if (!worldSessionConfig.worldEnabled && !isAdmin(profile)) redirect("/");
 
   // `damage`/armor/perk/shield columns may not exist yet if those
   // migrations haven't run — try with everything first (needed so the
@@ -70,6 +77,8 @@ export default async function WorldPage() {
       monsterTypes={monsterTypes}
       petTypes={petTypes}
       killStreakConfig={killStreakConfig}
+      disconnectCountdownSec={worldSessionConfig.disconnectCountdownSec}
+      pvpEnabled={worldSessionConfig.pvpEnabled}
       isAdmin={isAdmin(profile)}
     />
   );

@@ -8,7 +8,7 @@ const FOLIAGE_COLORS = ["#143d2b", "#1d4a35", "#225a3d"];
 
 function PineTree({ x, z, scale, hue }: { x: number; z: number; scale: number; hue: number }) {
   return (
-    <group position={[x, 0, z]} scale={scale} userData={{ collidable: true }}>
+    <group position={[x, 0, z]} scale={scale}>
       <mesh position={[0, 0.6, 0]}>
         <cylinderGeometry args={[0.16, 0.2, 1.2, 8]} />
         <meshStandardMaterial color={TRUNK_COLOR} />
@@ -48,7 +48,7 @@ function GrassTuft({ x, z }: { x: number; z: number }) {
  * wall you just bump into with no explanation. */
 function BorderCrystal({ x, z, scale }: { x: number; z: number; scale: number }) {
   return (
-    <group position={[x, 0, z]} scale={scale} userData={{ collidable: true }}>
+    <group position={[x, 0, z]} scale={scale}>
       <mesh position={[0, 0.9, 0]}>
         <coneGeometry args={[0.3, 1.8, 6]} />
         <meshStandardMaterial color="#3b1e6d" emissive="#a855f7" emissiveIntensity={0.55} />
@@ -82,13 +82,14 @@ function mulberry32(seed: number) {
  * area — trees and grass now scatter across the full playable radius (clear
  * of the spawn circle), and a ring of glowing crystals marks the border.
  *
- * Trees and border crystals are tagged `userData.collidable` — the only
- * convention use-camera-controls.ts' camera-collision raycast looks for to
- * decide what the camera is allowed to pull in front of (see
- * `resolveCameraDistance` there). Grass tufts are deliberately left
- * untagged: they're thin/low enough that clipping the camera through one is
- * never noticeable, and tagging 90 of them would make the per-frame
- * raycast's hit list needlessly long for zero visible benefit. */
+ * Trees/crystals used to be tagged `userData.collidable` for a per-frame
+ * camera-collision raycast (use-camera-controls.ts) that pulled the camera
+ * in front of whichever one it would otherwise clip through — removed
+ * (see that file's doc comment) because grazing one of the 70 trees
+ * scattered across nearly the whole map was a constant, not occasional,
+ * occurrence in normal play, and reads as the camera continuously zooming
+ * in and out while walking. No scenery here needs tagging for anything
+ * anymore. */
 export function Environment() {
   const trees = useMemo(() => {
     const rand = mulberry32(1337);

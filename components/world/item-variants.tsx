@@ -1433,21 +1433,22 @@ const EXACT_SHIELD_SHAPE: Record<string, typeof KiteShield> = {
 
 const SHIELD_AURA_SMOKE_COUNT = 8;
 
-// CharacterModel's body spans roughly feet-at-y=0 up to the hat at y≈2.42
-// (head box centered at y=2.05, half-extent 0.275, hat sitting just above
-// that) — and out to the shoulders at build.armX (max 0.48) plus the
-// forearm box's own half-width (0.11). A plain unit sphere centered at
-// y=1.2 (the previous shape) only reached y:[0.25, 2.15], which is short on
-// both ends: it left the shins/feet poking out the bottom and the
-// head/hat poking out the top, exactly the "Kopf oben, Beine unten raus"
-// look this fixes. Centering higher and stretching vertically (a sphere
-// scaled non-uniformly into an ellipsoid, not a literal bigger sphere —
-// kept horizontally snug so it still reads as a body-hugging bubble, not a
-// giant ball) covers the whole silhouette with a comfortable margin on
-// every side instead.
-const SHIELD_BUBBLE_CENTER_Y = 1.25;
-const SHIELD_BUBBLE_RADIUS = 0.78;
-const SHIELD_BUBBLE_SCALE = new THREE.Vector3(1, 1.75, 1);
+// CharacterModel's body spans roughly feet-at-y=0 up to the hat anchor at
+// y=2.42 — but the *tallest* hat shape, TopHat (its cylinder top sits 0.38
+// above its own group origin), actually reaches 2.42 + 0.38 = 2.80, taller
+// than the anchor point alone suggests. The previous version of this
+// bubble (center 1.25, radius 0.78 × scale (1, 1.75, 1) → top at 2.615)
+// still clipped that hat (and most others with any real height) right
+// through the crown — exactly the "every helmet should fit inside without
+// poking out" guarantee this is supposed to give, not just the bare head.
+// Retuned so the top clears 2.80 with real margin (now ~2.90) while the
+// bottom still clears the feet, and the horizontal radius leaves room for
+// the widest hat brims (CapHat's, ~0.25 half-width) sitting on the
+// shoulders — still reads as a body-hugging bubble, just one no equipped
+// hat can ever clip through.
+const SHIELD_BUBBLE_CENTER_Y = 1.38;
+const SHIELD_BUBBLE_RADIUS = 0.8;
+const SHIELD_BUBBLE_SCALE = new THREE.Vector3(1.08, 1.9, 1.08);
 
 /**
  * Full-body energy bubble + drifting smoke puffs for a *functioning*

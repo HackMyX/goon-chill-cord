@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, ContactShadows } from "@react-three/drei";
+import * as THREE from "three";
 import { CharacterModel } from "@/components/world/character-model";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -21,7 +22,10 @@ interface CharacterPreview3DProps {
 export function CharacterPreview3D({ gender, equippedByCategory }: CharacterPreview3DProps) {
   return (
     <div className="mx-auto mt-6 h-72 w-full overflow-hidden rounded-xl border border-white/10 bg-[#08050f]">
-      <Canvas shadows camera={{ position: [0, 1.6, 3.6], fov: 42 }}>
+      {/* Explicit shadow map type — see components/world/world-shell.tsx's
+          matching comment for why (the bare `shadows` shorthand's default
+          type is deprecated and spams a console warning per shadow pass). */}
+      <Canvas shadows={{ type: THREE.PCFShadowMap }} camera={{ position: [0, 1.6, 3.6], fov: 42 }}>
         <Suspense fallback={null}>
           <color attach="background" args={["#08050f"]} />
           <ambientLight intensity={0.6} color="#a78bfa" />

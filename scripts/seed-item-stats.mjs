@@ -36,17 +36,29 @@ async function main() {
 
   // Armor (jacket/pants/hat/shoes): summed across all 4 slots in
   // lib/combat.ts' applyIncomingDamage, so these are per-item points, not
-  // the total a fully-geared player ends up with. Calibrated against
-  // lib/monsters.ts' attack damage (4-26 across the full roster) so a full
-  // Ultra set (4 × 12 = 48) meaningfully softens even the toughest variant
-  // (Dämonenfürst, 26) without going below the hard 1-damage floor every
-  // hit still keeps.
+  // the total a fully-geared player ends up with.
+  //
+  // The first version of these numbers (1/3/6/12) looked progressive in
+  // isolation but broke down the moment all 4 slots stacked: a full Ultra
+  // set totaled 48 armor, comfortably *exceeding* even the toughest
+  // lib/monsters.ts variant's attack damage (Dämonenfürst, 26) — meaning
+  // every single hit from every single monster in the game, including the
+  // boss, got reduced all the way to the hard 1-damage floor. Maxed-out
+  // gear made the entire game's combat trivial outright, not "easier".
+  //
+  // These values are tuned so a full set's *total* (4×) stays below the
+  // mid/high-tier monsters it's meant to counter, not above them: full
+  // Normal (4) vs. the weakest variant (Slime, 4) still floors, which is
+  // fine — early gear trivializing the easiest enemy is normal
+  // progression. Full Ultra (20) vs. the boss (26) leaves 6 real damage
+  // per hit (~23%, not the floor) — even maxed-out gear keeps the rarest,
+  // most dangerous fight a genuine fight, never a free pass.
   const armorResult = await client.query(`
     UPDATE items SET armor = CASE rarity
       WHEN 'normal' THEN 1
-      WHEN 'selten' THEN 3
-      WHEN 'mythisch' THEN 6
-      WHEN 'ultra' THEN 12
+      WHEN 'selten' THEN 2
+      WHEN 'mythisch' THEN 4
+      WHEN 'ultra' THEN 5
       ELSE armor
     END
     WHERE type IN ('jacket', 'pants', 'hat', 'shoes') AND armor = 0
@@ -56,6 +68,9 @@ async function main() {
   // Shield (shield_cosmetic): absorb pool + respawn cooldown, rarer =
   // bigger pool AND faster recharge (a double upgrade, same as weapons
   // getting both more damage and nothing taken away at higher rarity).
+  // Cooldowns lengthened (was 14/11/8/5) across every rarity, not just one
+  // tier — a broken shield popping back to full too quickly never felt
+  // like a real, exposed risk window at any rarity.
   const shieldResult = await client.query(`
     UPDATE items SET
       shield_hp = CASE rarity
@@ -66,10 +81,10 @@ async function main() {
         ELSE shield_hp
       END,
       shield_regen_cooldown_sec = CASE rarity
-        WHEN 'normal' THEN 14
-        WHEN 'selten' THEN 11
-        WHEN 'mythisch' THEN 8
-        WHEN 'ultra' THEN 5
+        WHEN 'normal' THEN 22
+        WHEN 'selten' THEN 17
+        WHEN 'mythisch' THEN 13
+        WHEN 'ultra' THEN 9
         ELSE shield_regen_cooldown_sec
       END
     WHERE type = 'shield_cosmetic' AND shield_hp = 0

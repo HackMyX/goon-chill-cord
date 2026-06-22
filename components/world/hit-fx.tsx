@@ -81,3 +81,54 @@ export function BloodBurst() {
     </group>
   );
 }
+
+/** One-shot glowing arc — the weapon-swing "punch" Player.tsx mounts once
+ * per attack (into a short-lived state list, same idiom as this file's own
+ * BloodBurst above), positioned just in front of the player's swinging
+ * arm. A plain rotation.x arm-raise alone read as "the arm just flies up",
+ * with nothing to actually sell the hit as a *swing* through space — this
+ * sweeps a crescent across the same arc the arm travels and fades out
+ * immediately after, the same "slash trail" read action games use to make
+ * a melee hit feel like it has real mass behind it. `color` is the
+ * equipped weapon's own rarity color (falls back to a plain
+ * off-white for bare fists), so a rarer weapon's swing visibly reads as
+ * rarer too, not just hits harder. */
+export const SLASH_EFFECT_LIFETIME_MS = 220;
+
+export function SlashEffect({ color }: { color: string }) {
+  const ref = useRef<THREE.Mesh>(null);
+  const age = useRef(0);
+
+  useFrame((_, delta) => {
+    age.current += delta;
+    const m = ref.current;
+    if (!m) return;
+    const lifetimeSec = SLASH_EFFECT_LIFETIME_MS / 1000;
+    const t = Math.min(1, age.current / lifetimeSec);
+    // Sweeps across the first ~55% of its life (matching the arm's own
+    // fast-out swing timing in player.tsx), then just holds/fades — the
+    // visual trail a real blade leaves hanging in the air a beat after
+    // the swing itself has already passed through. Scale punches out past
+    // 1 before settling (a quick "pop", not a flat linear grow) for more
+    // visible impact.
+    m.rotation.z = THREE.MathUtils.lerp(-1.3, 0.65, Math.min(1, t / 0.55));
+    const pop = Math.sin(Math.min(1, t / 0.4) * Math.PI * 0.5);
+    m.scale.setScalar(0.85 + pop * 0.55);
+    const mat = m.material as THREE.MeshBasicMaterial;
+    mat.opacity = Math.max(0, 1 - t);
+  });
+
+  return (
+    <mesh ref={ref} rotation={[0, 0, -1.3]}>
+      <torusGeometry args={[0.55, 0.06, 8, 24, Math.PI * 0.95]} />
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={0.95}
+        toneMapped={false}
+        side={THREE.DoubleSide}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}

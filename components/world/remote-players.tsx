@@ -115,10 +115,17 @@ function RemotePlayerAvatar({
   // action validates against.
   useEffect(() => {
     const handle = { id: userId, getPosition: () => group.current?.position ?? new THREE.Vector3() };
-    const registry = registryRef.current;
-    registry.push(handle);
+    // Read/write `registryRef.current` directly on both ends, never via a
+    // local variable captured once at mount — see components/world/
+    // monster.tsx's matching comment (same registry pattern) for the
+    // stale-array race this avoids: capturing the array once and filtering
+    // that captured reference in the cleanup can silently overwrite
+    // `.current` with a snapshot that predates another player's
+    // mount/unmount, dropping a currently-present remote player out of
+    // the registry entirely.
+    registryRef.current.push(handle);
     return () => {
-      registryRef.current = registry.filter((h) => h !== handle);
+      registryRef.current = registryRef.current.filter((h) => h !== handle);
     };
   }, [userId, registryRef]);
 

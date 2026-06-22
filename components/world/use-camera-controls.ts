@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as THREE from "three";
 
 export interface CameraControlState {
   /** Absolute world-space look yaw, radians — this *is* the crosshair's
@@ -50,60 +49,24 @@ const ZOOM_SENSITIVITY = 0.0025;
  * magnitude costs nothing for real input. */
 const MAX_MOVEMENT_PER_EVENT = 80;
 
-// --- Camera-vs-world collision -------------------------------------------
+// --- Camera-vs-world collision (removed) ---------------------------------
 //
-// A single reused Raycaster (never allocated per-frame) backing
-// `resolveCameraDistance` below, called once per frame from player.tsx's
-// camera block. Walls/trees don't otherwise stop the camera from pulling
-// in behind them, which used to mean zooming/orbiting near a tree let the
-// camera clip straight through its trunk and see the inside of the
-// world's geometry — not "premium" by any definition.
-
-const cameraRaycaster = new THREE.Raycaster();
-
-/** True if `obj` or any of its ancestors carries `userData.collidable`
- * (components/world/environment.tsx tags tree/crystal root groups this
- * way) — walking up the parent chain instead of requiring every individual
- * mesh to be tagged itself, since a tagged group's child meshes are what
- * the raycaster actually reports as hit. */
-function isCollidable(obj: THREE.Object3D | null): boolean {
-  let o = obj;
-  while (o) {
-    if (o.userData?.collidable) return true;
-    o = o.parent;
-  }
-  return false;
-}
-
-const CAMERA_COLLISION_MARGIN = 0.3;
-const CAMERA_COLLISION_MIN_DISTANCE = 0.6;
-
-/**
- * Casts from `origin` (the player's chest/eye point, never their feet —
- * a ray from ground level would clip through the terrain itself) toward
- * the camera along `direction` (must already be unit length) for up to
- * `desiredDistance`, and returns the largest distance that doesn't end up
- * inside or behind a collidable object — `desiredDistance` itself if
- * nothing is in the way. A small margin keeps the camera from sitting
- * exactly on a tree's surface (which would still clip into it as the
- * player's own slight movement jitters the ray by sub-pixel amounts).
- */
-export function resolveCameraDistance(
-  scene: THREE.Object3D,
-  origin: THREE.Vector3,
-  direction: THREE.Vector3,
-  desiredDistance: number
-): number {
-  cameraRaycaster.set(origin, direction);
-  cameraRaycaster.far = desiredDistance;
-  const hits = cameraRaycaster.intersectObject(scene, true);
-  for (const hit of hits) {
-    if (isCollidable(hit.object)) {
-      return Math.max(CAMERA_COLLISION_MIN_DISTANCE, hit.distance - CAMERA_COLLISION_MARGIN);
-    }
-  }
-  return desiredDistance;
-}
+// This used to hold a per-frame raycast (`resolveCameraDistance`) that
+// pulled the camera in front of any tree/crystal it would otherwise clip
+// through (environment.tsx's `userData.collidable` tagging). Removed
+// entirely: environment.tsx scatters 70 trees across nearly the *entire*
+// playable radius, so in normal play the ray grazed a tree silhouette
+// constantly while walking or turning — not occasional noise, a genuinely
+// continuously-changing obstruction distance — and any amount of easing
+// toward a continuously-moving target reads as exactly the "camera keeps
+// zooming in and out while walking" bug, no matter how the easing itself
+// was tuned (several rounds of adjusting it never fixed the complaint,
+// because the *input* never stopped moving). Player.tsx's camera distance
+// is now just the player's own scroll-wheel `cc.distance`, full stop — at
+// the cost of occasionally clipping slightly into a tree trunk up close,
+// a far smaller and rarer artifact than continuous zoom breathing across
+// most of the map. environment.tsx's `userData.collidable` tag is now
+// vestigial (nothing reads it) but harmless to leave in place.
 
 export interface CameraControls {
   state: React.RefObject<CameraControlState>;
@@ -114,6 +77,11 @@ export interface CameraControls {
   /** Call from a user-gesture click handler (pointer lock requires one) to
    * engage mouse-look. */
   requestLock: () => void;
+  /** Programmatically releases the pointer lock (no user gesture needed,
+   * unlike `requestLock`) — a no-op if this canvas isn't the currently
+   * locked element. world-shell.tsx calls this the instant the player
+   * dies so the death screen's buttons are immediately clickable. */
+  releaseLock: () => void;
 }
 
 /**
@@ -170,13 +138,23 @@ export function useCameraControls(
       }
       const movementX = Math.max(-MAX_MOVEMENT_PER_EVENT, Math.min(MAX_MOVEMENT_PER_EVENT, e.movementX));
       const movementY = Math.max(-MAX_MOVEMENT_PER_EVENT, Math.min(MAX_MOVEMENT_PER_EVENT, e.movementY));
-      // Sign check (this app's forward convention is (sin(yaw), 0,
-      // cos(yaw)), and Player.tsx derives "right" as (-cos(yaw), 0,
-      // sin(yaw)) from it — the actual screen-right axis of this
-      // behind-the-player chase camera, not just "forward rotated by
-      // +yaw"): moving the mouse right is a positive `movementX`, so yaw
-      // must increase for a mouse-right move to turn the camera right —
-      // `+=`, not `-=`.
+      // Sign check, re-derived properly this time (a previous version of
+      // this comment got it backwards): this app's forward convention is
+      // F(yaw) = (sin(yaw), 0, cos(yaw)). This camera sits *behind* the
+      // player along -F and looks back along +F — which, run through
+      // three.js's own lookAt basis convention (camera-right = F × up,
+      // validated against the standard OpenGL default camera looking down
+      // -Z, where +X is screen-right), works out to a screen-right axis of
+      // (-cos(yaw), 0, sin(yaw)). At yaw=0 that's world -X — and dF/dyaw at
+      // yaw=0 is (cos(0), -sin(0)) = +X, the *opposite* of screen-right.
+      // So increasing yaw sweeps the view toward screen-*left*, not right
+      // — meaning a mouse-right move (positive movementX) must *decrease*
+      // yaw to turn the view right: `-=`, not `+=`. (The previous `+=` here
+      // was tuned to match player.tsx's strafe-right vector *before* that
+      // vector's own sign got fixed in a later pass — once that flipped,
+      // this should have flipped too, but didn't, which is exactly the
+      // "drag mouse right, view goes left" regression that fix quietly
+      // introduced.)
       if (state.current.freeLookActive) {
         // Right-mouse-held free-look: steers an *offset* on top of the
         // committed aim/movement yaw/pitch instead of the yaw/pitch
@@ -187,13 +165,13 @@ export function useCameraControls(
         // actually is: the camera swinging back to directly behind the
         // committed aim direction. Yaw is intentionally unclamped (full
         // look-around), pitch reuses the same clamp range as normal look.
-        state.current.freeLookYaw += movementX * YAW_SENSITIVITY;
+        state.current.freeLookYaw -= movementX * YAW_SENSITIVITY;
         state.current.freeLookPitch = Math.max(
           PITCH_MIN - state.current.pitch,
           Math.min(PITCH_MAX - state.current.pitch, state.current.freeLookPitch - movementY * PITCH_SENSITIVITY)
         );
       } else {
-        state.current.yaw += movementX * YAW_SENSITIVITY;
+        state.current.yaw -= movementX * YAW_SENSITIVITY;
         state.current.pitch = Math.max(
           PITCH_MIN,
           Math.min(PITCH_MAX, state.current.pitch - movementY * PITCH_SENSITIVITY)
@@ -216,6 +194,17 @@ export function useCameraControls(
     // mousemove ever arriving on `el` to undo it).
     const onMouseDown = (e: MouseEvent) => {
       if (e.button === 2 && document.pointerLockElement === el) {
+        // Belt-and-suspenders alongside the `contextmenu` handler below —
+        // suppressing the *mousedown* for the right button too, not just
+        // the menu it would otherwise open on mouseup, so there's no
+        // window at all for a browser-default action on this button (text
+        // selection, drag-start, etc.) to ever interfere with attack/jump/
+        // movement input firing normally while it's held. Left-click
+        // attack (use-attack-input.ts) and Space jump are independently
+        // gated only on pointer-lock state and their own cooldowns —
+        // neither one reads `freeLookActive` at all — so this is pure
+        // insurance, not a fix for an actual found block.
+        e.preventDefault();
         state.current.freeLookActive = true;
       }
     };
@@ -284,5 +273,16 @@ export function useCameraControls(
     }
   }, [canvasRef]);
 
-  return { state, locked, requestLock };
+  // Programmatic release — used by world-shell.tsx the instant the player
+  // dies, so the death screen's buttons are immediately clickable with a
+  // visible cursor instead of requiring an Escape press first just to get
+  // the mouse back. A no-op if nothing is locked (or something other than
+  // this canvas is), so it's always safe to call defensively.
+  const releaseLock = useCallback(() => {
+    if (document.pointerLockElement === canvasRef.current) {
+      document.exitPointerLock();
+    }
+  }, [canvasRef]);
+
+  return { state, locked, requestLock, releaseLock };
 }

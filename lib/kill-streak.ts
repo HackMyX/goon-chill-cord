@@ -25,11 +25,22 @@ export interface KillStreakConfig {
   mobScaleMax: number;
 }
 
+/** `mobScalePerKill`/`mobScaleMax` were tuned so the difficulty ramp
+ * plateaued at just 30 kills ((1.6 - 1) / 0.02) — at a realistic kill
+ * pace, a session hit "as hard as it ever gets" within a few minutes and
+ * then stayed flat no matter how much longer the player kept going,
+ * directly undermining "monsters should keep getting harder over time".
+ * Slower per-kill growth with a much higher cap means the ramp now keeps
+ * climbing for a genuinely long session (~210 kills to cap, not 30)
+ * instead of front-loading the entire difficulty curve into the first
+ * couple of minutes — admin-tunable from here regardless (components/
+ * admin/kill-streak-config-editor.tsx), this is just a saner out-of-the-
+ * box default. */
 export const DEFAULT_KILL_STREAK_CONFIG: KillStreakConfig = {
   multiplierPerKill: 0.04,
   maxMultiplier: 3,
-  mobScalePerKill: 0.02,
-  mobScaleMax: 1.6,
+  mobScalePerKill: 0.012,
+  mobScaleMax: 3.5,
 };
 
 /** CR multiplier for the kill about to be scored, given how many kills

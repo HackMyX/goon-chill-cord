@@ -35,36 +35,71 @@ export interface MonsterTypeConfig {
   scale: number;
   /** Admin kill-switch for one variant without touching the other three. */
   enabled: boolean;
+  /** Renders a held weapon prop (components/world/monster.tsx) on the
+   * sword-arm — purely visual, no separate stat. Optional/code-only for
+   * now (not yet surfaced in the admin editor — `enabled` and the numeric
+   * stats are the only fields the panel can currently touch on this). */
+  hasWeapon?: boolean;
+  /** Whether this variant can also throw a ranged projectile instead of
+   * always closing to melee — gives every variant *some* way to threaten a
+   * player who just stands at the edge of `aggroRange`, not only the ones
+   * within `attackRange`. `throwRange` must sit strictly between
+   * `attackRange` (below it, melee already works and takes over) and
+   * `aggroRange` (above it, the variant hasn't noticed the player at all).
+   * All four throw-related fields are required together when `canThrow` is
+   * true — components/world/monster.tsx reads them as a group. */
+  canThrow?: boolean;
+  throwDamage?: number;
+  throwCooldown?: number;
+  throwRange?: number;
 }
 
 /**
- * Balanced against lib/combat.ts: a bare-fisted player (8 dmg, ~2.2
- * hits/sec) kills the weakest variant (Slime, 20 HP) in 3 hits (~1.4s) and
- * the toughest (Dämonenfürst, 160 HP) in 20 (~9s) — three clear tiers, not
- * a flat list of recolors: Niedrig (Zombie/Skelett/Slime, common, cheap),
- * Mittel (Zombie-Brute/Skelett-Krieger/Ork, tankier and harder-hitting,
- * rarer), Krass (Geist/Dämonenfürst, the rarest and most dangerous —
- * Geist trades health for speed/evasiveness, Dämonenfürst is the
- * straightforward "biggest number" boss-tier endpoint). Rewards scale with
- * how dangerous/tanky a variant is, not flat per kill, so hunting the
- * rarer tiers is worth the risk.
+ * Re-balanced upward (health *and* attackDamage) after lib/combat.ts'
+ * weapon-damage fix — every weapon's `damage` column had been NULL/unset
+ * since launch, so every fight had actually been running on `FIST_DAMAGE`
+ * (8) the entire time regardless of equipped weapon/rarity. Once weapons
+ * started dealing their real 15/30/55/100, the *old* HP numbers (tuned,
+ * unknowingly, around an 8-damage attacker) made even a common weapon
+ * one-shot the weakest variants outright.
+ *
+ * That first pass over-corrected: real weapon damage *and* the full
+ * roster being individually tougher, stacked together, made fights feel
+ * harder/faster-paced than intended for several variants. Health/damage
+ * here are trimmed back down roughly 10-12% from that pass (still much
+ * tougher than the original pre-weapon-fix numbers, just not as brutal as
+ * the full correction), and the Mittel/Krass variants with the most
+ * speed headroom (Zombie-Brute, Skelett-Krieger, Ork, Geist, Dämonenfürst)
+ * had `moveSpeed` trimmed a few percent too — Niedrig variants are left
+ * untouched there since they were already close to the 4.5 floor (see
+ * the `moveSpeed` paragraph below) with no real room to trim further.
+ * Three clear tiers, not a flat list of recolors: Niedrig (Zombie/
+ * Skelett/Slime, common, cheap), Mittel (Zombie-Brute/Skelett-Krieger/
+ * Ork, tankier and harder-hitting, rarer), Krass (Geist/Dämonenfürst, the
+ * rarest and most dangerous — Geist trades health for speed/evasiveness,
+ * Dämonenfürst is the straightforward "biggest number" boss-tier
+ * endpoint). Rewards scale with how dangerous/tanky a variant is, not
+ * flat per kill, so hunting the rarer tiers is worth the risk.
  *
  * Every variant keeps `attackRange` comfortably under the player's own
  * `ATTACK_RANGE` (2.7, lib/combat.ts), so a player who lands a hit right at
  * max melee reach is never simultaneously in *their* strike range — "hit
  * first" stays the rewarded, skillful side of every fight.
  *
- * `moveSpeed`, deliberately, is the opposite of what an earlier version of
- * this file did: every variant is now *faster* than the player's unsprinted
- * walk (4.5) and *slower* than sprinting (8.1, stamina-gated, lib/combat.ts'
- * STAMINA_SPRINT_DRAIN_PER_SEC). The old numbers (every variant under 2.5)
- * meant simply holding S to back away — free, no stamina cost, no skill —
- * out-walked *any* monster forever, turning every fight into a zero-risk
- * "hit it, take exactly zero steps back, repeat" farm with no way to ever
- * actually get caught. Sprinting away is still the real, intended escape
- * (and still reliably outruns every variant), it just now has to be a
- * deliberate, resource-gated choice instead of the default state of
- * walking normally. Don't drop any of these back under 4.5.
+ * `moveSpeed` is faster than the player's unsprinted walk (4.5) and slower
+ * than sprinting (8.1, stamina-gated, lib/combat.ts'
+ * STAMINA_SPRINT_DRAIN_PER_SEC) for every variant — simply holding S to
+ * back away must never be a free, zero-risk escape; sprinting (a
+ * deliberate, resource-gated choice) is the only real one. Don't drop any
+ * of these back under 4.5.
+ *
+ * `canThrow` variants (every Mittel/Krass one, plus Skelett at Niedrig)
+ * lob a ranged projectile (components/world/monster.tsx's ThrownProjectile)
+ * at a player sitting between `attackRange` and `throwRange` instead of
+ * just standing there waiting for them to close the distance — a player
+ * can no longer camp just outside melee reach indefinitely and take zero
+ * risk. `hasWeapon` variants render a held weapon prop on the attack arm,
+ * purely cosmetic, no separate stat.
  */
 export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
   // --- Niedrig (low tier): common, cheap, low-risk -----------------------
@@ -72,8 +107,8 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     id: "zombie_weak",
     name: "Zombie",
     visualKind: "zombie",
-    health: 40,
-    attackDamage: 6,
+    health: 67,
+    attackDamage: 8,
     moveSpeed: 4.6,
     aggroRange: 9,
     attackRange: 1.6,
@@ -89,8 +124,8 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     id: "skeleton_weak",
     name: "Skelett",
     visualKind: "skeleton",
-    health: 28,
-    attackDamage: 8,
+    health: 52,
+    attackDamage: 10,
     moveSpeed: 4.8,
     aggroRange: 10,
     attackRange: 1.6,
@@ -101,13 +136,18 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     colorHex: "#d8d3c4",
     scale: 0.95,
     enabled: true,
+    hasWeapon: true,
+    canThrow: true,
+    throwDamage: 6,
+    throwCooldown: 3,
+    throwRange: 7,
   },
   {
     id: "slime_weak",
     name: "Slime",
     visualKind: "slime",
-    health: 20,
-    attackDamage: 4,
+    health: 31,
+    attackDamage: 6,
     moveSpeed: 4.55,
     aggroRange: 7,
     attackRange: 1.3,
@@ -125,9 +165,9 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     id: "zombie_strong",
     name: "Zombie-Brute",
     visualKind: "zombie",
-    health: 90,
-    attackDamage: 14,
-    moveSpeed: 5,
+    health: 135,
+    attackDamage: 17,
+    moveSpeed: 4.8,
     aggroRange: 10,
     attackRange: 1.8,
     attackCooldown: 1.3,
@@ -137,14 +177,15 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     colorHex: "#234a23",
     scale: 1.3,
     enabled: true,
+    hasWeapon: true,
   },
   {
     id: "skeleton_strong",
     name: "Skelett-Krieger",
     visualKind: "skeleton",
-    health: 65,
-    attackDamage: 16,
-    moveSpeed: 5.4,
+    health: 104,
+    attackDamage: 20,
+    moveSpeed: 5.1,
     aggroRange: 11,
     attackRange: 1.8,
     attackCooldown: 1,
@@ -154,14 +195,19 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     colorHex: "#9c958a",
     scale: 1.15,
     enabled: true,
+    hasWeapon: true,
+    canThrow: true,
+    throwDamage: 12,
+    throwCooldown: 2.6,
+    throwRange: 8,
   },
   {
     id: "orc_brute",
     name: "Ork",
     visualKind: "orc",
-    health: 100,
-    attackDamage: 18,
-    moveSpeed: 5,
+    health: 149,
+    attackDamage: 23,
+    moveSpeed: 4.8,
     aggroRange: 10,
     attackRange: 1.9,
     attackCooldown: 1.4,
@@ -171,6 +217,11 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     colorHex: "#5a6b35",
     scale: 1.4,
     enabled: true,
+    hasWeapon: true,
+    canThrow: true,
+    throwDamage: 14,
+    throwCooldown: 3.2,
+    throwRange: 7,
   },
 
   // --- Krass (high tier): rarest, most dangerous, biggest reward ---------
@@ -178,9 +229,9 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     id: "ghost_wraith",
     name: "Geist",
     visualKind: "ghost",
-    health: 55,
-    attackDamage: 12,
-    moveSpeed: 6.4,
+    health: 117,
+    attackDamage: 16,
+    moveSpeed: 5.9,
     aggroRange: 13,
     attackRange: 1.7,
     attackCooldown: 0.8,
@@ -190,14 +241,18 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     colorHex: "#b9d6ff",
     scale: 1.05,
     enabled: true,
+    canThrow: true,
+    throwDamage: 11,
+    throwCooldown: 2.2,
+    throwRange: 9,
   },
   {
     id: "demon_boss",
     name: "Dämonenfürst",
     visualKind: "demon",
-    health: 160,
-    attackDamage: 26,
-    moveSpeed: 5.6,
+    health: 290,
+    attackDamage: 32,
+    moveSpeed: 5.3,
     aggroRange: 12,
     attackRange: 2,
     attackCooldown: 1.1,
@@ -207,6 +262,11 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     colorHex: "#7a1020",
     scale: 1.6,
     enabled: true,
+    hasWeapon: true,
+    canThrow: true,
+    throwDamage: 20,
+    throwCooldown: 2.8,
+    throwRange: 8,
   },
 ];
 
@@ -215,15 +275,57 @@ export const MONSTER_TYPE_IDS = DEFAULT_MONSTER_TYPES.map((m) => m.id);
 // --- Spawn/world tuning -------------------------------------------------
 
 /** How many monsters can be alive (incl. mid-death-animation corpses) at
- * once — a handful, not a horde, so each encounter still reads as a
- * deliberate fight rather than background noise. */
-export const MAX_ALIVE_MONSTERS = 6;
-export const SPAWN_INTERVAL_MIN_SEC = 5;
-export const SPAWN_INTERVAL_MAX_SEC = 11;
+ * once, for a single player alone in the World — see
+ * `monstersAliveCapForPlayers` below for how this scales up once others
+ * join the same room. */
+export const MAX_ALIVE_MONSTERS = 8;
+export const SPAWN_INTERVAL_MIN_SEC = 3;
+export const SPAWN_INTERVAL_MAX_SEC = 6;
 /** No spawns within this radius of the world origin — matches the
  * decorative spawn-area glow circles in scene.tsx, so monsters never pop
  * in right on top of where the player actually starts. */
 export const SPAWN_SAFE_RADIUS = 12;
+
+/** Each additional player in the same World room (components/world/scene.tsx
+ * reads the live room roster via lib/world-realtime.ts' subscribeToWorldRoster)
+ * raises *this client's own* alive-monster ceiling by this much. Monsters
+ * have no server-authoritative shared state at all (lib/kill-streak.ts'
+ * doc comment on `mobScalePerKill` explains why) — every player simulates
+ * their own independent monster pool — so "the World feels busier with more
+ * people in it" has to mean "everyone's own pool gets bigger", not "there's
+ * one shared pool everyone draws from". */
+const ALIVE_CAP_PER_EXTRA_PLAYER = 3;
+/** Hard ceiling regardless of how many players are in the room — without
+ * this, a packed room would eventually spawn enough concurrent monsters to
+ * tank everyone's own framerate for no further gameplay benefit. */
+const ALIVE_CAP_MAX = 26;
+/** Multiplicative spawn-interval shrink per additional player, compounding
+ * (0.85² for 2 extra players, not 2×0.85) — a busier room doesn't just
+ * allow more monsters at once, it actually fills that higher ceiling
+ * faster too, so joining a populated World immediately feels more
+ * eventful, not just "a higher number that takes just as long to reach". */
+const SPAWN_INTERVAL_SHRINK_PER_EXTRA_PLAYER = 0.85;
+/** Floor on the cumulative shrink above — even a packed room keeps *some*
+ * pacing between spawns instead of degenerating into a dead-on-arrival
+ * instant-spawn firehose. */
+const SPAWN_INTERVAL_SHRINK_FLOOR = 0.4;
+
+/** `playerCount` is "how many players currently share this World room",
+ * always >= 1 (yourself). Returns this client's own alive-monster ceiling —
+ * see `ALIVE_CAP_PER_EXTRA_PLAYER`'s doc comment for why this is a per-
+ * client number, not a shared world total. */
+export function monstersAliveCapForPlayers(playerCount: number): number {
+  const extra = Math.max(0, playerCount - 1);
+  return Math.min(ALIVE_CAP_MAX, MAX_ALIVE_MONSTERS + extra * ALIVE_CAP_PER_EXTRA_PLAYER);
+}
+
+/** Multiplier applied to both `SPAWN_INTERVAL_MIN_SEC`/`MAX_SEC` — below 1
+ * (faster) the more players share the room, floored so it never degenerates
+ * into a spawn firehose. */
+export function spawnIntervalScaleForPlayers(playerCount: number): number {
+  const extra = Math.max(0, playerCount - 1);
+  return Math.max(SPAWN_INTERVAL_SHRINK_FLOOR, Math.pow(SPAWN_INTERVAL_SHRINK_PER_EXTRA_PLAYER, extra));
+}
 
 export function pickWeightedMonsterType(types: MonsterTypeConfig[]): MonsterTypeConfig | null {
   const enabled = types.filter((t) => t.enabled && t.spawnWeight > 0);

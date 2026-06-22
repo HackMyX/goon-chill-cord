@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Image from "next/image";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, ContactShadows } from "@react-three/drei";
+import * as THREE from "three";
 import { X, Loader2, ShieldCheck, Package, Calendar } from "lucide-react";
 import { CharacterModel } from "@/components/world/character-model";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
@@ -83,7 +84,11 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
         ) : (
           <div className="grid grid-cols-1 gap-0 sm:grid-cols-[180px_1fr]">
             <div className="h-56 overflow-hidden rounded-t-2xl border-b border-white/10 bg-[#08050f] sm:h-auto sm:rounded-l-2xl sm:rounded-tr-none sm:border-b-0 sm:border-r">
-              <Canvas shadows camera={{ position: [0, 1.6, 3.4], fov: 42 }}>
+              {/* Explicit shadow map type, not the bare `shadows` shorthand
+                  — see components/world/world-shell.tsx's matching comment
+                  for why (the shorthand's default type is deprecated and
+                  spams a console warning on every shadow pass). */}
+              <Canvas shadows={{ type: THREE.PCFShadowMap }} camera={{ position: [0, 1.6, 3.4], fov: 42 }}>
                 <Suspense fallback={null}>
                   <color attach="background" args={["#08050f"]} />
                   <ambientLight intensity={0.6} color="#a78bfa" />

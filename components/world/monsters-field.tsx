@@ -1,12 +1,19 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Monster, MONSTER_DEATH_CLEANUP_MS } from "@/components/world/monster";
+import {
+  Monster,
+  MONSTER_DEATH_CLEANUP_MS,
+  ThrownProjectile,
+  PROJECTILE_SPEED,
+  type ThrowRequest,
+} from "@/components/world/monster";
 import type { CombatSharedState, MonsterRegistry } from "@/components/world/combat-types";
 import {
   pickWeightedMonsterType,
-  MAX_ALIVE_MONSTERS,
+  monstersAliveCapForPlayers,
+  spawnIntervalScaleForPlayers,
   SPAWN_INTERVAL_MIN_SEC,
   SPAWN_INTERVAL_MAX_SEC,
   SPAWN_SAFE_RADIUS,
@@ -14,12 +21,19 @@ import {
 } from "@/lib/monsters";
 import { streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
 import { WORLD_RADIUS } from "@/lib/world-config";
+import { subscribeToWorldRoster } from "@/lib/world-realtime";
 
 interface MonsterSpawn {
   id: string;
   type: MonsterTypeConfig;
   position: [number, number, number];
 }
+
+interface LiveProjectile extends ThrowRequest {
+  id: number;
+}
+
+let projectileSeq = 0;
 
 interface MonstersFieldProps {
   monsterTypes: MonsterTypeConfig[];
@@ -57,16 +71,46 @@ export function MonstersField({
   onMonsterKilled,
 }: MonstersFieldProps) {
   const [spawns, setSpawns] = useState<MonsterSpawn[]>([]);
+  // Owned here, not by each Monster — see monster.tsx's onThrow doc
+  // comment: this field has no position/scale transform of its own
+  // (unlike each <Monster>, which is positioned+scaled per spawn), so it's
+  // the right place to render projectiles in real world-space coordinates.
+  const [projectiles, setProjectiles] = useState<LiveProjectile[]>([]);
   const spawnTimer = useRef(SPAWN_INTERVAL_MIN_SEC);
+  // Live room population (lib/world-realtime.ts), always >= 1 (yourself) —
+  // read in a ref, not React state, since useFrame below reads it every
+  // tick and a roster sync re-rendering this whole field would be wasted
+  // work. See lib/monsters.ts' monstersAliveCapForPlayers/
+  // spawnIntervalScaleForPlayers doc comments for why a busier room means
+  // *this client's own* spawn pool grows, not a shared one.
+  const playerCount = useRef(1);
+
+  useEffect(() => {
+    return subscribeToWorldRoster((onlineUserIds) => {
+      playerCount.current = Math.max(1, onlineUserIds.size);
+    });
+  }, []);
 
   useFrame((_, delta) => {
+    // Monsters/spawning are *not* paused or cleared while the player is
+    // dead — the World keeps running normally in the background (an
+    // earlier version despawned everything on death, which wasn't what
+    // was actually wanted: the player's own character is what falls over
+    // and disappears on death — components/world/player.tsx's death-pose
+    // animation — not the rest of the world around it). Monster.tsx's own
+    // `combatRef.current.dead` check still stops monsters from chasing/
+    // attacking a dead, no-longer-present player; that's the only
+    // death-related behavior this field needs to care about, and it
+    // already lives entirely in Monster.tsx.
     spawnTimer.current -= delta;
     if (spawnTimer.current > 0) return;
+    const intervalScale = spawnIntervalScaleForPlayers(playerCount.current);
     spawnTimer.current =
-      SPAWN_INTERVAL_MIN_SEC + Math.random() * (SPAWN_INTERVAL_MAX_SEC - SPAWN_INTERVAL_MIN_SEC);
+      (SPAWN_INTERVAL_MIN_SEC + Math.random() * (SPAWN_INTERVAL_MAX_SEC - SPAWN_INTERVAL_MIN_SEC)) *
+      intervalScale;
 
     setSpawns((curr) => {
-      if (curr.length >= MAX_ALIVE_MONSTERS) return curr;
+      if (curr.length >= monstersAliveCapForPlayers(playerCount.current)) return curr;
       const type = pickWeightedMonsterType(monsterTypes);
       if (!type) return curr;
       const scale = streakMobScale(streakKillCount, killStreakConfig);
@@ -92,6 +136,15 @@ export function MonstersField({
     }, MONSTER_DEATH_CLEANUP_MS);
   }
 
+  function handleThrow(request: ThrowRequest) {
+    const throwId = ++projectileSeq;
+    setProjectiles((curr) => [...curr, { ...request, id: throwId }]);
+    const [ox, oy, oz] = request.origin;
+    const [tx, ty, tz] = request.target;
+    const travelMs = (Math.hypot(tx - ox, ty - oy, tz - oz) / PROJECTILE_SPEED) * 1000 + 100;
+    setTimeout(() => setProjectiles((curr) => curr.filter((p) => p.id !== throwId)), travelMs);
+  }
+
   return (
     <>
       {spawns.map((s) => (
@@ -103,6 +156,17 @@ export function MonstersField({
           combatRef={combatRef}
           registryRef={registryRef}
           onDied={(typeId) => handleDied(s.id, typeId)}
+          onThrow={handleThrow}
+        />
+      ))}
+      {projectiles.map((p) => (
+        <ThrownProjectile
+          key={p.id}
+          origin={p.origin}
+          target={p.target}
+          damage={p.damage}
+          color={p.color}
+          combatRef={combatRef}
         />
       ))}
     </>

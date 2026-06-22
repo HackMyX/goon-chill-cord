@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -13,6 +13,7 @@ import { ShopTab } from "@/components/admin/shop-tab";
 import { MonsterTypeEditor } from "@/components/admin/monster-type-editor";
 import { PetConfigEditor } from "@/components/admin/pet-config-editor";
 import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
+import { GamesTab } from "@/components/admin/games-tab";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 import type { StreakConfig } from "@/lib/streak";
@@ -21,6 +22,7 @@ import type { AdminShopListing } from "@/lib/actions/shop";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { PetTypeConfig } from "@/lib/pets";
 import type { KillStreakConfig } from "@/lib/kill-streak";
+import type { WorldSessionConfig } from "@/lib/world-session-config";
 
 export interface AuditLogEntry {
   id: string;
@@ -77,9 +79,10 @@ interface AdminShellProps {
   monsterTypes: MonsterTypeConfig[];
   petTypes: PetTypeConfig[];
   killStreakConfig: KillStreakConfig;
+  worldSessionConfig: WorldSessionConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "audit";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "audit";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -89,6 +92,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "items", label: "Items", icon: Package },
   { id: "monsters", label: "Monster", icon: Skull },
   { id: "pets", label: "Pets", icon: PawPrint },
+  { id: "games", label: "Games", icon: Gamepad2 },
   { id: "audit", label: "Audit-Log", icon: ScrollText },
 ];
 
@@ -106,6 +110,7 @@ export function AdminShell({
   monsterTypes,
   petTypes,
   killStreakConfig,
+  worldSessionConfig,
 }: AdminShellProps) {
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
@@ -210,6 +215,14 @@ export function AdminShell({
               <PetConfigEditor key={type.id} type={type} />
             ))}
           </div>
+        )}
+
+        {tab === "games" && (
+          <GamesTab
+            worldSessionConfig={worldSessionConfig}
+            killStreakConfig={killStreakConfig}
+            topProfiles={profiles}
+          />
         )}
 
         {tab === "audit" && (

@@ -52,21 +52,30 @@ export const SUGGESTED_DAMAGE_BY_RARITY: Record<Rarity, number> = {
 export const PLAYER_MAX_HP = 100;
 export const PLAYER_MAX_STAMINA = 100;
 
-/** Stamina only ever drains from sprinting (continuous, per second) or
- * jumping (a flat cost per jump) — explicitly never from attacking, per
- * design: a fight shouldn't also exhaust you out of being able to run
- * away from it. */
+/** Stamina only ever drains from sprinting (continuous, per second) —
+ * explicitly never from attacking (a fight shouldn't also exhaust you out
+ * of being able to run away from it) or, as of this constant's removal,
+ * jumping either: jumping used to cost a flat chunk of stamina, but that
+ * meant a few hops could eat into the same pool sprinting needs to
+ * actually escape something, for a move that's mostly just traversal/
+ * dodging, not a real combat or escape tool itself. Jump is unlimited now
+ * — see JUMP_COOLDOWN_SEC below for how spam is prevented instead (a
+ * cooldown, not a resource cost). */
 export const STAMINA_SPRINT_DRAIN_PER_SEC = 16;
-export const STAMINA_JUMP_COST = 20;
 export const STAMINA_REGEN_PER_SEC = 12;
 /** Hysteresis: sprint can drain stamina all the way to 0, but can't be
  * *re-engaged* until it's regenerated back up past this floor — without
  * this, sitting exactly at the drain/regen breakeven point would flicker
  * sprint on/off every frame instead of cleanly cutting out. */
 export const STAMINA_MIN_TO_START_SPRINT = 15;
-/** Below this, Space simply does nothing (no half-height "tired hop") —
- * cleaner than letting stamina go negative. */
-export const STAMINA_MIN_TO_JUMP = STAMINA_JUMP_COST;
+/** Minimum time between jumps, seconds — not a stamina cost, just enough
+ * to stop holding/mashing Space from bunny-hopping back-to-back forever,
+ * while still letting jumping happen "as much as you want" otherwise (no
+ * stamina cost at all, see its doc comment above). 0.35 still let a
+ * continuous hop-hop-hop chain happen close enough together to feel
+ * spammable; a full second is a real, felt beat between jumps without
+ * making any single jump itself feel slow. */
+export const JUMP_COOLDOWN_SEC = 1;
 
 /** Slow passive regen so a fight's damage isn't permanent for the rest of
  * the session, but only once you've actually disengaged — otherwise
@@ -177,6 +186,36 @@ export function momentumMultiplier(sprinting: boolean, airborne: boolean): numbe
   return mult;
 }
 
+/**
+ * PvE damage tiers (15/30/55/100, `SUGGESTED_DAMAGE_BY_RARITY`) are
+ * calibrated against lib/monsters.ts' per-variant HP pools (30-320),
+ * each one specifically sized to absorb a few hits at its intended gear
+ * tier. A PvP target has none of that headroom — `PLAYER_MAX_HP` is a
+ * flat 100 no matter how a player is geared, armor only ever shaves a
+ * handful of points off the top (max 20, `lib/actions/monsters.ts`'
+ * rebalance), and momentum stacks multiplicatively on top of weapon tier
+ * (`momentumMultiplier`, up to ×1.62). Applied raw, a single sprint-jump
+ * hit from an Ultra weapon (100 × 1.62 ≈ 162) would one-shot *any* player
+ * outright, armor included — there's no equivalent of "the boss has 320
+ * HP so it can take a real fight even from the best gear" for a human
+ * target. `PVP_DAMAGE_MULTIPLIER` is the PvP-only correction for that gap:
+ * applied *only* in lib/actions/pvp.ts, never to monster damage, so PvE
+ * balance is completely untouched. At 0.35, even the single hardest
+ * possible hit (162 raw) caps at ~57 — survivable, a real "that hurt" hit,
+ * but never an unavoidable instant kill regardless of gear.
+ */
+export const PVP_DAMAGE_MULTIPLIER = 0.35;
+
+/** Single chokepoint for "how much HP does a landed PvP hit actually cost
+ * the target" — lib/actions/pvp.ts' attemptPvpHit rolls this server-side,
+ * exactly once, from the attacker's *actually-equipped* weapon row (never
+ * a client-claimed number). Kept here, not inlined there, so the PvE
+ * momentum math and the PvP-only dampener are visibly the same shape (one
+ * wraps the other) instead of two independently-drifting copies. */
+export function computePvpDamage(baseDmg: number, sprinting: boolean, airborne: boolean): number {
+  return Math.round(baseDmg * momentumMultiplier(sprinting, airborne) * PVP_DAMAGE_MULTIPLIER);
+}
+
 // --- Armor / perks / shields ---------------------------------------------
 // Every item's stat fields (lib/rarity-colors.ts EquippedItem, lib/actions/
 // admin.ts ItemInput) — armor on outfits, perks on amulets/rings, an
@@ -217,18 +256,37 @@ interface PerkSource {
 /** Slots that can carry a perk. */
 const PERK_SLOTS = ["amulet", "ring"] as const;
 
+/** Hard ceiling on the *combined* multiplier from stacking the same perk
+ * type on both amulet and ring at once. Two Ultra items of the same
+ * perk_type (35% each, lib/cases.ts' rarity tiers) would otherwise compound
+ * to +82% (1.35 × 1.35) uncapped — for `speed_boost` specifically, that
+ * pushes the player's *unsprinted* walk speed (4.5) up to ~8.2, almost
+ * exactly matching sprint (8.1, player.tsx SPRINT_MULTIPLIER) for free,
+ * with no stamina cost. That would silently undo the entire "every
+ * lib/monsters.ts variant is faster than walking, slower than sprinting"
+ * design (see that file's doc comment) for anyone holding this one rare
+ * item combo — turning the deliberately resource-gated sprint-to-escape
+ * loop back into the old free-walk-away exploit it replaced, just gated
+ * behind a different rare drop instead of behind nothing. Capped well
+ * under sprint's own 1.8× multiplier so even this best-case stacked build
+ * never matches sprinting outright, and the single fastest monster variant
+ * (Geist, 6.4) can still catch a walking player even at the absolute
+ * ceiling (4.5 × 1.4 = 6.3 < 6.4). */
+const PERK_MULTIPLIER_CAP = 1.4;
+
 /** Multiplier (around 1.0) for whichever stat `type` boosts — amulet and
  * ring stack multiplicatively if both happen to carry the same perk type,
  * so equipping both a +15% and a +10% speed item is a real +26.5%
- * (1.15 × 1.10), not just the better of the two. Returns exactly 1 (no
- * effect) if nothing equipped carries this perk. */
+ * (1.15 × 1.10), not just the better of the two — up to `PERK_MULTIPLIER_
+ * CAP` above, past which further stacking simply stops doing anything.
+ * Returns exactly 1 (no effect) if nothing equipped carries this perk. */
 export function getPerkMultiplier(equippedByCategory: Record<string, PerkSource | undefined>, type: PerkType): number {
   let mult = 1;
   for (const slot of PERK_SLOTS) {
     const item = equippedByCategory[slot];
     if (item?.perk_type === type) mult *= 1 + (item.perk_magnitude ?? 0);
   }
-  return mult;
+  return Math.min(mult, PERK_MULTIPLIER_CAP);
 }
 
 /** Whether `type` is one of the dbTypes the admin item editor should show

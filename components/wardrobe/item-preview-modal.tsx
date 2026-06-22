@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, ContactShadows } from "@react-three/drei";
+import * as THREE from "three";
 import { X } from "lucide-react";
 import { CharacterModel } from "@/components/world/character-model";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
@@ -74,7 +75,11 @@ export function ItemPreviewModal({ item, gender, onClose }: ItemPreviewModalProp
           </div>
 
           <div className="h-80 w-full overflow-hidden rounded-xl border border-white/10 bg-[#08050f]">
-            <Canvas shadows camera={{ position: [0, 1.6, 3.6], fov: 42 }}>
+            {/* Explicit shadow map type — see components/world/world-shell.tsx's
+                matching comment for why (the bare `shadows` shorthand's
+                default type is deprecated and spams a console warning per
+                shadow pass). */}
+            <Canvas shadows={{ type: THREE.PCFShadowMap }} camera={{ position: [0, 1.6, 3.6], fov: 42 }}>
               <Suspense fallback={null}>
                 <color attach="background" args={["#08050f"]} />
                 <ambientLight intensity={0.6} color="#a78bfa" />

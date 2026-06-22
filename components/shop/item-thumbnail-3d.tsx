@@ -80,7 +80,10 @@ export function ItemThumbnail3D({ item, gender, onClick }: ItemThumbnail3DProps)
       title="Klicken für große Vorschau"
       className="group block h-36 w-full overflow-hidden rounded-xl border border-white/10 bg-[#08050f] transition-colors hover:border-purple-400/40"
     >
-      <Canvas dpr={[1, 1.5]} shadows camera={{ position: [0, 1.5, 3.4], fov: 40 }}>
+      {/* Explicit shadow map type — see components/world/world-shell.tsx's
+          matching comment for why (the bare `shadows` shorthand's default
+          type is deprecated and spams a console warning per shadow pass). */}
+      <Canvas dpr={[1, 1.5]} shadows={{ type: THREE.PCFShadowMap }} camera={{ position: [0, 1.5, 3.4], fov: 40 }}>
         <Suspense fallback={null}>
           <color attach="background" args={["#08050f"]} />
           <ambientLight intensity={0.65} color="#a78bfa" />

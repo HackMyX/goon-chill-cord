@@ -7,6 +7,7 @@ import { getShopSettings, getAdminShopListings, getTodayShop } from "@/lib/actio
 import { getMonsterTypes } from "@/lib/actions/monsters";
 import { getPetConfigs } from "@/lib/actions/pets";
 import { getKillStreakConfig } from "@/lib/actions/kill-streak";
+import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import {
   AdminShell,
   type AuditLogEntry,
@@ -96,6 +97,7 @@ export default async function AdminPage() {
     monsterTypes,
     petTypes,
     killStreakConfig,
+    worldSessionConfig,
   ] = await Promise.all([
     admin
       .from("audit_logs")
@@ -116,6 +118,7 @@ export default async function AdminPage() {
     getMonsterTypes(),
     getPetConfigs(),
     getKillStreakConfig(),
+    getWorldSessionConfig(),
   ]);
 
   return (
@@ -133,6 +136,7 @@ export default async function AdminPage() {
       monsterTypes={monsterTypes}
       petTypes={petTypes}
       killStreakConfig={killStreakConfig}
+      worldSessionConfig={worldSessionConfig}
     />
   );
 }

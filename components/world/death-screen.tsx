@@ -1,11 +1,16 @@
 "use client";
 
-import { Skull, RotateCcw, Coins, Flame } from "lucide-react";
+import { Skull, RotateCcw, Coins, Flame, ArrowLeft } from "lucide-react";
 
 interface DeathScreenProps {
   forfeitedCr: number;
   forfeitedKillCount: number;
   onRespawn: () => void;
+  /** Leaves straight from here instead of forcing a respawn first just to
+   * reach the regular "Zurück" link — no countdown needed (unlike the
+   * Disconnect button elsewhere), since dying already forfeited whatever
+   * streak was pending, so there's nothing left to lose by leaving now. */
+  onLeave: () => void;
 }
 
 /**
@@ -19,7 +24,7 @@ interface DeathScreenProps {
  * committed `profiles.credits` are never touched by death, so this overlay
  * deliberately never implies otherwise.
  */
-export function DeathScreen({ forfeitedCr, forfeitedKillCount, onRespawn }: DeathScreenProps) {
+export function DeathScreen({ forfeitedCr, forfeitedKillCount, onRespawn, onLeave }: DeathScreenProps) {
   return (
     <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-black/80 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-3">
@@ -47,13 +52,22 @@ export function DeathScreen({ forfeitedCr, forfeitedKillCount, onRespawn }: Deat
         <p className="text-sm text-zinc-500">Keine offene Kill-Streak verloren.</p>
       )}
 
-      <button
-        onClick={onRespawn}
-        className="flex items-center gap-2 rounded-lg bg-purple-600 px-6 py-3 text-base font-bold text-white shadow-[0_0_20px_rgba(147,51,234,0.5)] transition-colors hover:bg-purple-500"
-      >
-        <RotateCcw className="h-5 w-5" />
-        Respawn
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onRespawn}
+          className="flex items-center gap-2 rounded-lg bg-purple-600 px-6 py-3 text-base font-bold text-white shadow-[0_0_20px_rgba(147,51,234,0.5)] transition-colors hover:bg-purple-500"
+        >
+          <RotateCcw className="h-5 w-5" />
+          Respawn
+        </button>
+        <button
+          onClick={onLeave}
+          className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 py-3 text-base font-semibold text-zinc-300 transition-colors hover:border-white/30 hover:bg-white/10"
+        >
+          <ArrowLeft className="h-5 w-5" />
+          Verlassen
+        </button>
+      </div>
     </div>
   );
 }
