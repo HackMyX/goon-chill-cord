@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isAdmin, isModerator } from "@/lib/admin";
+import { isModerator } from "@/lib/admin";
 import { notifyUser, notifyStaff } from "@/lib/notifications-internal";
 
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+export type TicketCategory = "bug" | "suggestion";
 
 export interface Ticket {
   id: string;
@@ -15,6 +16,7 @@ export interface Ticket {
   subject: string;
   description: string;
   status: TicketStatus;
+  category: TicketCategory;
   createdAt: string;
   updatedAt: string;
   messageCount: number;
@@ -39,6 +41,7 @@ export interface TicketDetail extends Ticket {
 export async function createTicket(input: {
   subject: string;
   description: string;
+  category?: TicketCategory;
 }): Promise<{ success: boolean; error?: string; ticketId?: string }> {
   const supabase = await createClient();
   const {
@@ -48,12 +51,13 @@ export async function createTicket(input: {
 
   const subject = input.subject.trim().slice(0, 120);
   const description = input.description.trim().slice(0, 2000);
+  const category: TicketCategory = input.category === "suggestion" ? "suggestion" : "bug";
   if (!subject || !description) return { success: false, error: "Betreff und Beschreibung sind erforderlich." };
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("tickets")
-    .insert({ user_id: user.id, subject, description, status: "open" })
+    .insert({ user_id: user.id, subject, description, status: "open", category })
     .select("id")
     .single();
 
@@ -66,7 +70,7 @@ export async function createTicket(input: {
 
   await notifyStaff({
     type: "ticket_new",
-    title: "Neues Support-Ticket",
+    title: category === "suggestion" ? "Neuer Verbesserungsvorschlag" : "Neues Support-Ticket",
     message: `${username}: ${subject}`,
     link: "/admin?tab=tickets",
   });
@@ -85,12 +89,12 @@ export async function getUserTickets(): Promise<Ticket[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, created_at, updated_at, profiles(username), ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, created_at, updated_at, ticket_messages(count)")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false })
     .limit(30);
 
-  return (data ?? []).map(mapTicket);
+  return attachUsernames(admin, data ?? []);
 }
 
 export async function getTicketDetail(ticketId: string): Promise<TicketDetail | null> {
@@ -106,7 +110,7 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
   // Users can only view their own tickets; staff can view all
   const query = admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, created_at, updated_at, profiles(username), ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, created_at, updated_at, ticket_messages(count)")
     .eq("id", ticketId);
 
   if (!isModerator(profile)) {
@@ -118,18 +122,21 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
 
   const { data: messages } = await admin
     .from("ticket_messages")
-    .select("id, ticket_id, user_id, message, is_staff, created_at, profiles(username)")
+    .select("id, ticket_id, user_id, message, is_staff, created_at")
     .eq("ticket_id", ticketId)
     .order("created_at", { ascending: true });
 
-  const ticket = mapTicket(data);
+  const [ticket] = await attachUsernames(admin, [data]);
+  const userIds = Array.from(new Set((messages ?? []).map((m) => m.user_id)));
+  const usernames = await fetchUsernames(admin, userIds);
+
   return {
     ...ticket,
     messages: (messages ?? []).map((m) => ({
       id: m.id,
       ticketId: m.ticket_id,
       userId: m.user_id,
-      username: (m.profiles as { username?: string } | null)?.username ?? "Unbekannt",
+      username: usernames.get(m.user_id) ?? "Unbekannt",
       message: m.message,
       isStaff: m.is_staff,
       createdAt: m.created_at,
@@ -239,11 +246,11 @@ export async function getAdminTickets(): Promise<Ticket[]> {
 
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, created_at, updated_at, profiles(username), ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, created_at, updated_at, ticket_messages(count)")
     .order("updated_at", { ascending: false })
     .limit(100);
 
-  return (data ?? []).map(mapTicket);
+  return attachUsernames(admin, data ?? []);
 }
 
 export async function updateTicketStatus(input: {
@@ -289,17 +296,37 @@ export async function updateTicketStatus(input: {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// `tickets`/`ticket_messages` only carry a FK to `auth.users`, not to
+// `profiles` — PostgREST can't embed `profiles(username)` across that gap
+// (confirmed via PGRST200 "Could not find a relationship"), which is why
+// every admin/user ticket list silently came back empty. Fetch usernames
+// in a second batched query instead, same pattern the rest of the codebase
+// (auctions.ts, trading.ts) already uses.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapTicket(row: any): Ticket {
-  const profiles = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+async function fetchUsernames(admin: ReturnType<typeof createAdminClient>, userIds: string[]): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map();
+  const { data } = await admin.from("profiles").select("id, username").in("id", userIds);
+  return new Map((data ?? []).map((p: { id: string; username: string | null }) => [p.id, p.username ?? "Unbekannt"]));
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function attachUsernames(admin: ReturnType<typeof createAdminClient>, rows: any[]): Promise<Ticket[]> {
+  const userIds = Array.from(new Set(rows.map((r) => r.user_id)));
+  const usernames = await fetchUsernames(admin, userIds);
+  return rows.map((row) => mapTicket(row, usernames.get(row.user_id)));
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapTicket(row: any, username?: string): Ticket {
   const msgCountRaw = Array.isArray(row.ticket_messages) ? row.ticket_messages[0]?.count : 0;
   return {
     id: row.id,
     userId: row.user_id,
-    username: profiles?.username ?? "Unbekannt",
+    username: username ?? "Unbekannt",
     subject: row.subject,
     description: row.description,
     status: row.status as TicketStatus,
+    category: (row.category as TicketCategory) ?? "bug",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     messageCount: typeof msgCountRaw === "number" ? msgCountRaw : Number(msgCountRaw) || 0,

@@ -17,6 +17,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { debugLog, debugWarn } from "@/lib/debug";
 import { RARITY_ORDER, type Rarity } from "@/lib/cases";
+import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 
 export interface InventoryRow {
   id: string;
@@ -162,7 +163,7 @@ function CombatStatsPanel({ equippedByCategory }: { equippedByCategory: Record<s
 }
 
 export function WardrobeShell({
-  credits,
+  credits: initialCredits,
   inventoryCount,
   streakDays,
   initialInventory,
@@ -170,6 +171,10 @@ export function WardrobeShell({
   genderLocked: initialGenderLocked,
   isAdmin = false,
 }: WardrobeShellProps) {
+  const [credits, setCredits] = useState(initialCredits);
+  useRealtimeProfile((row) => {
+    if (typeof row.credits === "number") setCredits(row.credits);
+  });
   const [inventory, setInventory] = useState(initialInventory);
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY.id);
   const [gender, setGender] = useState<"m" | "w">(initialGender);

@@ -11,6 +11,7 @@ import { ItemThumbnail3D } from "@/components/shop/item-thumbnail-3d";
 import { useSoundManager } from "@/lib/sound-manager";
 import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { purchaseShopItem, type ShopListingEntry } from "@/lib/actions/shop";
+import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 
 interface ShopShellProps {
   credits: number;
@@ -184,6 +185,9 @@ export function ShopShell({
   isAdmin = false,
 }: ShopShellProps) {
   const [credits, setCredits] = useState(initialCredits);
+  useRealtimeProfile((row) => {
+    if (typeof row.credits === "number") setCredits(row.credits);
+  });
   const [category, setCategory] = useState<string | "all">("all");
   const [previewListing, setPreviewListing] = useState<ShopListingEntry | null>(null);
   const sound = useSoundManager();

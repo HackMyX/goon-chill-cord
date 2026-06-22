@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, type ProfileRole } from "@/lib/admin";
+import { notifyUser } from "@/lib/notifications-internal";
 import type { Rarity } from "@/lib/cases";
 
 export interface AdminActionResult {
@@ -118,6 +119,13 @@ export async function updateUserCredits(
   if (error) return { success: false, error: "Update fehlgeschlagen." };
 
   await logAdminAction(user.id, "admin_set_credits", { targetUserId, credits });
+  await notifyUser({
+    userId: targetUserId,
+    type: "admin_credits",
+    title: "Guthaben geändert",
+    message: `Ein Admin hat dein Guthaben auf ${Math.floor(credits).toLocaleString("de-DE")} CR gesetzt.`,
+    link: "/account",
+  });
   revalidatePath("/admin");
   revalidatePath("/");
   return { success: true };
@@ -143,6 +151,13 @@ export async function setUserGender(
   if (error) return { success: false, error: "Update fehlgeschlagen." };
 
   await logAdminAction(user.id, "admin_set_gender", { targetUserId, gender });
+  await notifyUser({
+    userId: targetUserId,
+    type: "admin_action",
+    title: "Geschlecht geändert",
+    message: "Dein Geschlecht wurde vom Support geändert. Schau in die Garderobe.",
+    link: "/garderobe",
+  });
   revalidatePath("/admin");
   revalidatePath("/garderobe");
   revalidatePath("/world");
@@ -162,6 +177,13 @@ export async function updateUserRole(
   if (error) return { success: false, error: "Update fehlgeschlagen." };
 
   await logAdminAction(user.id, "admin_set_role", { targetUserId, role });
+  await notifyUser({
+    userId: targetUserId,
+    type: "admin_action",
+    title: "Rolle geändert",
+    message: `Deine Rolle wurde auf „${role}" geändert.`,
+    link: "/account",
+  });
   revalidatePath("/admin");
   return { success: true };
 }
@@ -423,7 +445,15 @@ export async function grantItemToUser(
 
   if (error) return { success: false, error: "Vergeben fehlgeschlagen." };
 
+  const { data: itemRow } = await admin.from("items").select("name").eq("id", itemId).single();
   await logAdminAction(user.id, "admin_grant_item", { targetUserId, itemId });
+  await notifyUser({
+    userId: targetUserId,
+    type: "admin_grant_item",
+    title: "Item erhalten",
+    message: `Ein Admin hat dir „${itemRow?.name ?? "ein Item"}" ins Inventar gelegt.`,
+    link: "/garderobe",
+  });
   revalidatePath("/admin");
   return { success: true };
 }
@@ -471,6 +501,13 @@ export async function grantAllItemsToUser(targetUserId: string): Promise<AdminAc
     targetUserId,
     count: missing.length,
   });
+  await notifyUser({
+    userId: targetUserId,
+    type: "admin_grant_item",
+    title: "Items erhalten",
+    message: `Ein Admin hat dir ${missing.length} fehlende Item${missing.length !== 1 ? "s" : ""} ins Inventar gelegt.`,
+    link: "/garderobe",
+  });
   revalidatePath("/admin");
   return { success: true };
 }
@@ -480,11 +517,27 @@ export async function removeUserItem(inventoryId: string): Promise<AdminActionRe
   if (!user) return { success: false, error: "Kein Zugriff." };
 
   const admin = createAdminClient();
+  const { data: row } = await admin
+    .from("inventory")
+    .select("user_id, item:items(name)")
+    .eq("id", inventoryId)
+    .single();
+
   const { error } = await admin.from("inventory").delete().eq("id", inventoryId);
 
   if (error) return { success: false, error: "Entfernen fehlgeschlagen." };
 
   await logAdminAction(user.id, "admin_remove_item", { inventoryId });
+  if (row?.user_id) {
+    const itemName = (row.item as unknown as { name?: string } | null)?.name ?? "ein Item";
+    await notifyUser({
+      userId: row.user_id,
+      type: "admin_action",
+      title: "Item entfernt",
+      message: `Ein Admin hat „${itemName}" aus deinem Inventar entfernt.`,
+      link: "/garderobe",
+    });
+  }
   revalidatePath("/admin");
   return { success: true };
 }
@@ -513,6 +566,14 @@ export async function setUserBanned(
   if (error) return { success: false, error: "Aktion fehlgeschlagen." };
 
   await logAdminAction(user.id, "admin_ban_user", { targetUserId, banned });
+  await notifyUser({
+    userId: targetUserId,
+    type: "admin_ban",
+    title: banned ? "Account gesperrt" : "Account entsperrt",
+    message: banned
+      ? "Dein Account wurde gesperrt. Kontaktiere den Support für weitere Informationen."
+      : "Deine Sperre wurde aufgehoben. Du kannst dich wieder einloggen.",
+  });
   revalidatePath("/admin");
   return { success: true };
 }
@@ -559,6 +620,13 @@ export async function wipeUserInventory(targetUserId: string): Promise<AdminActi
     targetUserId,
     count: data?.length ?? 0,
   });
+  await notifyUser({
+    userId: targetUserId,
+    type: "admin_action",
+    title: "Inventar zurückgesetzt",
+    message: "Ein Admin hat dein gesamtes Inventar geleert.",
+    link: "/garderobe",
+  });
   revalidatePath("/admin");
   return { success: true };
 }
@@ -601,6 +669,13 @@ export async function resetUser(targetUserId: string): Promise<AdminActionResult
   await logAdminAction(user.id, "admin_full_reset", {
     targetUserId,
     deletedInventoryCount: invData?.length ?? 0,
+  });
+  await notifyUser({
+    userId: targetUserId,
+    type: "admin_action",
+    title: "Account zurückgesetzt",
+    message: "Ein Admin hat deinen Account auf den Startzustand zurückgesetzt.",
+    link: "/account",
   });
   revalidatePath("/admin");
   revalidatePath("/");

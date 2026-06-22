@@ -7,6 +7,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import { isAdmin } from "@/lib/admin";
 import { updateUsername } from "@/lib/actions/account";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 
 interface AccountShellProps {
   username: string;
@@ -34,7 +35,16 @@ export function AccountShell({
   const [displayName, setDisplayName] = useState(username);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [liveCredits, setLiveCredits] = useState(credits);
+  const [liveRole, setLiveRole] = useState(role);
   const sound = useSoundManager();
+
+  // Admin-driven changes (credits set, role changed) reach this tab the
+  // instant they happen, no reload needed — see lib/use-realtime-profile.ts.
+  useRealtimeProfile((row) => {
+    if (typeof row.credits === "number") setLiveCredits(row.credits);
+    if (typeof row.role === "string") setLiveRole(row.role);
+  });
 
   async function handleSave() {
     setSaving(true);
@@ -57,7 +67,7 @@ export function AccountShell({
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={credits} streakDays={streakDays} inventoryCount={inventoryCount} isAdmin={isAdmin({ role })} />
+      <TopBar credits={liveCredits} streakDays={streakDays} inventoryCount={inventoryCount} isAdmin={isAdmin({ role: liveRole })} />
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
         <Link
@@ -124,7 +134,7 @@ export function AccountShell({
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
-                {role === "admin" && (
+                {liveRole === "admin" && (
                   <span className="flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
                     <ShieldCheck className="h-3 w-3" />
                     Admin
@@ -141,7 +151,7 @@ export function AccountShell({
           <div className="rounded-xl border border-purple-500/20 bg-white/[0.02] px-4 py-4 text-center">
             <Coins className="mx-auto h-5 w-5 text-purple-300" />
             <p className="glow-text mt-2 text-xl font-extrabold text-purple-300">
-              {credits.toLocaleString("de-DE")}
+              {liveCredits.toLocaleString("de-DE")}
             </p>
             <p className="text-xs text-zinc-500">Credits</p>
           </div>

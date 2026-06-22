@@ -16,6 +16,7 @@ import {
   type OwnedItemSummary,
 } from "@/lib/actions/trading";
 import type { Rarity } from "@/lib/cases";
+import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 
 export interface TradablePlayer {
   id: string;
@@ -408,7 +409,7 @@ function TradeRow({ trade, viewerId, onChanged }: { trade: TradeListEntry; viewe
 }
 
 export function TradingShell({
-  credits,
+  credits: initialCredits,
   streakDays,
   viewerId,
   myItems,
@@ -416,6 +417,10 @@ export function TradingShell({
   trades,
   isAdmin = false,
 }: TradingShellProps) {
+  const [credits, setCredits] = useState(initialCredits);
+  useRealtimeProfile((row) => {
+    if (typeof row.credits === "number") setCredits(row.credits);
+  });
   const [creating, setCreating] = useState(false);
   const sound = useSoundManager();
   const router = useRouter();

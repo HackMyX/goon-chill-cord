@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { notifyUser } from "@/lib/notifications-internal";
 import {
   computeStreakReward,
   decideStreak,
@@ -269,6 +270,19 @@ export async function claimDailyReward(): Promise<ClaimResult> {
 
   revalidatePath("/");
   revalidatePath("/account");
+
+  // Only milestone claims get a notification — the regular daily claim
+  // already has instant on-screen feedback (LiveClock's claim popup), so a
+  // bell entry for every single day would just be noise on top of that.
+  if (result.isMilestone) {
+    await notifyUser({
+      userId: user.id,
+      type: "streak_claim",
+      title: "Streak-Meilenstein erreicht!",
+      message: `${decision.newStreak} Tage in Folge — du hast ${result.totalCredits.toLocaleString("de-DE")} CR erhalten.`,
+      link: "/account",
+    });
+  }
 
   return {
     success: true,

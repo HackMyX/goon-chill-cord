@@ -26,6 +26,7 @@ import type { PetTypeConfig } from "@/lib/pets";
 import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
+import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 
 interface WorldShellProps {
   userId: string;
@@ -112,6 +113,9 @@ export function WorldShell({
   isAdmin = false,
 }: WorldShellProps) {
   const [credits, setCredits] = useState(initialCredits);
+  useRealtimeProfile((row) => {
+    if (typeof row.credits === "number") setCredits(row.credits);
+  });
   const [attackFlash, setAttackFlash] = useState<"hit" | "miss" | null>(null);
   const [hp, setHp] = useState(characterConfig.playerMaxHp);
   const [maxHp, setMaxHp] = useState(characterConfig.playerMaxHp);

@@ -11,6 +11,8 @@ import {
   Send,
   Loader2,
   RefreshCw,
+  Bug,
+  Lightbulb,
 } from "lucide-react";
 import {
   getAdminTickets,
@@ -20,6 +22,7 @@ import {
   type Ticket,
   type TicketDetail,
   type TicketStatus,
+  type TicketCategory,
 } from "@/lib/actions/tickets";
 import { useSoundManager } from "@/lib/sound-manager";
 
@@ -46,12 +49,37 @@ const STATUS_ICON: Record<TicketStatus, typeof MessageCircle> = {
 
 const ALL_STATUSES: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
 
+const CATEGORY_LABEL: Record<TicketCategory, string> = {
+  bug: "Problem",
+  suggestion: "Vorschlag",
+};
+
+const CATEGORY_STYLE: Record<TicketCategory, string> = {
+  bug: "text-orange-300 bg-orange-500/10 border-orange-500/30",
+  suggestion: "text-amber-300 bg-amber-500/10 border-amber-500/30",
+};
+
+const CATEGORY_ICON: Record<TicketCategory, typeof Bug> = {
+  bug: Bug,
+  suggestion: Lightbulb,
+};
+
 function StatusBadge({ status }: { status: TicketStatus }) {
   const Icon = STATUS_ICON[status];
   return (
     <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLE[status]}`}>
       <Icon className="h-2.5 w-2.5" />
       {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+function CategoryBadge({ category }: { category: TicketCategory }) {
+  const Icon = CATEGORY_ICON[category];
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${CATEGORY_STYLE[category]}`}>
+      <Icon className="h-2.5 w-2.5" />
+      {CATEGORY_LABEL[category]}
     </span>
   );
 }
@@ -106,6 +134,7 @@ function TicketRow({ ticket, onUpdated }: { ticket: Ticket; onUpdated: () => voi
         className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
       >
         <StatusBadge status={ticket.status} />
+        <CategoryBadge category={ticket.category} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-zinc-200">{ticket.subject}</p>
           <p className="text-[11px] text-zinc-500">
@@ -223,12 +252,14 @@ function TicketRow({ ticket, onUpdated }: { ticket: Ticket; onUpdated: () => voi
 }
 
 type FilterStatus = TicketStatus | "all";
+type FilterCategory = TicketCategory | "all";
 
 export function TicketsTab() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState<FilterStatus>("open");
+  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
   const sound = useSoundManager();
 
   const load = useCallback(async () => {
@@ -245,14 +276,40 @@ export function TicketsTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  const displayed = filter === "all" ? tickets : tickets.filter((t) => t.status === filter);
+  const byCategory = categoryFilter === "all" ? tickets : tickets.filter((t) => t.category === categoryFilter);
+  const displayed = filter === "all" ? byCategory : byCategory.filter((t) => t.status === filter);
 
   const countFor = (s: FilterStatus) =>
-    s === "all" ? tickets.length : tickets.filter((t) => t.status === s).length;
+    s === "all" ? byCategory.length : byCategory.filter((t) => t.status === s).length;
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter bar */}
+      {/* Category filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        {(["all", "bug", "suggestion"] as FilterCategory[]).map((c) => {
+          const Icon = c === "all" ? null : CATEGORY_ICON[c];
+          return (
+            <button
+              key={c}
+              onMouseEnter={sound.hover}
+              onClick={() => { sound.click(); setCategoryFilter(c); }}
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                categoryFilter === c
+                  ? "border-amber-400 bg-amber-500/15 text-amber-200 shadow-[0_0_8px_rgba(245,158,11,0.35)]"
+                  : "border-white/10 text-zinc-400 hover:border-white/30"
+              }`}
+            >
+              {Icon && <Icon className="h-3 w-3" />}
+              {c === "all" ? "Alle Kategorien" : CATEGORY_LABEL[c]}
+              <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px]">
+                {c === "all" ? tickets.length : tickets.filter((t) => t.category === c).length}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Status filter bar */}
       <div className="flex flex-wrap items-center gap-2">
         {(["all", "open", "in_progress", "resolved", "closed"] as FilterStatus[]).map((s) => (
           <button

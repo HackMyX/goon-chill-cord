@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import {
   MessageCircle,
   X,
   Send,
-  Plus,
+  Bug,
+  Lightbulb,
   ChevronLeft,
   Loader2,
   CheckCircle2,
@@ -23,6 +25,7 @@ import {
   type Ticket,
   type TicketDetail,
   type TicketStatus,
+  type TicketCategory,
 } from "@/lib/actions/tickets";
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
@@ -58,7 +61,23 @@ function StatusBadge({ status }: { status: TicketStatus }) {
 
 type View = "list" | "new" | "detail";
 
+const CATEGORY_META: Record<TicketCategory, { label: string; caption: string; icon: typeof Bug; placeholder: string }> = {
+  bug: {
+    label: "Problem melden",
+    caption: "Etwas funktioniert nicht wie erwartet? Melde Bugs und Fehler direkt an den Support.",
+    icon: Bug,
+    placeholder: "Details zum Problem — je mehr Infos, desto schneller können wir helfen…",
+  },
+  suggestion: {
+    label: "Verbesserungsvorschlag",
+    caption: "Du hast eine Idee, wie wir die Seite noch besser machen können? Schick sie den Admins.",
+    icon: Lightbulb,
+    placeholder: "Beschreibe deine Idee — was soll sich ändern oder neu dazukommen?",
+  },
+};
+
 export function SupportButton() {
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>("list");
@@ -67,6 +86,7 @@ export function SupportButton() {
   const [loading, setLoading] = useState(false);
 
   // New ticket form
+  const [category, setCategory] = useState<TicketCategory>("bug");
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -97,6 +117,13 @@ export function SupportButton() {
     loadTickets();
   }
 
+  function openNew(cat: TicketCategory) {
+    setCategory(cat);
+    setView("new");
+    setFormError(null);
+    setFormSuccess(false);
+  }
+
   async function openDetail(ticket: Ticket) {
     setView("detail");
     setLoading(true);
@@ -110,7 +137,7 @@ export function SupportButton() {
     if (!subject.trim() || !description.trim()) return;
     setSubmitting(true);
     setFormError(null);
-    const res = await createTicket({ subject: subject.trim(), description: description.trim() });
+    const res = await createTicket({ subject: subject.trim(), description: description.trim(), category });
     setSubmitting(false);
     if (res.success) {
       setFormSuccess(true);
@@ -145,6 +172,9 @@ export function SupportButton() {
     loadTickets();
   }
 
+  // The support widget must never float over the 3D game canvas — it
+  // covers HUD controls and breaks pointer-lock/camera drag there.
+  if (pathname?.startsWith("/world")) return null;
   if (!visible) return null;
 
   return (
@@ -179,18 +209,9 @@ export function SupportButton() {
               )}
               <span className="flex-1 text-sm font-bold text-zinc-100">
                 {view === "list" && "Support"}
-                {view === "new" && "Neues Ticket"}
+                {view === "new" && CATEGORY_META[category].label}
                 {view === "detail" && (detail?.subject ?? "Ticket")}
               </span>
-              {view === "list" && (
-                <button
-                  onClick={() => { setView("new"); setFormError(null); setFormSuccess(false); }}
-                  className="flex items-center gap-1 rounded-lg border border-purple-400/30 bg-purple-500/10 px-2.5 py-1 text-xs font-semibold text-purple-300 hover:bg-purple-500/20"
-                >
-                  <Plus className="h-3 w-3" />
-                  Neu
-                </button>
-              )}
               <button
                 onClick={() => setOpen(false)}
                 className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
@@ -211,34 +232,54 @@ export function SupportButton() {
                     </div>
                   )}
                   {!loading && tickets.length === 0 && (
-                    <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
+                    <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
                       <MessageCircle className="h-8 w-8 text-zinc-700" />
                       <p className="text-sm text-zinc-500">Du hast noch keine Tickets.</p>
-                      <button
-                        onClick={() => { setView("new"); setFormError(null); }}
-                        className="rounded-lg bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-500"
-                      >
-                        Erstes Ticket erstellen
-                      </button>
                     </div>
                   )}
-                  {!loading && tickets.map((ticket) => (
-                    <button
-                      key={ticket.id}
-                      onClick={() => openDetail(ticket)}
-                      className="flex flex-col gap-1.5 border-b border-white/[0.05] px-4 py-3 text-left transition-colors hover:bg-purple-500/[0.05] last:border-b-0"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-semibold leading-tight text-zinc-200">{ticket.subject}</p>
-                        <StatusBadge status={ticket.status} />
-                      </div>
-                      <p className="text-[11px] text-zinc-500">
-                        {new Date(ticket.updatedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                        {" · "}
-                        {ticket.messageCount} Nachricht{ticket.messageCount !== 1 ? "en" : ""}
-                      </p>
-                    </button>
-                  ))}
+                  {!loading && tickets.map((ticket) => {
+                    const meta = CATEGORY_META[ticket.category];
+                    const CatIcon = meta.icon;
+                    return (
+                      <button
+                        key={ticket.id}
+                        onClick={() => openDetail(ticket)}
+                        className="flex flex-col gap-1.5 border-b border-white/[0.05] px-4 py-3 text-left transition-colors hover:bg-purple-500/[0.05] last:border-b-0"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="flex items-center gap-1.5 text-sm font-semibold leading-tight text-zinc-200">
+                            <CatIcon className="h-3 w-3 shrink-0 text-zinc-500" />
+                            {ticket.subject}
+                          </p>
+                          <StatusBadge status={ticket.status} />
+                        </div>
+                        <p className="text-[11px] text-zinc-500">
+                          {new Date(ticket.updatedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                          {" · "}
+                          {ticket.messageCount} Nachricht{ticket.messageCount !== 1 ? "en" : ""}
+                        </p>
+                      </button>
+                    );
+                  })}
+
+                  {/* New ticket — separate, clearly captioned entry points */}
+                  <div className="flex flex-col gap-3 border-t border-white/10 bg-white/[0.02] p-4">
+                    {(Object.entries(CATEGORY_META) as [TicketCategory, typeof CATEGORY_META.bug][]).map(([cat, meta]) => {
+                      const CatIcon = meta.icon;
+                      return (
+                        <div key={cat} className="flex flex-col gap-1.5">
+                          <p className="text-[11px] leading-snug text-zinc-500">{meta.caption}</p>
+                          <button
+                            onClick={() => openNew(cat)}
+                            className="flex items-center justify-center gap-2 rounded-lg border border-purple-400/30 bg-purple-500/10 px-3 py-2 text-xs font-bold text-purple-300 hover:bg-purple-500/20"
+                          >
+                            <CatIcon className="h-3.5 w-3.5" />
+                            {meta.label}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -262,7 +303,7 @@ export function SupportButton() {
                       onChange={(e) => setDescription(e.target.value)}
                       rows={4}
                       maxLength={2000}
-                      placeholder="Details zum Problem — je mehr Infos, desto schneller können wir helfen…"
+                      placeholder={CATEGORY_META[category].placeholder}
                       className="resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-purple-400/60"
                     />
                   </label>
@@ -270,7 +311,7 @@ export function SupportButton() {
                   {formSuccess && (
                     <p className="flex items-center gap-1.5 text-xs text-emerald-400">
                       <CheckCheck className="h-3.5 w-3.5" />
-                      Ticket wurde gesendet!
+                      {category === "suggestion" ? "Vorschlag wurde gesendet!" : "Ticket wurde gesendet!"}
                     </p>
                   )}
                   <button
@@ -279,7 +320,7 @@ export function SupportButton() {
                     className="flex items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-50"
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    {submitting ? "Wird gesendet…" : "Ticket senden"}
+                    {submitting ? "Wird gesendet…" : category === "suggestion" ? "Vorschlag senden" : "Ticket senden"}
                   </button>
                 </form>
               )}

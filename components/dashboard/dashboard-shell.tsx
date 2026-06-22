@@ -12,6 +12,7 @@ import { subscribeToPresence } from "@/lib/presence-client";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { CaseGroup, Rarity } from "@/lib/cases";
+import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 
 /** Same Realtime presence roster the Community page uses (lib/presence-
  * client.ts) — just counting it instead of listing names, for the small
@@ -48,6 +49,9 @@ export function DashboardShell({
   isAdmin = false,
 }: DashboardShellProps) {
   const [credits, setCredits] = useState(initialCredits);
+  useRealtimeProfile((row) => {
+    if (typeof row.credits === "number") setCredits(row.credits);
+  });
   const router = useRouter();
   const sound = useSoundManager();
   const onlineCount = useOnlineCount();

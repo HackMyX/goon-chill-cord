@@ -11,6 +11,7 @@ import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { createAuction, placeBid, buyAuctionNow, cancelAuction } from "@/lib/actions/auctions";
 import { computeListingFee, MAX_ACTIVE_AUCTIONS_PER_USER } from "@/lib/auctions";
 import type { Rarity } from "@/lib/cases";
+import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 
 export interface OwnedItem {
   inventoryId: string;
@@ -392,13 +393,17 @@ function AuctionRow({
 }
 
 export function AuctionsShell({
-  credits,
+  credits: initialCredits,
   streakDays,
   viewerId,
   myItems,
   auctions,
   isAdmin = false,
 }: AuctionsShellProps) {
+  const [credits, setCredits] = useState(initialCredits);
+  useRealtimeProfile((row) => {
+    if (typeof row.credits === "number") setCredits(row.credits);
+  });
   const [creating, setCreating] = useState(false);
   const sound = useSoundManager();
   const router = useRouter();

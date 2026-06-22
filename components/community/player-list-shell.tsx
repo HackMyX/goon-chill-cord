@@ -10,6 +10,7 @@ import { subscribeToPresence } from "@/lib/presence-client";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, type Rarity } from "@/lib/cases";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useRealtimeProfile, useRealtimeAllProfiles } from "@/lib/use-realtime-profile";
 
 export interface PlayerCard {
   id: string;
@@ -59,9 +60,21 @@ function useOnlineUserIds(): Set<string> {
   return onlineIds;
 }
 
-export function PlayerListShell({ players, credits, streakDays, viewerId, isAdmin = false }: PlayerListShellProps) {
+export function PlayerListShell({ players: initialPlayers, credits: initialCredits, streakDays, viewerId, isAdmin = false }: PlayerListShellProps) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [credits, setCredits] = useState(initialCredits);
+  useRealtimeProfile((row) => {
+    if (typeof row.credits === "number") setCredits(row.credits);
+  });
+  const [players, setPlayers] = useState(initialPlayers);
+  // Other players' credits (shown on each card) update live too — e.g. an
+  // admin editing someone's balance, or anyone winning/spending, reflects
+  // here immediately without a reload.
+  useRealtimeAllProfiles((row) => {
+    if (typeof row.id !== "string" || typeof row.credits !== "number") return;
+    setPlayers((curr) => curr.map((p) => (p.id === row.id ? { ...p, credits: row.credits as number } : p)));
+  });
   const sound = useSoundManager();
   const onlineIds = useOnlineUserIds();
 

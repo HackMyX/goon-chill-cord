@@ -27,6 +27,7 @@ import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { SiteConfig } from "@/lib/site-config";
+import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 
 export interface AuditLogEntry {
   id: string;
@@ -105,7 +106,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
 ];
 
 export function AdminShell({
-  credits,
+  credits: initialCredits,
   streakDays,
   auditLog,
   caseTiers,
@@ -124,6 +125,10 @@ export function AdminShell({
 }: AdminShellProps) {
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
+  const [credits, setCredits] = useState(initialCredits);
+  useRealtimeProfile((row) => {
+    if (typeof row.credits === "number") setCredits(row.credits);
+  });
   const sound = useSoundManager();
 
   return (

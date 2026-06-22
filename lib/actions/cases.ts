@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { findCaseTier, pickRarity } from "@/lib/cases";
+import { findCaseTier, pickRarity, RARITY_LABELS } from "@/lib/cases";
 import { getCaseConfig } from "@/lib/cases-config";
+import { notifyUser } from "@/lib/notifications-internal";
 
 export interface WonItem {
   id: string;
@@ -168,6 +169,19 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
   }
 
   revalidatePath("/");
+
+  // Only the top two rarities get a notification — every other drop is too
+  // frequent (cases are opened in rapid succession) and would just bury the
+  // notification bell in noise instead of surfacing something worth seeing.
+  if (wonItem.rarity === "mythisch" || wonItem.rarity === "ultra") {
+    await notifyUser({
+      userId: user.id,
+      type: "case_opened",
+      title: `${RARITY_LABELS[wonItem.rarity as keyof typeof RARITY_LABELS] ?? wonItem.rarity}-Drop!`,
+      message: `Du hast „${wonItem.name}" aus einem Case gezogen!`,
+      link: "/garderobe",
+    });
+  }
 
   return {
     success: true,

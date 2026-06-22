@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Bell, CheckCheck, Repeat, Gavel, Sparkles, Swords, Flame, Gift, ShieldCheck, MessageCircle, ShoppingBag } from "lucide-react";
+import { Bell, CheckCheck, Repeat, Gavel, Sparkles, Swords, Flame, Gift, ShieldCheck, MessageCircle, ShoppingBag, Coins, Ban, Lightbulb, Dice5, PackageOpen } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   getNotifications,
@@ -28,10 +28,16 @@ const TYPE_ICON: Record<string, typeof Bell> = {
   streak_claim: Gift,
   streak_commit: Flame,
   admin_action: ShieldCheck,
+  admin_credits: Coins,
+  admin_grant_item: Gift,
+  admin_ban: Ban,
   shop_purchase: ShoppingBag,
   ticket_new: MessageCircle,
   ticket_reply: MessageCircle,
   ticket_status: MessageCircle,
+  ticket_suggestion: Lightbulb,
+  case_opened: PackageOpen,
+  double_or_nothing: Dice5,
 };
 
 function timeAgo(iso: string): string {

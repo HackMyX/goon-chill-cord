@@ -1,4 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import { Crown, Trophy, Medal } from "lucide-react";
+import { useRealtimeAllProfiles } from "@/lib/use-realtime-profile";
 
 export interface LeaderboardEntry {
   id: string;
@@ -12,7 +16,21 @@ const RANK_ICONS = [
   { Icon: Medal, className: "text-orange-400" },
 ];
 
-export function Leaderboard({ entries }: { entries: LeaderboardEntry[] }) {
+export function Leaderboard({ entries: initialEntries }: { entries: LeaderboardEntry[] }) {
+  const [entries, setEntries] = useState(initialEntries);
+
+  // Re-sorts and re-slices on every credits change anywhere — so a credit
+  // change (case win, admin edit, trade, anything) reorders this list (and
+  // can bump someone in or out of the top 10) without a page reload.
+  useRealtimeAllProfiles((row) => {
+    if (typeof row.id !== "string" || typeof row.credits !== "number" || typeof row.username !== "string") return;
+    setEntries((curr) =>
+      [...curr.filter((e) => e.id !== row.id), { id: row.id, username: row.username as string, credits: row.credits as number }]
+        .sort((a, b) => b.credits - a.credits)
+        .slice(0, 10)
+    );
+  });
+
   return (
     <section className="mx-auto w-full max-w-2xl px-4 py-10">
       <div className="text-center">
