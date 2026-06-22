@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -16,6 +16,7 @@ import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-ed
 import { GamesTab } from "@/components/admin/games-tab";
 import { SiteConfigEditor } from "@/components/admin/site-config-editor";
 import { TicketsTab } from "@/components/admin/tickets-tab";
+import { DebugLogTab } from "@/components/admin/debug-log-tab";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 import type { StreakConfig } from "@/lib/streak";
@@ -89,7 +90,7 @@ interface AdminShellProps {
   siteConfig: SiteConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "debug";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -103,6 +104,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "branding", label: "Branding", icon: Palette },
   { id: "audit", label: "Audit-Log", icon: ScrollText },
   { id: "tickets", label: "Tickets", icon: MessageCircle },
+  { id: "debug", label: "Debug Log", icon: Bug },
 ];
 
 export function AdminShell({
@@ -209,9 +211,9 @@ export function AdminShell({
           <div className="flex flex-col gap-3">
             <KillStreakConfigEditor config={killStreakConfig} />
             <p className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] px-4 py-3 text-xs text-zinc-400">
-              Diese 4 Monster-Varianten sind fest — hier lassen sich alle ihre Werte (Leben, Schaden,
-              Tempo, Reichweiten, Belohnung, Spawn-Häufigkeit, Farbe) bearbeiten oder eine Variante
-              komplett deaktivieren. Neue Varianten hinzufügen ist bewusst nicht Teil dieser Ansicht.
+              Diese {monsterTypes.length} Monster-Varianten sind fest — hier lassen sich alle ihre Werte
+              (Leben, Schaden, Tempo, Reichweiten, Belohnung, Spawn-Häufigkeit, Farbe) bearbeiten oder eine
+              Variante komplett deaktivieren. Neue Varianten hinzufügen ist bewusst nicht Teil dieser Ansicht.
             </p>
             {monsterTypes.map((type) => (
               <MonsterTypeEditor key={type.id} type={type} />
@@ -253,6 +255,8 @@ export function AdminShell({
         )}
 
         {tab === "tickets" && <TicketsTab />}
+
+        {tab === "debug" && <DebugLogTab />}
       </main>
     </div>
   );

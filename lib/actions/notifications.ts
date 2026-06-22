@@ -61,3 +61,27 @@ export async function markAllNotificationsRead(): Promise<{ success: boolean }> 
   revalidatePath("/");
   return { success: true };
 }
+
+export async function deleteNotification(id: string): Promise<{ success: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false };
+
+  await supabase.from("notifications").delete().eq("id", id).eq("user_id", user.id);
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function deleteAllNotifications(): Promise<{ success: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false };
+
+  await supabase.from("notifications").delete().eq("user_id", user.id);
+  revalidatePath("/");
+  return { success: true };
+}

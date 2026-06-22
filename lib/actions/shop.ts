@@ -12,10 +12,12 @@ import {
   shopDateKey,
   type ShopSettings,
 } from "@/lib/shop";
+import { logDebugEvent } from "@/lib/debug-log-server";
 import type { Rarity } from "@/lib/cases";
 
 function logServerError(scope: string, message: string, detail?: string) {
   console.error(`[${scope}] ${message}`, detail ?? "");
+  void logDebugEvent({ scope, message, detail });
 }
 
 interface ShopSettingsRow {
@@ -350,6 +352,17 @@ export async function purchaseShopItem(listingId: string): Promise<ShopPurchaseR
   });
 
   const itemName = (listing.item as unknown as { name: string } | null)?.name ?? "ein Item";
+
+  try {
+    await admin.from("audit_logs").insert({
+      user_id: user.id,
+      action: "shop_purchase",
+      payload: { listingId, itemName, price: listing.price_cr, newCredits },
+    });
+  } catch {
+    // best-effort
+  }
+
   await notifyUser({
     userId: user.id,
     type: "shop_purchase",

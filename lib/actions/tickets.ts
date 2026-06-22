@@ -294,6 +294,34 @@ export async function updateTicketStatus(input: {
   return { success: true };
 }
 
+/** Staff-only cleanup — only allowed on already-closed tickets, since
+ * deleting an open/active conversation would just erase the user's own
+ * support history out from under them. */
+export async function deleteTicket(ticketId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
+  if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
+
+  const { data: ticket } = await admin.from("tickets").select("status").eq("id", ticketId).single();
+  if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
+  if (ticket.status !== "closed") {
+    return { success: false, error: "Nur geschlossene Tickets können gelöscht werden." };
+  }
+
+  await admin.from("ticket_messages").delete().eq("ticket_id", ticketId);
+  const { error } = await admin.from("tickets").delete().eq("id", ticketId);
+  if (error) return { success: false, error: "Löschen fehlgeschlagen." };
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // `tickets`/`ticket_messages` only carry a FK to `auth.users`, not to

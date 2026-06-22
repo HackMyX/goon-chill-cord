@@ -12,6 +12,7 @@ import {
   MAX_ACTIVE_AUCTIONS_PER_USER,
 } from "@/lib/auctions";
 import { notifyUser } from "@/lib/notifications-internal";
+import { logDebugEvent } from "@/lib/debug-log-server";
 import type { Rarity } from "@/lib/cases";
 
 export interface AuctionEntry {
@@ -44,9 +45,14 @@ export interface AuctionActionResult {
  * return`). This is what actually shows up in the `next dev` terminal,
  * which matters here specifically because `auctions`/`trades` are brand
  * new tables with no RLS policies — using the regular per-user client
- * against them used to fail silently with no visible cause at all. */
+ * against them used to fail silently with no visible cause at all. Also
+ * persists to debug_logs (lib/debug-log-server.ts) — these errors are
+ * caught and handled gracefully (a friendly message goes back to the
+ * user), so instrumentation.ts's onRequestError never sees them; this is
+ * the only way they reach the admin Debug Log tab. */
 function logServerError(scope: string, message: string, detail?: string) {
   console.error(`[${scope}] ${message}`, detail ?? "");
+  void logDebugEvent({ scope, message, detail });
 }
 
 /**

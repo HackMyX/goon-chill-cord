@@ -15,6 +15,7 @@ import {
   Repeat,
   X,
   RotateCcw,
+  ShoppingBag,
   type LucideIcon,
 } from "lucide-react";
 
@@ -126,6 +127,13 @@ const ACTION_META: Record<string, ActionMeta> = {
     format: (p) =>
       `Trade ${str(p.tradeId).slice(0, 8)}… angenommen`,
   },
+  shop_purchase: {
+    icon: ShoppingBag,
+    color: "text-cyan-300",
+    bg: "bg-cyan-500/10",
+    border: "border-cyan-500/30",
+    format: (p) => `"${str(p.itemName)}" im Shop gekauft für ${cr(p.price)}`,
+  },
   admin_economy_update: {
     icon: Settings,
     color: "text-purple-300",
@@ -149,6 +157,28 @@ const ACTION_META: Record<string, ActionMeta> = {
     bg: "bg-purple-500/10",
     border: "border-purple-500/30",
     format: (p) => `Rolle geändert zu "${str(p.role)}"`,
+  },
+  admin_set_gender: {
+    icon: Settings,
+    color: "text-purple-300",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    format: (p) => `Geschlecht geändert zu "${str(p.gender)}"`,
+  },
+  admin_grant_all_items: {
+    icon: Plus,
+    color: "text-emerald-300",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/30",
+    format: (p) => `${str(p.count, "0")} fehlende Items ins Inventar vergeben`,
+  },
+  admin_streak_config_update: {
+    icon: Settings,
+    color: "text-purple-300",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    format: (p) =>
+      `Daily-Streak-Einstellungen angepasst — Basis ${str(p.baseReward)} CR, +${str(p.dailyIncrement)}/Tag, max. ${str(p.maxReward)} CR${p.enabled === false ? " (deaktiviert)" : ""}`,
   },
   admin_item_create: {
     icon: Plus,

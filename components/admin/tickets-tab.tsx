@@ -13,12 +13,14 @@ import {
   RefreshCw,
   Bug,
   Lightbulb,
+  Trash2,
 } from "lucide-react";
 import {
   getAdminTickets,
   getTicketDetail,
   addTicketMessage,
   updateTicketStatus,
+  deleteTicket,
   type Ticket,
   type TicketDetail,
   type TicketStatus,
@@ -91,6 +93,8 @@ function TicketRow({ ticket, onUpdated }: { ticket: Ticket; onUpdated: () => voi
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const sound = useSoundManager();
 
   async function handleExpand() {
@@ -127,6 +131,20 @@ function TicketRow({ ticket, onUpdated }: { ticket: Ticket; onUpdated: () => voi
     onUpdated();
   }
 
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    sound.click();
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      setTimeout(() => setDeleteConfirm(false), 4000);
+      return;
+    }
+    setDeleting(true);
+    await deleteTicket(ticket.id);
+    setDeleting(false);
+    onUpdated();
+  }
+
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
       <button
@@ -149,6 +167,22 @@ function TicketRow({ ticket, onUpdated }: { ticket: Ticket; onUpdated: () => voi
             {" "}· {ticket.messageCount} Msg
           </p>
         </div>
+        {ticket.status === "closed" && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={handleDelete}
+            title="Geschlossenes Ticket löschen"
+            className={`flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors ${
+              deleteConfirm
+                ? "border-red-500/50 bg-red-500/20 text-red-300"
+                : "border-white/10 text-zinc-500 hover:border-red-500/40 hover:text-red-400"
+            }`}
+          >
+            {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+            {deleteConfirm ? "Wirklich?" : ""}
+          </span>
+        )}
         {expanded ? (
           <ChevronUp className="h-4 w-4 shrink-0 text-zinc-500" />
         ) : (

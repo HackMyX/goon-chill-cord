@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Bell, CheckCheck, Repeat, Gavel, Sparkles, Swords, Flame, Gift, ShieldCheck, MessageCircle, ShoppingBag, Coins, Ban, Lightbulb, Dice5, PackageOpen } from "lucide-react";
+import { Bell, CheckCheck, Repeat, Gavel, Sparkles, Swords, Flame, Gift, ShieldCheck, MessageCircle, ShoppingBag, Coins, Ban, Lightbulb, Dice5, PackageOpen, X, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  deleteNotification,
+  deleteAllNotifications,
   type NotificationEntry,
 } from "@/lib/actions/notifications";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -165,6 +167,20 @@ export function NotificationsBell() {
     await markAllNotificationsRead();
   }
 
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    sound.click();
+    setNotifications((curr) => curr.filter((n) => n.id !== id));
+    await deleteNotification(id);
+  }
+
+  async function handleDeleteAll() {
+    sound.click();
+    setNotifications([]);
+    await deleteAllNotifications();
+  }
+
   return (
     <>
       <button
@@ -193,16 +209,28 @@ export function NotificationsBell() {
           >
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
               <span className="text-sm font-bold text-zinc-200">Benachrichtigungen</span>
-              {unreadCount > 0 && (
-                <button
-                  onMouseEnter={sound.hover}
-                  onClick={handleMarkAllRead}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-purple-300 hover:text-purple-200"
-                >
-                  <CheckCheck className="h-3.5 w-3.5" />
-                  Alle gelesen
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                {unreadCount > 0 && (
+                  <button
+                    onMouseEnter={sound.hover}
+                    onClick={handleMarkAllRead}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-purple-300 hover:text-purple-200"
+                  >
+                    <CheckCheck className="h-3.5 w-3.5" />
+                    Alle gelesen
+                  </button>
+                )}
+                {notifications.length > 0 && (
+                  <button
+                    onMouseEnter={sound.hover}
+                    onClick={handleDeleteAll}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-zinc-500 hover:text-red-400"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Alle löschen
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="max-h-96 overflow-y-auto">
@@ -216,7 +244,7 @@ export function NotificationsBell() {
                   const Icon = TYPE_ICON[n.type] ?? Bell;
                   const content = (
                     <div
-                      className={`flex w-full items-start gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-purple-500/10 ${
+                      className={`flex w-full items-start gap-2.5 px-4 py-2.5 pr-8 text-left transition-colors hover:bg-purple-500/10 ${
                         !n.read ? "bg-purple-500/[0.06]" : ""
                       }`}
                     >
@@ -231,14 +259,25 @@ export function NotificationsBell() {
                       {!n.read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />}
                     </div>
                   );
-                  return n.link ? (
-                    <Link key={n.id} href={n.link} onClick={() => handleNotificationClick(n)}>
-                      {content}
-                    </Link>
-                  ) : (
-                    <button key={n.id} onClick={() => handleNotificationClick(n)} className="w-full">
-                      {content}
-                    </button>
+                  return (
+                    <div key={n.id} className="group relative">
+                      {n.link ? (
+                        <Link href={n.link} onClick={() => handleNotificationClick(n)}>
+                          {content}
+                        </Link>
+                      ) : (
+                        <button onClick={() => handleNotificationClick(n)} className="w-full">
+                          {content}
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => handleDelete(e, n.id)}
+                        title="Löschen"
+                        className="absolute right-2 top-2.5 rounded-full p-1 text-zinc-600 opacity-0 transition-opacity hover:bg-white/10 hover:text-red-400 group-hover:opacity-100"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   );
                 })
               )}

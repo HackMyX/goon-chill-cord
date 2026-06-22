@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications-internal";
+import { logDebugEvent } from "@/lib/debug-log-server";
 import type { Rarity } from "@/lib/cases";
 
 /** Plain `console.error`, not lib/debug.ts's `debugError` — that helper is
@@ -13,6 +14,7 @@ import type { Rarity } from "@/lib/cases";
  * what actually shows up in the `next dev` terminal. */
 function logServerError(scope: string, message: string, detail?: string) {
   console.error(`[${scope}] ${message}`, detail ?? "");
+  void logDebugEvent({ scope, message, detail });
 }
 
 export interface TradeItemSummary {
@@ -198,17 +200,28 @@ export async function cancelTrade(tradeId: string): Promise<TradingActionResult>
   if (!user) return { success: false, error: "Du musst eingeloggt sein." };
 
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data: trade, error } = await admin
     .from("trades")
     .update({ status: "cancelled", resolved_at: new Date().toISOString() })
     .eq("id", tradeId)
     .eq("sender_id", user.id)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("receiver_id")
+    .single();
 
-  if (error) {
-    logServerError("Trading", "cancelTrade failed", error.message);
+  if (error || !trade) {
+    if (error) logServerError("Trading", "cancelTrade failed", error.message);
     return { success: false, error: "Trade konnte nicht abgebrochen werden." };
   }
+
+  const { data: senderProfile } = await admin.from("profiles").select("username").eq("id", user.id).single();
+  await notifyUser({
+    userId: trade.receiver_id,
+    type: "trade_cancelled",
+    title: "Trade zurückgezogen",
+    message: `${senderProfile?.username ?? "Ein Spieler"} hat seine Trade-Anfrage an dich zurückgezogen.`,
+    link: "/trading",
+  });
 
   revalidatePath("/trading");
   return { success: true };

@@ -170,18 +170,19 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
 
   revalidatePath("/");
 
-  // Only the top two rarities get a notification — every other drop is too
-  // frequent (cases are opened in rapid succession) and would just bury the
-  // notification bell in noise instead of surfacing something worth seeing.
-  if (wonItem.rarity === "mythisch" || wonItem.rarity === "ultra") {
-    await notifyUser({
-      userId: user.id,
-      type: "case_opened",
-      title: `${RARITY_LABELS[wonItem.rarity as keyof typeof RARITY_LABELS] ?? wonItem.rarity}-Drop!`,
-      message: `Du hast „${wonItem.name}" aus einem Case gezogen!`,
-      link: "/garderobe",
-    });
-  }
+  // Every case open gets a notification now — full, accurate history of
+  // every drop, not just the rare highlights.
+  const rarityLabel = RARITY_LABELS[wonItem.rarity as keyof typeof RARITY_LABELS] ?? wonItem.rarity;
+  await notifyUser({
+    userId: user.id,
+    type: "case_opened",
+    title:
+      wonItem.rarity === "mythisch" || wonItem.rarity === "ultra"
+        ? `${rarityLabel}-Drop!`
+        : "Case geöffnet",
+    message: `Du hast „${wonItem.name}" (${rarityLabel}) aus „${tier.label}" gezogen.`,
+    link: "/garderobe",
+  });
 
   return {
     success: true,

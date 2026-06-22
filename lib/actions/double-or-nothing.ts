@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyUser } from "@/lib/notifications-internal";
 
 export interface FlipResult {
   success: boolean;
@@ -67,6 +68,16 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   }
 
   revalidatePath("/");
+
+  await notifyUser({
+    userId: user.id,
+    type: "double_or_nothing",
+    title: won ? "Double or Nothing gewonnen!" : "Double or Nothing verloren",
+    message: won
+      ? `Du hast deinen Einsatz von ${stake.toLocaleString("de-DE")} CR verdoppelt!`
+      : `Du hast deinen Einsatz von ${stake.toLocaleString("de-DE")} CR verloren.`,
+    link: "/",
+  });
 
   return { success: true, won, amount: stake, newCredits: updatedRows[0].credits };
 }
