@@ -6,6 +6,8 @@ import { useFrame } from "@react-three/fiber";
 import { Billboard, Text } from "@react-three/drei";
 import { type EquippedItem } from "@/lib/rarity-colors";
 import { debugWarn } from "@/lib/debug";
+import { getPetSpeciesId, DEFAULT_PET_TYPES, type PetTypeConfig } from "@/lib/pets";
+import type { MonsterRegistry } from "@/components/world/combat-types";
 import {
   PetVariant,
   HatVariant,
@@ -15,6 +17,7 @@ import {
   PantsVariant,
   ShoeVariant,
   ShieldVariant,
+  ShieldAura,
   HairVariant,
   AuraVariant,
   TrailVariant,
@@ -23,6 +26,7 @@ import {
   AmuletVariant,
   BareFoot,
   DefaultFace,
+  isFlyingPet,
 } from "@/components/world/item-variants";
 
 export interface CharacterModelProps {
@@ -30,6 +34,21 @@ export interface CharacterModelProps {
   gender: "m" | "w";
   /** Floating nametag above the head — omitted in the Garderobe preview. */
   name?: string;
+  /** Player.tsx's own `combatRef`, passed through so the shield aura
+   * (below) can fade with actual remaining shield HP instead of always
+   * looking full-strength — omitted for remote avatars/previews, which
+   * have no live shield state to follow (ShieldAura falls back to a
+   * constant full-strength look in that case). */
+  shieldStateRef?: React.RefObject<{ shieldHpRemaining: number; shieldMaxHp: number }>;
+  /** Lets an equipped pet actually fight — omitted for remote
+   * avatars/Garderobe previews, which fall back to purely cosmetic
+   * wandering (PetCompanion below treats a missing registry as "no
+   * monsters to ever find", not an error). */
+  monsterRegistryRef?: MonsterRegistry;
+  /** Admin-configured per-species stats (lib/pets.ts) — defaults to the
+   * code fallbacks when omitted (Garderobe preview, remote avatars), same
+   * "code defaults, DB overrides" shape as lib/monsters.ts elsewhere. */
+  petTypes?: PetTypeConfig[];
 }
 
 export interface CharacterLimbRefs {
@@ -77,7 +96,10 @@ const BUILD = {
  * in `useFrame` — imperative, zero React re-renders per frame.
  */
 export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>(
-  function CharacterModel({ equippedByCategory, gender, name }, ref) {
+  function CharacterModel(
+    { equippedByCategory, gender, name, shieldStateRef, monsterRegistryRef, petTypes },
+    ref
+  ) {
     const hat = equippedByCategory.hat;
     const hair = equippedByCategory.hair;
     const jacket = equippedByCategory.jacket;
@@ -143,6 +165,12 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
             </Text>
           </Billboard>
         )}
+
+        {/* shield aura: whole-body bubble + smoke, only for a *functioning*
+            shield (shield_hp > 0) — a purely decorative shield_cosmetic
+            item still shows the arm-mounted ShieldVariant prop below, just
+            without this. */}
+        {shield && (shield.shield_hp ?? 0) > 0 && <ShieldAura item={shield} stateRef={shieldStateRef} />}
 
         {/* aura: one of several dramatically different effects (orbiting
             spheres / rising embers / spinning blades / counter-rotating
@@ -279,47 +307,235 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
             look like different animals, not just a differently-tinted
             sphere, and now it actually wanders/orbits around its owner
             instead of sitting frozen in one spot. */}
-        {pet && <PetCompanion item={pet} />}
+        {pet && (
+          <PetCompanion item={pet} monsterRegistryRef={monsterRegistryRef} petTypes={petTypes} />
+        )}
       </group>
     );
   }
 );
 
-/** Deterministic phase offset from the pet's name — without this, every
- * equipped pet across every player would orbit perfectly in sync (same
- * clock, same formula), which reads as obviously fake. A per-name phase
- * makes each pet's loop start at a different point in its cycle. */
-function namePhase(name: string): number {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return (h % 1000) / 1000 * Math.PI * 2;
+const PET_GROUND_RADIUS = [0.55, 2.1] as const;
+const PET_FLY_RADIUS = [0.7, 2.6] as const;
+const PET_FLY_HEIGHT = [0.75, 2.1] as const;
+const PET_GROUND_SPEED = 1.1;
+const PET_FLY_SPEED = 1.6;
+/** How long a pet commits to one destination before picking a new one —
+ * randomized per-decision (not a fixed interval) so a whole pack of pets
+ * never re-decides on the same beat. */
+const DECISION_INTERVAL = [1.6, 4] as const;
+const GROUND_PAUSE_CHANCE = 0.35;
+const JUMP_CHANCE = 0.4;
+
+function randRange(rng: () => number, [min, max]: readonly [number, number]) {
+  return min + rng() * (max - min);
 }
 
-/** Pets used to sit frozen at a single fixed offset — equip one and it
- * looked like a decoration bolted to your hip, not a companion. Now it
- * wanders in a lazy ellipse around its owner with a bit of bob and faces
- * its direction of travel, while still being purely cosmetic (no
- * collision, no pathing) since it's only ever rendered relative to the
- * character's own local origin. */
-function PetCompanion({ item }: { item: EquippedItem }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const phase = useMemo(() => namePhase(item.name), [item.name]);
+/** Tiny seeded PRNG (mulberry32, same algorithm as environment.tsx's
+ * scenery scatter) so each pet's wander pattern is deterministic-but-
+ * varied per equip rather than reseeding `Math.random()` mid-render
+ * (impure, flagged by React Compiler — see lib/monsters.ts/monster.tsx
+ * for the same constraint) or drifting differently on every remount. */
+function makeRng(seed: number) {
+  let a = seed || 1;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-  useFrame((state) => {
+/** How close (world units) a pet needs to be to its target monster before
+ * it stops closing the distance and starts actually attacking. */
+const PET_ATTACK_RANGE = 1.0;
+
+/**
+ * Pets used to sit frozen at a single fixed offset — equip one and it
+ * looked like a decoration bolted to your hip, not a companion. Now it
+ * actually wanders: picks a random spot near its owner, walks/flies
+ * there at its own pace, pauses, sometimes hops (ground pets) or banks
+ * into a swoop (flying pets — components/world/item-variants.tsx's
+ * `isFlyingPet`, currently Phönix/Drache), then picks a new spot — *unless*
+ * a monster wanders within its species' `aggroRadius` (lib/pets.ts,
+ * admin-configurable), in which case it breaks off wandering entirely to
+ * chase that monster down and attack it on its own `attackSpeed` cooldown,
+ * same idea as components/world/monster.tsx's own aggro/attack loop just
+ * running on the pet's side. Always purely cosmetic-positioned otherwise
+ * (no collision, no pathing) since it's only ever rendered relative to the
+ * character's own local origin — which is also exactly why the wander
+ * logic needs no owner-position input at all, the parent transform already
+ * moves with the player every frame. Combat targeting is the one place
+ * this *does* need a real position: monster registry entries report
+ * world-space coordinates, so every frame in combat first reads this pet's
+ * own current world position (`getWorldPosition`) and converts the
+ * target's world position into this group's *parent's* local space
+ * (`parent.worldToLocal`) before steering toward it — accounting for
+ * whatever the owner's position/rotation happen to be that frame, exactly
+ * the same way `pos.current`/`g.position` already work for wandering.
+ */
+function PetCompanion({
+  item,
+  monsterRegistryRef,
+  petTypes,
+}: {
+  item: EquippedItem;
+  monsterRegistryRef?: MonsterRegistry;
+  petTypes?: PetTypeConfig[];
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const bodyRef = useRef<THREE.Group>(null);
+  const flying = useMemo(() => isFlyingPet(item.name), [item.name]);
+  const rng = useMemo(() => makeRng(hashSeed(item.name)), [item.name]);
+  const speciesId = useMemo(() => getPetSpeciesId(item.name), [item.name]);
+  const petConfig = useMemo(() => {
+    const fallback = DEFAULT_PET_TYPES.find((p) => p.id === speciesId) ?? DEFAULT_PET_TYPES[DEFAULT_PET_TYPES.length - 1];
+    return (petTypes ?? DEFAULT_PET_TYPES).find((p) => p.id === speciesId) ?? fallback;
+  }, [petTypes, speciesId]);
+
+  const pos = useRef(new THREE.Vector3(0.8, flying ? 1.2 : 0, 0.6));
+  const target = useRef(new THREE.Vector3());
+  const decisionTimer = useRef(0);
+  const paused = useRef(false);
+  const jumpPhase = useRef(0); // 0 = not jumping, otherwise 0→1 arc progress
+  const facing = useRef(0);
+  const flapClock = useRef(0);
+  const combatTarget = useRef<{ isAlive: () => boolean; getPosition: () => THREE.Vector3; takeDamage: (n: number) => number } | null>(
+    null
+  );
+  const attackCooldown = useRef(0);
+  const worldPos = useRef(new THREE.Vector3());
+
+  function pickNewTarget() {
+    const angle = rng() * Math.PI * 2;
+    const radius = flying ? randRange(rng, PET_FLY_RADIUS) : randRange(rng, PET_GROUND_RADIUS);
+    target.current.set(
+      Math.cos(angle) * radius,
+      flying ? randRange(rng, PET_FLY_HEIGHT) : 0,
+      Math.sin(angle) * radius
+    );
+    decisionTimer.current = randRange(rng, DECISION_INTERVAL);
+    paused.current = !flying && rng() < GROUND_PAUSE_CHANCE;
+    if (!flying && !paused.current && rng() < JUMP_CHANCE) jumpPhase.current = 0.0001;
+  }
+
+  useEffect(() => {
+    pickNewTarget();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot init per mount/name-change, pickNewTarget closes over stable refs
+  }, [flying]);
+
+  useFrame((_, delta) => {
     const g = groupRef.current;
     if (!g) return;
-    const t = state.clock.elapsedTime * 0.55 + phase;
-    const x = Math.cos(t) * 1.05;
-    const z = Math.sin(t) * 0.85 + 0.55;
-    g.position.set(x, Math.max(0, Math.sin(t * 4)) * 0.08, z);
-    g.rotation.y = -t + Math.PI / 2;
+
+    // --- Combat: re-validate (or find) a target every frame before
+    // deciding whether to wander or chase this frame.
+    let inCombat = false;
+    if (monsterRegistryRef && petConfig.enabled) {
+      if (combatTarget.current && !combatTarget.current.isAlive()) combatTarget.current = null;
+      g.getWorldPosition(worldPos.current);
+      if (!combatTarget.current) {
+        let nearestDist = petConfig.aggroRadius;
+        for (const m of monsterRegistryRef.current) {
+          if (!m.isAlive()) continue;
+          const dist = worldPos.current.distanceTo(m.getPosition());
+          if (dist <= nearestDist) {
+            nearestDist = dist;
+            combatTarget.current = m;
+          }
+        }
+      }
+      inCombat = combatTarget.current !== null;
+    } else {
+      combatTarget.current = null;
+    }
+
+    if (inCombat && combatTarget.current) {
+      const monsterWorldPos = combatTarget.current.getPosition();
+      const localTarget = g.parent ? g.parent.worldToLocal(monsterWorldPos.clone()) : monsterWorldPos;
+      const toTarget = localTarget.clone().sub(pos.current);
+      const dist = toTarget.length();
+      if (dist > PET_ATTACK_RANGE) {
+        toTarget.normalize().multiplyScalar(Math.min(dist - PET_ATTACK_RANGE, petConfig.moveSpeed * delta));
+        pos.current.add(toTarget);
+        if (Math.abs(toTarget.x) > 0.001 || Math.abs(toTarget.z) > 0.001) {
+          facing.current = Math.atan2(toTarget.x, toTarget.z);
+        }
+      } else {
+        attackCooldown.current -= delta;
+        if (attackCooldown.current <= 0) {
+          attackCooldown.current = petConfig.attackSpeed;
+          combatTarget.current.takeDamage(petConfig.damage);
+        }
+      }
+      paused.current = false;
+    } else {
+      decisionTimer.current -= delta;
+      if (decisionTimer.current <= 0) pickNewTarget();
+
+      const speed = flying ? PET_FLY_SPEED : PET_GROUND_SPEED;
+      if (!paused.current) {
+        const toTarget = target.current.clone().sub(pos.current);
+        const dist = toTarget.length();
+        if (dist > 0.05) {
+          toTarget.normalize().multiplyScalar(Math.min(dist, speed * delta));
+          pos.current.add(toTarget);
+          if (Math.abs(toTarget.x) > 0.001 || Math.abs(toTarget.z) > 0.001) {
+            facing.current = Math.atan2(toTarget.x, toTarget.z);
+          }
+        } else {
+          paused.current = true;
+        }
+      }
+    }
+
+    // Ground hop: a quick symmetric arc, purely cosmetic (doesn't affect
+    // `pos.current.y`, which ground pets always keep at 0 — the bob below
+    // layers on top of that).
+    let hopY = 0;
+    if (jumpPhase.current > 0) {
+      jumpPhase.current += delta / 0.45;
+      if (jumpPhase.current >= 1) jumpPhase.current = 0;
+      else hopY = Math.sin(jumpPhase.current * Math.PI) * 0.22;
+    }
+
+    flapClock.current += delta * (flying ? 9 : 5);
+    const bob = flying
+      ? Math.sin(flapClock.current) * 0.06
+      : paused.current
+        ? Math.sin(flapClock.current * 0.5) * 0.015
+        : Math.abs(Math.sin(flapClock.current)) * 0.05;
+
+    g.position.set(pos.current.x, pos.current.y + hopY + bob, pos.current.z);
+    g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, facing.current, Math.min(1, delta * 6));
+
+    if (bodyRef.current) {
+      if (flying) {
+        // Banking into turns + a slight nose-down cruise tilt — reads as
+        // "flying under its own control", not "floating sprite".
+        const turn = THREE.MathUtils.lerp(g.rotation.y, facing.current, 1) - g.rotation.y;
+        bodyRef.current.rotation.z = THREE.MathUtils.lerp(bodyRef.current.rotation.z, -turn * 4, 0.1);
+        bodyRef.current.rotation.x = -0.12;
+      } else {
+        bodyRef.current.rotation.x = hopY > 0.01 ? -hopY * 0.6 : 0;
+      }
+    }
   });
 
   return (
     <group ref={groupRef}>
-      <PetVariant item={item} />
+      <group ref={bodyRef}>
+        <PetVariant item={item} />
+      </group>
     </group>
   );
+}
+
+function hashSeed(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return h;
 }
 
 /** Bare-legs fallback when no pants are equipped — keeps the silhouette

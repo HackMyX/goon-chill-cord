@@ -8,6 +8,7 @@ import {
   computeStreakReward,
   decideStreak,
   dateKey,
+  normalizeDateKey,
   DEFAULT_STREAK_CONFIG,
   type StreakConfig,
 } from "@/lib/streak";
@@ -129,7 +130,10 @@ export async function getClaimStatus(): Promise<ClaimStatus> {
   }
 
   const streakDays = profile?.streak_days ?? 0;
-  const lastClaimDate = profile?.last_claim_date ?? null;
+  // `last_claim_date` comes back as a full timestamptz string
+  // ("2026-06-21T00:00:00+00:00"), not the bare "YYYY-MM-DD" `today` is —
+  // normalize before any comparison, see normalizeDateKey() for why.
+  const lastClaimDate = normalizeDateKey(profile?.last_claim_date ?? null);
   const now = new Date();
   const today = dateKey(now);
   const canClaim = config.enabled && lastClaimDate !== today;
@@ -200,12 +204,19 @@ export async function claimDailyReward(): Promise<ClaimResult> {
 
   const now = new Date();
   const today = dateKey(now);
+  // Same timestamptz-vs-date-string mismatch as getClaimStatus() above —
+  // `rawLastClaimDate` (whatever shape the column actually returned) stays
+  // around separately because the optimistic-lock update below has to
+  // match it *exactly* as stored, while every date-logic comparison needs
+  // the normalized bare-date form.
+  const rawLastClaimDate = profile.last_claim_date;
+  const lastClaimDate = normalizeDateKey(rawLastClaimDate);
 
-  if (profile.last_claim_date === today) {
+  if (lastClaimDate === today) {
     return { success: false, error: "Du hast deinen Reward heute schon abgeholt." };
   }
 
-  const decision = decideStreak(profile.last_claim_date, profile.streak_days ?? 0, now, config);
+  const decision = decideStreak(lastClaimDate, profile.streak_days ?? 0, now, config);
   const result = computeStreakReward(decision.newStreak, config, now);
   const newCredits = profile.credits + result.totalCredits;
   const newBestStreak = Math.max(profile.best_streak_days ?? 0, decision.newStreak);
@@ -227,9 +238,9 @@ export async function claimDailyReward(): Promise<ClaimResult> {
     })
     .eq("id", user.id);
   updateQuery =
-    profile.last_claim_date === null
+    rawLastClaimDate === null
       ? updateQuery.is("last_claim_date", null)
-      : updateQuery.eq("last_claim_date", profile.last_claim_date);
+      : updateQuery.eq("last_claim_date", rawLastClaimDate);
 
   // The guard above (whichever form it took) means a double-click (two
   // claims firing before the first one's response lands) can't both

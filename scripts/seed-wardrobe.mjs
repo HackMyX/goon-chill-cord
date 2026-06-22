@@ -19,8 +19,8 @@ const supabase = createClient(
 );
 
 const items = [
-  { name: "Lila Mütze", rarity: "selten", type: "hat", price_cr: 300 },
-  { name: "Rosa Mütze", rarity: "normal", type: "hat", price_cr: 200 },
+  { name: "Lila Helm", rarity: "selten", type: "hat", price_cr: 300 },
+  { name: "Rosa Helm", rarity: "normal", type: "hat", price_cr: 200 },
   { name: "Cyan Jacke", rarity: "normal", type: "jacket", price_cr: 200 },
   { name: "Goldene Jacke", rarity: "mythisch", type: "jacket", price_cr: 4000 },
   { name: "Weiße Hose", rarity: "normal", type: "pants", price_cr: 150 },

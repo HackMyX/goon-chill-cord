@@ -5,8 +5,11 @@ import { useEffect, useRef } from "react";
 export interface KeyboardState {
   forward: boolean;
   backward: boolean;
-  left: boolean;
-  right: boolean;
+  /** A/D now strafe sideways relative to the camera's look direction —
+   * turning itself is automatic (Player.tsx eases the character's heading
+   * toward the camera yaw every frame), not a manual A/D action anymore. */
+  strafeLeft: boolean;
+  strafeRight: boolean;
   sprint: boolean;
   jumpPressed: boolean;
 }
@@ -26,10 +29,10 @@ const KEY_MAP: Record<string, keyof Omit<KeyboardState, "jumpPressed">> = {
   ArrowUp: "forward",
   KeyS: "backward",
   ArrowDown: "backward",
-  KeyA: "left",
-  ArrowLeft: "left",
-  KeyD: "right",
-  ArrowRight: "right",
+  KeyA: "strafeLeft",
+  ArrowLeft: "strafeLeft",
+  KeyD: "strafeRight",
+  ArrowRight: "strafeRight",
 };
 
 /** Mutable ref (not state) so useFrame can read pressed keys every render
@@ -38,8 +41,8 @@ export function useKeyboardControls(): KeyboardControls {
   const state = useRef<KeyboardState>({
     forward: false,
     backward: false,
-    left: false,
-    right: false,
+    strafeLeft: false,
+    strafeRight: false,
     sprint: false,
     jumpPressed: false,
   });
@@ -68,8 +71,8 @@ export function useKeyboardControls(): KeyboardControls {
     const onBlur = () => {
       state.current.forward = false;
       state.current.backward = false;
-      state.current.left = false;
-      state.current.right = false;
+      state.current.strafeLeft = false;
+      state.current.strafeRight = false;
       state.current.sprint = false;
       spaceHeld = false;
     };

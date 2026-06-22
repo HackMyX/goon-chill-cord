@@ -12,7 +12,7 @@ export default async function ShopPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days")
+    .select("credits, streak_days, gender")
     .eq("id", user.id)
     .single();
 
@@ -22,6 +22,7 @@ export default async function ShopPage() {
     <ShopShell
       credits={profile?.credits ?? 0}
       streakDays={profile?.streak_days ?? 0}
+      gender={(profile?.gender as "m" | "w") ?? "m"}
       listings={listings}
       resetsAt={resetsAt}
     />

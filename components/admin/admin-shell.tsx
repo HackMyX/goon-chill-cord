@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -10,11 +10,17 @@ import { ItemsTab } from "@/components/admin/items-tab";
 import { AuditTimeline } from "@/components/admin/audit-timeline";
 import { StreakConfigEditor } from "@/components/admin/streak-config-editor";
 import { ShopTab } from "@/components/admin/shop-tab";
+import { MonsterTypeEditor } from "@/components/admin/monster-type-editor";
+import { PetConfigEditor } from "@/components/admin/pet-config-editor";
+import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 import type { StreakConfig } from "@/lib/streak";
 import type { ShopSettings } from "@/lib/shop";
 import type { AdminShopListing } from "@/lib/actions/shop";
+import type { MonsterTypeConfig } from "@/lib/monsters";
+import type { PetTypeConfig } from "@/lib/pets";
+import type { KillStreakConfig } from "@/lib/kill-streak";
 
 export interface AuditLogEntry {
   id: string;
@@ -49,6 +55,12 @@ export interface ItemRow {
   rarity: Rarity;
   type: string;
   price_cr: number;
+  damage: number | null;
+  armor: number;
+  perk_type: "none" | "speed_boost" | "jump_boost" | "hp_regen_boost";
+  perk_magnitude: number;
+  shield_hp: number;
+  shield_regen_cooldown_sec: number;
 }
 
 interface AdminShellProps {
@@ -62,9 +74,12 @@ interface AdminShellProps {
   shopSettings: ShopSettings;
   todayShopListings: AdminShopListing[];
   tomorrowShopListings: AdminShopListing[];
+  monsterTypes: MonsterTypeConfig[];
+  petTypes: PetTypeConfig[];
+  killStreakConfig: KillStreakConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "audit";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "audit";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -72,6 +87,8 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "shop", label: "Shop", icon: Store },
   { id: "users", label: "User-Management", icon: Users },
   { id: "items", label: "Items", icon: Package },
+  { id: "monsters", label: "Monster", icon: Skull },
+  { id: "pets", label: "Pets", icon: PawPrint },
   { id: "audit", label: "Audit-Log", icon: ScrollText },
 ];
 
@@ -86,6 +103,9 @@ export function AdminShell({
   shopSettings,
   todayShopListings,
   tomorrowShopListings,
+  monsterTypes,
+  petTypes,
+  killStreakConfig,
 }: AdminShellProps) {
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
@@ -164,6 +184,33 @@ export function AdminShell({
         )}
 
         {tab === "items" && <ItemsTab items={items} setItems={setItems} />}
+
+        {tab === "monsters" && (
+          <div className="flex flex-col gap-3">
+            <KillStreakConfigEditor config={killStreakConfig} />
+            <p className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] px-4 py-3 text-xs text-zinc-400">
+              Diese 4 Monster-Varianten sind fest — hier lassen sich alle ihre Werte (Leben, Schaden,
+              Tempo, Reichweiten, Belohnung, Spawn-Häufigkeit, Farbe) bearbeiten oder eine Variante
+              komplett deaktivieren. Neue Varianten hinzufügen ist bewusst nicht Teil dieser Ansicht.
+            </p>
+            {monsterTypes.map((type) => (
+              <MonsterTypeEditor key={type.id} type={type} />
+            ))}
+          </div>
+        )}
+
+        {tab === "pets" && (
+          <div className="flex flex-col gap-3">
+            <p className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] px-4 py-3 text-xs text-zinc-400">
+              Diese Pet-Spezies sind fest — jede equipte Pet-Item wird anhand ihres Namens einer
+              dieser Spezies zugeordnet (Hund/Katze/Phönix/Drache/Geist, alles andere fällt unter
+              „Sonstiges Haustier“). Pets greifen Monster in ihrem Aggro-Radius eigenständig an.
+            </p>
+            {petTypes.map((type) => (
+              <PetConfigEditor key={type.id} type={type} />
+            ))}
+          </div>
+        )}
 
         {tab === "audit" && (
           <AuditTimeline

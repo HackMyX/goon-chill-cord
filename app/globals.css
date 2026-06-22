@@ -410,3 +410,16 @@
   mask-composite: exclude;
   pointer-events: none;
 }
+
+/* 3D World attack feedback — a hit number drifts up and fades out over the
+   crosshair, see components/world/world-shell.tsx. */
+@keyframes float-up {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px);
+  }
+}

@@ -278,4 +278,23 @@ writeWav(
   )
 );
 
+// Melee impact: a short sub-bass thump (reusing the ultra-win kick-drum
+// shape, just much shorter/punchier) layered with a brief high "crack" —
+// the thump alone reads as a dull bump, the crack on top of it is what
+// makes it read as a hit landing rather than a soft thud.
+writeWav(
+  "hit.wav",
+  fadeTail(
+    finalize(
+      mixLayers(
+        [
+          thump(90, { peak: 0.65, startFreq: 220, endFreq: 60 }),
+          note(950, 35, { decay: 0.035, peak: 0.32, startMs: 0, harmonics: [[1, 1], [1.8, 0.4]] }),
+        ],
+        110
+      )
+    )
+  )
+);
+
 console.log("Done.");

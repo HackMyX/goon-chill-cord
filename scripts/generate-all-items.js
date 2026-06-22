@@ -4,8 +4,11 @@
 //
 // Usage: node scripts/generate-all-items.js
 //
-// Re-running this script will insert a second full set (no dedupe) — only
-// run it once, or clear the relevant rows first if you want a clean re-seed.
+// Idempotent: fetches existing (type, name) pairs first and skips any item
+// that's already in the catalogue, so re-running this to add new vocabulary
+// later never reintroduces duplicates (see scripts/merge-duplicate-items.mjs
+// for the one-time cleanup of the dupes an earlier non-idempotent run left
+// behind).
 
 const { createClient } = require("@supabase/supabase-js");
 const fs = require("fs");
@@ -58,18 +61,21 @@ const PREFIX_TIERS = [
 
 const PRICE_BY_RARITY = { normal: 150, selten: 600, mythisch: 3000, ultra: 20000 };
 
-// Color-combinatorial wardrobe types (feminine noun forms).
+// Color-combinatorial wardrobe types. Noun gender drives which adjective
+// form is grammatically correct ("der Helm" is masculine -> "-er" ending,
+// e.g. "Roter Helm", unlike the rest of this list which are feminine/plural
+// nouns taking the "-e" ending, e.g. "Rote Jacke").
 const COLOR_TYPES = [
-  { dbType: "hat", word: "Mütze" },
-  { dbType: "jacket", word: "Jacke" },
-  { dbType: "pants", word: "Hose" },
-  { dbType: "shoes", word: "Schuhe" },
-  { dbType: "trail", word: "Spur" },
-  { dbType: "shield_cosmetic", word: "Schild" },
-  { dbType: "aura", word: "Aura" },
-  { dbType: "face", word: "Maske" },
-  { dbType: "hair_m", word: "Männerhaare" },
-  { dbType: "hair_f", word: "Frauenhaare" },
+  { dbType: "hat", word: "Helm", gender: "m" },
+  { dbType: "jacket", word: "Jacke", gender: "f" },
+  { dbType: "pants", word: "Hose", gender: "f" },
+  { dbType: "shoes", word: "Schuhe", gender: "f" },
+  { dbType: "trail", word: "Spur", gender: "f" },
+  { dbType: "shield_cosmetic", word: "Schild", gender: "f" },
+  { dbType: "aura", word: "Aura", gender: "f" },
+  { dbType: "face", word: "Maske", gender: "f" },
+  { dbType: "hair_m", word: "Männerhaare", gender: "f" },
+  { dbType: "hair_f", word: "Frauenhaare", gender: "f" },
 ];
 
 // Pets use a masculine noun (Hund) and a feminine noun (Katze).
@@ -81,7 +87,7 @@ const PET_NOUNS = [
 // Ultra is rare by design — curated unique names per type instead of the
 // full color matrix.
 const ULTRA_NAMES = {
-  hat: ["Kronen-Mütze", "Voidkappe", "Sternenhelm"],
+  hat: ["Kronen-Helm", "Voidhelm", "Sternenhelm"],
   jacket: ["Drachenrüstung", "Phönixmantel", "Voidjacke"],
   pants: ["Voidhose", "Sternenstoff-Hose"],
   shoes: ["Lichtschritt-Stiefel", "Voidtreter"],
@@ -116,7 +122,7 @@ function adjective(color, gender) {
 for (const type of COLOR_TYPES) {
   for (const tier of PREFIX_TIERS) {
     for (const color of COLORS) {
-      const name = [tier.prefix, adjective(color, "f"), type.word]
+      const name = [tier.prefix, adjective(color, type.gender), type.word]
         .filter(Boolean)
         .join(" ");
       items.push({
@@ -167,11 +173,22 @@ console.log(`Generated ${items.length} items.`);
 // ---------------------------------------------------------------------------
 
 async function main() {
+  const { data: existingRows, error: fetchError } = await supabase.from("items").select("type, name");
+  if (fetchError) {
+    console.error("Failed to fetch existing items:", fetchError.message);
+    process.exit(1);
+  }
+
+  const existingKeys = new Set(existingRows.map((row) => `${row.type}::${row.name}`));
+  const toInsert = items.filter((item) => !existingKeys.has(`${item.type}::${item.name}`));
+  const skipped = items.length - toInsert.length;
+  console.log(`Skipping ${skipped} items that already exist; inserting ${toInsert.length} new items.`);
+
   const BATCH_SIZE = 500;
   let inserted = 0;
 
-  for (let i = 0; i < items.length; i += BATCH_SIZE) {
-    const batch = items.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+    const batch = toInsert.slice(i, i + BATCH_SIZE);
     const { data, error } = await supabase.from("items").insert(batch).select("id");
     if (error) {
       console.error(`Batch ${i / BATCH_SIZE + 1} failed:`, error.message);
@@ -181,7 +198,7 @@ async function main() {
     console.log(`Inserted batch ${i / BATCH_SIZE + 1}: ${data.length} rows (total ${inserted})`);
   }
 
-  console.log(`Done. Inserted ${inserted} items total.`);
+  console.log(`Done. Inserted ${inserted} new items total.`);
 }
 
 main();

@@ -88,6 +88,30 @@ export function dateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * `profiles.last_claim_date` is a `timestamp with time zone` column, so
+ * Supabase/PostgREST returns it as a full ISO string like
+ * `"2026-06-21T00:00:00+00:00"`, never as the bare `"YYYY-MM-DD"` that
+ * `dateKey()` produces. Every comparison in lib/actions/streak.ts
+ * (`lastClaimDate !== today`, `profile.last_claim_date === today`) was
+ * comparing those two different formats directly — which never matches,
+ * meaning `canClaim` was permanently stuck `true` and the same-day guard
+ * never once blocked a claim. That's the entire "I can collect the daily
+ * bonus again every time I reload" bug: every claim looked like the
+ * first claim of a brand new day. It also fed the malformed string into
+ * `decideStreak()` (`` `${lastClaimDate}T00:00:00.000Z` `` got a *second*
+ * time-of-day suffix appended), producing an Invalid Date, `daysSince`
+ * of `NaN`, and therefore a streak that silently reset to 1 on every
+ * single claim instead of growing — explaining why the streak counter
+ * never went up either. Normalize through this helper *every* time the
+ * raw DB value is used for a date comparison or handed to decideStreak();
+ * it's a no-op for an already-bare date string, so it's safe even if the
+ * column is ever migrated to a real `date` type later. */
+export function normalizeDateKey(value: string | null): string | null {
+  if (!value) return null;
+  return value.slice(0, 10);
+}
+
 export interface StreakDecision {
   /** Whether this claim continues an existing streak (vs. resetting to 1
    * or freezing, depending on `resetOnMiss`). */

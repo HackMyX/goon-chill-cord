@@ -4,6 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getStreakConfig } from "@/lib/actions/streak";
 import { getShopSettings, getAdminShopListings, getTodayShop } from "@/lib/actions/shop";
+import { getMonsterTypes } from "@/lib/actions/monsters";
+import { getPetConfigs } from "@/lib/actions/pets";
+import { getKillStreakConfig } from "@/lib/actions/kill-streak";
 import {
   AdminShell,
   type AuditLogEntry,
@@ -46,6 +49,35 @@ export default async function AdminPage() {
     return (withoutTypes.data ?? []).map((row) => ({ ...row, item_types: null }));
   }
 
+  // `damage`/stat columns may not exist yet (one-time SQL not run) —
+  // degrade to the column-less select rather than losing the whole Items
+  // tab, same pattern as fetchTierRows() above.
+  async function fetchItemRows() {
+    const withStats = await admin
+      .from("items")
+      .select(
+        "id, name, rarity, type, price_cr, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec"
+      )
+      .order("name", { ascending: true })
+      .limit(1000);
+    if (!withStats.error) return withStats.data;
+
+    const withoutStats = await admin
+      .from("items")
+      .select("id, name, rarity, type, price_cr")
+      .order("name", { ascending: true })
+      .limit(1000);
+    return (withoutStats.data ?? []).map((row) => ({
+      ...row,
+      damage: null,
+      armor: 0,
+      perk_type: "none" as const,
+      perk_magnitude: 0,
+      shield_hp: 0,
+      shield_regen_cooldown_sec: 0,
+    }));
+  }
+
   // getTodayShop() is what actually triggers that day's auto-generation
   // (lib/actions/shop.ts's ensureShopGenerated) — calling it here means
   // visiting /admin first (before any player visits /shop) still rotates
@@ -56,11 +88,14 @@ export default async function AdminPage() {
     { data: auditRows },
     tierRows,
     { data: profileRows },
-    { data: itemRows },
+    itemRows,
     streakConfig,
     shopSettings,
     todayShopListings,
     tomorrowShopListings,
+    monsterTypes,
+    petTypes,
+    killStreakConfig,
   ] = await Promise.all([
     admin
       .from("audit_logs")
@@ -73,15 +108,14 @@ export default async function AdminPage() {
       .select("id, username, credits, role, cases_opened")
       .order("credits", { ascending: false })
       .limit(200),
-    admin
-      .from("items")
-      .select("id, name, rarity, type, price_cr")
-      .order("name", { ascending: true })
-      .limit(1000),
+    fetchItemRows(),
     getStreakConfig(),
     getShopSettings(),
     getAdminShopListings(0),
     getAdminShopListings(1),
+    getMonsterTypes(),
+    getPetConfigs(),
+    getKillStreakConfig(),
   ]);
 
   return (
@@ -91,11 +125,14 @@ export default async function AdminPage() {
       auditLog={(auditRows ?? []) as unknown as AuditLogEntry[]}
       caseTiers={(tierRows ?? []) as unknown as CaseTierRow[]}
       profiles={(profileRows ?? []) as unknown as ProfileRow[]}
-      items={(itemRows ?? []) as unknown as ItemRow[]}
+      items={((itemRows ?? []) as unknown[]) as ItemRow[]}
       streakConfig={streakConfig}
       shopSettings={shopSettings}
       todayShopListings={todayShopListings}
       tomorrowShopListings={tomorrowShopListings}
+      monsterTypes={monsterTypes}
+      petTypes={petTypes}
+      killStreakConfig={killStreakConfig}
     />
   );
 }

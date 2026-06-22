@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Gavel, Plus, Clock, Trophy, Ban } from "lucide-react";
+import { ArrowLeft, Gavel, Plus, Clock, Trophy, Ban, Zap } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
-import { createAuction, placeBid, cancelAuction } from "@/lib/actions/auctions";
+import { createAuction, placeBid, buyAuctionNow, cancelAuction } from "@/lib/actions/auctions";
 import { computeListingFee, MAX_ACTIVE_AUCTIONS_PER_USER } from "@/lib/auctions";
 import type { Rarity } from "@/lib/cases";
 
@@ -30,6 +30,9 @@ export interface AuctionListEntry {
   currentBid: number;
   currentBidderName: string | null;
   listingFee: number;
+  /** `null` = no "Sofort kaufen" option, this auction can only be won by
+   * outbidding everyone until it ends. */
+  buyoutPrice: number | null;
   status: "active" | "sold" | "expired" | "cancelled";
   endsAt: string;
   createdAt: string;
@@ -78,6 +81,8 @@ function CreateAuctionForm({
   const [selected, setSelected] = useState<OwnedItem | null>(null);
   const [startingBid, setStartingBid] = useState(500);
   const [durationHours, setDurationHours] = useState(24);
+  const [buyoutEnabled, setBuyoutEnabled] = useState(false);
+  const [buyoutPrice, setBuyoutPrice] = useState(1500);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
@@ -86,10 +91,19 @@ function CreateAuctionForm({
 
   async function handleSubmit() {
     if (!selected) return;
+    if (buyoutEnabled && buyoutPrice <= startingBid) {
+      setError("Sofortkauf-Preis muss höher als das Startgebot sein.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     sound.click();
-    const res = await createAuction({ inventoryId: selected.inventoryId, startingBid, durationHours });
+    const res = await createAuction({
+      inventoryId: selected.inventoryId,
+      startingBid,
+      durationHours,
+      buyoutPrice: buyoutEnabled ? buyoutPrice : null,
+    });
     setSubmitting(false);
     if (res.success) {
       sound.win();
@@ -154,6 +168,31 @@ function CreateAuctionForm({
               />
             </label>
           </div>
+
+          <label className="mt-4 flex items-center gap-2 text-xs font-semibold text-zinc-300">
+            <input
+              type="checkbox"
+              checked={buyoutEnabled}
+              onChange={(e) => setBuyoutEnabled(e.target.checked)}
+              className="h-3.5 w-3.5 accent-emerald-500"
+            />
+            <Zap className="h-3.5 w-3.5 text-emerald-400" />
+            Sofortkauf-Preis festlegen (optional)
+          </label>
+          {buyoutEnabled && (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="number"
+                min={startingBid + 1}
+                value={buyoutPrice}
+                onChange={(e) => setBuyoutPrice(Math.max(0, Number(e.target.value)))}
+                className="w-32 rounded-lg border border-emerald-400/30 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-emerald-400/60"
+              />
+              <span className="text-xs text-zinc-500">
+                CR — jeder andere Spieler kann für genau diesen Preis sofort kaufen, ohne zu bieten.
+              </span>
+            </div>
+          )}
 
           <p className="mt-3 text-xs text-amber-300">
             Einstellgebühr: <span className="font-bold">{fmt(fee)} CR</span> (5%, min. 50 CR) — wird sofort
@@ -233,6 +272,28 @@ function AuctionRow({
     else sound.error();
   }
 
+  async function handleBuyNow() {
+    if (auction.buyoutPrice === null) return;
+    sound.click();
+    const ok = await confirm({
+      title: "Sofort kaufen",
+      message: `Du kaufst dieses Item sofort für ${fmt(auction.buyoutPrice)} CR, ohne weiter zu bieten. Das kann nicht rückgängig gemacht werden.`,
+      confirmLabel: "Sofort kaufen",
+    });
+    if (!ok) return;
+    setSubmitting(true);
+    setError(null);
+    const res = await buyAuctionNow(auction.id);
+    setSubmitting(false);
+    if (res.success) {
+      sound.win();
+      onChanged();
+    } else {
+      sound.error();
+      setError(res.error ?? "Fehler.");
+    }
+  }
+
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-[#0f0e18] p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
@@ -251,6 +312,13 @@ function AuctionRow({
               </>
             )}
             {!auction.currentBidderName && isActive && " · Kein Gebot"}
+            {auction.buyoutPrice !== null && isActive && (
+              <>
+                {" "}
+                · <Zap className="inline h-3 w-3 text-emerald-400" />{" "}
+                <span className="text-emerald-400">Sofortkauf: {fmt(auction.buyoutPrice)} CR</span>
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -292,6 +360,18 @@ function AuctionRow({
             >
               Bieten
             </button>
+            {auction.buyoutPrice !== null && auction.currentBid < auction.buyoutPrice && (
+              <button
+                onMouseEnter={sound.hover}
+                onClick={handleBuyNow}
+                disabled={submitting || credits < auction.buyoutPrice}
+                title={credits < auction.buyoutPrice ? "Nicht genug Credits" : undefined}
+                className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-60"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Sofort kaufen
+              </button>
+            )}
           </div>
         )}
         {isActive && isSeller && !auction.currentBidderName && (

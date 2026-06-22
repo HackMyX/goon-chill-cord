@@ -26,12 +26,16 @@ export default async function AuctionsPage() {
 
   const admin = createAdminClient();
 
-  const [{ data: auctionRows }, { data: myInventory }] = await Promise.all([
+  const auctionColumnsBase =
+    "id, seller_id, inventory_id, current_bid, current_bidder_id, listing_fee, status, ends_at, created_at, item:items(id, name, rarity, type), seller:profiles!auctions_seller_id_fkey(username), bidder:profiles!auctions_current_bidder_id_fkey(username)";
+
+  const [auctionsResult, { data: myInventory }] = await Promise.all([
+    // `buyout_price` may not exist yet if that migration hasn't run — try
+    // with it first and fall back to the base columns rather than
+    // breaking the whole auction house over one missing column.
     admin
       .from("auctions")
-      .select(
-        "id, seller_id, inventory_id, current_bid, current_bidder_id, listing_fee, status, ends_at, created_at, item:items(id, name, rarity, type), seller:profiles!auctions_seller_id_fkey(username), bidder:profiles!auctions_current_bidder_id_fkey(username)"
-      )
+      .select(`${auctionColumnsBase}, buyout_price`)
       .order("created_at", { ascending: false })
       .limit(50),
     admin
@@ -39,6 +43,15 @@ export default async function AuctionsPage() {
       .select("id, equipped, item:items(id, name, rarity, type)")
       .eq("user_id", user.id),
   ]);
+  let auctionRows = auctionsResult.data;
+  if (auctionsResult.error) {
+    const retry = await admin
+      .from("auctions")
+      .select(auctionColumnsBase)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    auctionRows = (retry.data ?? []).map((a) => ({ ...a, buyout_price: null }));
+  }
 
   // Items already in an active auction can't be listed again — filter
   // them out of the "Item inserieren" picker rather than letting the
@@ -64,6 +77,7 @@ export default async function AuctionsPage() {
         currentBid: a.current_bid,
         currentBidderName: bidder?.username ?? null,
         listingFee: a.listing_fee,
+        buyoutPrice: a.buyout_price ?? null,
         status: a.status,
         endsAt: a.ends_at,
         createdAt: a.created_at,

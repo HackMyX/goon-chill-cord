@@ -186,6 +186,8 @@ export interface ShopListingEntry {
   itemName: string;
   itemRarity: Rarity;
   itemType: string;
+  /** Weapon power (lib/combat.ts) — `null` for every non-weapon listing. */
+  itemDamage: number | null;
   priceCr: number;
   purchaseLimit: number;
   featured: boolean;
@@ -205,11 +207,27 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
   } = await supabase.auth.getUser();
 
   const admin = createAdminClient();
-  const { data: listings } = await admin
+  // `damage` may not exist yet if that migration hasn't run — try with it
+  // first (needed so weapon listings show their power, see lib/combat.ts)
+  // and fall back to the columns that were always there.
+  const withDamage = await admin
     .from("shop_listings")
-    .select("id, item_id, price_cr, purchase_limit, featured, source, item:items(id, name, rarity, type)")
+    .select("id, item_id, price_cr, purchase_limit, featured, source, item:items(id, name, rarity, type, damage)")
     .eq("shop_date", today)
     .order("featured", { ascending: false });
+  let listings: { id: string; item_id: string; price_cr: number; purchase_limit: number; featured: boolean; source: string; item: unknown }[] | null =
+    withDamage.data;
+  if (withDamage.error) {
+    const retry = await admin
+      .from("shop_listings")
+      .select("id, item_id, price_cr, purchase_limit, featured, source, item:items(id, name, rarity, type)")
+      .eq("shop_date", today)
+      .order("featured", { ascending: false });
+    listings = (retry.data ?? []).map((row) => ({
+      ...row,
+      item: row.item ? { ...row.item, damage: null } : null,
+    }));
+  }
 
   let purchaseCounts = new Map<string, number>();
   if (user && listings && listings.length > 0) {
@@ -232,13 +250,20 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
     listings: (listings ?? [])
       .filter((l) => l.item)
       .map((l) => {
-        const item = l.item as unknown as { id: string; name: string; rarity: Rarity; type: string };
+        const item = l.item as unknown as {
+          id: string;
+          name: string;
+          rarity: Rarity;
+          type: string;
+          damage: number | null;
+        };
         return {
           id: l.id,
           itemId: item.id,
           itemName: item.name,
           itemRarity: item.rarity,
           itemType: item.type,
+          itemDamage: item.damage ?? null,
           priceCr: l.price_cr,
           purchaseLimit: l.purchase_limit,
           featured: l.featured,
@@ -364,22 +389,46 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
   const dateKey = shopDateKey(date);
 
   const admin = createAdminClient();
-  const { data } = await admin
+  // `damage` may not exist yet if that migration hasn't run — same
+  // try/fallback as getTodayShop() above.
+  const withDamage = await admin
     .from("shop_listings")
-    .select("id, item_id, price_cr, purchase_limit, featured, source, shop_date, item:items(id, name, rarity, type)")
+    .select(
+      "id, item_id, price_cr, purchase_limit, featured, source, shop_date, item:items(id, name, rarity, type, damage)"
+    )
     .eq("shop_date", dateKey)
     .order("featured", { ascending: false });
+  let data: { id: string; item_id: string; price_cr: number; purchase_limit: number; featured: boolean; source: string; shop_date: string; item: unknown }[] | null =
+    withDamage.data;
+  if (withDamage.error) {
+    const retry = await admin
+      .from("shop_listings")
+      .select("id, item_id, price_cr, purchase_limit, featured, source, shop_date, item:items(id, name, rarity, type)")
+      .eq("shop_date", dateKey)
+      .order("featured", { ascending: false });
+    data = (retry.data ?? []).map((row) => ({
+      ...row,
+      item: row.item ? { ...row.item, damage: null } : null,
+    }));
+  }
 
   return (data ?? [])
     .filter((l) => l.item)
     .map((l) => {
-      const item = l.item as unknown as { id: string; name: string; rarity: Rarity; type: string };
+      const item = l.item as unknown as {
+        id: string;
+        name: string;
+        rarity: Rarity;
+        type: string;
+        damage: number | null;
+      };
       return {
         id: l.id,
         itemId: item.id,
         itemName: item.name,
         itemRarity: item.rarity,
         itemType: item.type,
+        itemDamage: item.damage ?? null,
         priceCr: l.price_cr,
         purchaseLimit: l.purchase_limit,
         featured: l.featured,

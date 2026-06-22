@@ -7,7 +7,15 @@ import { RARITY_ORDER, RARITY_LABELS, RARITY_STYLES, getTypeLabel, type Rarity }
 import { hasItemIcon, KNOWN_ICON_TYPES } from "@/lib/item-icons";
 import { ItemRenderer } from "@/components/items/item-renderer";
 import { useSoundManager } from "@/lib/sound-manager";
+import { isWeaponType, isArmorType, isPerkType, isShieldType, SUGGESTED_DAMAGE_BY_RARITY, type PerkType } from "@/lib/combat";
 import type { ItemRow } from "@/components/admin/admin-shell";
+
+const PERK_TYPE_LABELS: Record<PerkType, string> = {
+  none: "Kein Perk",
+  speed_boost: "Speed Boost",
+  jump_boost: "Jump Boost",
+  hp_regen_boost: "HP-Regen Boost",
+};
 
 interface ItemRowEditorProps {
   item: ItemRow;
@@ -19,6 +27,12 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
   const [rarity, setRarity] = useState<Rarity>(item.rarity);
   const [type, setType] = useState(item.type);
   const [priceCr, setPriceCr] = useState(item.price_cr);
+  const [damage, setDamage] = useState(item.damage ?? 0);
+  const [armor, setArmor] = useState(item.armor ?? 0);
+  const [perkType, setPerkType] = useState<PerkType>(item.perk_type ?? "none");
+  const [perkMagnitude, setPerkMagnitude] = useState(item.perk_magnitude ?? 0);
+  const [shieldHp, setShieldHp] = useState(item.shield_hp ?? 0);
+  const [shieldCooldown, setShieldCooldown] = useState(item.shield_regen_cooldown_sec ?? 0);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
@@ -27,7 +41,19 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
   async function handleSave() {
     setSaving(true);
     setStatus("idle");
-    const res = await upsertItem({ id: item.id, name, rarity, type, price_cr: priceCr });
+    const res = await upsertItem({
+      id: item.id,
+      name,
+      rarity,
+      type,
+      price_cr: priceCr,
+      damage: isWeaponType(type) ? damage : null,
+      armor: isArmorType(type) ? armor : 0,
+      perk_type: isPerkType(type) ? perkType : "none",
+      perk_magnitude: isPerkType(type) ? perkMagnitude : 0,
+      shield_hp: isShieldType(type) ? shieldHp : 0,
+      shield_regen_cooldown_sec: isShieldType(type) ? shieldCooldown : 0,
+    });
     setSaving(false);
     setStatus(res.success ? "saved" : "error");
   }
@@ -88,8 +114,21 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
           type="number"
           value={priceCr}
           onChange={(e) => setPriceCr(Number(e.target.value) || 0)}
+          title="Preis (CR)"
           className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
         />
+
+        {isWeaponType(type) && (
+          <input
+            type="number"
+            min={0}
+            value={damage}
+            onChange={(e) => setDamage(Math.max(0, Number(e.target.value) || 0))}
+            title="Schaden (DMG)"
+            placeholder={`⚔ DMG (Vorschlag ${SUGGESTED_DAMAGE_BY_RARITY[rarity]})`}
+            className="w-36 rounded-lg border border-emerald-400/30 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/60"
+          />
+        )}
 
         <button
           onMouseEnter={sound.hover}
@@ -110,6 +149,73 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
         {status === "saved" && <span className="text-sm text-emerald-400">✓</span>}
         {status === "error" && <span className="text-sm text-red-400">Fehler</span>}
       </div>
+
+      {(isArmorType(type) || isPerkType(type) || isShieldType(type)) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
+          {isArmorType(type) && (
+            <input
+              type="number"
+              min={0}
+              value={armor}
+              onChange={(e) => setArmor(Math.max(0, Number(e.target.value) || 0))}
+              title="Rüstung (Schadensreduktion)"
+              placeholder="🛡 Rüstung"
+              className="w-32 rounded-lg border border-blue-400/30 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-blue-400/60"
+            />
+          )}
+          {isPerkType(type) && (
+            <>
+              <select
+                value={perkType}
+                onMouseEnter={sound.hover}
+                onChange={(e) => setPerkType(e.target.value as PerkType)}
+                className="rounded-lg border border-amber-400/30 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60"
+              >
+                {Object.entries(PERK_TYPE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              {perkType !== "none" && (
+                <input
+                  type="number"
+                  min={0}
+                  step={0.05}
+                  value={perkMagnitude}
+                  onChange={(e) => setPerkMagnitude(Math.max(0, Number(e.target.value) || 0))}
+                  title="Perk-Stärke (z.B. 0.15 = +15%)"
+                  placeholder="Stärke (z.B. 0.15)"
+                  className="w-36 rounded-lg border border-amber-400/30 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-amber-400/60"
+                />
+              )}
+            </>
+          )}
+          {isShieldType(type) && (
+            <>
+              <input
+                type="number"
+                min={0}
+                value={shieldHp}
+                onChange={(e) => setShieldHp(Math.max(0, Number(e.target.value) || 0))}
+                title="Schild-HP (0 = rein kosmetisch)"
+                placeholder="🔵 Schild-HP"
+                className="w-32 rounded-lg border border-cyan-400/30 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-400/60"
+              />
+              <input
+                type="number"
+                min={0}
+                value={shieldCooldown}
+                onChange={(e) => setShieldCooldown(Math.max(0, Number(e.target.value) || 0))}
+                title="Schild-Respawn-Cooldown (Sekunden)"
+                placeholder="⏱ Cooldown (s)"
+                className="w-32 rounded-lg border border-cyan-400/30 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-400/60"
+              />
+            </>
+          )}
+        </div>
+      )}
+
       {!hasItemIcon(type) && (
         <p className="mt-1.5 text-[11px] text-amber-400">
           Unbekannter Typ — zeigt den schwebenden Platzhalter statt eines festen Icons.

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   computeListingFee,
+  isValidBuyoutPrice,
   MIN_DURATION_HOURS,
   MAX_DURATION_HOURS,
   MIN_BID_INCREMENT,
@@ -25,6 +26,9 @@ export interface AuctionEntry {
   currentBid: number;
   currentBidderName: string | null;
   listingFee: number;
+  /** `null` = no buyout, this auction can only be won by outlasting the
+   * bidding. See buyAuctionNow() and placeBid()'s auto-buyout path. */
+  buyoutPrice: number | null;
   status: "active" | "sold" | "expired" | "cancelled";
   endsAt: string;
   createdAt: string;
@@ -155,6 +159,10 @@ export async function createAuction(input: {
   inventoryId: string;
   startingBid: number;
   durationHours: number;
+  /** Optional fixed "Sofortkauf" price — any other player can instantly
+   * buy the item for exactly this amount instead of waiting out the
+   * auction. `undefined`/`null` disables it for this listing. */
+  buyoutPrice?: number | null;
 }): Promise<AuctionActionResult> {
   const supabase = await createClient();
   const {
@@ -164,6 +172,10 @@ export async function createAuction(input: {
 
   if (!Number.isFinite(input.startingBid) || input.startingBid < 1) {
     return { success: false, error: "Ungültiges Startgebot." };
+  }
+  const buyoutPrice = input.buyoutPrice ?? null;
+  if (!isValidBuyoutPrice(buyoutPrice, input.startingBid)) {
+    return { success: false, error: "Der Sofortkauf-Preis muss höher als das Startgebot sein." };
   }
   const durationHours = Math.min(
     MAX_DURATION_HOURS,
@@ -224,13 +236,147 @@ export async function createAuction(input: {
     listing_fee: fee,
     status: "active",
     ends_at: new Date(Date.now() + durationHours * 3_600_000).toISOString(),
+    // Only included when actually set — if `buyout_price` doesn't exist
+    // yet (migration not run) and nobody asked for a buyout, omitting the
+    // key entirely means every *other* listing keeps working. Only a
+    // listing that explicitly requests a buyout would surface the
+    // column-missing error, which is the correct behavior: silently
+    // dropping a price the seller explicitly set would be worse than
+    // telling them it didn't apply.
+    ...(buyoutPrice !== null ? { buyout_price: Math.floor(buyoutPrice) } : {}),
   });
 
   if (error) {
     logServerError("Auctions", "createAuction insert failed", error.message);
     // Roll back the fee charge since the listing itself never happened.
     await admin.from("profiles").update({ credits: profile.credits }).eq("id", user.id);
-    return { success: false, error: "Auktion konnte nicht erstellt werden." };
+    return {
+      success: false,
+      error:
+        buyoutPrice !== null
+          ? "Auktion konnte nicht erstellt werden — ist die Sofortkauf-Migration eingespielt?"
+          : "Auktion konnte nicht erstellt werden.",
+    };
+  }
+
+  revalidatePath("/auctions");
+  revalidatePath("/garderobe");
+  return { success: true };
+}
+
+/**
+ * Immediately resolves an auction at a fixed `price` — shared by
+ * buyAuctionNow() (explicit "Sofort kaufen" click) and placeBid()'s
+ * auto-buyout path (a bid that reaches the buyout price). Unlike a normal
+ * bid, this is a real, *immediate* transfer (item + credits move right
+ * now), not a deferred one settled at sweep time — that's the whole point
+ * of paying the buyout instead of waiting the auction out.
+ *
+ * The status flip to "sold" is the atomic claim: it only succeeds while
+ * the row is still `status = 'active'`, so two players hitting buyout at
+ * the same instant can't both win it — the loser's update affects zero
+ * rows and gets a clean "not available anymore" instead of double-selling
+ * the item or double-charging two buyers.
+ */
+async function finalizeBuyout(
+  admin: ReturnType<typeof createAdminClient>,
+  auction: {
+    id: string;
+    seller_id: string;
+    inventory_id: string;
+    current_bid: number;
+    current_bidder_id: string | null;
+    item: unknown;
+  },
+  buyerId: string,
+  price: number
+): Promise<AuctionActionResult> {
+  // Remember the pre-claim state so a failed transfer below can put the
+  // auction back exactly how it was, instead of leaving it stuck "sold"
+  // with nothing actually transferred.
+  const previousBid = auction.current_bid;
+  const previousBidderId = auction.current_bidder_id;
+
+  const { data: claimedRows, error: claimError } = await admin
+    .from("auctions")
+    .update({ status: "sold", current_bid: price, current_bidder_id: buyerId, resolved_at: new Date().toISOString() })
+    .eq("id", auction.id)
+    .eq("status", "active")
+    .select("id");
+
+  if (claimError || !claimedRows || claimedRows.length === 0) {
+    if (claimError) logServerError("Auctions", "finalizeBuyout claim failed", claimError.message);
+    return { success: false, error: "Diese Auktion ist nicht mehr verfügbar." };
+  }
+
+  async function unclaim() {
+    await admin
+      .from("auctions")
+      .update({ status: "active", current_bid: previousBid, current_bidder_id: previousBidderId, resolved_at: null })
+      .eq("id", auction.id);
+  }
+
+  const [{ data: buyerProfile }, { data: sellerProfile }] = await Promise.all([
+    admin.from("profiles").select("credits, username").eq("id", buyerId).single(),
+    admin.from("profiles").select("credits").eq("id", auction.seller_id).single(),
+  ]);
+  if (!buyerProfile || !sellerProfile) {
+    // Extremely unlikely (profiles always exist for a logged-in/seeded
+    // user), but if it happens, unclaim rather than leave the auction
+    // stuck "sold" with nothing actually transferred.
+    await unclaim();
+    return { success: false, error: "Profile konnten nicht geladen werden." };
+  }
+
+  const { error: transferError } = await admin
+    .from("inventory")
+    .update({ user_id: buyerId, equipped: false })
+    .eq("id", auction.inventory_id);
+  if (transferError) {
+    logServerError("Auctions", "finalizeBuyout item transfer failed", transferError.message);
+    await unclaim();
+    return { success: false, error: "Item-Transfer fehlgeschlagen — bitte erneut versuchen." };
+  }
+
+  await admin.from("profiles").update({ credits: buyerProfile.credits - price }).eq("id", buyerId);
+  await admin.from("profiles").update({ credits: sellerProfile.credits + price }).eq("id", auction.seller_id);
+
+  const itemName = (auction.item as unknown as { name: string } | null)?.name ?? "ein Item";
+
+  try {
+    await admin.from("audit_logs").insert({
+      user_id: buyerId,
+      action: "auction_buyout",
+      payload: { auctionId: auction.id, sellerId: auction.seller_id, buyerId, price },
+    });
+  } catch {
+    // best-effort
+  }
+
+  await notifyUser({
+    userId: auction.seller_id,
+    type: "auction_sold",
+    title: "Auktion sofort verkauft!",
+    message: `${buyerProfile.username ?? "Ein Spieler"} hat ${itemName} für ${price.toLocaleString("de-DE")} CR sofort gekauft.`,
+    link: "/auctions",
+  });
+  await notifyUser({
+    userId: buyerId,
+    type: "auction_won",
+    title: "Sofortkauf erfolgreich!",
+    message: `Du hast ${itemName} für ${price.toLocaleString("de-DE")} CR sofort gekauft.`,
+    link: "/auctions",
+  });
+  // Anyone who had a standing bid just lost the item to the buyout instead
+  // of the auction running its course — they should know why it's gone.
+  if (auction.current_bidder_id && auction.current_bidder_id !== buyerId) {
+    await notifyUser({
+      userId: auction.current_bidder_id,
+      type: "auction_outbid",
+      title: "Auktion per Sofortkauf beendet",
+      message: `${itemName} wurde für ${price.toLocaleString("de-DE")} CR sofort gekauft, bevor deine Auktion endete.`,
+      link: "/auctions",
+    });
   }
 
   revalidatePath("/auctions");
@@ -246,6 +392,12 @@ export async function createAuction(input: {
  * bidder theoretically being able to spend their credits elsewhere before
  * the auction ends; that edge case is handled at resolution time by
  * letting the auction expire unsold instead of failing.
+ *
+ * Exception: if the auction has a `buyout_price` and this bid reaches it,
+ * the auction resolves immediately at the buyout price (via
+ * finalizeBuyout()) instead of just becoming the new high bid — same as
+ * clicking "Sofort kaufen" directly, just reached by typing a big number
+ * into the bid field instead.
  */
 export async function placeBid(auctionId: string, amount: number): Promise<AuctionActionResult> {
   const supabase = await createClient();
@@ -256,11 +408,22 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
 
   const admin = createAdminClient();
 
-  const { data: auction } = await admin
+  let auction = await admin
     .from("auctions")
-    .select("seller_id, current_bid, current_bidder_id, status, ends_at, item:items(name)")
+    .select("seller_id, inventory_id, current_bid, current_bidder_id, buyout_price, status, ends_at, item:items(name)")
     .eq("id", auctionId)
-    .single();
+    .single()
+    .then((r) => r.data);
+  if (!auction) {
+    // `buyout_price` may not exist yet — degrade to "no buyout" rather
+    // than letting every single bid fail over one missing column.
+    auction = await admin
+      .from("auctions")
+      .select("seller_id, inventory_id, current_bid, current_bidder_id, status, ends_at, item:items(name)")
+      .eq("id", auctionId)
+      .single()
+      .then((r) => (r.data ? { ...r.data, buyout_price: null } : null));
+  }
 
   if (!auction || auction.status !== "active") {
     return { success: false, error: "Diese Auktion ist nicht mehr aktiv." };
@@ -278,6 +441,13 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
   const { data: profile } = await admin.from("profiles").select("credits").eq("id", user.id).single();
   if (!profile || profile.credits < amount) {
     return { success: false, error: "Nicht genug Credits für dieses Gebot." };
+  }
+
+  if (auction.buyout_price !== null && amount >= auction.buyout_price) {
+    if (profile.credits < auction.buyout_price) {
+      return { success: false, error: "Nicht genug Credits für den Sofortkauf-Preis." };
+    }
+    return finalizeBuyout(admin, { id: auctionId, ...auction }, user.id, auction.buyout_price);
   }
 
   const { error } = await admin
@@ -319,6 +489,50 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
 
   revalidatePath("/auctions");
   return { success: true };
+}
+
+/**
+ * Explicit "Sofort kaufen" action — buys the auction outright at its
+ * `buyout_price` without placing an incremental bid first.
+ */
+export async function buyAuctionNow(auctionId: string): Promise<AuctionActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Du musst eingeloggt sein." };
+
+  const admin = createAdminClient();
+
+  const { data: auction, error: auctionError } = await admin
+    .from("auctions")
+    .select("seller_id, inventory_id, buyout_price, current_bid, current_bidder_id, status, ends_at, item:items(name)")
+    .eq("id", auctionId)
+    .single();
+
+  if (auctionError || !auction) {
+    if (auctionError) logServerError("Auctions", "buyAuctionNow lookup failed", auctionError.message);
+    return { success: false, error: "Diese Auktion ist nicht verfügbar." };
+  }
+  if (auction.status !== "active") {
+    return { success: false, error: "Diese Auktion ist nicht mehr aktiv." };
+  }
+  if (new Date(auction.ends_at).getTime() <= Date.now()) {
+    return { success: false, error: "Diese Auktion ist bereits abgelaufen." };
+  }
+  if (auction.seller_id === user.id) {
+    return { success: false, error: "Du kannst deine eigene Auktion nicht kaufen." };
+  }
+  if (auction.buyout_price === null) {
+    return { success: false, error: "Für diese Auktion gibt es keinen Sofortkauf-Preis." };
+  }
+
+  const { data: profile } = await admin.from("profiles").select("credits").eq("id", user.id).single();
+  if (!profile || profile.credits < auction.buyout_price) {
+    return { success: false, error: "Nicht genug Credits für diesen Sofortkauf." };
+  }
+
+  return finalizeBuyout(admin, { id: auctionId, ...auction }, user.id, auction.buyout_price);
 }
 
 export async function cancelAuction(auctionId: string): Promise<AuctionActionResult> {

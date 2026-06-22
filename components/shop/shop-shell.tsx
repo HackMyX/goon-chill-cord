@@ -6,12 +6,16 @@ import Link from "next/link";
 import { ArrowLeft, Store, Clock, Sparkles, ShoppingCart, Check } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
+import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
+import { ItemThumbnail3D } from "@/components/shop/item-thumbnail-3d";
 import { useSoundManager } from "@/lib/sound-manager";
+import { isWeaponType, getEquippedDamage, formatDamage } from "@/lib/combat";
 import { purchaseShopItem, type ShopListingEntry } from "@/lib/actions/shop";
 
 interface ShopShellProps {
   credits: number;
   streakDays: number;
+  gender: "m" | "w";
   listings: ShopListingEntry[];
   resetsAt: string;
 }
@@ -60,10 +64,14 @@ function fmt(n: number) {
 function ShopCard({
   listing,
   credits,
+  gender,
+  onPreview,
   onPurchased,
 }: {
   listing: ShopListingEntry;
   credits: number;
+  gender: "m" | "w";
+  onPreview: (listing: ShopListingEntry) => void;
   onPurchased: (newCredits: number) => void;
 }) {
   const [buying, setBuying] = useState(false);
@@ -102,11 +110,34 @@ function ShopCard({
           Featured
         </span>
       )}
+
+      <ItemThumbnail3D
+        item={{
+          id: listing.itemId,
+          name: listing.itemName,
+          rarity: listing.itemRarity,
+          type: listing.itemType,
+          damage: listing.itemDamage,
+        }}
+        gender={gender}
+        onClick={() => {
+          sound.click();
+          onPreview(listing);
+        }}
+      />
+
       <div className="flex items-center justify-between gap-2">
         <p className="truncate font-semibold text-zinc-100">{listing.itemName}</p>
         <RarityBadge rarity={listing.itemRarity} />
       </div>
-      <p className="text-[11px] text-zinc-500">{CATEGORY_LABELS[listing.itemType] ?? listing.itemType}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-[11px] text-zinc-500">{CATEGORY_LABELS[listing.itemType] ?? listing.itemType}</p>
+        {isWeaponType(listing.itemType) && (
+          <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+            {formatDamage(getEquippedDamage({ damage: listing.itemDamage }))}
+          </span>
+        )}
+      </div>
 
       <div className="mt-auto flex items-center justify-between gap-2">
         <span className="text-lg font-extrabold text-purple-300">{fmt(listing.priceCr)} CR</span>
@@ -140,9 +171,10 @@ function ShopCard({
   );
 }
 
-export function ShopShell({ credits: initialCredits, streakDays, listings, resetsAt }: ShopShellProps) {
+export function ShopShell({ credits: initialCredits, streakDays, gender, listings, resetsAt }: ShopShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   const [category, setCategory] = useState<string | "all">("all");
+  const [previewListing, setPreviewListing] = useState<ShopListingEntry | null>(null);
   const sound = useSoundManager();
   const router = useRouter();
   const countdown = useCountdown(resetsAt);
@@ -215,11 +247,32 @@ export function ShopShell({ credits: initialCredits, streakDays, listings, reset
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {filtered.map((listing) => (
-              <ShopCard key={listing.id} listing={listing} credits={credits} onPurchased={handlePurchased} />
+              <ShopCard
+                key={listing.id}
+                listing={listing}
+                credits={credits}
+                gender={gender}
+                onPreview={setPreviewListing}
+                onPurchased={handlePurchased}
+              />
             ))}
           </div>
         )}
       </main>
+
+      {previewListing && (
+        <ItemPreviewModal
+          item={{
+            id: previewListing.itemId,
+            name: previewListing.itemName,
+            rarity: previewListing.itemRarity,
+            type: previewListing.itemType,
+            damage: previewListing.itemDamage,
+          }}
+          gender={gender}
+          onClose={() => setPreviewListing(null)}
+        />
+      )}
     </div>
   );
 }

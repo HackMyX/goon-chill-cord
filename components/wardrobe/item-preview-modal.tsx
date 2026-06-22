@@ -7,11 +7,12 @@ import { OrbitControls, ContactShadows } from "@react-three/drei";
 import { X } from "lucide-react";
 import { CharacterModel } from "@/components/world/character-model";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
+import { isWeaponType, getEquippedDamage, formatDamage } from "@/lib/combat";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import type { Rarity } from "@/lib/cases";
 
 interface ItemPreviewModalProps {
-  item: { id: string; name: string; rarity: Rarity; type: string };
+  item: { id: string; name: string; rarity: Rarity; type: string; damage?: number | null };
   gender: "m" | "w";
   onClose: () => void;
 }
@@ -42,7 +43,7 @@ export function ItemPreviewModal({ item, gender, onClose }: ItemPreviewModalProp
   if (!mounted) return null;
 
   const equippedByCategory: Record<string, EquippedItem | undefined> = {
-    [item.type]: { id: item.id, name: item.name, rarity: item.rarity },
+    [item.type]: { id: item.id, name: item.name, rarity: item.rarity, damage: item.damage },
   };
 
   return createPortal(
@@ -65,6 +66,11 @@ export function ItemPreviewModal({ item, gender, onClose }: ItemPreviewModalProp
           <div className="mb-2 flex items-center justify-center gap-2">
             <p className="text-center text-sm font-semibold text-zinc-100">{item.name}</p>
             <RarityBadge rarity={item.rarity} />
+            {isWeaponType(item.type) && (
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                {formatDamage(getEquippedDamage(item))}
+              </span>
+            )}
           </div>
 
           <div className="h-80 w-full overflow-hidden rounded-xl border border-white/10 bg-[#08050f]">

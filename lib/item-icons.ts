@@ -14,12 +14,6 @@ import {
 } from "lucide-react";
 
 const ITEM_TYPE_ICONS: Record<string, LucideIcon> = {
-  // Case-opening (RPG) items
-  weapon: Sword,
-  shield: Shield,
-  helmet: HardHat,
-  armor: Shirt,
-  cape: Shirt,
   ring: Gem,
   amulet: Gem,
   // Wardrobe (cosmetic) items

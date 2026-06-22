@@ -7,9 +7,26 @@ import { ItemRowEditor } from "@/components/admin/item-row-editor";
 import { NewItemForm } from "@/components/admin/new-item-form";
 import { ALL_ITEM_TYPES, RARITY_ORDER, RARITY_LABELS, getTypeLabel } from "@/lib/cases";
 import { useSoundManager } from "@/lib/sound-manager";
+import { isArmorType, isPerkType, isShieldType } from "@/lib/combat";
 import type { ItemRow } from "@/components/admin/admin-shell";
 
-const ROW_HEIGHT = 92;
+// Only an *initial guess* before the real height is measured (see
+// `measureElement` below) — most rows are this tall (single line, no stat
+// fields), but a fixed guess used to be the *actual* height for every row
+// regardless of content (a flat 132px for all ~1000 items), which left a
+// visible dead gap under every plain cosmetic row that didn't need the
+// second stat-fields line (armor/perk/shield — item-row-editor.tsx) at
+// all. Rows with one now correctly take more space, and everything else
+// shrinks to fit, because the virtualizer measures actual rendered height
+// per row instead of trusting one number for all of them.
+const ESTIMATED_ROW_HEIGHT = 84;
+
+/** Whether `item` renders item-row-editor.tsx's second stat-fields line at
+ * all — used only to pick a closer initial estimate so the very first
+ * paint (before measurement corrects it) doesn't visibly jump as much. */
+function hasStatLine(item: ItemRow): boolean {
+  return isArmorType(item.type) || isPerkType(item.type) || isShieldType(item.type);
+}
 
 export function ItemsTab({ items, setItems }: { items: ItemRow[]; setItems: (fn: (prev: ItemRow[]) => ItemRow[]) => void }) {
   const [query, setQuery] = useState("");
@@ -31,7 +48,7 @@ export function ItemsTab({ items, setItems }: { items: ItemRow[]; setItems: (fn:
   const virtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: (index) => (hasStatLine(filtered[index]) ? ESTIMATED_ROW_HEIGHT + 56 : ESTIMATED_ROW_HEIGHT),
     overscan: 8,
   });
 
@@ -92,12 +109,13 @@ export function ItemsTab({ items, setItems }: { items: ItemRow[]; setItems: (fn:
               return (
                 <div
                   key={item.id}
+                  ref={virtualizer.measureElement}
+                  data-index={virtualRow.index}
                   style={{
                     position: "absolute",
                     top: 0,
                     left: 0,
                     width: "100%",
-                    height: virtualRow.size,
                     transform: `translateY(${virtualRow.start}px)`,
                     paddingBottom: 8,
                   }}

@@ -109,11 +109,6 @@ export const ALL_ITEM_TYPES = [
   "hair",
   "pet",
   "weapon_cosmetic",
-  "weapon",
-  "shield",
-  "helmet",
-  "armor",
-  "cape",
   "ring",
   "amulet",
 ] as const;
@@ -123,7 +118,7 @@ export const ALL_ITEM_TYPES = [
  * item belongs to, not just its rarity. Unknown future types fall back to
  * a capitalized version of the raw string instead of nothing. */
 const TYPE_LABELS: Record<string, string> = {
-  hat: "Mütze",
+  hat: "Helm",
   jacket: "Jacke",
   pants: "Hose",
   shoes: "Schuhe",
@@ -134,11 +129,6 @@ const TYPE_LABELS: Record<string, string> = {
   hair: "Haare",
   pet: "Haustier",
   weapon_cosmetic: "Waffe",
-  weapon: "Waffe",
-  shield: "Schild",
-  helmet: "Helm",
-  armor: "Rüstung",
-  cape: "Umhang",
   ring: "Ring",
   amulet: "Amulett",
 };
@@ -163,10 +153,10 @@ export const CASE_GROUPS: CaseGroup[] = [
     id: "cosmetics",
     title: "Case Opening",
     iconName: "package",
-    // Every wardrobe-cosmetic dbType (lib/wardrobe.ts) plus the small set of
-    // legacy RPG accessory types — this is the pool that actually contains
-    // ~95% of the 900+ generated items, so it has to cover all of them or
-    // almost nothing is ever reachable from this case.
+    // Every wardrobe-cosmetic dbType (lib/wardrobe.ts) plus ring/amulet —
+    // this is the pool that actually contains ~95% of the 900+ generated
+    // items, so it has to cover all of them or almost nothing is ever
+    // reachable from this case.
     itemTypes: [
       "hat",
       "jacket",
@@ -180,9 +170,6 @@ export const CASE_GROUPS: CaseGroup[] = [
       "pet",
       "ring",
       "amulet",
-      "helmet",
-      "armor",
-      "cape",
     ],
     // Both tiers' weights now sum to a clean 100, and premium (5x the
     // price of standard) consistently buys a 5x better shot at Ultra in
@@ -214,7 +201,7 @@ export const CASE_GROUPS: CaseGroup[] = [
     title: "Waffen Case",
     subtitle: "Gewinne Waffen für den 3D-World-Kampf — ab 2.000 CR",
     iconName: "swords",
-    itemTypes: ["weapon", "shield", "weapon_cosmetic"],
+    itemTypes: ["weapon_cosmetic"],
     // Same "matches the original site's published odds exactly" note as
     // the cosmetics group above (92/6/2/0.05 standard, 84.8/9/6/0.2
     // premium, normal shaved by the rounding remainder so each tier sums

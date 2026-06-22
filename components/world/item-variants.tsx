@@ -160,6 +160,14 @@ function DogPet({ color }: { color: string }) {
         <sphereGeometry args={[0.13, 12, 12]} />
         <meshStandardMaterial color={color} />
       </mesh>
+      {/* eyes — small dark dots on the head sphere, the one thing every
+          pet needs to actually read as "alive" rather than a tinted toy. */}
+      {[0.085, -0.085].map((z) => (
+        <mesh key={z} position={[0.34, 0.29, z]}>
+          <sphereGeometry args={[0.022, 8, 8]} />
+          <meshStandardMaterial color="#0a0a0a" />
+        </mesh>
+      ))}
       <mesh position={[0.39, 0.23, 0]}>
         <boxGeometry args={[0.14, 0.09, 0.1]} />
         <meshStandardMaterial color={color} />
@@ -191,6 +199,14 @@ function DragonPet({ color }: { color: string }) {
         <coneGeometry args={[0.05, 0.14, 6]} />
         <meshStandardMaterial color={color} />
       </mesh>
+      {/* glowing reptile eyes — small emissive dots either side of the
+          horn, the head sphere otherwise has no face at all. */}
+      {[0.085, -0.085].map((z) => (
+        <mesh key={z} position={[0.18, 0.26, z]}>
+          <sphereGeometry args={[0.025, 8, 8]} />
+          <meshStandardMaterial color="#fde047" emissive="#facc15" emissiveIntensity={1.2} toneMapped={false} />
+        </mesh>
+      ))}
       <mesh position={[0.12, 0.22, 0.22]} rotation={[1.1, 0, 0.3]}>
         <boxGeometry args={[0.02, 0.24, 0.16]} />
         <meshStandardMaterial color={color} transparent opacity={0.75} />
@@ -199,6 +215,51 @@ function DragonPet({ color }: { color: string }) {
         <boxGeometry args={[0.02, 0.24, 0.16]} />
         <meshStandardMaterial color={color} transparent opacity={0.75} />
       </mesh>
+    </group>
+  );
+}
+
+/** A bird, not a ghost — "Mini-Phönix" used to render as GhostPet (a
+ * translucent floating orb+ring), which reads as "spectre", not "fire
+ * bird". Slim upright body, a pointed beak, two angled wings swept back
+ * like mid-flap, and a fanned tail of thin glowing feather-cones — built
+ * to actually look airborne, since lib/monsters.ts-style flight behavior
+ * (components/world/character-model.tsx's PetCompanion) is the other half
+ * of "a phoenix should be able to do what a phoenix does". */
+function PhoenixPet({ color }: { color: string }) {
+  return (
+    <group>
+      <mesh position={[0, 0.26, 0]} scale={[0.85, 1.15, 0.85]}>
+        <sphereGeometry args={[0.13, 12, 12]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0.4, 0.05]}>
+        <sphereGeometry args={[0.07, 10, 10]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0.39, 0.13]} rotation={[Math.PI / 2, 0, 0]}>
+        <coneGeometry args={[0.025, 0.09, 6]} />
+        <meshStandardMaterial color="#fde68a" emissive="#fbbf24" emissiveIntensity={0.6} toneMapped={false} />
+      </mesh>
+      {/* small bright eyes either side of the beak. */}
+      {[0.055, -0.055].map((x) => (
+        <mesh key={x} position={[x, 0.41, 0.1]}>
+          <sphereGeometry args={[0.018, 8, 8]} />
+          <meshStandardMaterial color="#1c1917" emissive="#7c2d12" emissiveIntensity={0.3} />
+        </mesh>
+      ))}
+      {[1, -1].map((side) => (
+        <mesh key={side} position={[0.1 * side, 0.3, -0.02]} rotation={[0.2, 0, side * 0.9]}>
+          <coneGeometry args={[0.05, 0.36, 4]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.7} toneMapped={false} />
+        </mesh>
+      ))}
+      {[-0.05, 0, 0.05].map((z, i) => (
+        <mesh key={i} position={[0, 0.18, -0.16 - Math.abs(z) * 0.3]} rotation={[1.3, 0, z * 2]}>
+          <coneGeometry args={[0.025, 0.26, 5]} />
+          <meshStandardMaterial color="#fb923c" emissive="#f97316" emissiveIntensity={0.8} toneMapped={false} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -214,6 +275,15 @@ function GhostPet({ color }: { color: string }) {
         <torusGeometry args={[0.26, 0.02, 8, 24]} />
         <meshBasicMaterial color={color} transparent opacity={0.5} toneMapped={false} />
       </mesh>
+      {/* two simple dark dots floating inside the translucent body — a
+          ghost's whole "face" is just enough to read as a face, deliberately
+          not a detailed one. */}
+      {[0.07, -0.07].map((x) => (
+        <mesh key={x} position={[x, 0.26, 0.13]}>
+          <sphereGeometry args={[0.025, 8, 8]} />
+          <meshBasicMaterial color="#18181b" transparent opacity={0.85} toneMapped={false} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -245,6 +315,13 @@ function CatPet({ color }: { color: string }) {
         <sphereGeometry args={[0.1, 12, 12]} />
         <meshStandardMaterial color={color} />
       </mesh>
+      {/* almond-shaped green cat eyes either side of the head. */}
+      {[0.05, -0.05].map((z) => (
+        <mesh key={z} position={[0.26, 0.24, z]} scale={[1, 1.4, 0.6]}>
+          <sphereGeometry args={[0.022, 8, 8]} />
+          <meshStandardMaterial color="#84cc16" emissive="#65a30d" emissiveIntensity={0.5} />
+        </mesh>
+      ))}
       <mesh position={[0.21, 0.32, 0.045]} rotation={[0, 0, -0.15]}>
         <coneGeometry args={[0.03, 0.09, 6]} />
         <meshStandardMaterial color={color} />
@@ -269,6 +346,14 @@ function CatPet({ color }: { color: string }) {
 
 const PET_VARIANTS = [DogPet, DragonPet, GhostPet, CatPet];
 
+/** True for any pet whose name says it flies — see character-model.tsx's
+ * PetCompanion for the actual flight-vs-ground-wander behavior this
+ * gates. Only ever called with a pet's own name (never a jacket's), so no
+ * need to guard against "Drachenrüstung" et al. */
+export function isFlyingPet(name: string): boolean {
+  return /Phönix|Drache/.test(name);
+}
+
 export function PetVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
   // The pet's *noun* always wins over the hash fallback — equip something
@@ -280,16 +365,15 @@ export function PetVariant({ item }: { item: EquippedItem }) {
   // statically see this only ever selects among the fixed components above.
   // Phönix checked *before* Drache/Schatten — "Mini-Phönix" used to match
   // the same /Drache|Phönix/ branch as "Schatten-Drache" and render as an
-  // identical DragonPet, which is exactly the "two different items look
-  // the same" bug. A phoenix reads closer to "ghostly/ethereal glow" than
-  // "scaly wyvern" anyway, so it gets GhostPet instead — distinct shape,
-  // still thematically reasonable.
+  // identical DragonPet, which was the "two different items look the
+  // same" bug; it now gets its own bird-shaped PhoenixPet instead of
+  // reusing either Dragon or Ghost.
   const Variant = /Hund/.test(item.name)
     ? DogPet
     : /Katze/.test(item.name)
       ? CatPet
       : /Phönix/.test(item.name)
-        ? GhostPet
+        ? PhoenixPet
         : /Drache/.test(item.name)
           ? DragonPet
           : /Schatten|Geist/.test(item.name)
@@ -302,7 +386,18 @@ export function PetVariant({ item }: { item: EquippedItem }) {
   );
 }
 
-// --- Hats: 4 distinct silhouettes ----------------------------------------
+// --- Hats: 5 distinct silhouettes, picked by keyword not hash ------------
+//
+// The entire color-matrix catalogue (scripts/generate-all-items.js
+// COLOR_TYPES) names every single hat "... Helm" as its generic trailing
+// word — a knit beanie, no brim. The old hash-based pick could land any of
+// those on CapHat (a brimmed baseball cap) or TopHat/CrownHat (neither
+// remotely a beanie), which is a direct contradiction between the name and
+// what's actually rendered — exactly the "Roter Helm that's secretly a top
+// hat" bug. BeanieHat is now the only shape a plain catalogue "... Helm"
+// name can ever produce; the other shapes are reachable *only* by a name
+// that actually says so (a real "Kappe"/"Zylinder"/"Krone", or a curated
+// compound "helm" name like "Sternenhelm"), checked in HatVariant below.
 
 function CapHat({ color }: { color: string }) {
   return (
@@ -358,24 +453,52 @@ function CrownHat({ color }: { color: string }) {
   );
 }
 
-const HAT_VARIANTS = [CapHat, BeanieHat, TopHat, CrownHat];
-
-/** The curated ultra hat names (scripts/generate-all-items.js ULTRA_NAMES.
- * hat) would otherwise fall through the same hash as the color-matrix
- * items and could coincidentally land on the same shape as each other —
- * fine for color-matrix items (that's expected variety), not fine for
- * three uniquely-named top-tier items. Exact-mapped to three guaranteed-
- * distinct existing shapes instead. */
-const EXACT_HAT_SHAPE: Record<string, typeof CapHat> = {
-  "Kronen-Mütze": CrownHat,
-  "Voidkappe": BeanieHat,
-  "Sternenhelm": TopHat,
-};
+/** A real full-coverage helmet — a rounded dome that comes down past the
+ * temples plus a brow ridge/visor lip across the front, clearly distinct
+ * from every other hat shape (no other variant covers this much of the
+ * head, none have a front lip). "Sternenhelm" literally means
+ * "star-HELMET" and used to render as a TopHat, which doesn't even
+ * resemble a helmet, let alone the plain catalogue beanie. */
+function HelmetHat({ color }: { color: string }) {
+  return (
+    <group>
+      <mesh position={[0, -0.02, 0]}>
+        <sphereGeometry args={[0.36, 16, 12, 0, Math.PI * 2, 0, Math.PI / 1.55]} />
+        <meshStandardMaterial color={color} metalness={0.4} roughness={0.35} />
+      </mesh>
+      <mesh position={[0, -0.1, 0.3]}>
+        <boxGeometry args={[0.5, 0.06, 0.16]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} metalness={0.4} />
+      </mesh>
+    </group>
+  );
+}
 
 export function HatVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#6d28d9");
-  const Variant =
-    EXACT_HAT_SHAPE[item.name] ?? HAT_VARIANTS[variantIndex(item.name, HAT_VARIANTS.length)];
+  // Keyword-first, hash-last, written as a plain ternary chain (same
+  // reasoning as PetVariant above) so the React Compiler can statically
+  // see this only ever selects among the fixed components below — a name
+  // that actually says what kind of hat it is (Krone/Zylinder/Kappe, or a
+  // *fused/compound* "helm" word like "Sternenhelm"/"Voidhelm") always
+  // gets the shape that word means, regardless of anything else in the
+  // name. The color-matrix catalogue's generic word is now also "Helm"
+  // (renamed from "Mütze"), always appearing as its own trailing word
+  // preceded by a space ("Roter Helm") — that plain form is excluded from
+  // the curated-helmet match below so the entire catalogue doesn't
+  // collapse onto one shape just because its generic noun happens to be
+  // the same word a few curated uniques use as a name *component*; it
+  // falls back to BeanieHat instead, same as the old "Mütze" behavior.
+  const isPlainCatalogHelm = /\sHelm$/.test(item.name);
+  const Variant = /Kronen?/.test(item.name)
+    ? CrownHat
+    : /Zylinder/.test(item.name)
+      ? TopHat
+      : /Kappe/.test(item.name)
+        ? CapHat
+        : !isPlainCatalogHelm && /helm/i.test(item.name)
+          ? HelmetHat
+          : BeanieHat;
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
@@ -1308,6 +1431,96 @@ const EXACT_SHIELD_SHAPE: Record<string, typeof KiteShield> = {
   "Drachenschild": KiteShield,
 };
 
+const SHIELD_AURA_SMOKE_COUNT = 8;
+
+/**
+ * Full-body energy bubble + drifting smoke puffs for a *functioning*
+ * shield (item.shield_hp > 0 — lib/combat.ts) — wraps the whole character,
+ * not just the arm-mounted `ShieldVariant` prop mesh, since "you have an
+ * active damage-absorbing shield" is a whole-body state, not a held item.
+ * `stateRef` (Player.tsx's own `combatRef`, structurally compatible —
+ * extra fields on it are simply ignored) lets the bubble/smoke fade out
+ * as the shield depletes and snap back once it recharges
+ * (lib/combat.ts' `applyIncomingDamage`/Player.tsx's regen tick mutate the
+ * same ref this reads every frame); omitted entirely for remote
+ * avatars/previews, which fall back to a constant full-strength look since
+ * there's no live shield state to follow there.
+ */
+export function ShieldAura({
+  item,
+  stateRef,
+}: {
+  item: EquippedItem;
+  stateRef?: React.RefObject<{ shieldHpRemaining: number; shieldMaxHp: number }>;
+}) {
+  const color = rarityColorFor(item, "#22d3ee");
+  const bubbleRef = useRef<THREE.Mesh>(null);
+  const smokeRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const seeds = useMemo(
+    () =>
+      Array.from({ length: SHIELD_AURA_SMOKE_COUNT }, (_, i) => ({
+        angle: (i / SHIELD_AURA_SMOKE_COUNT) * Math.PI * 2,
+        phase: i * 0.7,
+        heightSeed: (i % 3) * 0.3,
+      })),
+    []
+  );
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    const s = stateRef?.current;
+    const frac = s ? (s.shieldMaxHp > 0 ? s.shieldHpRemaining / s.shieldMaxHp : 0) : 1;
+
+    if (bubbleRef.current) {
+      bubbleRef.current.visible = frac > 0;
+      bubbleRef.current.scale.setScalar(1 + Math.sin(t * 1.5) * 0.015);
+      const mat = bubbleRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.12 * frac + Math.sin(t * 2) * 0.02 * frac;
+      mat.color.set(color);
+    }
+    for (let i = 0; i < smokeRefs.current.length; i++) {
+      const mesh = smokeRefs.current[i];
+      if (!mesh) continue;
+      const seed = seeds[i];
+      mesh.position.set(
+        Math.cos(t * 0.5 + seed.angle) * 0.55,
+        0.4 + Math.sin(t * 0.8 + seed.phase) * 0.4 + seed.heightSeed,
+        Math.sin(t * 0.5 + seed.angle) * 0.55
+      );
+      const mat = mesh.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.25 * frac;
+      mat.color.set(color);
+    }
+  });
+
+  return (
+    <group position={[0, 1.2, 0]}>
+      <mesh ref={bubbleRef}>
+        <sphereGeometry args={[0.95, 24, 18]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.12}
+          toneMapped={false}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+      {seeds.map((_, i) => (
+        <mesh
+          key={i}
+          ref={(el) => {
+            smokeRefs.current[i] = el;
+          }}
+        >
+          <sphereGeometry args={[0.12, 8, 8]} />
+          <meshBasicMaterial color={color} transparent opacity={0.25} toneMapped={false} depthWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 export function ShieldVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#52525b");
   const emissive = rarityColorFor(item, "#000000");
@@ -1395,13 +1608,41 @@ export function RingVariant({ item }: { item: EquippedItem }) {
 
 // --- Amulets: a chain + pendant on the chest — 3 distinct pendant shapes --
 
+const NECK_CHAIN_LINK_COUNT = 16;
+const NECK_CHAIN_RADIUS = 0.13;
+
+/** A real multi-link chain loop, not one big solid torus — `linkCount`
+ * small individual link-tori spaced evenly around the neck circle, each
+ * one rotated 90° from its neighbor so consecutive links visually
+ * interlock the way real chain links alternate orientation. Replaces the
+ * single oversized torus every amulet variant used to share, which read
+ * as a smooth metal hoop rather than a chain at all. Shared by every
+ * pendant shape below so the chain itself is consistent regardless of
+ * which pendant is hanging from it. */
+function NeckChain({ color = "#7a7a82" }: { color?: string }) {
+  const links = useMemo(() => Array.from({ length: NECK_CHAIN_LINK_COUNT }, (_, i) => i), []);
+  return (
+    <group rotation={[Math.PI / 2, 0, 0]}>
+      {links.map((i) => {
+        const angle = (i / NECK_CHAIN_LINK_COUNT) * Math.PI * 2;
+        const x = Math.cos(angle) * NECK_CHAIN_RADIUS;
+        const y = Math.sin(angle) * NECK_CHAIN_RADIUS;
+        const altRotation = i % 2 === 0 ? 0 : Math.PI / 2;
+        return (
+          <mesh key={i} position={[x, y, 0]} rotation={[0, 0, angle + Math.PI / 2 + altRotation]}>
+            <torusGeometry args={[0.024, 0.0065, 6, 10]} />
+            <meshStandardMaterial color={color} metalness={0.65} roughness={0.3} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
 function GemPendantAmulet({ color, emissive }: { color: string; emissive: string }) {
   return (
     <group>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.13, 0.012, 8, 24]} />
-        <meshStandardMaterial color="#7a7a82" />
-      </mesh>
+      <NeckChain />
       <mesh position={[0, -0.16, 0]} rotation={[0, 0, Math.PI / 4]}>
         <boxGeometry args={[0.1, 0.1, 0.04]} />
         <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.7} />
@@ -1413,10 +1654,7 @@ function GemPendantAmulet({ color, emissive }: { color: string; emissive: string
 function CrossPendantAmulet({ color, emissive }: { color: string; emissive: string }) {
   return (
     <group>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.13, 0.012, 8, 24]} />
-        <meshStandardMaterial color="#7a7a82" />
-      </mesh>
+      <NeckChain />
       <group position={[0, -0.18, 0]}>
         <mesh>
           <boxGeometry args={[0.035, 0.16, 0.03]} />
@@ -1434,10 +1672,7 @@ function CrossPendantAmulet({ color, emissive }: { color: string; emissive: stri
 function OrbPendantAmulet({ color, emissive }: { color: string; emissive: string }) {
   return (
     <group>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.13, 0.012, 8, 24]} />
-        <meshStandardMaterial color="#7a7a82" />
-      </mesh>
+      <NeckChain />
       <mesh position={[0, -0.17, 0]}>
         <sphereGeometry args={[0.06, 14, 14]} />
         <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.8} transparent opacity={0.85} />

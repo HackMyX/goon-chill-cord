@@ -3,6 +3,7 @@
 import { X, Lock } from "lucide-react";
 import { getCategories } from "@/lib/wardrobe";
 import { CharacterPreview3D } from "@/components/wardrobe/character-preview-3d";
+import { isWeaponType, getEquippedDamage, formatDamage } from "@/lib/combat";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 export type { EquippedItem };
@@ -104,6 +105,11 @@ export function CharacterViewer({
                 <span className="truncate text-right text-xs text-zinc-500">
                   {equipped?.name ?? "—"}
                 </span>
+                {isWeaponType(category.dbType) && equipped && (
+                  <span className="shrink-0 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                    {formatDamage(getEquippedDamage(equipped))}
+                  </span>
+                )}
                 {equipped?.id && (
                   <button
                     onClick={() => onUnequip(equipped.id!)}

@@ -35,7 +35,7 @@ export const ALL_CATEGORY: WardrobeCategory = {
 };
 
 export const WARDROBE_CATEGORIES: WardrobeCategory[] = [
-  { id: "hat", label: "Mütze", icon: HardHat, dbType: "hat" },
+  { id: "hat", label: "Helm", icon: HardHat, dbType: "hat" },
   { id: "jacket", label: "Jacke", icon: Shirt, dbType: "jacket" },
   { id: "pants", label: "Hose", icon: Footprints, dbType: "pants" },
   { id: "shoes", label: "Schuhe", icon: Footprints, dbType: "shoes" },

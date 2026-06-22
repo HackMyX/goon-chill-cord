@@ -6,18 +6,20 @@ import { RARITY_STYLES, getTypeLabel, type Rarity } from "@/lib/cases";
 import { ItemRenderer } from "@/components/items/item-renderer";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { useSoundManager } from "@/lib/sound-manager";
+import { isWeaponType, getEquippedDamage, formatDamage } from "@/lib/combat";
 
 interface ItemRowProps {
   id: string;
   name: string;
   rarity: Rarity;
   type: string;
+  damage?: number | null;
   equipped: boolean;
   onToggle: (id: string) => void;
   onPreview: (id: string) => void;
 }
 
-function ItemRowComponent({ id, name, rarity, type, equipped, onToggle, onPreview }: ItemRowProps) {
+function ItemRowComponent({ id, name, rarity, type, damage, equipped, onToggle, onPreview }: ItemRowProps) {
   const style = RARITY_STYLES[rarity];
   const sound = useSoundManager();
 
@@ -50,7 +52,14 @@ function ItemRowComponent({ id, name, rarity, type, equipped, onToggle, onPrevie
               exactly the "border only goes half-way around" symptom. */}
           <p className="truncate font-semibold text-zinc-100">{name}</p>
           <p className="text-[11px] tracking-wide text-zinc-500 uppercase">{getTypeLabel(type)}</p>
-          <RarityBadge rarity={rarity} className="mt-1" />
+          <div className="mt-1 flex items-center gap-1.5">
+            <RarityBadge rarity={rarity} />
+            {isWeaponType(type) && (
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                {formatDamage(getEquippedDamage({ damage }))}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

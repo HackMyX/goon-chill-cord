@@ -170,23 +170,83 @@ export async function updateUserRole(
 // Item catalogue CRUD
 // ---------------------------------------------------------------------------
 
+/** Matches lib/combat.ts's `PerkType` — duplicated as a plain string union
+ * here rather than imported, since lib/combat.ts has no "use server"
+ * marker and importing a server action file into a type-only spot is fine,
+ * but keeping the admin input type self-contained avoids any risk of
+ * pulling client-side combat constants into this server module's bundle. */
+export type ItemPerkType = "none" | "speed_boost" | "jump_boost" | "hp_regen_boost";
+
 export interface ItemInput {
   id?: string;
   name: string;
   rarity: Rarity;
   type: string;
   price_cr: number;
+  /** Weapon power (see lib/combat.ts) — `null`/`undefined` clears it, only
+   * meaningful for weapon-ish types but accepted for any type since the
+   * admin types `type` as free text and there's no hard enum to gate on. */
+  damage?: number | null;
+  /** Flat damage-reduction points — meaningful for jacket/pants/hat/shoes,
+   * see lib/combat.ts's `applyArmorReduction`. */
+  armor?: number;
+  /** Amulet/ring perk — `"none"` (the default) means no perk at all. */
+  perk_type?: ItemPerkType;
+  /** Perk strength as a multiplier added on top of 1.0 (e.g. 0.15 = +15%
+   * speed/jump/regen) — only meaningful when `perk_type` isn't `"none"`. */
+  perk_magnitude?: number;
+  /** Shield HP this item's aura absorbs before it breaks and damage starts
+   * reaching the player's real HP — 0 means a shield_cosmetic row that's
+   * purely decorative, not a functioning shield. */
+  shield_hp?: number;
+  /** Seconds after breaking before the shield can absorb again. */
+  shield_regen_cooldown_sec?: number;
 }
 
 export interface UpsertItemResult extends AdminActionResult {
-  item?: { id: string; name: string; rarity: Rarity; type: string; price_cr: number };
+  item?: {
+    id: string;
+    name: string;
+    rarity: Rarity;
+    type: string;
+    price_cr: number;
+    damage: number | null;
+    armor: number;
+    perk_type: ItemPerkType;
+    perk_magnitude: number;
+    shield_hp: number;
+    shield_regen_cooldown_sec: number;
+  };
 }
+
+const VALID_PERK_TYPES: ItemPerkType[] = ["none", "speed_boost", "jump_boost", "hp_regen_boost"];
 
 export async function upsertItem(input: ItemInput): Promise<UpsertItemResult> {
   const user = await requireAdmin();
   if (!user) return { success: false, error: "Kein Zugriff." };
   if (!input.name.trim() || !input.type.trim()) {
     return { success: false, error: "Name und Typ sind erforderlich." };
+  }
+  if (input.damage !== undefined && input.damage !== null && (!Number.isFinite(input.damage) || input.damage < 0)) {
+    return { success: false, error: "Ungültiger Schaden." };
+  }
+  if (input.armor !== undefined && (!Number.isFinite(input.armor) || input.armor < 0)) {
+    return { success: false, error: "Ungültige Rüstung." };
+  }
+  if (input.perk_type !== undefined && !VALID_PERK_TYPES.includes(input.perk_type)) {
+    return { success: false, error: "Ungültiger Perk-Typ." };
+  }
+  if (input.perk_magnitude !== undefined && (!Number.isFinite(input.perk_magnitude) || input.perk_magnitude < 0)) {
+    return { success: false, error: "Ungültige Perk-Stärke." };
+  }
+  if (input.shield_hp !== undefined && (!Number.isFinite(input.shield_hp) || input.shield_hp < 0)) {
+    return { success: false, error: "Ungültige Schild-HP." };
+  }
+  if (
+    input.shield_regen_cooldown_sec !== undefined &&
+    (!Number.isFinite(input.shield_regen_cooldown_sec) || input.shield_regen_cooldown_sec < 0)
+  ) {
+    return { success: false, error: "Ungültiger Schild-Cooldown." };
   }
 
   const admin = createAdminClient();
@@ -196,17 +256,60 @@ export async function upsertItem(input: ItemInput): Promise<UpsertItemResult> {
     type: input.type.trim(),
     price_cr: Math.max(0, Math.floor(input.price_cr) || 0),
   };
+  // Only sent when explicitly provided — same reasoning as the auctions
+  // buyout_price field: omitting the key entirely means every item that
+  // doesn't set a damage value keeps working even if this migration
+  // hasn't run yet, and only an explicit damage value surfaces the
+  // column-missing error instead of silently dropping it.
+  const damagePayload =
+    input.damage === undefined ? {} : { damage: input.damage === null ? null : Math.floor(input.damage) };
+  const statsPayload: Record<string, unknown> = {};
+  if (input.armor !== undefined) statsPayload.armor = Math.floor(input.armor);
+  if (input.perk_type !== undefined) statsPayload.perk_type = input.perk_type;
+  if (input.perk_magnitude !== undefined) statsPayload.perk_magnitude = input.perk_magnitude;
+  if (input.shield_hp !== undefined) statsPayload.shield_hp = Math.floor(input.shield_hp);
+  if (input.shield_regen_cooldown_sec !== undefined) {
+    statsPayload.shield_regen_cooldown_sec = Math.floor(input.shield_regen_cooldown_sec);
+  }
 
   const { data, error } = input.id
-    ? await admin.from("items").update(payload).eq("id", input.id).select().single()
-    : await admin.from("items").insert(payload).select().single();
+    ? await admin
+        .from("items")
+        .update({ ...payload, ...damagePayload, ...statsPayload })
+        .eq("id", input.id)
+        .select()
+        .single()
+    : await admin
+        .from("items")
+        .insert({ ...payload, ...damagePayload, ...statsPayload })
+        .select()
+        .single();
 
-  if (error || !data) return { success: false, error: "Speichern fehlgeschlagen." };
+  if (error || !data) {
+    return {
+      success: false,
+      error:
+        Object.keys(damagePayload).length > 0 || Object.keys(statsPayload).length > 0
+          ? "Speichern fehlgeschlagen — sind die Item-Stat-Migrationen eingespielt?"
+          : "Speichern fehlgeschlagen.",
+    };
+  }
 
   await logAdminAction(user.id, input.id ? "admin_item_update" : "admin_item_create", data);
   revalidatePath("/admin");
   revalidatePath("/");
-  return { success: true, item: data };
+  return {
+    success: true,
+    item: {
+      ...data,
+      damage: data.damage ?? null,
+      armor: data.armor ?? 0,
+      perk_type: (data.perk_type as ItemPerkType) ?? "none",
+      perk_magnitude: data.perk_magnitude ?? 0,
+      shield_hp: data.shield_hp ?? 0,
+      shield_regen_cooldown_sec: data.shield_regen_cooldown_sec ?? 0,
+    },
+  };
 }
 
 export async function deleteItem(itemId: string): Promise<AdminActionResult> {

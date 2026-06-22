@@ -1,7 +1,12 @@
 "use client";
 
 export type FxSound = "win" | "ultraWin" | "click" | "error" | "flip";
-export type InterruptSound = "tick" | "hover";
+// "hit" is an interrupt channel, not a queued Fx one, on purpose — sustained
+// melee (clicking as fast as ATTACK_COOLDOWN allows) needs every landed hit
+// to play immediately, the same way tick/hover never queue. Routing it
+// through the FIFO `fx` queue instead would make hit sounds visibly lag
+// behind the swings during any fight longer than one punch.
+export type InterruptSound = "tick" | "hover" | "hit";
 
 const FX_SRC: Record<FxSound, string> = {
   win: "/sounds/win.wav",
@@ -14,6 +19,7 @@ const FX_SRC: Record<FxSound, string> = {
 const INTERRUPT_SRC: Record<InterruptSound, string> = {
   tick: "/sounds/tick.wav",
   hover: "/sounds/hover.wav",
+  hit: "/sounds/hit.wav",
 };
 
 const HOVER_THROTTLE_MS = 70;
@@ -48,7 +54,7 @@ class SoundManager {
       audio = new Audio(INTERRUPT_SRC[name]);
       // hover/tick fire constantly (mouse movement, reel spin) — kept quiet
       // so a session of moving the mouse around doesn't wear the ears down.
-      audio.volume = name === "hover" ? 0.16 : 0.3;
+      audio.volume = name === "hover" ? 0.16 : name === "hit" ? 0.45 : 0.3;
       this.interruptAudio.set(name, audio);
     }
     return audio;
@@ -74,6 +80,10 @@ class SoundManager {
     if (now - this.lastHoverAt < HOVER_THROTTLE_MS) return;
     this.lastHoverAt = now;
     this.playInterrupt("hover");
+  }
+
+  hit(): void {
+    this.playInterrupt("hit");
   }
 
   private playInterrupt(name: InterruptSound): void {
@@ -134,6 +144,7 @@ export function useSoundManager() {
   return {
     tick: () => soundManager.tick(),
     hover: () => soundManager.hover(),
+    hit: () => soundManager.hit(),
     win: () => soundManager.play("win"),
     ultraWin: () => soundManager.play("ultraWin"),
     click: () => soundManager.play("click"),

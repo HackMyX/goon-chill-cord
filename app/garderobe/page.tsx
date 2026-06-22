@@ -19,10 +19,25 @@ export default async function GarderobePage() {
     .eq("id", user.id)
     .single();
 
-  const { data: inventory } = await supabase
+  // `damage` may not exist yet if that migration hasn't run — try with it
+  // first (needed so weapon items show their power in the wardrobe, see
+  // lib/combat.ts) and fall back to the columns that were always there.
+  const withDamage = await supabase
     .from("inventory")
-    .select("id, equipped, obtained_at, item:items(id, name, rarity, type, price_cr)")
+    .select("id, equipped, obtained_at, item:items(id, name, rarity, type, price_cr, damage)")
     .eq("user_id", user.id);
+  let inventory: { id: unknown; equipped: unknown; obtained_at: unknown; item: unknown }[] | null =
+    withDamage.data;
+  if (withDamage.error) {
+    const retry = await supabase
+      .from("inventory")
+      .select("id, equipped, obtained_at, item:items(id, name, rarity, type, price_cr)")
+      .eq("user_id", user.id);
+    inventory = (retry.data ?? []).map((row) => ({
+      ...row,
+      item: row.item ? { ...row.item, damage: null } : null,
+    }));
+  }
 
   const inventoryRows = (inventory ?? []) as unknown as InventoryRow[];
 

@@ -5,16 +5,42 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Sky, Stars, ContactShadows } from "@react-three/drei";
 import { Player } from "@/components/world/player";
+import { RemotePlayers } from "@/components/world/remote-players";
 import { Environment } from "@/components/world/environment";
+import { MonstersField } from "@/components/world/monsters-field";
+import { createCombatSharedState, type MonsterHandle, type RemotePlayerHandle } from "@/components/world/combat-types";
 import { WORLD_RADIUS } from "@/lib/world-config";
+import { getTotalArmor } from "@/lib/combat";
+import type { MonsterTypeConfig } from "@/lib/monsters";
+import type { PetTypeConfig } from "@/lib/pets";
+import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { CameraControls } from "@/components/world/use-camera-controls";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 interface SceneProps {
+  userId: string;
   equippedByCategory: Record<string, EquippedItem | undefined>;
   gender: "m" | "w";
   username: string;
   cameraControls: CameraControls;
+  canvasRef: React.RefObject<HTMLElement | null>;
+  monsterTypes: MonsterTypeConfig[];
+  petTypes: PetTypeConfig[];
+  killStreakConfig: KillStreakConfig;
+  /** Current player's kill-streak count — scales locally-spawned
+   * monsters' health/attackDamage slightly upward the longer it runs
+   * (lib/kill-streak.ts' streakMobScale). Necessarily client-local: this
+   * World has no server-authoritative monster simulation at all (monsters
+   * live entirely in each client's own R3F scene), so there's no
+   * mechanism for "this player's streak" to affect any *other* player's
+   * spawns even if it wanted to — nor would it need to, since other
+   * players never see this client's monster pool either. */
+  streakKillCount: number;
+  onAttack?: (damage: number, hit: boolean) => void;
+  onStatsChange?: (hp: number, maxHp: number, stamina: number, maxStamina: number) => void;
+  onMonsterKilled?: (typeId: string) => void;
+  onDeath?: () => void;
+  respawnSignal: number;
 }
 
 /** A slow pulse on the world-border ring — purely decorative, but it's what
@@ -34,7 +60,37 @@ function BorderRing() {
   );
 }
 
-export function Scene({ equippedByCategory, gender, username, cameraControls }: SceneProps) {
+export function Scene({
+  userId,
+  equippedByCategory,
+  gender,
+  username,
+  cameraControls,
+  canvasRef,
+  monsterTypes,
+  petTypes,
+  killStreakConfig,
+  streakKillCount,
+  onAttack,
+  onStatsChange,
+  onMonsterKilled,
+  onDeath,
+  respawnSignal,
+}: SceneProps) {
+  // Equipped items never change mid-World-session (re-equipping requires
+  // the Garderobe, a separate page) — armor/shield are seeded once here
+  // from whatever's equipped, rather than tracked with an effect that
+  // would never actually fire again after mount.
+  const combatRef = useRef(
+    createCombatSharedState({
+      armor: getTotalArmor(equippedByCategory),
+      shieldMaxHp: equippedByCategory.shield_cosmetic?.shield_hp ?? 0,
+      shieldRegenCooldownDuration: equippedByCategory.shield_cosmetic?.shield_regen_cooldown_sec ?? 0,
+    })
+  );
+  const monsterRegistryRef = useRef<MonsterHandle[]>([]);
+  const remotePlayerRegistryRef = useRef<RemotePlayerHandle[]>([]);
+
   return (
     <>
       {/* Dusk sky — sun held low near the horizon (rather than drei's Sky
@@ -88,10 +144,31 @@ export function Scene({ equippedByCategory, gender, username, cameraControls }: 
       <ContactShadows position={[0, 0, 0]} opacity={0.6} scale={12} blur={2.2} far={4} />
 
       <Player
+        userId={userId}
         equippedByCategory={equippedByCategory}
         gender={gender}
         name={username}
         cameraControls={cameraControls}
+        canvasRef={canvasRef}
+        combatRef={combatRef}
+        monsterRegistryRef={monsterRegistryRef}
+        remotePlayerRegistryRef={remotePlayerRegistryRef}
+        petTypes={petTypes}
+        onAttack={onAttack}
+        onStatsChange={onStatsChange}
+        onDeath={onDeath}
+        respawnSignal={respawnSignal}
+      />
+
+      <RemotePlayers selfUserId={userId} registryRef={remotePlayerRegistryRef} />
+
+      <MonstersField
+        monsterTypes={monsterTypes}
+        combatRef={combatRef}
+        registryRef={monsterRegistryRef}
+        killStreakConfig={killStreakConfig}
+        streakKillCount={streakKillCount}
+        onMonsterKilled={(typeId) => onMonsterKilled?.(typeId)}
       />
     </>
   );

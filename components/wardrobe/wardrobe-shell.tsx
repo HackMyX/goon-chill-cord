@@ -27,6 +27,7 @@ export interface InventoryRow {
     rarity: Rarity;
     type: string;
     price_cr?: number;
+    damage?: number | null;
   };
 }
 
@@ -165,7 +166,12 @@ export function WardrobeShell({
     const map: Record<string, EquippedItem | undefined> = {};
     for (const row of inventory) {
       if (row.equipped) {
-        map[row.item.type] = { id: row.id, name: row.item.name, rarity: row.item.rarity };
+        map[row.item.type] = {
+          id: row.id,
+          name: row.item.name,
+          rarity: row.item.rarity,
+          damage: row.item.damage,
+        };
       }
     }
     return map;
@@ -306,6 +312,7 @@ export function WardrobeShell({
                           name={row.item.name}
                           rarity={row.item.rarity}
                           type={row.item.type}
+                          damage={row.item.damage}
                           equipped={row.equipped}
                           onToggle={handleToggle}
                           onPreview={setPreviewId}
