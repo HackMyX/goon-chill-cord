@@ -227,13 +227,19 @@ type FilterStatus = TicketStatus | "all";
 export function TicketsTab() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState<FilterStatus>("open");
   const sound = useSoundManager();
 
   const load = useCallback(async () => {
     setLoading(true);
-    const result = await getAdminTickets();
-    setTickets(result);
+    setLoadError(false);
+    try {
+      const result = await getAdminTickets();
+      setTickets(result);
+    } catch {
+      setLoadError(true);
+    }
     setLoading(false);
   }, []);
 
@@ -296,11 +302,10 @@ export function TicketsTab() {
         </div>
       )}
 
-      {tickets.length === 0 && !loading && (
+      {loadError && !loading && (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm text-amber-200">
-          Noch keine Tickets. Führe einmalig{" "}
-          <code className="rounded bg-black/40 px-1.5 py-0.5">node scripts/create-tickets.mjs</code> aus,
-          wenn die Tabellen noch nicht existieren.
+          Tabellen nicht gefunden. Führe einmalig{" "}
+          <code className="rounded bg-black/40 px-1.5 py-0.5">node scripts/create-tickets.mjs</code> aus.
         </p>
       )}
     </div>
