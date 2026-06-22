@@ -1,15 +1,9 @@
 /**
- * The fixed list of config/catalog tables a backup snapshots — parent
- * tables first, dependents last, since restoreBackup() inserts in this
- * order (and deletes in the reverse of it) to never violate a foreign key
- * mid-restore. Deliberately excludes live player data (profiles,
- * inventory, trades, auctions, tickets, notifications, audit/debug logs)
- * — restoring those would wipe every player's progress, which is not what
- * "back up the site" should casually mean. `shop_categories` and
- * `shop_category_day_rules` are listed even before they necessarily exist
- * in the DB — lib/actions/backup.ts skips any table that errors on
- * select/delete, so this list can be the eventual full set without
- * breaking today.
+ * Config/catalog tables a backup can snapshot — parent tables first,
+ * dependents last, so restoreBackup() can insert in this order without
+ * foreign-key violations and delete in the reverse. Deliberately excludes
+ * live player data (profiles, inventory, trades, auctions, tickets,
+ * notifications, audit/debug logs).
  */
 export const BACKUP_TABLES = [
   "items",
@@ -28,3 +22,105 @@ export const BACKUP_TABLES = [
 ] as const;
 
 export type BackupTableName = (typeof BACKUP_TABLES)[number];
+
+export type BackupCategory = "config" | "content" | "shop";
+
+export interface BackupTableInfo {
+  name: BackupTableName;
+  label: string;
+  category: BackupCategory;
+  description: string;
+}
+
+export const BACKUP_TABLE_INFO: BackupTableInfo[] = [
+  // ── Konfiguration ──────────────────────────────────────────
+  {
+    name: "site_config",
+    label: "Site-Konfiguration",
+    category: "config",
+    description: "Seitenname, Logo, Bezeichnungen und Startguthaben",
+  },
+  {
+    name: "shop_settings",
+    label: "Shop-Einstellungen",
+    category: "config",
+    description: "Globale Shop-Parameter und Rotationslogik",
+  },
+  {
+    name: "streak_config",
+    label: "Streak-Konfiguration",
+    category: "config",
+    description: "Daily-Reward-Einstellungen und Meilenstein-Boni",
+  },
+  {
+    name: "kill_streak_config",
+    label: "Kill-Streak-Config",
+    category: "config",
+    description: "Kill-Streak-Multiplikatoren und Schwellenwerte",
+  },
+  {
+    name: "world_config",
+    label: "Welt-Konfiguration",
+    category: "config",
+    description: "Spielwelt-Parameter, Spawn-Einstellungen und Grenzen",
+  },
+  {
+    name: "character_config",
+    label: "Charakter-Konfiguration",
+    category: "config",
+    description: "Standard-Charakter-Eigenschaften und Defaults",
+  },
+  // ── Inhalte ────────────────────────────────────────────────
+  {
+    name: "items",
+    label: "Item-Katalog",
+    category: "content",
+    description: "Alle Items mit Stats, Seltenheit, Wert und Typ",
+  },
+  {
+    name: "case_tiers",
+    label: "Case-Tiers",
+    category: "content",
+    description: "Case-Stufen und Drop-Wahrscheinlichkeiten",
+  },
+  {
+    name: "monster_types",
+    label: "Monster-Typen",
+    category: "content",
+    description: "Monster-Definitionen für die Spielwelt",
+  },
+  {
+    name: "pet_configs",
+    label: "Pet-Konfigurationen",
+    category: "content",
+    description: "Haustier-Einstellungen, Boni und Verhalten",
+  },
+  // ── Shop ───────────────────────────────────────────────────
+  {
+    name: "shop_categories",
+    label: "Shop-Kategorien",
+    category: "shop",
+    description: "Kategorien und deren Einstellungen",
+  },
+  {
+    name: "shop_category_day_rules",
+    label: "Tagesplan-Regeln",
+    category: "shop",
+    description: "Welche Kategorien an welchen Wochentagen aktiv sind",
+  },
+  {
+    name: "shop_listings",
+    label: "Shop-Angebote",
+    category: "shop",
+    description: "Aktuelle und geplante Angebote im Shop",
+  },
+];
+
+export const BACKUP_CATEGORY_META: Record<
+  BackupCategory,
+  { label: string; color: "purple" | "amber" | "emerald" }
+> = {
+  config: { label: "Konfiguration", color: "purple" },
+  content: { label: "Inhalte", color: "amber" },
+  shop: { label: "Shop", color: "emerald" },
+};

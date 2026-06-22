@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
+export type NotificationPrefs = Record<string, boolean>;
+
 export interface AccountActionResult {
   success: boolean;
   error?: string;
@@ -72,6 +74,38 @@ export async function getPlayerSettings(): Promise<PlayerSettings> {
     acceptsTrades: data?.accepts_trades ?? true,
     profileVisible: data?.profile_visible ?? true,
   };
+}
+
+export async function getNotificationPrefs(): Promise<NotificationPrefs> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return {};
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("notification_prefs")
+    .eq("id", user.id)
+    .single();
+
+  return (data?.notification_prefs as NotificationPrefs) ?? {};
+}
+
+export async function updateNotificationPrefs(prefs: NotificationPrefs): Promise<AccountActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Du musst eingeloggt sein." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ notification_prefs: prefs })
+    .eq("id", user.id);
+
+  if (error) return { success: false, error: "Speichern fehlgeschlagen." };
+  return { success: true };
 }
 
 export async function updatePlayerSettings(input: Partial<PlayerSettings>): Promise<AccountActionResult> {

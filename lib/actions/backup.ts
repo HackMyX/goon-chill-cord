@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { revalidatePath } from "next/cache";
-import { BACKUP_TABLES, type BackupTableName } from "@/lib/backup-tables";
+import { BACKUP_TABLES, type BackupTableName, BACKUP_TABLE_INFO } from "@/lib/backup-tables";
 
 export interface BackupSummary {
   id: string;
@@ -46,15 +46,26 @@ async function selectAllRows(admin: ReturnType<typeof createAdminClient>, table:
   }
 }
 
-export async function createBackup(name?: string): Promise<{ success: boolean; error?: string; id?: string }> {
+export async function createBackup(
+  name?: string,
+  selectedTables?: BackupTableName[]
+): Promise<{ success: boolean; error?: string; id?: string }> {
   const user = await requireAdmin();
   if (!user) return { success: false, error: "Kein Zugriff." };
+
+  // Use BACKUP_TABLES order so restore dependency order is always respected,
+  // but only snapshot the tables the caller selected.
+  const wanted = new Set<string>(selectedTables ?? BACKUP_TABLES);
+  const tablesToBackup = BACKUP_TABLES.filter((t) => wanted.has(t));
+  if (tablesToBackup.length === 0) {
+    return { success: false, error: "Mindestens eine Tabelle muss ausgewählt sein." };
+  }
 
   const admin = createAdminClient();
   const tables: Record<string, unknown[]> = {};
   const tableCounts: Record<string, number> = {};
 
-  for (const table of BACKUP_TABLES) {
+  for (const table of tablesToBackup) {
     const rows = await selectAllRows(admin, table);
     tables[table] = rows;
     tableCounts[table] = rows.length;

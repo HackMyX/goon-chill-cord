@@ -5,9 +5,10 @@ import Link from "next/link";
 import { ArrowLeft, Coins, Package, Sparkles, ShieldCheck, Pencil, Check, X, Repeat, Eye, EyeOff, Loader2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { isAdmin } from "@/lib/admin";
-import { updateUsername, updatePlayerSettings } from "@/lib/actions/account";
+import { updateUsername, updatePlayerSettings, type NotificationPrefs } from "@/lib/actions/account";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { NotificationPrefsSection } from "@/components/account/notification-prefs-section";
 
 interface AccountShellProps {
   username: string;
@@ -20,6 +21,7 @@ interface AccountShellProps {
   inventoryCount: number;
   acceptsTrades: boolean;
   profileVisible: boolean;
+  notificationPrefs: NotificationPrefs;
 }
 
 export function AccountShell({
@@ -33,6 +35,7 @@ export function AccountShell({
   inventoryCount,
   acceptsTrades: initialAcceptsTrades,
   profileVisible: initialProfileVisible,
+  notificationPrefs,
 }: AccountShellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(username);
@@ -280,6 +283,8 @@ export function AccountShell({
             </div>
           </div>
         </div>
+
+        <NotificationPrefsSection initialPrefs={notificationPrefs} role={liveRole} />
       </main>
     </div>
   );
