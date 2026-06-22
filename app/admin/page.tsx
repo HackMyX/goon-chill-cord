@@ -111,7 +111,7 @@ export default async function AdminPage() {
     fetchTierRows(),
     admin
       .from("profiles")
-      .select("id, username, credits, role, cases_opened")
+      .select("id, username, credits, role, cases_opened, support_banned")
       .order("credits", { ascending: false })
       .limit(200),
     fetchItemRows(),

@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Coins, Package, Sparkles, ShieldCheck, Pencil, Check, X } from "lucide-react";
+import { ArrowLeft, Coins, Package, Sparkles, ShieldCheck, Pencil, Check, X, Repeat, Eye, EyeOff, Loader2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { isAdmin } from "@/lib/admin";
-import { updateUsername } from "@/lib/actions/account";
+import { updateUsername, updatePlayerSettings } from "@/lib/actions/account";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 
@@ -18,6 +18,8 @@ interface AccountShellProps {
   role: string;
   memberSince: string;
   inventoryCount: number;
+  acceptsTrades: boolean;
+  profileVisible: boolean;
 }
 
 export function AccountShell({
@@ -29,6 +31,8 @@ export function AccountShell({
   role,
   memberSince,
   inventoryCount,
+  acceptsTrades: initialAcceptsTrades,
+  profileVisible: initialProfileVisible,
 }: AccountShellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(username);
@@ -37,7 +41,29 @@ export function AccountShell({
   const [error, setError] = useState<string | null>(null);
   const [liveCredits, setLiveCredits] = useState(credits);
   const [liveRole, setLiveRole] = useState(role);
+  const [acceptsTrades, setAcceptsTrades] = useState(initialAcceptsTrades);
+  const [profileVisible, setProfileVisible] = useState(initialProfileVisible);
+  const [acceptsTradesSaving, setAcceptsTradesSaving] = useState(false);
+  const [profileVisibleSaving, setProfileVisibleSaving] = useState(false);
   const sound = useSoundManager();
+
+  async function handleToggleAcceptsTrades() {
+    sound.click();
+    setAcceptsTradesSaving(true);
+    const next = !acceptsTrades;
+    const res = await updatePlayerSettings({ acceptsTrades: next });
+    setAcceptsTradesSaving(false);
+    if (res.success) setAcceptsTrades(next);
+  }
+
+  async function handleToggleProfileVisible() {
+    sound.click();
+    setProfileVisibleSaving(true);
+    const next = !profileVisible;
+    const res = await updatePlayerSettings({ profileVisible: next });
+    setProfileVisibleSaving(false);
+    if (res.success) setProfileVisible(next);
+  }
 
   // Admin-driven changes (credits set, role changed) reach this tab the
   // instant they happen, no reload needed — see lib/use-realtime-profile.ts.
@@ -184,6 +210,75 @@ export function AccountShell({
           >
             Case Opening
           </Link>
+        </div>
+
+        <div className="mt-8">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-zinc-500">Einstellungen</h2>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Repeat className="h-5 w-5 shrink-0 text-cyan-300" />
+                <div>
+                  <p className="text-sm font-semibold text-zinc-200">Trade-Anfragen annehmen</p>
+                  <p className="text-xs text-zinc-500">Wenn deaktiviert, können andere Spieler dir keine Trades mehr anbieten.</p>
+                </div>
+              </div>
+              <button
+                onMouseEnter={sound.hover}
+                onClick={handleToggleAcceptsTrades}
+                disabled={acceptsTradesSaving}
+                role="switch"
+                aria-checked={acceptsTrades}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                  acceptsTrades ? "bg-purple-600" : "bg-white/10"
+                }`}
+              >
+                {acceptsTradesSaving ? (
+                  <Loader2 className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin text-zinc-300" />
+                ) : (
+                  <span
+                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      acceptsTrades ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                )}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+              <div className="flex items-center gap-3">
+                {profileVisible ? (
+                  <Eye className="h-5 w-5 shrink-0 text-emerald-300" />
+                ) : (
+                  <EyeOff className="h-5 w-5 shrink-0 text-zinc-500" />
+                )}
+                <div>
+                  <p className="text-sm font-semibold text-zinc-200">Auf Bestenliste &amp; Spieler-Liste sichtbar sein</p>
+                  <p className="text-xs text-zinc-500">Wenn deaktiviert, taucht dein Profil für andere nirgendwo öffentlich auf.</p>
+                </div>
+              </div>
+              <button
+                onMouseEnter={sound.hover}
+                onClick={handleToggleProfileVisible}
+                disabled={profileVisibleSaving}
+                role="switch"
+                aria-checked={profileVisible}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                  profileVisible ? "bg-purple-600" : "bg-white/10"
+                }`}
+              >
+                {profileVisibleSaving ? (
+                  <Loader2 className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin text-zinc-300" />
+                ) : (
+                  <span
+                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      profileVisible ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </main>
     </div>

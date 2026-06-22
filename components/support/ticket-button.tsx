@@ -99,8 +99,13 @@ export function SupportButton() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setVisible(!!user);
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) {
+        setVisible(false);
+        return;
+      }
+      const { data: profile } = await supabase.from("profiles").select("support_banned").eq("id", user.id).single();
+      setVisible(!profile?.support_banned);
     });
   }, []);
 

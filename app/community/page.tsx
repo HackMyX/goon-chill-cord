@@ -32,6 +32,7 @@ export default async function CommunityPage() {
     admin
       .from("profiles")
       .select("id, username, credits, role, created_at, gender")
+      .or(`profile_visible.eq.true,id.eq.${user.id}`)
       .order("credits", { ascending: false }),
     admin
       .from("inventory")

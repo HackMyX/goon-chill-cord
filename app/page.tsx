@@ -50,6 +50,7 @@ export default async function Home() {
   const { data: topProfiles } = await supabase
     .from("profiles")
     .select("id, username, credits")
+    .or(`profile_visible.eq.true,id.eq.${user.id}`)
     .order("credits", { ascending: false })
     .limit(10);
 

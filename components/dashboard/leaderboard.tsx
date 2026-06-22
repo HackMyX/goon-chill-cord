@@ -24,11 +24,16 @@ export function Leaderboard({ entries: initialEntries }: { entries: LeaderboardE
   // can bump someone in or out of the top 10) without a page reload.
   useRealtimeAllProfiles((row) => {
     if (typeof row.id !== "string" || typeof row.credits !== "number" || typeof row.username !== "string") return;
-    setEntries((curr) =>
-      [...curr.filter((e) => e.id !== row.id), { id: row.id, username: row.username as string, credits: row.credits as number }]
+    setEntries((curr) => {
+      const without = curr.filter((e) => e.id !== row.id);
+      // Respect the "Auf der Bestenliste anzeigen" privacy toggle — a
+      // newly-hidden profile drops out of live updates the same way it's
+      // excluded from the initial server fetch.
+      if (row.profile_visible === false) return without;
+      return [...without, { id: row.id, username: row.username as string, credits: row.credits as number }]
         .sort((a, b) => b.credits - a.credits)
-        .slice(0, 10)
-    );
+        .slice(0, 10);
+    });
   });
 
   return (

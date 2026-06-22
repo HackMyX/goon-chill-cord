@@ -55,6 +55,7 @@ export interface ProfileRow {
   credits: number;
   role: string;
   cases_opened: number;
+  support_banned?: boolean;
 }
 
 export interface ItemRow {

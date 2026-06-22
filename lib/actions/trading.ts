@@ -124,6 +124,15 @@ export async function createTradeOffer(input: {
 
   const admin = createAdminClient();
 
+  const { data: receiverProfile } = await admin
+    .from("profiles")
+    .select("accepts_trades")
+    .eq("id", input.receiverId)
+    .single();
+  if (receiverProfile && receiverProfile.accepts_trades === false) {
+    return { success: false, error: "Dieser Spieler nimmt aktuell keine Trade-Anfragen an." };
+  }
+
   const { count: pendingCount, error: pendingError } = await admin
     .from("trades")
     .select("*", { count: "exact", head: true })

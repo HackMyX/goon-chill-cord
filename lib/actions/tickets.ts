@@ -55,6 +55,11 @@ export async function createTicket(input: {
   if (!subject || !description) return { success: false, error: "Betreff und Beschreibung sind erforderlich." };
 
   const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("username, support_banned").eq("id", user.id).single();
+  if (profile?.support_banned) {
+    return { success: false, error: "Du hast aktuell keinen Zugriff auf den Support." };
+  }
+
   const { data, error } = await admin
     .from("tickets")
     .insert({ user_id: user.id, subject, description, status: "open", category })
@@ -65,7 +70,6 @@ export async function createTicket(input: {
     return { success: false, error: "Ticket konnte nicht erstellt werden — ist die Tickets-Migration eingespielt?" };
   }
 
-  const { data: profile } = await admin.from("profiles").select("username").eq("id", user.id).single();
   const username = profile?.username ?? "Ein Spieler";
 
   await notifyStaff({
@@ -158,8 +162,11 @@ export async function addTicketMessage(input: {
   if (!message) return { success: false, error: "Nachricht darf nicht leer sein." };
 
   const admin = createAdminClient();
-  const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
+  const { data: profile } = await admin.from("profiles").select("role, username, support_banned").eq("id", user.id).single();
   const isStaff = isModerator(profile);
+  if (!isStaff && profile?.support_banned) {
+    return { success: false, error: "Du hast aktuell keinen Zugriff auf den Support." };
+  }
 
   // Users may only message their own tickets
   const { data: ticket } = await admin

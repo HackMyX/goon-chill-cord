@@ -222,6 +222,13 @@ const ACTION_META: Record<string, ActionMeta> = {
     border: "border-red-500/30",
     format: (p) => (p.banned ? "User gebannt" : "User entbannt"),
   },
+  admin_support_ban: {
+    icon: Ban,
+    color: "text-orange-300",
+    bg: "bg-orange-500/10",
+    border: "border-orange-500/30",
+    format: (p) => (p.banned ? "Support-Button gesperrt" : "Support-Button entsperrt"),
+  },
   admin_kick_user: {
     icon: LogOut,
     color: "text-orange-300",

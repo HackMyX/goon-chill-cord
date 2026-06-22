@@ -49,3 +49,48 @@ export async function updateUsername(newUsername: string): Promise<AccountAction
   revalidatePath("/");
   return { success: true };
 }
+
+export interface PlayerSettings {
+  acceptsTrades: boolean;
+  profileVisible: boolean;
+}
+
+export async function getPlayerSettings(): Promise<PlayerSettings> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { acceptsTrades: true, profileVisible: true };
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("accepts_trades, profile_visible")
+    .eq("id", user.id)
+    .single();
+
+  return {
+    acceptsTrades: data?.accepts_trades ?? true,
+    profileVisible: data?.profile_visible ?? true,
+  };
+}
+
+export async function updatePlayerSettings(input: Partial<PlayerSettings>): Promise<AccountActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Du musst eingeloggt sein." };
+
+  const payload: Record<string, boolean> = {};
+  if (typeof input.acceptsTrades === "boolean") payload.accepts_trades = input.acceptsTrades;
+  if (typeof input.profileVisible === "boolean") payload.profile_visible = input.profileVisible;
+  if (Object.keys(payload).length === 0) return { success: true };
+
+  const { error } = await supabase.from("profiles").update(payload).eq("id", user.id);
+  if (error) return { success: false, error: "Speichern fehlgeschlagen." };
+
+  revalidatePath("/account");
+  revalidatePath("/");
+  revalidatePath("/community");
+  return { success: true };
+}

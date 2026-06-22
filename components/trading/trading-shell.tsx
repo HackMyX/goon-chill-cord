@@ -21,6 +21,7 @@ import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 export interface TradablePlayer {
   id: string;
   username: string;
+  acceptsTrades?: boolean;
 }
 
 export interface OwnedItem {
@@ -182,20 +183,27 @@ function CreateTradeForm({
 
       <p className="mb-2 text-xs font-semibold text-zinc-400">Spieler wählen</p>
       <div className="mb-5 flex flex-wrap gap-2">
-        {players.map((p) => (
-          <button
-            key={p.id}
-            onMouseEnter={sound.hover}
-            onClick={() => selectPlayer(p)}
-            className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
-              selectedPlayer?.id === p.id
-                ? "border-purple-400 bg-purple-500/20 text-purple-200"
-                : "border-white/10 text-zinc-300 hover:border-white/30"
-            }`}
-          >
-            {p.username}
-          </button>
-        ))}
+        {players.map((p) => {
+          const blocked = p.acceptsTrades === false;
+          return (
+            <button
+              key={p.id}
+              onMouseEnter={sound.hover}
+              onClick={() => !blocked && selectPlayer(p)}
+              disabled={blocked}
+              title={blocked ? "Dieser Spieler nimmt aktuell keine Trade-Anfragen an" : undefined}
+              className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
+                blocked
+                  ? "cursor-not-allowed border-white/5 text-zinc-600 line-through"
+                  : selectedPlayer?.id === p.id
+                  ? "border-purple-400 bg-purple-500/20 text-purple-200"
+                  : "border-white/10 text-zinc-300 hover:border-white/30"
+              }`}
+            >
+              {p.username}
+            </button>
+          );
+        })}
       </div>
 
       {selectedPlayer && (

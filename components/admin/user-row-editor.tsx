@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Save, RotateCcw } from "lucide-react";
-import { updateUserCredits, updateUserRole, resetUser } from "@/lib/actions/admin";
+import { Save, RotateCcw, MessageCircleOff, MessageCircle } from "lucide-react";
+import { updateUserCredits, updateUserRole, resetUser, setSupportBanned } from "@/lib/actions/admin";
 import { UserDetailPanel } from "@/components/admin/user-detail-panel";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -18,7 +18,24 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [resetConfirm, setResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [supportBanned, setSupportBannedState] = useState(!!profile.support_banned);
+  const [supportBanToggling, setSupportBanToggling] = useState(false);
   const sound = useSoundManager();
+
+  async function handleToggleSupportBan(e: React.MouseEvent) {
+    e.stopPropagation();
+    sound.click();
+    setSupportBanToggling(true);
+    const next = !supportBanned;
+    const res = await setSupportBanned(profile.id, next);
+    setSupportBanToggling(false);
+    if (res.success) {
+      setSupportBannedState(next);
+      setStatus("saved");
+    } else {
+      setStatus("error");
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -114,6 +131,25 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
           >
             <RotateCcw className="h-4 w-4" />
             {resetting ? "..." : resetConfirm ? "Sicher?" : "Reset"}
+          </button>
+
+          <button
+            onMouseEnter={sound.hover}
+            onClick={handleToggleSupportBan}
+            disabled={supportBanToggling}
+            title={
+              supportBanned
+                ? "Support-Button für diesen User wieder freigeben"
+                : "Support-Button für diesen User sperren (z.B. bei Spam)"
+            }
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
+              supportBanned
+                ? "border-red-400/60 bg-red-500/20 text-red-300 hover:border-red-400/80"
+                : "border-white/10 text-zinc-400 hover:border-white/30"
+            }`}
+          >
+            {supportBanned ? <MessageCircleOff className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
+            {supportBanToggling ? "..." : supportBanned ? "Support gesperrt" : "Support sperren"}
           </button>
 
           {status === "saved" && <span className="text-sm text-emerald-400">✓</span>}

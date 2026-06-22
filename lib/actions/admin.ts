@@ -579,6 +579,39 @@ export async function setUserBanned(
 }
 
 /**
+ * Separate from setUserBanned() on purpose — a full account ban logs the
+ * user out entirely (GoTrue rejects their session), which is overkill for
+ * "this person spams support tickets". This only hides/blocks the support
+ * widget (components/support/ticket-button.tsx) and rejects ticket
+ * creation/replies server-side (lib/actions/tickets.ts) — everything else
+ * about their account keeps working normally.
+ */
+export async function setSupportBanned(
+  targetUserId: string,
+  banned: boolean
+): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("profiles").update({ support_banned: banned }).eq("id", targetUserId);
+
+  if (error) return { success: false, error: "Aktion fehlgeschlagen." };
+
+  await logAdminAction(user.id, "admin_support_ban", { targetUserId, banned });
+  await notifyUser({
+    userId: targetUserId,
+    type: "admin_action",
+    title: banned ? "Support-Zugriff entzogen" : "Support-Zugriff wiederhergestellt",
+    message: banned
+      ? "Du kannst aktuell keine neuen Support-Tickets mehr erstellen oder beantworten."
+      : "Du kannst wieder Support-Tickets erstellen und beantworten.",
+  });
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+/**
  * "Force Logout" / "Kick": there's no direct "kill all sessions for this
  * user id" call in the Supabase JS admin API (`auth.signOut` only revokes a
  * session by its own JWT). A short, self-expiring ban achieves the same
