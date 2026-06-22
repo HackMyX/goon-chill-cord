@@ -120,11 +120,15 @@ export function useCameraControls(
     freeLookActive: false,
   });
   const [locked, setLocked] = useState(false);
-  // Set true the instant pointer lock engages, cleared after the very
-  // first mousemove event is *seen* (not applied) — see
-  // MAX_MOVEMENT_PER_EVENT's doc comment for why that first event is
-  // dropped outright rather than just clamped.
-  const justLocked = useRef(false);
+  // How many mousemove events to discard immediately after pointer lock
+  // engages — browsers typically send the OS's cursor-warp-to-lock-point
+  // as one OR MORE large mousemove events that must not be interpreted as
+  // deliberate look input (the original bool dropped only the very first
+  // one, which wasn't enough on some platforms and produced a brief
+  // "spin-on-click" jerk). Three is conservative and costs nothing for
+  // real play (genuine flicks arrive as many normal-sized events at the
+  // mouse's poll rate, not a single event at the start of a session).
+  const justLocked = useRef(0);
 
   useEffect(() => {
     const el = canvasRef.current;
@@ -132,8 +136,8 @@ export function useCameraControls(
 
     const onMouseMove = (e: MouseEvent) => {
       if (document.pointerLockElement !== el) return;
-      if (justLocked.current) {
-        justLocked.current = false;
+      if (justLocked.current > 0) {
+        justLocked.current--;
         return;
       }
       const movementX = Math.max(-MAX_MOVEMENT_PER_EVENT, Math.min(MAX_MOVEMENT_PER_EVENT, e.movementX));
@@ -163,15 +167,24 @@ export function useCameraControls(
         // in Player.tsx) changing underneath you. Released, Player.tsx eases
         // this back to 0 every frame, which is what "resets to standard"
         // actually is: the camera swinging back to directly behind the
-        // committed aim direction. Yaw is intentionally unclamped (full
-        // look-around), pitch reuses the same clamp range as normal look.
-        state.current.freeLookYaw -= movementX * YAW_SENSITIVITY;
+        // committed aim direction. Clamped to ±π so a stray right-click
+        // during rapid mouse movement can never accumulate to an absurd
+        // offset that reads as a long lingering spin when released.
+        state.current.freeLookYaw = Math.max(
+          -Math.PI,
+          Math.min(Math.PI, state.current.freeLookYaw - movementX * YAW_SENSITIVITY)
+        );
         state.current.freeLookPitch = Math.max(
           PITCH_MIN - state.current.pitch,
           Math.min(PITCH_MAX - state.current.pitch, state.current.freeLookPitch - movementY * PITCH_SENSITIVITY)
         );
       } else {
         state.current.yaw -= movementX * YAW_SENSITIVITY;
+        // Normalise to (−π, π) to prevent floating-point growth and keep
+        // all downstream sin/cos/angleDelta calls on small, precise values.
+        state.current.yaw = state.current.yaw % (Math.PI * 2);
+        if (state.current.yaw < -Math.PI) state.current.yaw += Math.PI * 2;
+        else if (state.current.yaw > Math.PI) state.current.yaw -= Math.PI * 2;
         state.current.pitch = Math.max(
           PITCH_MIN,
           Math.min(PITCH_MAX, state.current.pitch - movementY * PITCH_SENSITIVITY)
@@ -213,7 +226,7 @@ export function useCameraControls(
     };
     const onLockChange = () => {
       const isLocked = document.pointerLockElement === el;
-      if (isLocked) justLocked.current = true;
+      if (isLocked) justLocked.current = 3;
       // Losing the lock mid-free-look (Escape, alt-tab) must drop it too —
       // otherwise it stays "active" with no mouseup ever coming to clear
       // it, leaving the next click-to-resume permanently stuck in free-look.

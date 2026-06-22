@@ -328,7 +328,8 @@ export function Player({
     });
   }, [userId, combatRef]);
 
-  useFrame((_, delta) => {
+  useFrame((_, rawDelta) => {
+    const delta = Math.min(rawDelta, 1 / 20);
     const g = group.current;
     if (!g) return;
 
@@ -436,6 +437,9 @@ export function Player({
     // simply not read below, so the character just stands still facing
     // wherever it last faced.
     g.rotation.y += angleDelta(g.rotation.y, cc.yaw) * (1 - Math.exp(-delta * CHARACTER_TURN_RATE));
+    g.rotation.y = g.rotation.y % (Math.PI * 2);
+    if (g.rotation.y < -Math.PI) g.rotation.y += Math.PI * 2;
+    else if (g.rotation.y > Math.PI) g.rotation.y -= Math.PI * 2;
 
     const moveForward =
       locked && alive ? (keys.state.current.forward ? 1 : 0) - (keys.state.current.backward ? 1 : 0) : 0;

@@ -79,7 +79,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
       role="switch"
       aria-checked={checked}
       onClick={onChange}
-      className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900 ${
+      className={`relative h-6 w-11 shrink-0 cursor-pointer overflow-hidden rounded-full outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900 ${
         checked ? "bg-purple-600" : "bg-white/10"
       }`}
     >
@@ -237,7 +237,7 @@ export function NotificationPrefsSection({
                   <p className="text-[11px] leading-snug text-zinc-600">{item.desc}</p>
                 </div>
                 {/* Locked toggle — always-on, non-interactive */}
-                <div className="relative h-6 w-11 shrink-0 rounded-full bg-purple-700">
+                <div className="relative h-6 w-11 shrink-0 overflow-hidden rounded-full bg-purple-700">
                   <span className="absolute top-[2px] h-5 w-5 translate-x-[22px] rounded-full bg-white shadow-sm" />
                 </div>
               </div>

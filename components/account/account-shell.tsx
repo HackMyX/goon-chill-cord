@@ -232,7 +232,7 @@ export function AccountShell({
                 disabled={acceptsTradesSaving}
                 role="switch"
                 aria-checked={acceptsTrades}
-                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                className={`relative h-6 w-11 shrink-0 overflow-hidden rounded-full transition-colors disabled:opacity-50 ${
                   acceptsTrades ? "bg-purple-600" : "bg-white/10"
                 }`}
               >
@@ -266,7 +266,7 @@ export function AccountShell({
                 disabled={profileVisibleSaving}
                 role="switch"
                 aria-checked={profileVisible}
-                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                className={`relative h-6 w-11 shrink-0 overflow-hidden rounded-full transition-colors disabled:opacity-50 ${
                   profileVisible ? "bg-purple-600" : "bg-white/10"
                 }`}
               >
