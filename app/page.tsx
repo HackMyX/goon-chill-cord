@@ -4,19 +4,27 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { getCaseConfig } from "@/lib/cases-config";
 import { type Rarity } from "@/lib/cases";
 import { isAdmin } from "@/lib/admin";
-import { Gamepad2 } from "lucide-react";
+import { getSiteConfig } from "@/lib/actions/site-config";
+import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
 
 export default async function Home() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
+    const { siteName, logoUrl, logoIconName } = await getSiteConfig();
+    const LogoIcon = resolveSiteLogoIcon(logoIconName);
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-8 px-4 text-center">
         <div className="flex items-center gap-3">
-          <Gamepad2 className="h-10 w-10 text-purple-400" />
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- admin-provided arbitrary external URL
+            <img src={logoUrl} alt={siteName} className="h-10 w-10 rounded object-cover" />
+          ) : (
+            <LogoIcon className="h-10 w-10 text-purple-400" />
+          )}
           <h1 className="text-4xl font-extrabold text-zinc-100">
-            Goon&apos;n Chill Cord
+            {siteName}
           </h1>
         </div>
         <p className="max-w-md text-zinc-400">

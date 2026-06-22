@@ -4,10 +4,12 @@ import { useState } from "react";
 import { Box, Joystick, Pickaxe, Trophy, Coins } from "lucide-react";
 import { WorldSessionConfigEditor } from "@/components/admin/world-session-config-editor";
 import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
+import { CharacterConfigEditor } from "@/components/admin/character-config-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import type { ProfileRow } from "@/components/admin/admin-shell";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
 import type { KillStreakConfig } from "@/lib/kill-streak";
+import type { CharacterConfig } from "@/lib/character-config";
 
 interface GameDef {
   id: string;
@@ -33,6 +35,7 @@ const GAMES: GameDef[] = [
 interface GamesTabProps {
   worldSessionConfig: WorldSessionConfig;
   killStreakConfig: KillStreakConfig;
+  characterConfig: CharacterConfig;
   /** Already sorted by credits descending (app/admin/page.tsx's query) —
    * reused here as-is for the "Bestenliste" section instead of a second,
    * game-specific scores table that doesn't exist: World rewards are
@@ -50,7 +53,7 @@ interface GamesTabProps {
  * anything real behind it; Snake/Mine render as inert "Bald" placeholders
  * so the tab's shape doesn't have to change again once they exist.
  */
-export function GamesTab({ worldSessionConfig, killStreakConfig, topProfiles }: GamesTabProps) {
+export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig, topProfiles }: GamesTabProps) {
   const [openGame, setOpenGame] = useState<string>("world");
 
   return (
@@ -97,6 +100,7 @@ export function GamesTab({ worldSessionConfig, killStreakConfig, topProfiles }: 
             {isOpen && game.id === "world" && (
               <div className="flex flex-col gap-3 border-t border-white/10 px-5 py-5">
                 <WorldSessionConfigEditor config={worldSessionConfig} />
+                <CharacterConfigEditor config={characterConfig} />
                 <KillStreakConfigEditor config={killStreakConfig} />
 
                 <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">

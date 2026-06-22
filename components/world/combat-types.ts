@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { PLAYER_MAX_HP, PLAYER_MAX_STAMINA } from "@/lib/combat";
 
 /**
  * Mutated in place every frame by Player.tsx and read every frame by
@@ -48,17 +47,24 @@ export interface CombatSharedStateInit {
   armor?: number;
   shieldMaxHp?: number;
   shieldRegenCooldownDuration?: number;
+  /** Admin-configured (lib/character-config.ts) — scene.tsx passes these
+   * through from the loaded CharacterConfig instead of this file hardcoding
+   * lib/combat.ts's bare constants directly. */
+  maxHp?: number;
+  maxStamina?: number;
 }
 
 export function createCombatSharedState(init?: CombatSharedStateInit): CombatSharedState {
   const shieldMaxHp = init?.shieldMaxHp ?? 0;
+  const maxHp = init?.maxHp ?? 100;
+  const maxStamina = init?.maxStamina ?? 100;
   return {
     playerPos: new THREE.Vector3(0, 0, 0),
     playerHeading: 0,
-    hp: PLAYER_MAX_HP,
-    maxHp: PLAYER_MAX_HP,
-    stamina: PLAYER_MAX_STAMINA,
-    maxStamina: PLAYER_MAX_STAMINA,
+    hp: maxHp,
+    maxHp,
+    stamina: maxStamina,
+    maxStamina,
     invulnerable: false,
     armor: init?.armor ?? 0,
     shieldHpRemaining: shieldMaxHp,

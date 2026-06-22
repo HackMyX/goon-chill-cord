@@ -5,23 +5,8 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { rarityColorFor, type EquippedItem } from "@/lib/rarity-colors";
 import { SlashEffect, SLASH_EFFECT_LIFETIME_MS } from "@/components/world/hit-fx";
-import {
-  getEquippedDamage,
-  capsuleHitTest,
-  momentumMultiplier,
-  getPerkMultiplier,
-  applyIncomingDamage,
-  ATTACK_RANGE,
-  ATTACK_COOLDOWN,
-  STAMINA_SPRINT_DRAIN_PER_SEC,
-  STAMINA_REGEN_PER_SEC,
-  STAMINA_MIN_TO_START_SPRINT,
-  JUMP_COOLDOWN_SEC,
-  HP_REGEN_PER_SEC,
-  HP_REGEN_DELAY_AFTER_HIT_SEC,
-  RESPAWN_INVULNERABLE_SEC,
-  PLAYER_MAX_HP,
-} from "@/lib/combat";
+import { getEquippedDamage, capsuleHitTest, momentumMultiplier, getPerkMultiplier, applyIncomingDamage } from "@/lib/combat";
+import type { CharacterConfig } from "@/lib/character-config";
 import { CharacterModel, type CharacterLimbRefs } from "@/components/world/character-model";
 import { useKeyboardControls } from "@/components/world/use-keyboard-controls";
 import { useAttackInput } from "@/components/world/use-attack-input";
@@ -87,10 +72,14 @@ interface PlayerProps {
    * Respawn button to actually perform the reset — see the death-screen
    * doc comment below for why this isn't automatic anymore. */
   respawnSignal: number;
+  /** Admin-configured player/combat base stats (lib/character-config.ts)
+   * — every constant this file used to import straight from lib/combat.ts
+   * (move speed, stamina, fist damage, attack range/cooldown, etc.) now
+   * comes from here instead, so the admin Games tab can actually retune
+   * any of it live. */
+  characterConfig: CharacterConfig;
 }
 
-const SPEED = 4.5;
-const SPRINT_MULTIPLIER = 1.8;
 const ACCEL_RATE = 8; // higher = snappier velocity response, still delta-scaled
 /** Absolute world-space floor on the camera's Y position — scene.tsx's
  * ground plane sits at y≈-0.04 and is single-sided (invisible from
@@ -217,6 +206,7 @@ export function Player({
   onStatsChange,
   onDeath,
   respawnSignal,
+  characterConfig,
 }: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const limbs = useRef<CharacterLimbRefs>(null);
@@ -248,9 +238,9 @@ export function Player({
   // per-render values rather than refs/effects: every frame's closure
   // below just reads whatever was computed this render, which is always
   // the same number for the component's entire lifetime in practice.
-  const speedMultiplier = getPerkMultiplier(equippedByCategory, "speed_boost");
-  const jumpMultiplier = getPerkMultiplier(equippedByCategory, "jump_boost");
-  const hpRegenMultiplier = getPerkMultiplier(equippedByCategory, "hp_regen_boost");
+  const speedMultiplier = getPerkMultiplier(equippedByCategory, "speed_boost", characterConfig.perkMultiplierCap);
+  const jumpMultiplier = getPerkMultiplier(equippedByCategory, "jump_boost", characterConfig.perkMultiplierCap);
+  const hpRegenMultiplier = getPerkMultiplier(equippedByCategory, "hp_regen_boost", characterConfig.perkMultiplierCap);
 
   // Pre-allocated scratch objects — reused every frame, never replaced.
   const velocity = useRef(new THREE.Vector3());
@@ -295,11 +285,11 @@ export function Player({
   // last frame's value (monsters mutate combatRef.current.hp directly,
   // Player never sees the hit happen otherwise) and resets the
   // out-of-combat timer whenever it does.
-  // Starts at the constant, not `combatRef.current.maxHp` — reading a ref
-  // during render is itself flagged by React Compiler's purity rule, and
-  // combatRef's initial value (combat-types.ts) is this same constant
-  // anyway.
-  const prevHp = useRef(PLAYER_MAX_HP);
+  // Starts at the configured max, not `combatRef.current.maxHp` — reading
+  // a ref during render is itself flagged by React Compiler's purity
+  // rule, and combatRef's initial value (combat-types.ts) is this same
+  // number anyway.
+  const prevHp = useRef(characterConfig.playerMaxHp);
   const hpRegenTimer = useRef(0);
   const respawnInvulnTimer = useRef(0);
   const statsSyncTimer = useRef(0);
@@ -357,7 +347,7 @@ export function Player({
       combatRef.current.hp = combatRef.current.maxHp;
       prevHp.current = combatRef.current.maxHp;
       combatRef.current.invulnerable = true;
-      respawnInvulnTimer.current = RESPAWN_INVULNERABLE_SEC;
+      respawnInvulnTimer.current = characterConfig.respawnInvulnerableSec;
       // Respawn is a fresh start — an equipped shield comes back up at
       // full, not however depleted it was when the player died.
       combatRef.current.shieldHpRemaining = combatRef.current.shieldMaxHp;
@@ -448,15 +438,18 @@ export function Player({
     // flat cost below) — never from attacking. See lib/combat.ts for the
     // exact numbers and the hysteresis reasoning.
     const wantsSprint = locked && moving && keys.state.current.sprint;
-    if (combatRef.current.stamina >= STAMINA_MIN_TO_START_SPRINT) sprintAllowed.current = true;
+    if (combatRef.current.stamina >= characterConfig.staminaMinToStartSprint) sprintAllowed.current = true;
     const sprinting = wantsSprint && sprintAllowed.current && combatRef.current.stamina > 0;
     if (sprinting) {
-      combatRef.current.stamina = Math.max(0, combatRef.current.stamina - STAMINA_SPRINT_DRAIN_PER_SEC * delta);
+      combatRef.current.stamina = Math.max(
+        0,
+        combatRef.current.stamina - characterConfig.staminaSprintDrainPerSec * delta
+      );
       if (combatRef.current.stamina <= 0) sprintAllowed.current = false;
     } else {
       combatRef.current.stamina = Math.min(
         combatRef.current.maxStamina,
-        combatRef.current.stamina + STAMINA_REGEN_PER_SEC * delta
+        combatRef.current.stamina + characterConfig.staminaRegenPerSec * delta
       );
     }
 
@@ -481,7 +474,9 @@ export function Player({
         .normalize();
       targetVelocity.current
         .copy(moveDir.current)
-        .multiplyScalar(SPEED * speedMultiplier * (sprinting ? SPRINT_MULTIPLIER : 1));
+        .multiplyScalar(
+          characterConfig.moveSpeed * speedMultiplier * (sprinting ? characterConfig.sprintMultiplier : 1)
+        );
     } else {
       targetVelocity.current.set(0, 0, 0);
     }
@@ -513,7 +508,7 @@ export function Player({
     if (locked && alive && jumpRequested && grounded.current && jumpCooldown.current <= 0) {
       verticalVelocity.current = JUMP_VELOCITY * jumpMultiplier;
       grounded.current = false;
-      jumpCooldown.current = JUMP_COOLDOWN_SEC;
+      jumpCooldown.current = characterConfig.jumpCooldownSec;
     }
     verticalVelocity.current += GRAVITY * delta;
     baseY.current += verticalVelocity.current * delta;
@@ -535,10 +530,10 @@ export function Player({
     if (combatRef.current.hp < prevHp.current) hpRegenTimer.current = 0;
     else hpRegenTimer.current += delta;
     prevHp.current = combatRef.current.hp;
-    if (hpRegenTimer.current >= HP_REGEN_DELAY_AFTER_HIT_SEC) {
+    if (hpRegenTimer.current >= characterConfig.hpRegenDelayAfterHitSec) {
       combatRef.current.hp = Math.min(
         combatRef.current.maxHp,
-        combatRef.current.hp + HP_REGEN_PER_SEC * hpRegenMultiplier * delta
+        combatRef.current.hp + characterConfig.hpRegenPerSec * hpRegenMultiplier * delta
       );
       prevHp.current = combatRef.current.hp;
     }
@@ -577,7 +572,7 @@ export function Player({
       const dx = pos.x - g.position.x;
       const dz = pos.z - g.position.z;
       const dist = Math.hypot(dx, dz);
-      if (dist > ATTACK_RANGE) continue;
+      if (dist > characterConfig.attackRange) continue;
       anyInRange = true;
       // `cc.yaw` (the committed aim/movement/body-facing direction), not
       // `viewYaw` (the camera's *current rendered look*, free-look offset
@@ -598,7 +593,19 @@ export function Player({
       // Slime's, so treating both as the same fixed-size point whiffed
       // swings that clearly looked like they connected with a big
       // variant's visible silhouette.
-      if (!capsuleHitTest(g.position.x, g.position.z, cc.yaw, pos.x, pos.z, ATTACK_RANGE, m.hitRadius)) continue;
+      if (
+        !capsuleHitTest(
+          g.position.x,
+          g.position.z,
+          cc.yaw,
+          pos.x,
+          pos.z,
+          characterConfig.attackRange,
+          m.hitRadius,
+          characterConfig.attackConeHalfAngle
+        )
+      )
+        continue;
       if (dist < nearestDist) {
         nearestDist = dist;
         nearestMonster = m;
@@ -611,10 +618,22 @@ export function Player({
       const dx = pos.x - g.position.x;
       const dz = pos.z - g.position.z;
       const dist = Math.hypot(dx, dz);
-      if (dist > ATTACK_RANGE) continue;
+      if (dist > characterConfig.attackRange) continue;
       anyInRange = true;
       // Same `cc.yaw` reasoning as the monster loop above.
-      if (!capsuleHitTest(g.position.x, g.position.z, cc.yaw, pos.x, pos.z, ATTACK_RANGE)) continue;
+      if (
+        !capsuleHitTest(
+          g.position.x,
+          g.position.z,
+          cc.yaw,
+          pos.x,
+          pos.z,
+          characterConfig.attackRange,
+          characterConfig.attackHitRadius,
+          characterConfig.attackConeHalfAngle
+        )
+      )
+        continue;
       if (dist < nearestDist) {
         nearestDist = dist;
         nearestMonster = null;
@@ -631,7 +650,7 @@ export function Player({
     // doesn't linger and fire the moment the player respawns.
     const attackPressed = attack.consumeAttack();
     if (locked && alive && attackPressed && attackCooldown.current <= 0) {
-      attackCooldown.current = ATTACK_COOLDOWN;
+      attackCooldown.current = characterConfig.attackCooldown;
       attackProgress.current = 0.0001; // nudge off exactly 0 so the block below picks it up this frame
       // Slash VFX (hit-fx.tsx) — fired on every swing, hit or miss, exactly
       // like the arm animation itself; only the floating damage number
@@ -673,9 +692,17 @@ export function Player({
         () => setSlashEffects((curr) => curr.filter((s) => s.id !== slashId)),
         SLASH_EFFECT_LIFETIME_MS
       );
-      const baseDmg = getEquippedDamage(equippedByCategory.weapon_cosmetic);
+      const baseDmg = getEquippedDamage(equippedByCategory.weapon_cosmetic, characterConfig.fistDamage);
       const airborne = !grounded.current;
-      const dmg = Math.round(baseDmg * momentumMultiplier(sprinting, airborne));
+      const dmg = Math.round(
+        baseDmg *
+          momentumMultiplier(
+            sprinting,
+            airborne,
+            characterConfig.sprintDamageMultiplier,
+            characterConfig.airborneDamageMultiplier
+          )
+      );
       const hit = nearestMonster !== null || nearestPlayerId !== null;
       if (nearestMonster) {
         nearestMonster.takeDamage(dmg);
@@ -971,7 +998,7 @@ export function Player({
             player, see the doc comment above for why this replaced a
             screen-space crosshair. */}
         <mesh ref={rangeRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
-          <ringGeometry args={[ATTACK_RANGE - 0.07, ATTACK_RANGE, 48]} />
+          <ringGeometry args={[characterConfig.attackRange - 0.07, characterConfig.attackRange, 48]} />
           <meshBasicMaterial color="#a855f7" transparent opacity={0.16} toneMapped={false} side={THREE.DoubleSide} />
         </mesh>
       </group>

@@ -50,7 +50,12 @@ export const SUGGESTED_DAMAGE_BY_RARITY: Record<Rarity, number> = {
 // from one balanced source instead of two copies that could drift apart.
 
 export const PLAYER_MAX_HP = 100;
-export const PLAYER_MAX_STAMINA = 100;
+// Bumped from 100 — feedback was "a bit more stamina would be nice".
+// Regen nudged up to match rather than just the pool size alone, so a
+// bigger max doesn't only mean "the same regen takes longer to refill
+// it" — both the ceiling and the recovery pace are a little more
+// generous now. Admin-tunable regardless (lib/character-config.ts).
+export const PLAYER_MAX_STAMINA = 130;
 
 /** Stamina only ever drains from sprinting (continuous, per second) —
  * explicitly never from attacking (a fight shouldn't also exhaust you out
@@ -62,7 +67,7 @@ export const PLAYER_MAX_STAMINA = 100;
  * — see JUMP_COOLDOWN_SEC below for how spam is prevented instead (a
  * cooldown, not a resource cost). */
 export const STAMINA_SPRINT_DRAIN_PER_SEC = 16;
-export const STAMINA_REGEN_PER_SEC = 12;
+export const STAMINA_REGEN_PER_SEC = 14;
 /** Hysteresis: sprint can drain stamina all the way to 0, but can't be
  * *re-engaged* until it's regenerated back up past this floor — without
  * this, sitting exactly at the drain/regen breakeven point would flicker
@@ -176,13 +181,22 @@ export function capsuleHitTest(
  * Stacked multiplicatively (a sprint-jump-attack is rare but should feel
  * like the biggest hit available) and applied on top of whatever
  * `getEquippedDamage` already returned, never replacing it. */
-const SPRINT_DAMAGE_MULTIPLIER = 1.2;
-const AIRBORNE_DAMAGE_MULTIPLIER = 1.35;
+export const SPRINT_DAMAGE_MULTIPLIER = 1.2;
+export const AIRBORNE_DAMAGE_MULTIPLIER = 1.35;
 
-export function momentumMultiplier(sprinting: boolean, airborne: boolean): number {
+/** Optional 3rd/4th params let an admin-configured value (lib/character-
+ * config.ts) override the module default without every existing caller
+ * needing to pass anything — same "parameterized with a default" shape
+ * `capsuleHitTest` already uses below. */
+export function momentumMultiplier(
+  sprinting: boolean,
+  airborne: boolean,
+  sprintMult: number = SPRINT_DAMAGE_MULTIPLIER,
+  airborneMult: number = AIRBORNE_DAMAGE_MULTIPLIER
+): number {
   let mult = 1;
-  if (sprinting) mult *= SPRINT_DAMAGE_MULTIPLIER;
-  if (airborne) mult *= AIRBORNE_DAMAGE_MULTIPLIER;
+  if (sprinting) mult *= sprintMult;
+  if (airborne) mult *= airborneMult;
   return mult;
 }
 
@@ -212,8 +226,15 @@ export const PVP_DAMAGE_MULTIPLIER = 0.35;
  * a client-claimed number). Kept here, not inlined there, so the PvE
  * momentum math and the PvP-only dampener are visibly the same shape (one
  * wraps the other) instead of two independently-drifting copies. */
-export function computePvpDamage(baseDmg: number, sprinting: boolean, airborne: boolean): number {
-  return Math.round(baseDmg * momentumMultiplier(sprinting, airborne) * PVP_DAMAGE_MULTIPLIER);
+export function computePvpDamage(
+  baseDmg: number,
+  sprinting: boolean,
+  airborne: boolean,
+  sprintMult: number = SPRINT_DAMAGE_MULTIPLIER,
+  airborneMult: number = AIRBORNE_DAMAGE_MULTIPLIER,
+  pvpMult: number = PVP_DAMAGE_MULTIPLIER
+): number {
+  return Math.round(baseDmg * momentumMultiplier(sprinting, airborne, sprintMult, airborneMult) * pvpMult);
 }
 
 // --- Armor / perks / shields ---------------------------------------------
@@ -272,7 +293,7 @@ const PERK_SLOTS = ["amulet", "ring"] as const;
  * never matches sprinting outright, and the single fastest monster variant
  * (Geist, 6.4) can still catch a walking player even at the absolute
  * ceiling (4.5 × 1.4 = 6.3 < 6.4). */
-const PERK_MULTIPLIER_CAP = 1.4;
+export const PERK_MULTIPLIER_CAP = 1.4;
 
 /** Multiplier (around 1.0) for whichever stat `type` boosts — amulet and
  * ring stack multiplicatively if both happen to carry the same perk type,
@@ -280,13 +301,17 @@ const PERK_MULTIPLIER_CAP = 1.4;
  * (1.15 × 1.10), not just the better of the two — up to `PERK_MULTIPLIER_
  * CAP` above, past which further stacking simply stops doing anything.
  * Returns exactly 1 (no effect) if nothing equipped carries this perk. */
-export function getPerkMultiplier(equippedByCategory: Record<string, PerkSource | undefined>, type: PerkType): number {
+export function getPerkMultiplier(
+  equippedByCategory: Record<string, PerkSource | undefined>,
+  type: PerkType,
+  cap: number = PERK_MULTIPLIER_CAP
+): number {
   let mult = 1;
   for (const slot of PERK_SLOTS) {
     const item = equippedByCategory[slot];
     if (item?.perk_type === type) mult *= 1 + (item.perk_magnitude ?? 0);
   }
-  return Math.min(mult, PERK_MULTIPLIER_CAP);
+  return Math.min(mult, cap);
 }
 
 /** Whether `type` is one of the dbTypes the admin item editor should show
@@ -352,9 +377,9 @@ export interface DamageSource {
  * fist — that's the whole point of equipping it — and never equipping
  * anything (or equipping a weapon skin with no damage set) means you're
  * still just punching. */
-export function getEquippedDamage(weapon: DamageSource | undefined | null): number {
-  if (!weapon || weapon.damage === null || weapon.damage === undefined) return FIST_DAMAGE;
-  return Math.max(FIST_DAMAGE, Math.floor(weapon.damage));
+export function getEquippedDamage(weapon: DamageSource | undefined | null, fistDamage: number = FIST_DAMAGE): number {
+  if (!weapon || weapon.damage === null || weapon.damage === undefined) return fistDamage;
+  return Math.max(fistDamage, Math.floor(weapon.damage));
 }
 
 /** Display label for damage badges — same "⚔" glyph everywhere a weapon's

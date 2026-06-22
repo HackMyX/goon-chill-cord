@@ -1,0 +1,158 @@
+"use client";
+
+import { useState } from "react";
+import { Save, Loader2, Palette, Coins } from "lucide-react";
+import { updateSiteConfig } from "@/lib/actions/site-config";
+import type { SiteConfig } from "@/lib/site-config";
+import { SITE_LOGO_ICONS, resolveSiteLogoIcon, type SiteLogoIconName } from "@/lib/site-logo-icons";
+import { useSoundManager } from "@/lib/sound-manager";
+
+const ICON_NAMES = Object.keys(SITE_LOGO_ICONS) as SiteLogoIconName[];
+
+/**
+ * Admin config for sitewide branding (lib/site-config.ts) — the name shown
+ * top-left in every page's TopBar (and the browser tab title, and the
+ * logged-out homepage) plus the logo: either a custom image URL or one of
+ * lib/site-logo-icons.ts' curated icon choices. Lives in its own top-level
+ * admin tab ("Branding") rather than inside the Games tab, since this
+ * isn't specific to any one game.
+ */
+export function SiteConfigEditor({ config }: { config: SiteConfig }) {
+  const [form, setForm] = useState(config);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const sound = useSoundManager();
+
+  async function handleSave() {
+    setSaving(true);
+    sound.click();
+    const res = await updateSiteConfig(form);
+    setSaving(false);
+    if (res.success) {
+      sound.win();
+      setMessage("Gespeichert.");
+    } else {
+      sound.error();
+      setMessage(res.error ?? "Fehler.");
+    }
+    setTimeout(() => setMessage(null), 3000);
+  }
+
+  const PreviewIcon = resolveSiteLogoIcon(form.logoIconName);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
+      <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
+        <Palette className="h-5 w-5 text-pink-400" />
+        Branding
+      </h3>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-semibold text-zinc-400">Seitenname</span>
+        <input
+          type="text"
+          maxLength={60}
+          value={form.siteName}
+          onChange={(e) => setForm((f) => ({ ...f, siteName: e.target.value }))}
+          className="w-full max-w-sm rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+        />
+        <span className="text-[11px] text-zinc-600">
+          Erscheint oben links in der Navigation, als Browser-Tab-Titel und auf der Login-Seite.
+        </span>
+      </label>
+
+      <div className="mt-5">
+        <span className="text-xs font-semibold text-zinc-400">Logo-Icon</span>
+        <p className="mb-2 text-[11px] text-zinc-600">
+          Eines auswählen — wird genutzt, solange unten keine eigene Bild-URL eingetragen ist.
+        </p>
+        <div className="grid grid-cols-6 gap-2 sm:grid-cols-10">
+          {ICON_NAMES.map((name) => {
+            const Icon = SITE_LOGO_ICONS[name];
+            const selected = form.logoIconName === name;
+            return (
+              <button
+                key={name}
+                type="button"
+                title={name}
+                onMouseEnter={sound.hover}
+                onClick={() => {
+                  sound.click();
+                  setForm((f) => ({ ...f, logoIconName: name }));
+                }}
+                className={`flex items-center justify-center rounded-lg border p-2.5 transition-colors ${
+                  selected
+                    ? "border-purple-400 bg-purple-500/20 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.45)]"
+                    : "border-white/10 text-zinc-400 hover:border-white/30 hover:text-zinc-200"
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <label className="mt-5 flex flex-col gap-1">
+        <span className="text-xs font-semibold text-zinc-400">Eigene Logo-Bild-URL (optional)</span>
+        <input
+          type="text"
+          placeholder="https://…"
+          value={form.logoUrl ?? ""}
+          onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value || null }))}
+          className="w-full max-w-sm rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+        />
+        <span className="text-[11px] text-zinc-600">
+          Überschreibt das ausgewählte Icon, solange diese URL gesetzt ist. Leeren, um wieder das
+          Icon oben zu verwenden. Es gibt keinen Datei-Upload — eine bereits gehostete Bild-URL
+          eintragen.
+        </span>
+      </label>
+
+      <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+        <span className="text-xs text-zinc-500">Vorschau:</span>
+        {form.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- arbitrary admin-provided URL preview
+          <img src={form.logoUrl} alt={form.siteName} className="h-6 w-6 rounded object-cover" />
+        ) : (
+          <PreviewIcon className="h-6 w-6 text-purple-400" />
+        )}
+        <span className="font-extrabold tracking-tight text-zinc-100">{form.siteName || "—"}</span>
+      </div>
+
+      <label className="mt-5 flex flex-col gap-1">
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+          <Coins className="h-3.5 w-3.5 text-amber-400" />
+          Startguthaben für neue User (CR)
+        </span>
+        <input
+          type="number"
+          min={0}
+          max={1000000}
+          step={50}
+          value={form.startingCredits ?? 500}
+          onChange={(e) => setForm((f) => ({ ...f, startingCredits: Math.max(0, Number(e.target.value) || 0) }))}
+          className="w-40 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60"
+        />
+        <span className="text-[11px] text-zinc-600">
+          Credits, die jeder neue Spieler beim ersten Login automatisch erhält. Erfordert einmalig{" "}
+          <code className="rounded bg-black/40 px-1 py-0.5 text-amber-400/80">node scripts/add-starting-credits.mjs</code>,
+          damit der DB-Trigger den Wert liest.
+        </span>
+      </label>
+
+      <div className="mt-5 flex items-center gap-3">
+        <button
+          onMouseEnter={sound.hover}
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Speichern
+        </button>
+        {message && <span className="text-sm text-zinc-400">{message}</span>}
+      </div>
+    </div>
+  );
+}

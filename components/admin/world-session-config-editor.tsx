@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Save, Loader2, Power, Swords, Timer } from "lucide-react";
 import { updateWorldSessionConfig } from "@/lib/actions/world-session";
+import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
 import { useSoundManager } from "@/lib/sound-manager";
 
@@ -36,12 +37,14 @@ export function WorldSessionConfigEditor({ config }: { config: WorldSessionConfi
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
-      <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
-        <Timer className="h-5 w-5 text-cyan-400" />
-        Session-Einstellungen
-      </h3>
-
+    <CollapsibleAdminRow
+      header={
+        <div className="flex items-center gap-2">
+          <Timer className="h-5 w-5 text-cyan-400" />
+          <span className="text-base font-bold text-zinc-100">Session-Einstellungen</span>
+        </div>
+      }
+    >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-semibold text-zinc-400">Disconnect-Timer (Sekunden)</span>
@@ -57,7 +60,7 @@ export function WorldSessionConfigEditor({ config }: { config: WorldSessionConfi
             className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
           />
           <span className="text-[11px] text-zinc-600">
-            So lange muss der Spieler nach Klick auf „Disconnect“ überleben, bevor die Kill-Streak
+            So lange muss der Spieler nach Klick auf &bdquo;Disconnect&ldquo; überleben, bevor die Kill-Streak
             gesichert wird.
           </span>
         </label>
@@ -109,8 +112,8 @@ export function WorldSessionConfigEditor({ config }: { config: WorldSessionConfi
             {form.pvpEnabled ? "An" : "Aus"}
           </button>
           <span className="text-[11px] text-zinc-600">
-            Wenn aus: Schläge gegen andere Spieler treffen nie (Server-seitig erzwungen). Monster-
-            Kämpfe sind unabhängig davon immer aktiv.
+            Wenn aus: Schläge gegen andere Spieler treffen nie (Server-seitig erzwungen).
+            Monster-Kämpfe sind unabhängig davon immer aktiv.
           </span>
         </label>
       </div>
@@ -127,6 +130,6 @@ export function WorldSessionConfigEditor({ config }: { config: WorldSessionConfi
         </button>
         {message && <span className="text-sm text-zinc-400">{message}</span>}
       </div>
-    </div>
+    </CollapsibleAdminRow>
   );
 }

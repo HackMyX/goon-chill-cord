@@ -20,6 +20,7 @@ import {
   type MonsterTypeConfig,
 } from "@/lib/monsters";
 import { streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
+import type { CharacterConfig } from "@/lib/character-config";
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { subscribeToWorldRoster } from "@/lib/world-realtime";
 
@@ -45,6 +46,7 @@ interface MonstersFieldProps {
    * long the streak has run by the time they appear. */
   streakKillCount: number;
   onMonsterKilled: (typeId: string) => void;
+  characterConfig: CharacterConfig;
 }
 
 let spawnSeq = 0;
@@ -69,6 +71,7 @@ export function MonstersField({
   killStreakConfig,
   streakKillCount,
   onMonsterKilled,
+  characterConfig,
 }: MonstersFieldProps) {
   const [spawns, setSpawns] = useState<MonsterSpawn[]>([]);
   // Owned here, not by each Monster — see monster.tsx's onThrow doc
@@ -157,6 +160,7 @@ export function MonstersField({
           registryRef={registryRef}
           onDied={(typeId) => handleDied(s.id, typeId)}
           onThrow={handleThrow}
+          characterConfig={characterConfig}
         />
       ))}
       {projectiles.map((p) => (

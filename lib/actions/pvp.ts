@@ -4,8 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { broadcastToWorldRoom } from "@/lib/realtime-server";
 import { WORLD_CHANNEL_NAME } from "@/lib/world-realtime";
-import { getEquippedDamage, isWeaponType, computePvpDamage, capsuleHitTest, ATTACK_RANGE } from "@/lib/combat";
+import { getEquippedDamage, isWeaponType, computePvpDamage, capsuleHitTest } from "@/lib/combat";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
+import { getCharacterConfig } from "@/lib/actions/character-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 export interface AttemptPvpHitInput {
@@ -61,6 +62,7 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
   // just never lands on another player while this is off.
   const sessionConfig = await getWorldSessionConfig();
   if (!sessionConfig.pvpEnabled) return { success: true, hit: false };
+  const characterConfig = await getCharacterConfig();
 
   const admin = createAdminClient();
 
@@ -82,7 +84,9 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
     input.attackerHeading,
     input.targetX,
     input.targetZ,
-    ATTACK_RANGE
+    characterConfig.attackRange,
+    characterConfig.attackHitRadius,
+    characterConfig.attackConeHalfAngle
   );
   if (!isHit) return { success: true, hit: false };
 
@@ -97,14 +101,21 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
   const weaponRow = ((inventory ?? []) as unknown as { item: (EquippedItem & { type: string }) | null }[]).find(
     (row) => row.item && isWeaponType(row.item.type)
   );
-  const baseDmg = getEquippedDamage(weaponRow?.item ?? null);
+  const baseDmg = getEquippedDamage(weaponRow?.item ?? null, characterConfig.fistDamage);
   // computePvpDamage (not the bare PvE momentum math) — see its doc
   // comment in lib/combat.ts for why PvP needs its own, separately
   // dampened damage curve: a flat 100-HP human target has none of the
   // per-tier HP headroom monsters are individually balanced around, so
   // applying raw weapon/momentum numbers here would let a single
   // sprint-jump hit from a top-tier weapon one-shot anyone outright.
-  const damage = computePvpDamage(baseDmg, input.sprinting, input.airborne);
+  const damage = computePvpDamage(
+    baseDmg,
+    input.sprinting,
+    input.airborne,
+    characterConfig.sprintDamageMultiplier,
+    characterConfig.airborneDamageMultiplier,
+    characterConfig.pvpDamageMultiplier
+  );
 
   try {
     await admin.from("audit_logs").insert({

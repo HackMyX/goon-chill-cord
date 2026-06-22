@@ -14,6 +14,7 @@ import { getTotalArmor } from "@/lib/combat";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { PetTypeConfig } from "@/lib/pets";
 import type { KillStreakConfig } from "@/lib/kill-streak";
+import type { CharacterConfig } from "@/lib/character-config";
 import type { CameraControls } from "@/components/world/use-camera-controls";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -27,6 +28,7 @@ interface SceneProps {
   monsterTypes: MonsterTypeConfig[];
   petTypes: PetTypeConfig[];
   killStreakConfig: KillStreakConfig;
+  characterConfig: CharacterConfig;
   /** Current player's kill-streak count — scales locally-spawned
    * monsters' health/attackDamage slightly upward the longer it runs
    * (lib/kill-streak.ts' streakMobScale). Necessarily client-local: this
@@ -70,6 +72,7 @@ export function Scene({
   monsterTypes,
   petTypes,
   killStreakConfig,
+  characterConfig,
   streakKillCount,
   onAttack,
   onStatsChange,
@@ -86,6 +89,8 @@ export function Scene({
       armor: getTotalArmor(equippedByCategory),
       shieldMaxHp: equippedByCategory.shield_cosmetic?.shield_hp ?? 0,
       shieldRegenCooldownDuration: equippedByCategory.shield_cosmetic?.shield_regen_cooldown_sec ?? 0,
+      maxHp: characterConfig.playerMaxHp,
+      maxStamina: characterConfig.playerMaxStamina,
     })
   );
   const monsterRegistryRef = useRef<MonsterHandle[]>([]);
@@ -158,6 +163,7 @@ export function Scene({
         onStatsChange={onStatsChange}
         onDeath={onDeath}
         respawnSignal={respawnSignal}
+        characterConfig={characterConfig}
       />
 
       <RemotePlayers selfUserId={userId} registryRef={remotePlayerRegistryRef} />
@@ -168,6 +174,7 @@ export function Scene({
         registryRef={monsterRegistryRef}
         killStreakConfig={killStreakConfig}
         streakKillCount={streakKillCount}
+        characterConfig={characterConfig}
         onMonsterKilled={(typeId) => onMonsterKilled?.(typeId)}
       />
     </>

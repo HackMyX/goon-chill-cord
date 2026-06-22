@@ -5,6 +5,7 @@ import { getMonsterTypes } from "@/lib/actions/monsters";
 import { getPetConfigs } from "@/lib/actions/pets";
 import { getKillStreakConfig } from "@/lib/actions/kill-streak";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
+import { getCharacterConfig } from "@/lib/actions/character-config";
 import { isAdmin } from "@/lib/admin";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -59,6 +60,7 @@ export default async function WorldPage() {
   const monsterTypes = await getMonsterTypes();
   const petTypes = await getPetConfigs();
   const killStreakConfig = await getKillStreakConfig();
+  const characterConfig = await getCharacterConfig();
 
   const equippedByCategory: Record<string, EquippedItem> = {};
   for (const row of (equipped ?? []) as unknown as { item: EquippedItem & { type: string } }[]) {
@@ -77,6 +79,7 @@ export default async function WorldPage() {
       monsterTypes={monsterTypes}
       petTypes={petTypes}
       killStreakConfig={killStreakConfig}
+      characterConfig={characterConfig}
       disconnectCountdownSec={worldSessionConfig.disconnectCountdownSec}
       pvpEnabled={worldSessionConfig.pvpEnabled}
       isAdmin={isAdmin(profile)}

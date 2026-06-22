@@ -1,0 +1,307 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
+import { notifyUser, notifyStaff } from "@/lib/notifications-internal";
+
+export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+
+export interface Ticket {
+  id: string;
+  userId: string;
+  username: string;
+  subject: string;
+  description: string;
+  status: TicketStatus;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  userId: string;
+  username: string;
+  message: string;
+  isStaff: boolean;
+  createdAt: string;
+}
+
+export interface TicketDetail extends Ticket {
+  messages: TicketMessage[];
+}
+
+// ─── User actions ─────────────────────────────────────────────────────────────
+
+export async function createTicket(input: {
+  subject: string;
+  description: string;
+}): Promise<{ success: boolean; error?: string; ticketId?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const subject = input.subject.trim().slice(0, 120);
+  const description = input.description.trim().slice(0, 2000);
+  if (!subject || !description) return { success: false, error: "Betreff und Beschreibung sind erforderlich." };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("tickets")
+    .insert({ user_id: user.id, subject, description, status: "open" })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return { success: false, error: "Ticket konnte nicht erstellt werden — ist die Tickets-Migration eingespielt?" };
+  }
+
+  const { data: profile } = await admin.from("profiles").select("username").eq("id", user.id).single();
+  const username = profile?.username ?? "Ein Spieler";
+
+  await notifyStaff({
+    type: "ticket_new",
+    title: "Neues Support-Ticket",
+    message: `${username}: ${subject}`,
+    link: "/admin?tab=tickets",
+  });
+
+  revalidatePath("/admin");
+  return { success: true, ticketId: data.id };
+}
+
+export async function getUserTickets(): Promise<Ticket[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("tickets")
+    .select("id, user_id, subject, description, status, created_at, updated_at, profiles(username), ticket_messages(count)")
+    .eq("user_id", user.id)
+    .order("updated_at", { ascending: false })
+    .limit(30);
+
+  return (data ?? []).map(mapTicket);
+}
+
+export async function getTicketDetail(ticketId: string): Promise<TicketDetail | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
+
+  // Users can only view their own tickets; staff can view all
+  const query = admin
+    .from("tickets")
+    .select("id, user_id, subject, description, status, created_at, updated_at, profiles(username), ticket_messages(count)")
+    .eq("id", ticketId);
+
+  if (!isModerator(profile)) {
+    query.eq("user_id", user.id);
+  }
+
+  const { data } = await query.single();
+  if (!data) return null;
+
+  const { data: messages } = await admin
+    .from("ticket_messages")
+    .select("id, ticket_id, user_id, message, is_staff, created_at, profiles(username)")
+    .eq("ticket_id", ticketId)
+    .order("created_at", { ascending: true });
+
+  const ticket = mapTicket(data);
+  return {
+    ...ticket,
+    messages: (messages ?? []).map((m) => ({
+      id: m.id,
+      ticketId: m.ticket_id,
+      userId: m.user_id,
+      username: (m.profiles as { username?: string } | null)?.username ?? "Unbekannt",
+      message: m.message,
+      isStaff: m.is_staff,
+      createdAt: m.created_at,
+    })),
+  };
+}
+
+export async function addTicketMessage(input: {
+  ticketId: string;
+  message: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const message = input.message.trim().slice(0, 2000);
+  if (!message) return { success: false, error: "Nachricht darf nicht leer sein." };
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
+  const isStaff = isModerator(profile);
+
+  // Users may only message their own tickets
+  const { data: ticket } = await admin
+    .from("tickets")
+    .select("id, user_id, subject, status")
+    .eq("id", input.ticketId)
+    .single();
+
+  if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
+  if (!isStaff && ticket.user_id !== user.id) return { success: false, error: "Kein Zugriff." };
+  if (ticket.status === "closed") return { success: false, error: "Dieses Ticket ist geschlossen." };
+
+  await admin.from("ticket_messages").insert({
+    ticket_id: input.ticketId,
+    user_id: user.id,
+    message,
+    is_staff: isStaff,
+  });
+
+  // Update updated_at on the ticket
+  await admin
+    .from("tickets")
+    .update({ updated_at: new Date().toISOString(), status: isStaff && ticket.status === "open" ? "in_progress" : ticket.status })
+    .eq("id", input.ticketId);
+
+  const username = profile?.username ?? "Support";
+
+  if (isStaff) {
+    // Notify the ticket owner
+    await notifyUser({
+      userId: ticket.user_id,
+      type: "ticket_reply",
+      title: "Antwort auf dein Ticket",
+      message: `${username} hat auf dein Ticket „${ticket.subject}" geantwortet.`,
+      link: `/support`,
+    });
+  } else {
+    // Notify staff of user reply
+    await notifyStaff({
+      type: "ticket_reply",
+      title: "User-Antwort auf Ticket",
+      message: `${username}: ${message.slice(0, 80)}`,
+      link: "/admin?tab=tickets",
+    });
+  }
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function closeTicket(ticketId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const admin = createAdminClient();
+  const { data: ticket } = await admin
+    .from("tickets")
+    .select("user_id")
+    .eq("id", ticketId)
+    .single();
+
+  if (!ticket || ticket.user_id !== user.id) return { success: false, error: "Kein Zugriff." };
+
+  await admin.from("tickets").update({ status: "closed", updated_at: new Date().toISOString() }).eq("id", ticketId);
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+// ─── Admin/Staff actions ───────────────────────────────────────────────────────
+
+export async function getAdminTickets(): Promise<Ticket[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
+  if (!isModerator(profile)) return [];
+
+  const { data } = await admin
+    .from("tickets")
+    .select("id, user_id, subject, description, status, created_at, updated_at, profiles(username), ticket_messages(count)")
+    .order("updated_at", { ascending: false })
+    .limit(100);
+
+  return (data ?? []).map(mapTicket);
+}
+
+export async function updateTicketStatus(input: {
+  ticketId: string;
+  status: TicketStatus;
+}): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
+  if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
+
+  const { data: ticket } = await admin.from("tickets").select("user_id, subject").eq("id", input.ticketId).single();
+  if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
+
+  await admin
+    .from("tickets")
+    .update({ status: input.status, updated_at: new Date().toISOString() })
+    .eq("id", input.ticketId);
+
+  const STATUS_LABELS: Record<TicketStatus, string> = {
+    open: "Offen",
+    in_progress: "In Bearbeitung",
+    resolved: "Gelöst",
+    closed: "Geschlossen",
+  };
+
+  await notifyUser({
+    userId: ticket.user_id,
+    type: "ticket_status",
+    title: "Ticket-Status geändert",
+    message: `Dein Ticket „${ticket.subject}" ist jetzt: ${STATUS_LABELS[input.status]}`,
+    link: `/support`,
+  });
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapTicket(row: any): Ticket {
+  const profiles = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+  const msgCountRaw = Array.isArray(row.ticket_messages) ? row.ticket_messages[0]?.count : 0;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    username: profiles?.username ?? "Unbekannt",
+    subject: row.subject,
+    description: row.description,
+    status: row.status as TicketStatus,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    messageCount: typeof msgCountRaw === "number" ? msgCountRaw : Number(msgCountRaw) || 0,
+  };
+}

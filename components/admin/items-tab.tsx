@@ -7,26 +7,17 @@ import { ItemRowEditor } from "@/components/admin/item-row-editor";
 import { NewItemForm } from "@/components/admin/new-item-form";
 import { ALL_ITEM_TYPES, RARITY_ORDER, RARITY_LABELS, getTypeLabel } from "@/lib/cases";
 import { useSoundManager } from "@/lib/sound-manager";
-import { isArmorType, isPerkType, isShieldType } from "@/lib/combat";
 import type { ItemRow } from "@/components/admin/admin-shell";
 
 // Only an *initial guess* before the real height is measured (see
-// `measureElement` below) — most rows are this tall (single line, no stat
-// fields), but a fixed guess used to be the *actual* height for every row
-// regardless of content (a flat 132px for all ~1000 items), which left a
-// visible dead gap under every plain cosmetic row that didn't need the
-// second stat-fields line (armor/perk/shield — item-row-editor.tsx) at
-// all. Rows with one now correctly take more space, and everything else
-// shrinks to fit, because the virtualizer measures actual rendered height
-// per row instead of trusting one number for all of them.
+// `measureElement` below) — every row now starts collapsed (item-row-
+// editor.tsx's stat-fields line is hidden behind an explicit expand
+// toggle, components/admin/collapsible-admin-row.tsx), so unlike before,
+// every row's *initial* height is genuinely the same regardless of its
+// type. The virtualizer still measures actual rendered height per row
+// (picking up the moment any individual row is expanded), this is only
+// the first-paint guess.
 const ESTIMATED_ROW_HEIGHT = 84;
-
-/** Whether `item` renders item-row-editor.tsx's second stat-fields line at
- * all — used only to pick a closer initial estimate so the very first
- * paint (before measurement corrects it) doesn't visibly jump as much. */
-function hasStatLine(item: ItemRow): boolean {
-  return isArmorType(item.type) || isPerkType(item.type) || isShieldType(item.type);
-}
 
 export function ItemsTab({ items, setItems }: { items: ItemRow[]; setItems: (fn: (prev: ItemRow[]) => ItemRow[]) => void }) {
   const [query, setQuery] = useState("");
@@ -48,7 +39,7 @@ export function ItemsTab({ items, setItems }: { items: ItemRow[]; setItems: (fn:
   const virtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (index) => (hasStatLine(filtered[index]) ? ESTIMATED_ROW_HEIGHT + 56 : ESTIMATED_ROW_HEIGHT),
+    estimateSize: () => ESTIMATED_ROW_HEIGHT,
     overscan: 8,
   });
 

@@ -7,7 +7,8 @@ import { Billboard, Text } from "@react-three/drei";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { CombatSharedState, MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
-import { applyIncomingDamage, ATTACK_HIT_RADIUS } from "@/lib/combat";
+import { applyIncomingDamage } from "@/lib/combat";
+import type { CharacterConfig } from "@/lib/character-config";
 import { WORLD_RADIUS } from "@/lib/world-config";
 
 /** One thrown-projectile request — fired upward via `onThrow` (Monster
@@ -29,6 +30,12 @@ interface MonsterProps {
   registryRef: MonsterRegistry;
   onDied: (typeId: string) => void;
   onThrow: (request: ThrowRequest) => void;
+  /** Admin-configured (lib/character-config.ts) — only `attackHitRadius`
+   * is actually used here (baked into this monster's own `hitRadius`
+   * scaled by its `type.scale`, same as before), but the whole config is
+   * threaded through rather than a single bare number so a future field
+   * needing the same treatment doesn't need its own prop added later. */
+  characterConfig: CharacterConfig;
 }
 
 let popupSeq = 0;
@@ -201,7 +208,16 @@ export function ThrownProjectile({
  * Player.tsx's attack scan can find and damage it without any prop
  * drilling back the other way — see components/world/combat-types.ts.
  */
-export function Monster({ id, type, initialPosition, combatRef, registryRef, onDied, onThrow }: MonsterProps) {
+export function Monster({
+  id,
+  type,
+  initialPosition,
+  combatRef,
+  registryRef,
+  onDied,
+  onThrow,
+  characterConfig,
+}: MonsterProps) {
   const group = useRef<THREE.Group>(null);
   const upperBody = useRef<THREE.Group>(null);
   const legL = useRef<THREE.Group>(null);
@@ -246,7 +262,7 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
       typeId: type.id,
       getPosition: () => group.current?.position ?? new THREE.Vector3(...initialPosition),
       isAlive: () => alive.current,
-      hitRadius: ATTACK_HIT_RADIUS * type.scale,
+      hitRadius: characterConfig.attackHitRadius * type.scale,
       takeDamage: (amount) => {
         if (!alive.current) return 0;
         health.current = Math.max(0, health.current - amount);

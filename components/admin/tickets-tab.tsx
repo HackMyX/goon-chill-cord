@@ -1,0 +1,308 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import {
+  MessageCircle,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
+  Send,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
+import {
+  getAdminTickets,
+  getTicketDetail,
+  addTicketMessage,
+  updateTicketStatus,
+  type Ticket,
+  type TicketDetail,
+  type TicketStatus,
+} from "@/lib/actions/tickets";
+import { useSoundManager } from "@/lib/sound-manager";
+
+const STATUS_LABEL: Record<TicketStatus, string> = {
+  open: "Offen",
+  in_progress: "In Bearbeitung",
+  resolved: "Gelöst",
+  closed: "Geschlossen",
+};
+
+const STATUS_STYLE: Record<TicketStatus, string> = {
+  open: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
+  in_progress: "text-blue-300 bg-blue-500/10 border-blue-500/30",
+  resolved: "text-purple-300 bg-purple-500/10 border-purple-500/30",
+  closed: "text-zinc-400 bg-zinc-500/10 border-zinc-500/30",
+};
+
+const STATUS_ICON: Record<TicketStatus, typeof MessageCircle> = {
+  open: MessageCircle,
+  in_progress: Clock,
+  resolved: CheckCircle2,
+  closed: XCircle,
+};
+
+const ALL_STATUSES: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
+
+function StatusBadge({ status }: { status: TicketStatus }) {
+  const Icon = STATUS_ICON[status];
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLE[status]}`}>
+      <Icon className="h-2.5 w-2.5" />
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+function TicketRow({ ticket, onUpdated }: { ticket: Ticket; onUpdated: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [detail, setDetail] = useState<TicketDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
+  const [statusChanging, setStatusChanging] = useState(false);
+  const sound = useSoundManager();
+
+  async function handleExpand() {
+    sound.click();
+    if (!expanded) {
+      setExpanded(true);
+      setLoadingDetail(true);
+      const d = await getTicketDetail(ticket.id);
+      setDetail(d);
+      setLoadingDetail(false);
+    } else {
+      setExpanded(false);
+    }
+  }
+
+  async function handleReply(e: React.FormEvent) {
+    e.preventDefault();
+    if (!reply.trim()) return;
+    setSending(true);
+    await addTicketMessage({ ticketId: ticket.id, message: reply.trim() });
+    setReply("");
+    const d = await getTicketDetail(ticket.id);
+    setDetail(d);
+    setSending(false);
+    onUpdated();
+  }
+
+  async function handleStatusChange(status: TicketStatus) {
+    setStatusChanging(true);
+    await updateTicketStatus({ ticketId: ticket.id, status });
+    const d = await getTicketDetail(ticket.id);
+    setDetail(d);
+    setStatusChanging(false);
+    onUpdated();
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+      <button
+        onClick={handleExpand}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
+      >
+        <StatusBadge status={ticket.status} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-zinc-200">{ticket.subject}</p>
+          <p className="text-[11px] text-zinc-500">
+            {ticket.username} ·{" "}
+            {new Date(ticket.updatedAt).toLocaleString("de-DE", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+            {" "}· {ticket.messageCount} Msg
+          </p>
+        </div>
+        {expanded ? (
+          <ChevronUp className="h-4 w-4 shrink-0 text-zinc-500" />
+        ) : (
+          <ChevronDown className="h-4 w-4 shrink-0 text-zinc-500" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-white/[0.06]">
+          {loadingDetail && (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+            </div>
+          )}
+
+          {!loadingDetail && detail && (
+            <div className="flex flex-col gap-0">
+              {/* Status controls */}
+              <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
+                <span className="text-xs text-zinc-500">Status:</span>
+                {ALL_STATUSES.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => handleStatusChange(s)}
+                    disabled={statusChanging || detail.status === s}
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold transition-colors ${
+                      detail.status === s
+                        ? STATUS_STYLE[s]
+                        : "border-white/10 text-zinc-500 hover:border-white/30 hover:text-zinc-300"
+                    } disabled:opacity-50`}
+                  >
+                    {STATUS_LABEL[s]}
+                  </button>
+                ))}
+                {statusChanging && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />}
+              </div>
+
+              {/* Original description */}
+              <div className="border-b border-white/[0.06] bg-black/20 px-4 py-3">
+                <p className="text-[11px] text-zinc-500 mb-1">Beschreibung von {ticket.username}:</p>
+                <p className="text-sm leading-relaxed text-zinc-300">{detail.description}</p>
+              </div>
+
+              {/* Messages */}
+              <div className="flex flex-col gap-2 px-4 py-3">
+                {detail.messages.length === 0 && (
+                  <p className="text-center text-xs text-zinc-600">Noch keine Nachrichten.</p>
+                )}
+                {detail.messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`rounded-xl px-3 py-2 ${msg.isStaff ? "ml-6 bg-purple-500/10" : "mr-6 bg-white/[0.04]"}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-bold ${msg.isStaff ? "text-purple-300" : "text-zinc-400"}`}>
+                        {msg.isStaff ? "🛡 " : ""}{msg.username}
+                      </span>
+                      <span className="text-[10px] text-zinc-600">
+                        {new Date(msg.createdAt).toLocaleString("de-DE", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-sm leading-relaxed text-zinc-300">{msg.message}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Reply */}
+              {detail.status !== "closed" && (
+                <form onSubmit={handleReply} className="border-t border-white/[0.06] px-4 py-3">
+                  <p className="mb-2 text-[11px] font-semibold text-purple-300">Als Staff antworten:</p>
+                  <div className="flex gap-2">
+                    <textarea
+                      value={reply}
+                      onChange={(e) => setReply(e.target.value)}
+                      rows={2}
+                      maxLength={2000}
+                      placeholder="Antwort…"
+                      className="min-w-0 flex-1 resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-purple-400/60"
+                    />
+                    <button
+                      type="submit"
+                      disabled={sending || !reply.trim()}
+                      className="flex items-center justify-center rounded-lg bg-purple-600 px-3 py-2 text-white transition-colors hover:bg-purple-500 disabled:opacity-50"
+                    >
+                      {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type FilterStatus = TicketStatus | "all";
+
+export function TicketsTab() {
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<FilterStatus>("open");
+  const sound = useSoundManager();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const result = await getAdminTickets();
+    setTickets(result);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const displayed = filter === "all" ? tickets : tickets.filter((t) => t.status === filter);
+
+  const countFor = (s: FilterStatus) =>
+    s === "all" ? tickets.length : tickets.filter((t) => t.status === s).length;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        {(["all", "open", "in_progress", "resolved", "closed"] as FilterStatus[]).map((s) => (
+          <button
+            key={s}
+            onMouseEnter={sound.hover}
+            onClick={() => { sound.click(); setFilter(s); }}
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+              filter === s
+                ? "border-purple-400 bg-purple-500/15 text-purple-200 shadow-[0_0_8px_rgba(168,85,247,0.35)]"
+                : "border-white/10 text-zinc-400 hover:border-white/30"
+            }`}
+          >
+            {s === "all" ? "Alle" : STATUS_LABEL[s as TicketStatus]}
+            <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px]">{countFor(s)}</span>
+          </button>
+        ))}
+        <button
+          onMouseEnter={sound.hover}
+          onClick={() => { sound.click(); load(); }}
+          className="ml-auto flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-zinc-400 hover:border-white/30"
+        >
+          <RefreshCw className="h-3 w-3" />
+          Aktualisieren
+        </button>
+      </div>
+
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+        </div>
+      )}
+
+      {!loading && displayed.length === 0 && (
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] py-12 text-center">
+          <MessageCircle className="h-8 w-8 text-zinc-700" />
+          <p className="text-sm text-zinc-500">
+            {filter === "all" ? "Noch keine Tickets vorhanden." : `Keine ${STATUS_LABEL[filter as TicketStatus]}-Tickets.`}
+          </p>
+        </div>
+      )}
+
+      {!loading && displayed.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {displayed.map((ticket) => (
+            <TicketRow key={ticket.id} ticket={ticket} onUpdated={load} />
+          ))}
+        </div>
+      )}
+
+      {tickets.length === 0 && !loading && (
+        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm text-amber-200">
+          Noch keine Tickets. Führe einmalig{" "}
+          <code className="rounded bg-black/40 px-1.5 py-0.5">node scripts/create-tickets.mjs</code> aus,
+          wenn die Tabellen noch nicht existieren.
+        </p>
+      )}
+    </div>
+  );
+}

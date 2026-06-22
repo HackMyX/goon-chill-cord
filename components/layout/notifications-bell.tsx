@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Bell, CheckCheck, Repeat, Gavel, Sparkles } from "lucide-react";
+import { Bell, CheckCheck, Repeat, Gavel, Sparkles, Swords, Flame, Gift, ShieldCheck, MessageCircle, ShoppingBag } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   getNotifications,
@@ -22,6 +22,16 @@ const TYPE_ICON: Record<string, typeof Bell> = {
   auction_outbid: Gavel,
   auction_sold: Gavel,
   auction_won: Gavel,
+  pvp_hit: Swords,
+  pvp_kill: Swords,
+  streak_kill: Flame,
+  streak_claim: Gift,
+  streak_commit: Flame,
+  admin_action: ShieldCheck,
+  shop_purchase: ShoppingBag,
+  ticket_new: MessageCircle,
+  ticket_reply: MessageCircle,
+  ticket_status: MessageCircle,
 };
 
 function timeAgo(iso: string): string {
@@ -209,7 +219,7 @@ export function NotificationsBell() {
                         <p className={`text-sm font-semibold ${!n.read ? "text-zinc-100" : "text-zinc-400"}`}>
                           {n.title}
                         </p>
-                        <p className="truncate text-xs text-zinc-500">{n.message}</p>
+                        <p className="line-clamp-2 text-xs text-zinc-500">{n.message}</p>
                         <p className="mt-0.5 text-[10px] text-zinc-600">{timeAgo(n.createdAt)}</p>
                       </div>
                       {!n.read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />}

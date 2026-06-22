@@ -12,6 +12,7 @@ import { ItemRow } from "@/components/wardrobe/item-row";
 import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
 import { toggleEquip, updateGender } from "@/lib/actions/wardrobe";
 import { getCategoryByDbType, getCategories, ALL_CATEGORY } from "@/lib/wardrobe";
+import { getTotalArmor, getPerkMultiplier, getEquippedDamage, FIST_DAMAGE } from "@/lib/combat";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { debugLog, debugWarn } from "@/lib/debug";
@@ -28,6 +29,11 @@ export interface InventoryRow {
     type: string;
     price_cr?: number;
     damage?: number | null;
+    armor?: number | null;
+    perk_type?: string | null;
+    perk_magnitude?: number | null;
+    shield_hp?: number | null;
+    shield_regen_cooldown_sec?: number | null;
   };
 }
 
@@ -45,6 +51,115 @@ interface WardrobeShellProps {
 }
 
 const ROW_HEIGHT = 76; // row height incl. gap, used by the virtualizer's size estimate
+
+interface StatRowDef {
+  label: string;
+  value: string;
+  color: string;
+  tooltip: string;
+}
+
+function StatRow({ label, value, color, tooltip }: StatRowDef) {
+  return (
+    <div className="group relative flex items-center justify-between gap-3">
+      <span className="text-[11px] text-zinc-500">{label}</span>
+      <span className={`cursor-help text-[11px] font-bold tabular-nums ${color}`}>{value}</span>
+      <div className="pointer-events-none absolute right-0 bottom-full z-50 mb-1.5 w-56 rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-2 text-[11px] leading-relaxed text-zinc-300 opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100">
+        {tooltip}
+      </div>
+    </div>
+  );
+}
+
+function CombatStatsPanel({ equippedByCategory }: { equippedByCategory: Record<string, EquippedItem | undefined> }) {
+  const totalArmor = getTotalArmor(equippedByCategory);
+  const speedMult = getPerkMultiplier(equippedByCategory, "speed_boost");
+  const jumpMult = getPerkMultiplier(equippedByCategory, "jump_boost");
+  const regenMult = getPerkMultiplier(equippedByCategory, "hp_regen_boost");
+  const equippedWeapon = equippedByCategory["weapon_cosmetic"];
+  const effectiveDmg = getEquippedDamage(equippedWeapon);
+  const equippedShield = equippedByCategory["shield_cosmetic"];
+  const shieldHp = equippedShield?.shield_hp ?? 0;
+  const shieldCooldown = equippedShield?.shield_regen_cooldown_sec ?? 0;
+
+  const rows: StatRowDef[] = [
+    {
+      label: "Schaden",
+      value: `⚔ ${effectiveDmg} DMG${!equippedWeapon ? " (Fäuste)" : ""}`,
+      color: effectiveDmg > FIST_DAMAGE ? "text-emerald-300" : "text-zinc-500",
+      tooltip: equippedWeapon
+        ? `Waffenschaden: Deine ausgerüstete Waffe verursacht ${effectiveDmg} Punkte pro Treffer im Kampf.`
+        : `Waffenschaden: Keine Waffe ausgerüstet — du greifst mit Fäusten an (${FIST_DAMAGE} DMG). Rüste eine Waffe aus, um mehr Schaden zu machen.`,
+    },
+    {
+      label: "Rüstung",
+      value: `🛡 ${totalArmor} AP`,
+      color: totalArmor > 0 ? "text-blue-300" : "text-zinc-500",
+      tooltip: `Rüstungspunkte gesamt: Reduziert jeden eingehenden Schaden um ${totalArmor} Punkte (min. 1 Schaden geht immer durch). Kommt von Jacke, Hose, Hut und Schuhen zusammen.`,
+    },
+    ...(speedMult > 1
+      ? [
+          {
+            label: "Tempo",
+            value: `⚡ +${Math.round((speedMult - 1) * 100)}%`,
+            color: "text-amber-300",
+            tooltip: `Tempo-Boost: Deine ausgerüsteten Perks erhöhen die Laufgeschwindigkeit um +${Math.round((speedMult - 1) * 100)}%. Amulett und Ring stapeln sich multiplikativ (max. +40% gesamt).`,
+          },
+        ]
+      : []),
+    ...(jumpMult > 1
+      ? [
+          {
+            label: "Sprung",
+            value: `↑ +${Math.round((jumpMult - 1) * 100)}%`,
+            color: "text-amber-300",
+            tooltip: `Sprung-Boost: Deine ausgerüsteten Perks erhöhen Sprunghöhe und -weite um +${Math.round((jumpMult - 1) * 100)}%. Amulett und Ring stapeln sich multiplikativ (max. +40% gesamt).`,
+          },
+        ]
+      : []),
+    ...(regenMult > 1
+      ? [
+          {
+            label: "Regen",
+            value: `♥ +${Math.round((regenMult - 1) * 100)}%`,
+            color: "text-amber-300",
+            tooltip: `HP-Regen-Boost: Deine ausgerüsteten Perks erhöhen die passive Lebensregeneration um +${Math.round((regenMult - 1) * 100)}%. Regen setzt 4 Sekunden nach dem letzten Treffer ein. Amulett und Ring stapeln sich multiplikativ (max. +40% gesamt).`,
+          },
+        ]
+      : []),
+    ...(shieldHp > 0
+      ? [
+          {
+            label: "Schild",
+            value: `🔵 ${shieldHp} HP`,
+            color: "text-cyan-300",
+            tooltip: `Schild-HP: Dein ausgerüsteter Schild absorbiert bis zu ${shieldHp} Schadenspunkte, bevor deine HP sinken. Leert sich komplett und lädt sich nach dem Cooldown vollständig wieder auf.`,
+          },
+          ...(shieldCooldown > 0
+            ? [
+                {
+                  label: "Schild CD",
+                  value: `⏱ ${shieldCooldown}s`,
+                  color: "text-cyan-400/70",
+                  tooltip: `Schild-Cooldown: Nach dem vollständigen Leeren des Schildes dauert es ${shieldCooldown} Sekunden, bis es sich wieder vollständig auflädt.`,
+                },
+              ]
+            : []),
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="shrink-0 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+      <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wide text-zinc-600">Kampf-Stats</h3>
+      <div className="flex flex-col gap-1">
+        {rows.map((row) => (
+          <StatRow key={row.label} {...row} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function WardrobeShell({
   credits,
@@ -171,6 +286,11 @@ export function WardrobeShell({
           name: row.item.name,
           rarity: row.item.rarity,
           damage: row.item.damage,
+          armor: row.item.armor,
+          perk_type: row.item.perk_type as EquippedItem["perk_type"],
+          perk_magnitude: row.item.perk_magnitude,
+          shield_hp: row.item.shield_hp,
+          shield_regen_cooldown_sec: row.item.shield_regen_cooldown_sec,
         };
       }
     }
@@ -256,14 +376,19 @@ export function WardrobeShell({
           />
 
           <div className="flex flex-col gap-4">
-            <CategoryFilters
-              categories={categories}
-              active={currentCategory.id}
-              onSelect={(id) => {
-                sound.click();
-                setActiveCategory(id);
-              }}
-            />
+            <div className="flex flex-wrap items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <CategoryFilters
+                  categories={categories}
+                  active={currentCategory.id}
+                  onSelect={(id) => {
+                    sound.click();
+                    setActiveCategory(id);
+                  }}
+                />
+              </div>
+              <CombatStatsPanel equippedByCategory={equippedByCategory} />
+            </div>
 
             <WardrobeFilters
               query={query}
@@ -313,6 +438,11 @@ export function WardrobeShell({
                           rarity={row.item.rarity}
                           type={row.item.type}
                           damage={row.item.damage}
+                          armor={row.item.armor}
+                          perk_type={row.item.perk_type}
+                          perk_magnitude={row.item.perk_magnitude}
+                          shield_hp={row.item.shield_hp}
+                          shield_regen_cooldown_sec={row.item.shield_regen_cooldown_sec}
                           equipped={row.equipped}
                           onToggle={handleToggle}
                           onPreview={setPreviewId}
@@ -329,7 +459,18 @@ export function WardrobeShell({
 
       {previewRow && (
         <ItemPreviewModal
-          item={previewRow.item}
+          item={{
+            id: previewRow.item.id,
+            name: previewRow.item.name,
+            rarity: previewRow.item.rarity,
+            type: previewRow.item.type,
+            damage: previewRow.item.damage,
+            armor: previewRow.item.armor,
+            perk_type: previewRow.item.perk_type,
+            perk_magnitude: previewRow.item.perk_magnitude,
+            shield_hp: previewRow.item.shield_hp,
+            shield_regen_cooldown_sec: previewRow.item.shield_regen_cooldown_sec,
+          }}
           gender={gender}
           onClose={() => setPreviewId(null)}
         />

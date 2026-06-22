@@ -12,6 +12,12 @@ export interface WonItem {
   rarity: string;
   type: string;
   image_url: string | null;
+  damage: number | null;
+  armor: number | null;
+  perk_type: string | null;
+  perk_magnitude: number | null;
+  shield_hp: number | null;
+  shield_regen_cooldown_sec: number | null;
 }
 
 export interface OpenCaseResult {
@@ -67,10 +73,26 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
 
   let { data: pool, error: poolError } = await supabase
     .from("items")
-    .select("id, name, rarity, type, image_url")
+    .select("id, name, rarity, type, image_url, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec")
     .eq("rarity", rolledRarity)
     .in("type", itemTypes)
     .limit(500);
+
+  // Fallback if stat columns haven't been migrated yet — still open the case.
+  if (poolError) {
+    const retry = await supabase
+      .from("items")
+      .select("id, name, rarity, type, image_url")
+      .eq("rarity", rolledRarity)
+      .in("type", itemTypes)
+      .limit(500);
+    pool = (retry.data ?? []).map((row) => ({
+      ...row,
+      damage: null, armor: null, perk_type: null,
+      perk_magnitude: null, shield_hp: null, shield_regen_cooldown_sec: null,
+    }));
+    poolError = retry.error;
+  }
 
   // Fallback: the exact rarity has no items yet (e.g. DB import still in
   // progress) — broaden to any rarity within this case's item pool instead
@@ -79,7 +101,7 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
   if (!poolError && (!pool || pool.length === 0)) {
     const fallback = await supabase
       .from("items")
-      .select("id, name, rarity, type, image_url")
+      .select("id, name, rarity, type, image_url, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec")
       .in("type", itemTypes)
       .limit(500);
     pool = fallback.data;

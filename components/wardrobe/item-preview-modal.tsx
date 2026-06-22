@@ -8,12 +8,23 @@ import * as THREE from "three";
 import { X } from "lucide-react";
 import { CharacterModel } from "@/components/world/character-model";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
-import { isWeaponType, getEquippedDamage, formatDamage } from "@/lib/combat";
+import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import type { Rarity } from "@/lib/cases";
 
 interface ItemPreviewModalProps {
-  item: { id: string; name: string; rarity: Rarity; type: string; damage?: number | null };
+  item: {
+    id: string;
+    name: string;
+    rarity: Rarity;
+    type: string;
+    damage?: number | null;
+    armor?: number | null;
+    perk_type?: string | null;
+    perk_magnitude?: number | null;
+    shield_hp?: number | null;
+    shield_regen_cooldown_sec?: number | null;
+  };
   gender: "m" | "w";
   onClose: () => void;
 }
@@ -44,7 +55,17 @@ export function ItemPreviewModal({ item, gender, onClose }: ItemPreviewModalProp
   if (!mounted) return null;
 
   const equippedByCategory: Record<string, EquippedItem | undefined> = {
-    [item.type]: { id: item.id, name: item.name, rarity: item.rarity, damage: item.damage },
+    [item.type]: {
+      id: item.id,
+      name: item.name,
+      rarity: item.rarity,
+      damage: item.damage,
+      armor: item.armor,
+      perk_type: item.perk_type as EquippedItem["perk_type"],
+      perk_magnitude: item.perk_magnitude,
+      shield_hp: item.shield_hp,
+      shield_regen_cooldown_sec: item.shield_regen_cooldown_sec,
+    },
   };
 
   return createPortal(
@@ -64,14 +85,17 @@ export function ItemPreviewModal({ item, gender, onClose }: ItemPreviewModalProp
         </button>
 
         <div className="rounded-2xl border border-purple-500/30 bg-[#0b0814] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
-          <div className="mb-2 flex items-center justify-center gap-2">
+          <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
             <p className="text-center text-sm font-semibold text-zinc-100">{item.name}</p>
             <RarityBadge rarity={item.rarity} />
-            {isWeaponType(item.type) && (
-              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
-                {formatDamage(getEquippedDamage(item))}
-              </span>
-            )}
+            <ItemStatBadges
+              damage={item.damage}
+              armor={item.armor}
+              perk_type={item.perk_type}
+              perk_magnitude={item.perk_magnitude}
+              shield_hp={item.shield_hp}
+              shield_regen_cooldown_sec={item.shield_regen_cooldown_sec}
+            />
           </div>
 
           <div className="h-80 w-full overflow-hidden rounded-xl border border-white/10 bg-[#08050f]">

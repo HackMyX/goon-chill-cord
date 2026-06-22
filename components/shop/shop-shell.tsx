@@ -9,7 +9,7 @@ import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
 import { ItemThumbnail3D } from "@/components/shop/item-thumbnail-3d";
 import { useSoundManager } from "@/lib/sound-manager";
-import { isWeaponType, getEquippedDamage, formatDamage } from "@/lib/combat";
+import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { purchaseShopItem, type ShopListingEntry } from "@/lib/actions/shop";
 
 interface ShopShellProps {
@@ -131,13 +131,16 @@ function ShopCard({
         <p className="truncate font-semibold text-zinc-100">{listing.itemName}</p>
         <RarityBadge rarity={listing.itemRarity} />
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <p className="text-[11px] text-zinc-500">{CATEGORY_LABELS[listing.itemType] ?? listing.itemType}</p>
-        {isWeaponType(listing.itemType) && (
-          <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
-            {formatDamage(getEquippedDamage({ damage: listing.itemDamage }))}
-          </span>
-        )}
+        <ItemStatBadges
+          damage={listing.itemDamage}
+          armor={listing.itemArmor}
+          perk_type={listing.itemPerkType}
+          perk_magnitude={listing.itemPerkMagnitude}
+          shield_hp={listing.itemShieldHp}
+          shield_regen_cooldown_sec={listing.itemShieldCooldown}
+        />
       </div>
 
       <div className="mt-auto flex items-center justify-between gap-2">
@@ -276,6 +279,11 @@ export function ShopShell({
             rarity: previewListing.itemRarity,
             type: previewListing.itemType,
             damage: previewListing.itemDamage,
+            armor: previewListing.itemArmor,
+            perk_type: previewListing.itemPerkType,
+            perk_magnitude: previewListing.itemPerkMagnitude,
+            shield_hp: previewListing.itemShieldHp,
+            shield_regen_cooldown_sec: previewListing.itemShieldCooldown,
           }}
           gender={gender}
           onClose={() => setPreviewListing(null)}

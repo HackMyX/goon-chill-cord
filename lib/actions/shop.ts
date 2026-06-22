@@ -186,8 +186,12 @@ export interface ShopListingEntry {
   itemName: string;
   itemRarity: Rarity;
   itemType: string;
-  /** Weapon power (lib/combat.ts) — `null` for every non-weapon listing. */
   itemDamage: number | null;
+  itemArmor: number | null;
+  itemPerkType: string | null;
+  itemPerkMagnitude: number | null;
+  itemShieldHp: number | null;
+  itemShieldCooldown: number | null;
   priceCr: number;
   purchaseLimit: number;
   featured: boolean;
@@ -207,12 +211,9 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
   } = await supabase.auth.getUser();
 
   const admin = createAdminClient();
-  // `damage` may not exist yet if that migration hasn't run — try with it
-  // first (needed so weapon listings show their power, see lib/combat.ts)
-  // and fall back to the columns that were always there.
   const withDamage = await admin
     .from("shop_listings")
-    .select("id, item_id, price_cr, purchase_limit, featured, source, item:items(id, name, rarity, type, damage)")
+    .select("id, item_id, price_cr, purchase_limit, featured, source, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)")
     .eq("shop_date", today)
     .order("featured", { ascending: false });
   let listings: { id: string; item_id: string; price_cr: number; purchase_limit: number; featured: boolean; source: string; item: unknown }[] | null =
@@ -225,7 +226,7 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
       .order("featured", { ascending: false });
     listings = (retry.data ?? []).map((row) => ({
       ...row,
-      item: row.item ? { ...row.item, damage: null } : null,
+      item: row.item ? { ...row.item, damage: null, armor: null, perk_type: null, perk_magnitude: null, shield_hp: null, shield_regen_cooldown_sec: null } : null,
     }));
   }
 
@@ -251,11 +252,10 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
       .filter((l) => l.item)
       .map((l) => {
         const item = l.item as unknown as {
-          id: string;
-          name: string;
-          rarity: Rarity;
-          type: string;
-          damage: number | null;
+          id: string; name: string; rarity: Rarity; type: string;
+          damage: number | null; armor: number | null;
+          perk_type: string | null; perk_magnitude: number | null;
+          shield_hp: number | null; shield_regen_cooldown_sec: number | null;
         };
         return {
           id: l.id,
@@ -264,6 +264,11 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
           itemRarity: item.rarity,
           itemType: item.type,
           itemDamage: item.damage ?? null,
+          itemArmor: item.armor ?? null,
+          itemPerkType: item.perk_type ?? null,
+          itemPerkMagnitude: item.perk_magnitude ?? null,
+          itemShieldHp: item.shield_hp ?? null,
+          itemShieldCooldown: item.shield_regen_cooldown_sec ?? null,
           priceCr: l.price_cr,
           purchaseLimit: l.purchase_limit,
           featured: l.featured,
@@ -389,12 +394,10 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
   const dateKey = shopDateKey(date);
 
   const admin = createAdminClient();
-  // `damage` may not exist yet if that migration hasn't run — same
-  // try/fallback as getTodayShop() above.
   const withDamage = await admin
     .from("shop_listings")
     .select(
-      "id, item_id, price_cr, purchase_limit, featured, source, shop_date, item:items(id, name, rarity, type, damage)"
+      "id, item_id, price_cr, purchase_limit, featured, source, shop_date, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)"
     )
     .eq("shop_date", dateKey)
     .order("featured", { ascending: false });
@@ -408,7 +411,7 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
       .order("featured", { ascending: false });
     data = (retry.data ?? []).map((row) => ({
       ...row,
-      item: row.item ? { ...row.item, damage: null } : null,
+      item: row.item ? { ...row.item, damage: null, armor: null, perk_type: null, perk_magnitude: null, shield_hp: null, shield_regen_cooldown_sec: null } : null,
     }));
   }
 
@@ -416,11 +419,10 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
     .filter((l) => l.item)
     .map((l) => {
       const item = l.item as unknown as {
-        id: string;
-        name: string;
-        rarity: Rarity;
-        type: string;
-        damage: number | null;
+        id: string; name: string; rarity: Rarity; type: string;
+        damage: number | null; armor: number | null;
+        perk_type: string | null; perk_magnitude: number | null;
+        shield_hp: number | null; shield_regen_cooldown_sec: number | null;
       };
       return {
         id: l.id,
@@ -429,6 +431,11 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
         itemRarity: item.rarity,
         itemType: item.type,
         itemDamage: item.damage ?? null,
+        itemArmor: item.armor ?? null,
+        itemPerkType: item.perk_type ?? null,
+        itemPerkMagnitude: item.perk_magnitude ?? null,
+        itemShieldHp: item.shield_hp ?? null,
+        itemShieldCooldown: item.shield_regen_cooldown_sec ?? null,
         priceCr: l.price_cr,
         purchaseLimit: l.purchase_limit,
         featured: l.featured,

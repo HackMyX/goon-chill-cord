@@ -8,6 +8,8 @@ import { getMonsterTypes } from "@/lib/actions/monsters";
 import { getPetConfigs } from "@/lib/actions/pets";
 import { getKillStreakConfig } from "@/lib/actions/kill-streak";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
+import { getCharacterConfig } from "@/lib/actions/character-config";
+import { getSiteConfig } from "@/lib/actions/site-config";
 import {
   AdminShell,
   type AuditLogEntry,
@@ -98,6 +100,8 @@ export default async function AdminPage() {
     petTypes,
     killStreakConfig,
     worldSessionConfig,
+    characterConfig,
+    siteConfig,
   ] = await Promise.all([
     admin
       .from("audit_logs")
@@ -119,6 +123,8 @@ export default async function AdminPage() {
     getPetConfigs(),
     getKillStreakConfig(),
     getWorldSessionConfig(),
+    getCharacterConfig(),
+    getSiteConfig(),
   ]);
 
   return (
@@ -137,6 +143,8 @@ export default async function AdminPage() {
       petTypes={petTypes}
       killStreakConfig={killStreakConfig}
       worldSessionConfig={worldSessionConfig}
+      characterConfig={characterConfig}
+      siteConfig={siteConfig}
     />
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Flame, Save, Loader2 } from "lucide-react";
 import { updateKillStreakConfig } from "@/lib/actions/kill-streak";
 import { streakCrMultiplier, streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
+import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
 
 interface FieldDef {
@@ -64,12 +65,14 @@ export function KillStreakConfigEditor({ config }: { config: KillStreakConfig })
   const previewKills = [0, 5, 10, 20, 40];
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
-      <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
-        <Flame className="h-5 w-5 text-orange-400" />
-        Kill-Streak-Konfiguration
-      </h3>
-
+    <CollapsibleAdminRow
+      header={
+        <div className="flex items-center gap-2">
+          <Flame className="h-5 w-5 text-orange-400" />
+          <span className="text-base font-bold text-zinc-100">Kill-Streak-Konfiguration</span>
+        </div>
+      }
+    >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {FIELDS.map((field) => (
           <label key={field.key} className="flex flex-col gap-1">
@@ -109,6 +112,6 @@ export function KillStreakConfigEditor({ config }: { config: KillStreakConfig })
         </button>
         {message && <span className="text-sm text-zinc-400">{message}</span>}
       </div>
-    </div>
+    </CollapsibleAdminRow>
   );
 }

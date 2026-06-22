@@ -13,7 +13,7 @@ import { useCameraControls } from "@/components/world/use-camera-controls";
 import type { PlayerStatsSnapshot } from "@/components/world/player";
 import { useSoundManager } from "@/lib/sound-manager";
 import { debugLog, debugWarn } from "@/lib/debug";
-import { getEquippedDamage, formatDamage, PLAYER_MAX_HP, PLAYER_MAX_STAMINA } from "@/lib/combat";
+import { getEquippedDamage, formatDamage } from "@/lib/combat";
 import {
   enterWorld,
   registerStreakKill,
@@ -24,6 +24,7 @@ import { joinWorldRoom } from "@/lib/world-realtime";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { PetTypeConfig } from "@/lib/pets";
 import type { KillStreakConfig } from "@/lib/kill-streak";
+import type { CharacterConfig } from "@/lib/character-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 interface WorldShellProps {
@@ -47,6 +48,10 @@ interface WorldShellProps {
    * the player swing at someone and have it just silently no-op
    * server-side); it doesn't need to be enforced client-side too. */
   pvpEnabled?: boolean;
+  /** Admin-configured player/combat base stats (lib/character-config.ts)
+   * — drives both the HUD's max-HP/Stamina bars here and Player.tsx's
+   * actual physics/combat math, so both always agree on the same numbers. */
+  characterConfig: CharacterConfig;
   isAdmin?: boolean;
 }
 
@@ -103,14 +108,15 @@ export function WorldShell({
   petTypes,
   killStreakConfig,
   disconnectCountdownSec = 10,
+  characterConfig,
   isAdmin = false,
 }: WorldShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   const [attackFlash, setAttackFlash] = useState<"hit" | "miss" | null>(null);
-  const [hp, setHp] = useState(PLAYER_MAX_HP);
-  const [maxHp, setMaxHp] = useState(PLAYER_MAX_HP);
-  const [stamina, setStamina] = useState(PLAYER_MAX_STAMINA);
-  const [maxStamina, setMaxStamina] = useState(PLAYER_MAX_STAMINA);
+  const [hp, setHp] = useState(characterConfig.playerMaxHp);
+  const [maxHp, setMaxHp] = useState(characterConfig.playerMaxHp);
+  const [stamina, setStamina] = useState(characterConfig.playerMaxStamina);
+  const [maxStamina, setMaxStamina] = useState(characterConfig.playerMaxStamina);
   const [shieldHp, setShieldHp] = useState(0);
   const [shieldMaxHp, setShieldMaxHp] = useState(0);
   const [shieldRegenCooldown, setShieldRegenCooldown] = useState(0);
@@ -118,7 +124,7 @@ export function WorldShell({
   const [rewardPopups, setRewardPopups] = useState<RewardPopup[]>([]);
   const [damageTakenPopups, setDamageTakenPopups] = useState<DamageTakenPopup[]>([]);
   const [hurtFlash, setHurtFlash] = useState(false);
-  const prevHpRef = useRef(PLAYER_MAX_HP);
+  const prevHpRef = useRef(characterConfig.playerMaxHp);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const cameraControls = useCameraControls(canvasWrapRef);
   const sound = useSoundManager();
@@ -184,7 +190,7 @@ export function WorldShell({
   }, [cancelDisconnectCountdown, cameraControls, pendingStreakCr, streakKillCount]);
 
   const weapon = equippedByCategory.weapon_cosmetic;
-  const weaponDamage = getEquippedDamage(weapon);
+  const weaponDamage = getEquippedDamage(weapon, characterConfig.fistDamage);
   const weaponName = weapon?.name ?? "Fäuste";
 
   const handleAttack = useCallback(
@@ -675,6 +681,7 @@ export function WorldShell({
               monsterTypes={monsterTypes}
               petTypes={petTypes}
               killStreakConfig={killStreakConfig}
+              characterConfig={characterConfig}
               streakKillCount={streakKillCount}
               onAttack={handleAttack}
               onStatsChange={handleStatsChange}

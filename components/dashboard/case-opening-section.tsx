@@ -8,6 +8,7 @@ import { CaseReel, type ReelEntry } from "@/components/dashboard/case-reel";
 import { ChanceBar } from "@/components/dashboard/chance-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { ItemRenderer } from "@/components/items/item-renderer";
+import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { openCase, type WonItem } from "@/lib/actions/cases";
 import { RARITY_ORDER, getTypeLabel, type CaseGroup, type CaseTier, type Rarity } from "@/lib/cases";
 import { getCaseIcon } from "@/lib/case-icons";
@@ -298,7 +299,17 @@ export function CaseOpeningSection({
                 <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
                   {getTypeLabel(wonItem.type)}
                 </span>
-                <RarityBadge rarity={wonItem.rarity as Rarity} />
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  <RarityBadge rarity={wonItem.rarity as Rarity} />
+                  <ItemStatBadges
+                    damage={wonItem.damage}
+                    armor={wonItem.armor}
+                    perk_type={wonItem.perk_type}
+                    perk_magnitude={wonItem.perk_magnitude}
+                    shield_hp={wonItem.shield_hp}
+                    shield_regen_cooldown_sec={wonItem.shield_regen_cooldown_sec}
+                  />
+                </div>
               </motion.div>
             </motion.div>
           )}

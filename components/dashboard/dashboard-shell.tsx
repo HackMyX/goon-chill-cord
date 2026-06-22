@@ -10,6 +10,7 @@ import { DoubleOrNothing } from "@/components/dashboard/double-or-nothing";
 import { Leaderboard, type LeaderboardEntry } from "@/components/dashboard/leaderboard";
 import { subscribeToPresence } from "@/lib/presence-client";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { CaseGroup, Rarity } from "@/lib/cases";
 
 /** Same Realtime presence roster the Community page uses (lib/presence-
@@ -50,6 +51,7 @@ export function DashboardShell({
   const router = useRouter();
   const sound = useSoundManager();
   const onlineCount = useOnlineCount();
+  const { siteName } = useSiteConfig();
 
   function handleCreditsChange(newCredits: number) {
     setCredits(newCredits);
@@ -72,7 +74,7 @@ export function DashboardShell({
             KRUNKER-STYLE CASE OPENING
           </span>
           <h1 className="glow-text mt-4 text-3xl font-black tracking-tight text-zinc-50 sm:text-4xl">
-            Willkommen im <span className="text-primary">Goon&apos;n Chill Cord</span>
+            Willkommen im <span className="text-primary">{siteName}</span>
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm text-zinc-400">
             Öffne Cases und gewinne Cosmetics &amp; Waffen — Normal, Selten, Mythisch oder Ultra RGB.

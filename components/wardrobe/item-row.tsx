@@ -5,8 +5,8 @@ import { Eye } from "lucide-react";
 import { RARITY_STYLES, getTypeLabel, type Rarity } from "@/lib/cases";
 import { ItemRenderer } from "@/components/items/item-renderer";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
+import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { useSoundManager } from "@/lib/sound-manager";
-import { isWeaponType, getEquippedDamage, formatDamage } from "@/lib/combat";
 
 interface ItemRowProps {
   id: string;
@@ -14,12 +14,17 @@ interface ItemRowProps {
   rarity: Rarity;
   type: string;
   damage?: number | null;
+  armor?: number | null;
+  perk_type?: string | null;
+  perk_magnitude?: number | null;
+  shield_hp?: number | null;
+  shield_regen_cooldown_sec?: number | null;
   equipped: boolean;
   onToggle: (id: string) => void;
   onPreview: (id: string) => void;
 }
 
-function ItemRowComponent({ id, name, rarity, type, damage, equipped, onToggle, onPreview }: ItemRowProps) {
+function ItemRowComponent({ id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec, equipped, onToggle, onPreview }: ItemRowProps) {
   const style = RARITY_STYLES[rarity];
   const sound = useSoundManager();
 
@@ -52,13 +57,16 @@ function ItemRowComponent({ id, name, rarity, type, damage, equipped, onToggle, 
               exactly the "border only goes half-way around" symptom. */}
           <p className="truncate font-semibold text-zinc-100">{name}</p>
           <p className="text-[11px] tracking-wide text-zinc-500 uppercase">{getTypeLabel(type)}</p>
-          <div className="mt-1 flex items-center gap-1.5">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <RarityBadge rarity={rarity} />
-            {isWeaponType(type) && (
-              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
-                {formatDamage(getEquippedDamage({ damage }))}
-              </span>
-            )}
+            <ItemStatBadges
+              damage={damage}
+              armor={armor}
+              perk_type={perk_type}
+              perk_magnitude={perk_magnitude}
+              shield_hp={shield_hp}
+              shield_regen_cooldown_sec={shield_regen_cooldown_sec}
+            />
           </div>
         </div>
       </div>

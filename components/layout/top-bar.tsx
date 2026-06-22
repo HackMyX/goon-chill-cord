@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {
-  Gamepad2,
   Link2,
   ShoppingBag,
   Gavel,
@@ -17,6 +16,8 @@ import { GamesMenu } from "@/components/layout/games-menu";
 import { LiveClock } from "@/components/layout/live-clock";
 import { NotificationsBell } from "@/components/layout/notifications-bell";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
 import { useSoundManager } from "@/lib/sound-manager";
 
 interface TopBarProps {
@@ -45,6 +46,8 @@ export function TopBar({
 }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
+  const { siteName, logoUrl, logoIconName } = useSiteConfig();
+  const LogoIcon = resolveSiteLogoIcon(logoIconName);
 
   return (
     // `minmax(0,1fr)` (not bare `1fr`) on both side columns forces them to
@@ -64,11 +67,21 @@ export function TopBar({
         >
           <span className="relative flex items-center justify-center">
             <span aria-hidden className="logo-icon-glow" />
-            <Gamepad2 className="relative h-6 w-6 text-purple-400 transition-transform duration-300 group-hover:rotate-[-8deg] group-hover:scale-110" />
+            {logoUrl ? (
+              // Admin-provided arbitrary external URL, not a local/
+              // optimizable asset — next/image would need it allow-listed
+              // per-domain, which an admin-editable URL can't satisfy.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt={siteName}
+                className="relative h-6 w-6 rounded object-cover transition-transform duration-300 group-hover:rotate-[-8deg] group-hover:scale-110"
+              />
+            ) : (
+              <LogoIcon className="relative h-6 w-6 text-purple-400 transition-transform duration-300 group-hover:rotate-[-8deg] group-hover:scale-110" />
+            )}
           </span>
-          <span className="logo-text hidden font-extrabold tracking-tight sm:inline">
-            Goon&apos;n Chill Cord
-          </span>
+          <span className="logo-text hidden font-extrabold tracking-tight sm:inline">{siteName}</span>
         </Link>
         <div className="flex items-center gap-1 rounded-full bg-purple-600/90 px-3 py-1 text-sm font-semibold text-white">
           <span>{creditsLabel} CR</span>

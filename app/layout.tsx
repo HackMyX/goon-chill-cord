@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AmbientGlow } from "@/components/layout/ambient-glow";
 import { GlobalErrorLogger } from "@/components/debug/global-error-logger";
+import { ThreeWarningsSuppressor } from "@/components/debug/three-warnings-suppressor";
 import { ConfirmDialogProvider } from "@/components/layout/confirm-dialog-provider";
+import { SiteConfigProvider } from "@/components/layout/site-config-provider";
 import { PresenceHeartbeat } from "@/components/layout/presence-heartbeat";
+import { SupportButton } from "@/components/support/ticket-button";
+import { getSiteConfig } from "@/lib/actions/site-config";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,26 +20,38 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Goon'n Chill Cord",
-  description: "Die Community-Hub für Goon'n Chill Cord",
-};
+// `generateMetadata`, not a static `export const metadata` — the browser
+// tab title needs to reflect the admin-configured site name (lib/site-
+// config.ts), which a static object computed once at module load could
+// never pick up.
+export async function generateMetadata(): Promise<Metadata> {
+  const { siteName } = await getSiteConfig();
+  return {
+    title: siteName,
+    description: `Die Community-Hub für ${siteName}`,
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const siteConfig = await getSiteConfig();
   return (
     <html
       lang="de"
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        <ThreeWarningsSuppressor />
         <GlobalErrorLogger />
         <AmbientGlow />
         <PresenceHeartbeat />
-        <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
+        <SiteConfigProvider config={siteConfig}>
+          <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
+        </SiteConfigProvider>
+        <SupportButton />
       </body>
     </html>
   );

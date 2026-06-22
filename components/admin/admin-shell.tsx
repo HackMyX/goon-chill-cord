@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2 } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -14,6 +14,8 @@ import { MonsterTypeEditor } from "@/components/admin/monster-type-editor";
 import { PetConfigEditor } from "@/components/admin/pet-config-editor";
 import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
 import { GamesTab } from "@/components/admin/games-tab";
+import { SiteConfigEditor } from "@/components/admin/site-config-editor";
+import { TicketsTab } from "@/components/admin/tickets-tab";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 import type { StreakConfig } from "@/lib/streak";
@@ -23,6 +25,8 @@ import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { PetTypeConfig } from "@/lib/pets";
 import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
+import type { CharacterConfig } from "@/lib/character-config";
+import type { SiteConfig } from "@/lib/site-config";
 
 export interface AuditLogEntry {
   id: string;
@@ -80,9 +84,11 @@ interface AdminShellProps {
   petTypes: PetTypeConfig[];
   killStreakConfig: KillStreakConfig;
   worldSessionConfig: WorldSessionConfig;
+  characterConfig: CharacterConfig;
+  siteConfig: SiteConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "audit";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -93,7 +99,9 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "monsters", label: "Monster", icon: Skull },
   { id: "pets", label: "Pets", icon: PawPrint },
   { id: "games", label: "Games", icon: Gamepad2 },
+  { id: "branding", label: "Branding", icon: Palette },
   { id: "audit", label: "Audit-Log", icon: ScrollText },
+  { id: "tickets", label: "Tickets", icon: MessageCircle },
 ];
 
 export function AdminShell({
@@ -111,6 +119,8 @@ export function AdminShell({
   petTypes,
   killStreakConfig,
   worldSessionConfig,
+  characterConfig,
+  siteConfig,
 }: AdminShellProps) {
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
@@ -221,9 +231,12 @@ export function AdminShell({
           <GamesTab
             worldSessionConfig={worldSessionConfig}
             killStreakConfig={killStreakConfig}
+            characterConfig={characterConfig}
             topProfiles={profiles}
           />
         )}
+
+        {tab === "branding" && <SiteConfigEditor config={siteConfig} />}
 
         {tab === "audit" && (
           <AuditTimeline
@@ -233,6 +246,8 @@ export function AdminShell({
             }))}
           />
         )}
+
+        {tab === "tickets" && <TicketsTab />}
       </main>
     </div>
   );
