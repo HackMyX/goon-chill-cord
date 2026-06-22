@@ -25,13 +25,34 @@ import {
 import { CharacterModel, type CharacterLimbRefs } from "@/components/world/character-model";
 import { useKeyboardControls } from "@/components/world/use-keyboard-controls";
 import { useAttackInput } from "@/components/world/use-attack-input";
-import { resolveCameraDistance, type CameraControls } from "@/components/world/use-camera-controls";
+import { resolveCameraDistance, PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
 import type { CombatSharedState, MonsterRegistry, RemotePlayerRegistry } from "@/components/world/combat-types";
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { debugLog, debugWarn } from "@/lib/debug";
 import { broadcastTransform, subscribeToWorldPvpDamage } from "@/lib/world-realtime";
 import { attemptPvpHit } from "@/lib/actions/pvp";
 import type { PetTypeConfig } from "@/lib/pets";
+
+/** Everything world-shell.tsx's HUD needs from a single throttled tick —
+ * bundled into one object instead of a growing positional-argument list,
+ * since the shield fields below were added on top of the original
+ * hp/stamina pair. */
+export interface PlayerStatsSnapshot {
+  hp: number;
+  maxHp: number;
+  stamina: number;
+  maxStamina: number;
+  /** 0/0 if no equipped shield_cosmetic has a functioning `shield_hp` — the
+   * HUD hides the shield bar entirely in that case rather than showing an
+   * always-empty one. */
+  shieldHp: number;
+  shieldMaxHp: number;
+  /** Seconds left before a broken shield pops back up to full — 0 whenever
+   * it isn't currently on cooldown (either still up, or has none to begin
+   * with). */
+  shieldRegenCooldown: number;
+  shieldRegenCooldownDuration: number;
+}
 
 interface PlayerProps {
   /** Own Supabase user id — stamped on every transform broadcast so other
@@ -55,9 +76,9 @@ interface PlayerProps {
    * the weapon HUD chip — purely a UI side-effect hook, never read back
    * into the physics/animation above. */
   onAttack?: (damage: number, hit: boolean) => void;
-  /** Throttled to ~10/sec (not every frame) so the HP/Stamina HUD bars in
-   * world-shell.tsx stay live without re-rendering React 60×/sec. */
-  onStatsChange?: (hp: number, maxHp: number, stamina: number, maxStamina: number) => void;
+  /** Throttled to ~10/sec (not every frame) so the HP/Stamina/Shield HUD in
+   * world-shell.tsx stays live without re-rendering React 60×/sec. */
+  onStatsChange?: (stats: PlayerStatsSnapshot) => void;
   /** Fired exactly once at the moment hp hits 0 (not every frame while
    * dead) — world-shell.tsx's cue to forfeit the streak and show the
    * death-screen overlay. */
@@ -92,6 +113,12 @@ const CHARACTER_TURN_RATE = 11;
 
 const ATTACK_SWING_DURATION = 0.32;
 
+/** How fast the right-click free-look offset eases back to 0 once the
+ * button is released — fast enough to feel like a deliberate "snap back to
+ * standard", not a lingering drift, but still a visible ease rather than an
+ * instant teleport of the camera. */
+const FREE_LOOK_RESET_RATE = 9;
+
 /** Lives outside the component on purpose — the React Compiler's
  * immutability check flags direct `camera.fov = x` reassignment *inside* a
  * component that called `useThree()`, even though mutating a three.js
@@ -118,6 +145,17 @@ function applyCameraShake(cam: THREE.Camera, shakeAmount: number) {
 function applyRingStyle(mat: THREE.MeshBasicMaterial, color: string, opacity: number, t: number) {
   mat.color.lerp(new THREE.Color(color), t);
   mat.opacity = THREE.MathUtils.lerp(mat.opacity, opacity, t);
+}
+
+/** Same reasoning as applySprintFov — `cc` is `cameraControls.state.current`,
+ * a hook-argument-owned ref object, so easing its fields back toward 0
+ * directly inside the component scope is what React Compiler's
+ * immutability check flags; routing the actual field writes through a
+ * plain module-scope function keeps that mutation out of the flagged
+ * scope without changing what it does. */
+function easeFreeLookToZero(cc: { freeLookYaw: number; freeLookPitch: number }, t: number) {
+  cc.freeLookYaw = THREE.MathUtils.lerp(cc.freeLookYaw, 0, t);
+  cc.freeLookPitch = THREE.MathUtils.lerp(cc.freeLookPitch, 0, t);
 }
 
 /** Shortest signed angular distance from `from` to `to`, both radians —
@@ -320,6 +358,28 @@ export function Player({
     const alive = !combatRef.current.dead;
     const cc = cameraControls.state.current;
 
+    // Free-look easing lives here, *before* anything below reads
+    // freeLookYaw/Pitch — moved up from the camera block at the bottom of
+    // this frame specifically so `viewYaw` (right below) is available to
+    // the melee hit-test further down too, not just the camera. Released,
+    // it's eased back to exactly 0 every frame; see use-camera-controls.ts'
+    // doc comment for the full reasoning.
+    if (!cc.freeLookActive) {
+      easeFreeLookToZero(cc, Math.min(1, delta * FREE_LOOK_RESET_RATE));
+    }
+    // The actual direction currently rendered/aimed at — `cc.yaw` plus
+    // whatever right-click free-look offset is active. Movement/body-
+    // heading below intentionally keep using plain `cc.yaw` (free-look must
+    // never change which way WASD walks or which way the body turns), but
+    // the melee hit-test further down uses `viewYaw`: a swing should land
+    // on whatever you're actually looking at *right now*, including mid-
+    // free-look — using the frozen `cc.yaw` there instead would silently
+    // whiff anything that looks dead-center on screen while free-looking,
+    // exactly the kind of "I'm clearly facing it but can't hit it" bug
+    // report this is fixing.
+    const viewYaw = cc.yaw + cc.freeLookYaw;
+    const viewPitch = THREE.MathUtils.clamp(cc.pitch + cc.freeLookPitch, PITCH_MIN, PITCH_MAX);
+
     // --- Body heading: eases toward the camera's look yaw every frame —
     // the one and only place the character's rotation.y is ever set. When
     // the pointer isn't locked (menus, "click to play" overlay) input is
@@ -357,8 +417,16 @@ export function Player({
       // instantly, only the visual body rotation lags behind it.
       const fx = Math.sin(cc.yaw);
       const fz = Math.cos(cc.yaw);
-      const rx = Math.cos(cc.yaw);
-      const rz = -Math.sin(cc.yaw);
+      // "Right" must match the camera's actual screen-right axis, not just
+      // "the forward vector rotated by +yaw" — for this behind-the-player
+      // chase camera (positioned opposite the look direction, then
+      // `camera.lookAt`-ed back at the player) those two are *not* the same
+      // vector, they're exact opposites. Three.js's own lookAt convention
+      // (x-axis = cross(up, eye-target)) resolves to (-cos(yaw), sin(yaw))
+      // here, not (cos(yaw), -sin(yaw)) — using the latter is exactly what
+      // made D strafe screen-left and A strafe screen-right.
+      const rx = -Math.cos(cc.yaw);
+      const rz = Math.sin(cc.yaw);
       moveDir.current
         .set(fx * moveForward + rx * moveRight, 0, fz * moveForward + rz * moveRight)
         .normalize();
@@ -464,7 +532,20 @@ export function Player({
       const dist = Math.hypot(dx, dz);
       if (dist > ATTACK_RANGE) continue;
       anyInRange = true;
-      if (!capsuleHitTest(g.position.x, g.position.z, g.rotation.y, pos.x, pos.z, ATTACK_RANGE)) continue;
+      // `viewYaw` (the direction actually rendered/aimed at *this frame*,
+      // free-look offset included — computed at the top of this useFrame),
+      // not `g.rotation.y` (the body's cosmetic heading, which only *eases*
+      // toward `cc.yaw` over CHARACTER_TURN_RATE and never includes
+      // free-look at all). Using the body heading whiffed targets dead-
+      // center in the crosshair right after a quick aim correction; using
+      // plain `cc.yaw` (no free-look) whiffed anything you were currently
+      // free-looking at instead of the frozen aim direction underneath it.
+      // `m.hitRadius` (lib/monsters.ts `scale` baked in at spawn time, see
+      // monster.tsx) instead of the flat default — a Dämonenfürst's visible
+      // body is nearly twice the width of a Slime's, so treating both as
+      // the same fixed-size point whiffed swings that clearly looked like
+      // they connected with a big variant's visible silhouette.
+      if (!capsuleHitTest(g.position.x, g.position.z, viewYaw, pos.x, pos.z, ATTACK_RANGE, m.hitRadius)) continue;
       if (dist < nearestDist) {
         nearestDist = dist;
         nearestMonster = m;
@@ -479,7 +560,8 @@ export function Player({
       const dist = Math.hypot(dx, dz);
       if (dist > ATTACK_RANGE) continue;
       anyInRange = true;
-      if (!capsuleHitTest(g.position.x, g.position.z, g.rotation.y, pos.x, pos.z, ATTACK_RANGE)) continue;
+      // Same `viewYaw` reasoning as the monster loop above.
+      if (!capsuleHitTest(g.position.x, g.position.z, viewYaw, pos.x, pos.z, ATTACK_RANGE)) continue;
       if (dist < nearestDist) {
         nearestDist = dist;
         nearestMonster = null;
@@ -515,7 +597,11 @@ export function Player({
           targetUserId: nearestPlayerId,
           attackerX: g.position.x,
           attackerZ: g.position.z,
-          attackerHeading: g.rotation.y,
+          // viewYaw (actual rendered aim, free-look included) — same
+          // reasoning as the local capsuleHitTest calls above, so the
+          // server-side PvP hit check agrees with what the client just used
+          // to pick this target.
+          attackerHeading: viewYaw,
           targetX: nearestPlayerPos.x,
           targetZ: nearestPlayerPos.z,
           sprinting,
@@ -630,12 +716,16 @@ export function Player({
     statsSyncTimer.current += delta;
     if (statsSyncTimer.current >= STATS_SYNC_INTERVAL) {
       statsSyncTimer.current = 0;
-      onStatsChange?.(
-        combatRef.current.hp,
-        combatRef.current.maxHp,
-        combatRef.current.stamina,
-        combatRef.current.maxStamina
-      );
+      onStatsChange?.({
+        hp: combatRef.current.hp,
+        maxHp: combatRef.current.maxHp,
+        stamina: combatRef.current.stamina,
+        maxStamina: combatRef.current.maxStamina,
+        shieldHp: combatRef.current.shieldHpRemaining,
+        shieldMaxHp: combatRef.current.shieldMaxHp,
+        shieldRegenCooldown: combatRef.current.shieldRegenCooldown,
+        shieldRegenCooldownDuration: combatRef.current.shieldRegenCooldownDuration,
+      });
       // Same 10Hz cadence as the HUD sync above — a position broadcast
       // doesn't need to be any more frequent than the HUD itself updates,
       // and reusing this timer means no second interval to keep in sync.
@@ -650,18 +740,23 @@ export function Player({
       });
     }
 
-    // Camera: sits behind+above the player along the mouse-driven look
-    // direction at all times — no free-look offset to ease back to
-    // anymore, the look direction *is* the camera's only input.
-    const lookX = Math.sin(cc.yaw);
-    const lookZ = Math.cos(cc.yaw);
+    // `viewYaw`/`viewPitch` (free-look offset included) were already
+    // computed at the top of this frame, right after `cc` itself — reused
+    // here as-is, not recomputed, so the camera and the melee hit-test
+    // further up agree on exactly the same direction every frame.
+
+    // Camera: sits behind+above the player along the look direction at all
+    // times (cc.yaw/cc.pitch, plus whatever free-look offset is currently
+    // active above).
+    const lookX = Math.sin(viewYaw);
+    const lookZ = Math.cos(viewYaw);
     // (dirX, dirY, dirZ) is already unit-length — lookX/lookZ are a
     // sin/cos pair (unit circle in XZ) and cos(pitch)/sin(pitch) is a
     // second unit pair, so the combined vector's length is exactly 1
     // without needing a separate .normalize() call.
-    const dirX = -lookX * Math.cos(cc.pitch);
-    const dirY = Math.sin(cc.pitch);
-    const dirZ = -lookZ * Math.cos(cc.pitch);
+    const dirX = -lookX * Math.cos(viewPitch);
+    const dirY = Math.sin(viewPitch);
+    const dirZ = -lookZ * Math.cos(viewPitch);
     cameraRayDir.current.set(dirX, dirY, dirZ);
     // Cast from chest height, not the feet — a ray starting at ground
     // level would immediately clip through the terrain mesh itself.

@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Sky, Stars, ContactShadows } from "@react-three/drei";
-import { Player } from "@/components/world/player";
+import { Player, type PlayerStatsSnapshot } from "@/components/world/player";
 import { RemotePlayers } from "@/components/world/remote-players";
 import { Environment } from "@/components/world/environment";
 import { MonstersField } from "@/components/world/monsters-field";
@@ -37,7 +37,7 @@ interface SceneProps {
    * players never see this client's monster pool either. */
   streakKillCount: number;
   onAttack?: (damage: number, hit: boolean) => void;
-  onStatsChange?: (hp: number, maxHp: number, stamina: number, maxStamina: number) => void;
+  onStatsChange?: (stats: PlayerStatsSnapshot) => void;
   onMonsterKilled?: (typeId: string) => void;
   onDeath?: () => void;
   respawnSignal: number;

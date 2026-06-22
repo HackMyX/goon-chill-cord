@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sweepExpiredAuctions } from "@/lib/actions/auctions";
+import { isAdmin } from "@/lib/admin";
 import {
   AuctionsShell,
   type AuctionListEntry,
@@ -20,7 +21,7 @@ export default async function AuctionsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days")
+    .select("credits, streak_days, role, username")
     .eq("id", user.id)
     .single();
 
@@ -95,6 +96,7 @@ export default async function AuctionsPage() {
     <AuctionsShell
       credits={profile?.credits ?? 0}
       streakDays={profile?.streak_days ?? 0}
+      isAdmin={isAdmin(profile)}
       viewerId={user.id}
       myItems={myItems}
       auctions={auctions}

@@ -50,6 +50,7 @@ interface TradingShellProps {
   myItems: OwnedItem[];
   players: TradablePlayer[];
   trades: TradeListEntry[];
+  isAdmin?: boolean;
 }
 
 function fmt(n: number) {
@@ -406,7 +407,15 @@ function TradeRow({ trade, viewerId, onChanged }: { trade: TradeListEntry; viewe
   );
 }
 
-export function TradingShell({ credits, streakDays, viewerId, myItems, players, trades }: TradingShellProps) {
+export function TradingShell({
+  credits,
+  streakDays,
+  viewerId,
+  myItems,
+  players,
+  trades,
+  isAdmin = false,
+}: TradingShellProps) {
   const [creating, setCreating] = useState(false);
   const sound = useSoundManager();
   const router = useRouter();
@@ -426,7 +435,7 @@ export function TradingShell({ credits, streakDays, viewerId, myItems, players, 
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={credits} streakDays={streakDays} />
+      <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} />
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
         <Link

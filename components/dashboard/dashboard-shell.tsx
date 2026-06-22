@@ -63,6 +63,7 @@ export function DashboardShell({
         inventoryCount={inventoryCount}
         streakDays={streakDays}
         onCreditsChange={handleCreditsChange}
+        isAdmin={isAdmin}
       />
       <main className="flex-1">
         <section className="mx-auto w-full max-w-2xl px-4 pt-12 pb-4 text-center">

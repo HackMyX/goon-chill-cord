@@ -4,6 +4,7 @@ import { WorldShell } from "@/components/world/world-shell";
 import { getMonsterTypes } from "@/lib/actions/monsters";
 import { getPetConfigs } from "@/lib/actions/pets";
 import { getKillStreakConfig } from "@/lib/actions/kill-streak";
+import { isAdmin } from "@/lib/admin";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 export default async function WorldPage() {
@@ -16,7 +17,7 @@ export default async function WorldPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days, username, gender")
+    .select("credits, streak_days, username, gender, role")
     .eq("id", user.id)
     .single();
 
@@ -69,6 +70,7 @@ export default async function WorldPage() {
       monsterTypes={monsterTypes}
       petTypes={petTypes}
       killStreakConfig={killStreakConfig}
+      isAdmin={isAdmin(profile)}
     />
   );
 }

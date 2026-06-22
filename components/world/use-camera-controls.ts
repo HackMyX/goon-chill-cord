@@ -16,6 +16,16 @@ export interface CameraControlState {
   pitch: number;
   /** Distance from the player, world units, adjusted by the scroll wheel. */
   distance: number;
+  /** Right-mouse-held free-look offset on top of `yaw`/`pitch` — see the
+   * `onMouseMove` doc comment below. Zero whenever the button isn't held
+   * and eases back to zero (in Player.tsx's per-frame camera block) once
+   * it's released. */
+  freeLookYaw: number;
+  freeLookPitch: number;
+  /** True for exactly as long as the right mouse button is held down while
+   * pointer-locked — Player.tsx reads this to decide whether to keep
+   * easing `freeLookYaw`/`freeLookPitch` back toward 0. */
+  freeLookActive: boolean;
 }
 
 export const DEFAULT_YAW = 0;
@@ -24,8 +34,8 @@ const DEFAULT_DISTANCE = 6.5;
 
 const YAW_SENSITIVITY = 0.0024;
 const PITCH_SENSITIVITY = 0.0021;
-const PITCH_MIN = -0.3;
-const PITCH_MAX = 1.1;
+export const PITCH_MIN = -0.3;
+export const PITCH_MAX = 1.1;
 const DISTANCE_MIN = 3;
 const DISTANCE_MAX = 14;
 const ZOOM_SENSITIVITY = 0.0025;
@@ -107,18 +117,28 @@ export interface CameraControls {
 }
 
 /**
- * Always-on pointer-lock mouse-look for the 3D World, replacing the old
- * "hold right-mouse-button to free-look, release to snap back" scheme.
- * Clicking the canvas locks the pointer; from then on every mouse-move
- * directly steers `yaw`/`pitch` (the crosshair's look direction) until
- * Escape (or losing focus) releases the lock again, at which point the
- * World shows a "click to resume" prompt rather than silently going
- * unresponsive. Scroll wheel still zooms regardless of lock state.
+ * Always-on pointer-lock mouse-look for the 3D World. Clicking the canvas
+ * locks the pointer; from then on every mouse-move directly steers
+ * `yaw`/`pitch` (the crosshair's look direction, and the basis WASD moves
+ * along) until Escape (or losing focus) releases the lock again, at which
+ * point the World shows a "click to resume" prompt rather than silently
+ * going unresponsive. Scroll wheel still zooms regardless of lock state.
  *
- * Held in a ref (not React state) for yaw/pitch/distance so Player's
- * per-frame camera math can read it without ever triggering a re-render;
- * `locked` is the one piece that genuinely needs to be React state, since
- * the overlay UI in world-shell.tsx has to re-render when it changes.
+ * Holding the right mouse button re-engages a separate "free-look" on top
+ * of that: mouse-move while held steers `freeLookYaw`/`freeLookPitch`
+ * instead (an offset, not a replacement) so the camera can swing around to
+ * look elsewhere without changing `yaw`/`pitch` themselves — and therefore
+ * without changing which way WASD walks or which way the body (Player.tsx
+ * eases its heading toward `yaw` alone) is facing. Releasing the button
+ * eases that offset back to 0 every frame (Player.tsx's camera block),
+ * which is what "resets to standard" actually is: the camera swings back to
+ * directly behind the committed aim direction.
+ *
+ * Held in a ref (not React state) for yaw/pitch/distance/free-look so
+ * Player's per-frame camera math can read it without ever triggering a
+ * re-render; `locked` is the one piece that genuinely needs to be React
+ * state, since the overlay UI in world-shell.tsx has to re-render when it
+ * changes.
  */
 export function useCameraControls(
   canvasRef: React.RefObject<HTMLElement | null>
@@ -127,6 +147,9 @@ export function useCameraControls(
     yaw: DEFAULT_YAW,
     pitch: DEFAULT_PITCH,
     distance: DEFAULT_DISTANCE,
+    freeLookYaw: 0,
+    freeLookPitch: 0,
+    freeLookActive: false,
   });
   const [locked, setLocked] = useState(false);
   // Set true the instant pointer lock engages, cleared after the very
@@ -148,18 +171,34 @@ export function useCameraControls(
       const movementX = Math.max(-MAX_MOVEMENT_PER_EVENT, Math.min(MAX_MOVEMENT_PER_EVENT, e.movementX));
       const movementY = Math.max(-MAX_MOVEMENT_PER_EVENT, Math.min(MAX_MOVEMENT_PER_EVENT, e.movementY));
       // Sign check (this app's forward convention is (sin(yaw), 0,
-      // cos(yaw)), and Player.tsx derives "right" as (cos(yaw), 0,
-      // -sin(yaw)) from it): increasing yaw sweeps forward *toward* that
-      // right vector, i.e. increasing yaw turns the view right. Moving the
-      // mouse right is a positive `movementX`, so yaw must increase for a
-      // mouse-right move to turn the camera right — `+=`, not `-=`. The
-      // previous `-=` here was backwards (mouse right turned the view
-      // left), which is exactly the "rechts/links vertauscht" bug report.
-      state.current.yaw += movementX * YAW_SENSITIVITY;
-      state.current.pitch = Math.max(
-        PITCH_MIN,
-        Math.min(PITCH_MAX, state.current.pitch - movementY * PITCH_SENSITIVITY)
-      );
+      // cos(yaw)), and Player.tsx derives "right" as (-cos(yaw), 0,
+      // sin(yaw)) from it — the actual screen-right axis of this
+      // behind-the-player chase camera, not just "forward rotated by
+      // +yaw"): moving the mouse right is a positive `movementX`, so yaw
+      // must increase for a mouse-right move to turn the camera right —
+      // `+=`, not `-=`.
+      if (state.current.freeLookActive) {
+        // Right-mouse-held free-look: steers an *offset* on top of the
+        // committed aim/movement yaw/pitch instead of the yaw/pitch
+        // themselves — so you can look around without your walk direction
+        // (or the character's body heading, which eases toward `yaw` alone
+        // in Player.tsx) changing underneath you. Released, Player.tsx eases
+        // this back to 0 every frame, which is what "resets to standard"
+        // actually is: the camera swinging back to directly behind the
+        // committed aim direction. Yaw is intentionally unclamped (full
+        // look-around), pitch reuses the same clamp range as normal look.
+        state.current.freeLookYaw += movementX * YAW_SENSITIVITY;
+        state.current.freeLookPitch = Math.max(
+          PITCH_MIN - state.current.pitch,
+          Math.min(PITCH_MAX - state.current.pitch, state.current.freeLookPitch - movementY * PITCH_SENSITIVITY)
+        );
+      } else {
+        state.current.yaw += movementX * YAW_SENSITIVITY;
+        state.current.pitch = Math.max(
+          PITCH_MIN,
+          Math.min(PITCH_MAX, state.current.pitch - movementY * PITCH_SENSITIVITY)
+        );
+      }
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -169,9 +208,27 @@ export function useCameraControls(
       );
     };
     const onContextMenu = (e: MouseEvent) => e.preventDefault();
+    // Right mouse button (button 2) toggles free-look for as long as it's
+    // held — mousedown on the canvas (must already be pointer-locked,
+    // same gate as the attack click), mouseup on `document` rather than
+    // `el` so dragging the mouse off the canvas before releasing still
+    // clears it (otherwise it could get stuck "active" with no further
+    // mousemove ever arriving on `el` to undo it).
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 2 && document.pointerLockElement === el) {
+        state.current.freeLookActive = true;
+      }
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 2) state.current.freeLookActive = false;
+    };
     const onLockChange = () => {
       const isLocked = document.pointerLockElement === el;
       if (isLocked) justLocked.current = true;
+      // Losing the lock mid-free-look (Escape, alt-tab) must drop it too —
+      // otherwise it stays "active" with no mouseup ever coming to clear
+      // it, leaving the next click-to-resume permanently stuck in free-look.
+      else state.current.freeLookActive = false;
       setLocked(isLocked);
     };
     // Pointer lock can fail to engage (browser security throttling after
@@ -180,19 +237,30 @@ export function useCameraControls(
     // next click given exactly the same chance to retry, since nothing
     // here would have errored loudly.
     const onLockError = () => setLocked(false);
+    // Same alt-tab reasoning as useKeyboardControls' onBlur — a held right
+    // button never fires its mouseup if focus is lost while it's down.
+    const onBlur = () => {
+      state.current.freeLookActive = false;
+    };
 
     document.addEventListener("mousemove", onMouseMove);
     el.addEventListener("wheel", onWheel, { passive: false });
     el.addEventListener("contextmenu", onContextMenu);
+    el.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("mouseup", onMouseUp);
     document.addEventListener("pointerlockchange", onLockChange);
     document.addEventListener("pointerlockerror", onLockError);
+    window.addEventListener("blur", onBlur);
 
     return () => {
       document.removeEventListener("mousemove", onMouseMove);
       el.removeEventListener("wheel", onWheel);
       el.removeEventListener("contextmenu", onContextMenu);
+      el.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("mouseup", onMouseUp);
       document.removeEventListener("pointerlockchange", onLockChange);
       document.removeEventListener("pointerlockerror", onLockError);
+      window.removeEventListener("blur", onBlur);
     };
   }, [canvasRef]);
 

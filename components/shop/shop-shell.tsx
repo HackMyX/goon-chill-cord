@@ -18,6 +18,7 @@ interface ShopShellProps {
   gender: "m" | "w";
   listings: ShopListingEntry[];
   resetsAt: string;
+  isAdmin?: boolean;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -171,7 +172,14 @@ function ShopCard({
   );
 }
 
-export function ShopShell({ credits: initialCredits, streakDays, gender, listings, resetsAt }: ShopShellProps) {
+export function ShopShell({
+  credits: initialCredits,
+  streakDays,
+  gender,
+  listings,
+  resetsAt,
+  isAdmin = false,
+}: ShopShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   const [category, setCategory] = useState<string | "all">("all");
   const [previewListing, setPreviewListing] = useState<ShopListingEntry | null>(null);
@@ -193,7 +201,7 @@ export function ShopShell({ credits: initialCredits, streakDays, gender, listing
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={credits} streakDays={streakDays} onCreditsChange={setCredits} />
+      <TopBar credits={credits} streakDays={streakDays} onCreditsChange={setCredits} isAdmin={isAdmin} />
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
         <Link

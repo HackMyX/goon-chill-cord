@@ -37,9 +37,10 @@ async function main() {
   // Armor (jacket/pants/hat/shoes): summed across all 4 slots in
   // lib/combat.ts' applyIncomingDamage, so these are per-item points, not
   // the total a fully-geared player ends up with. Calibrated against
-  // lib/monsters.ts' attack damage (6-16) so a full Ultra set (4 × 12 = 48)
-  // meaningfully softens even the toughest variant without going below the
-  // hard 1-damage floor every hit still keeps.
+  // lib/monsters.ts' attack damage (4-26 across the full roster) so a full
+  // Ultra set (4 × 12 = 48) meaningfully softens even the toughest variant
+  // (Dämonenfürst, 26) without going below the hard 1-damage floor every
+  // hit still keeps.
   const armorResult = await client.query(`
     UPDATE items SET armor = CASE rarity
       WHEN 'normal' THEN 1

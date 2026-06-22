@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TradingShell, type TradeListEntry, type TradablePlayer, type OwnedItem } from "@/components/trading/trading-shell";
 import type { Rarity } from "@/lib/cases";
+import { isAdmin } from "@/lib/admin";
 
 export default async function TradingPage() {
   const supabase = await createClient();
@@ -13,7 +14,7 @@ export default async function TradingPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days")
+    .select("credits, streak_days, role, username")
     .eq("id", user.id)
     .single();
 
@@ -97,6 +98,7 @@ export default async function TradingPage() {
       myItems={myItems}
       players={tradablePlayers}
       trades={trades}
+      isAdmin={isAdmin(profile)}
     />
   );
 }

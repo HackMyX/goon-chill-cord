@@ -4,11 +4,12 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
-import { ArrowLeft, Keyboard, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut } from "lucide-react";
+import { ArrowLeft, Keyboard, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { Scene } from "@/components/world/scene";
 import { DeathScreen } from "@/components/world/death-screen";
 import { useCameraControls } from "@/components/world/use-camera-controls";
+import type { PlayerStatsSnapshot } from "@/components/world/player";
 import { useSoundManager } from "@/lib/sound-manager";
 import { debugLog, debugWarn } from "@/lib/debug";
 import { getEquippedDamage, formatDamage, PLAYER_MAX_HP, PLAYER_MAX_STAMINA } from "@/lib/combat";
@@ -35,6 +36,7 @@ interface WorldShellProps {
   monsterTypes: MonsterTypeConfig[];
   petTypes: PetTypeConfig[];
   killStreakConfig: KillStreakConfig;
+  isAdmin?: boolean;
 }
 
 interface RewardPopup {
@@ -89,6 +91,7 @@ export function WorldShell({
   monsterTypes,
   petTypes,
   killStreakConfig,
+  isAdmin = false,
 }: WorldShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   const [showHint, setShowHint] = useState(true);
@@ -97,6 +100,10 @@ export function WorldShell({
   const [maxHp, setMaxHp] = useState(PLAYER_MAX_HP);
   const [stamina, setStamina] = useState(PLAYER_MAX_STAMINA);
   const [maxStamina, setMaxStamina] = useState(PLAYER_MAX_STAMINA);
+  const [shieldHp, setShieldHp] = useState(0);
+  const [shieldMaxHp, setShieldMaxHp] = useState(0);
+  const [shieldRegenCooldown, setShieldRegenCooldown] = useState(0);
+  const [shieldRegenCooldownDuration, setShieldRegenCooldownDuration] = useState(0);
   const [rewardPopups, setRewardPopups] = useState<RewardPopup[]>([]);
   const [damageTakenPopups, setDamageTakenPopups] = useState<DamageTakenPopup[]>([]);
   const [hurtFlash, setHurtFlash] = useState(false);
@@ -131,9 +138,9 @@ export function WorldShell({
   );
 
   const handleStatsChange = useCallback(
-    (nextHp: number, nextMaxHp: number, nextStamina: number, nextMaxStamina: number) => {
-      if (nextHp < prevHpRef.current) {
-        const lost = Math.round(prevHpRef.current - nextHp);
+    (stats: PlayerStatsSnapshot) => {
+      if (stats.hp < prevHpRef.current) {
+        const lost = Math.round(prevHpRef.current - stats.hp);
         sound.error();
         setHurtFlash(true);
         setTimeout(() => setHurtFlash(false), 220);
@@ -141,11 +148,15 @@ export function WorldShell({
         setDamageTakenPopups((curr) => [...curr, { id, amount: lost }]);
         setTimeout(() => setDamageTakenPopups((curr) => curr.filter((p) => p.id !== id)), 700);
       }
-      prevHpRef.current = nextHp;
-      setHp(nextHp);
-      setMaxHp(nextMaxHp);
-      setStamina(nextStamina);
-      setMaxStamina(nextMaxStamina);
+      prevHpRef.current = stats.hp;
+      setHp(stats.hp);
+      setMaxHp(stats.maxHp);
+      setStamina(stats.stamina);
+      setMaxStamina(stats.maxStamina);
+      setShieldHp(stats.shieldHp);
+      setShieldMaxHp(stats.shieldMaxHp);
+      setShieldRegenCooldown(stats.shieldRegenCooldown);
+      setShieldRegenCooldownDuration(stats.shieldRegenCooldownDuration);
     },
     [sound]
   );
@@ -255,7 +266,13 @@ export function WorldShell({
 
   return (
     <div className="flex h-screen flex-col">
-      <TopBar credits={credits} streakDays={streakDays} inventoryCount={inventoryCount} onCreditsChange={setCredits} />
+      <TopBar
+        credits={credits}
+        streakDays={streakDays}
+        inventoryCount={inventoryCount}
+        onCreditsChange={setCredits}
+        isAdmin={isAdmin}
+      />
 
       <div ref={canvasWrapRef} className="relative min-h-0 flex-1">
         <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
@@ -306,6 +323,40 @@ export function WorldShell({
             colorClass="bg-gradient-to-r from-yellow-600 to-yellow-300"
             label="Ausdauer"
           />
+          {/* Shield bar — only shown when a functioning shield_cosmetic is
+              actually equipped (shieldMaxHp > 0). While it's broken
+              (shieldHp <= 0 and the regen cooldown is still counting down),
+              the bar itself swaps for a "charging back up" readout instead
+              of just sitting empty with no explanation of when it returns. */}
+          {shieldMaxHp > 0 &&
+            (shieldHp > 0 || shieldRegenCooldown <= 0 ? (
+              <StatBar
+                icon={<ShieldHalf className="h-4 w-4 text-cyan-300" />}
+                value={shieldHp}
+                max={shieldMaxHp}
+                colorClass="bg-gradient-to-r from-cyan-600 to-cyan-300"
+                label="Schild"
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <ShieldHalf className="h-4 w-4 animate-pulse text-cyan-300/50" />
+                <div className="relative h-2.5 w-36 overflow-hidden rounded-full bg-black/50 ring-1 ring-cyan-400/20">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-cyan-900/60 to-cyan-500/60 transition-[width] duration-150"
+                    style={{
+                      width: `${
+                        shieldRegenCooldownDuration > 0
+                          ? 100 - (shieldRegenCooldown / shieldRegenCooldownDuration) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold tracking-wide text-cyan-100/90">
+                    SCHILD LÄDT {Math.max(0, Math.ceil(shieldRegenCooldown))}s
+                  </div>
+                </div>
+              </div>
+            ))}
           {streakKillCount > 0 && (
             <div className="flex items-center gap-1.5 border-t border-white/10 pt-1.5 text-xs">
               <Flame className="h-3.5 w-3.5 text-orange-400" />

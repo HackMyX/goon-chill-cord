@@ -1433,6 +1433,22 @@ const EXACT_SHIELD_SHAPE: Record<string, typeof KiteShield> = {
 
 const SHIELD_AURA_SMOKE_COUNT = 8;
 
+// CharacterModel's body spans roughly feet-at-y=0 up to the hat at y≈2.42
+// (head box centered at y=2.05, half-extent 0.275, hat sitting just above
+// that) — and out to the shoulders at build.armX (max 0.48) plus the
+// forearm box's own half-width (0.11). A plain unit sphere centered at
+// y=1.2 (the previous shape) only reached y:[0.25, 2.15], which is short on
+// both ends: it left the shins/feet poking out the bottom and the
+// head/hat poking out the top, exactly the "Kopf oben, Beine unten raus"
+// look this fixes. Centering higher and stretching vertically (a sphere
+// scaled non-uniformly into an ellipsoid, not a literal bigger sphere —
+// kept horizontally snug so it still reads as a body-hugging bubble, not a
+// giant ball) covers the whole silhouette with a comfortable margin on
+// every side instead.
+const SHIELD_BUBBLE_CENTER_Y = 1.25;
+const SHIELD_BUBBLE_RADIUS = 0.78;
+const SHIELD_BUBBLE_SCALE = new THREE.Vector3(1, 1.75, 1);
+
 /**
  * Full-body energy bubble + drifting smoke puffs for a *functioning*
  * shield (item.shield_hp > 0 — lib/combat.ts) — wraps the whole character,
@@ -1473,7 +1489,16 @@ export function ShieldAura({
 
     if (bubbleRef.current) {
       bubbleRef.current.visible = frac > 0;
-      bubbleRef.current.scale.setScalar(1 + Math.sin(t * 1.5) * 0.015);
+      // Pulse multiplies the ellipsoid's baked-in non-uniform shape rather
+      // than replacing it with `setScalar` — a uniform setScalar here would
+      // collapse the deliberate vertical stretch back into a sphere every
+      // frame.
+      const pulse = 1 + Math.sin(t * 1.5) * 0.015;
+      bubbleRef.current.scale.set(
+        SHIELD_BUBBLE_SCALE.x * pulse,
+        SHIELD_BUBBLE_SCALE.y * pulse,
+        SHIELD_BUBBLE_SCALE.z * pulse
+      );
       const mat = bubbleRef.current.material as THREE.MeshBasicMaterial;
       mat.opacity = 0.12 * frac + Math.sin(t * 2) * 0.02 * frac;
       mat.color.set(color);
@@ -1482,10 +1507,14 @@ export function ShieldAura({
       const mesh = smokeRefs.current[i];
       if (!mesh) continue;
       const seed = seeds[i];
+      // Orbit radius/height range widened to match the taller, equally-wide
+      // bubble shape above — drifting across its full height (roughly
+      // -1.3..1.3 around the group's own origin) instead of only the
+      // lower-middle band the old shorter sphere had room for.
       mesh.position.set(
-        Math.cos(t * 0.5 + seed.angle) * 0.55,
-        0.4 + Math.sin(t * 0.8 + seed.phase) * 0.4 + seed.heightSeed,
-        Math.sin(t * 0.5 + seed.angle) * 0.55
+        Math.cos(t * 0.5 + seed.angle) * SHIELD_BUBBLE_RADIUS * 0.85,
+        Math.sin(t * 0.8 + seed.phase) * 1.05 + seed.heightSeed,
+        Math.sin(t * 0.5 + seed.angle) * SHIELD_BUBBLE_RADIUS * 0.85
       );
       const mat = mesh.material as THREE.MeshBasicMaterial;
       mat.opacity = 0.25 * frac;
@@ -1494,9 +1523,9 @@ export function ShieldAura({
   });
 
   return (
-    <group position={[0, 1.2, 0]}>
-      <mesh ref={bubbleRef}>
-        <sphereGeometry args={[0.95, 24, 18]} />
+    <group position={[0, SHIELD_BUBBLE_CENTER_Y, 0]}>
+      <mesh ref={bubbleRef} scale={SHIELD_BUBBLE_SCALE}>
+        <sphereGeometry args={[SHIELD_BUBBLE_RADIUS, 24, 18]} />
         <meshBasicMaterial
           color={color}
           transparent

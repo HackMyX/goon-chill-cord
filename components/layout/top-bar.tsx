@@ -10,6 +10,7 @@ import {
   Users,
   Shirt,
   UserRound,
+  ShieldAlert,
 } from "lucide-react";
 import { IconButton } from "@/components/layout/icon-button";
 import { GamesMenu } from "@/components/layout/games-menu";
@@ -24,9 +25,24 @@ interface TopBarProps {
   streakDays?: number;
   /** Forwarded to LiveClock — see its own docs for why this is optional. */
   onCreditsChange?: (newCredits: number) => void;
+  /** Shows the small Admin-panel shortcut next to the CR display below —
+   * every page rendering TopBar computes this server-side itself (`lib/
+   * admin.ts`'s `isAdmin(profile)`, same check the homepage's own big
+   * "Admin" button already gates on) and passes the plain boolean down, so
+   * a non-admin's TopBar never even receives the `/admin` href, let alone
+   * renders a button pointing at it. Defaults to `false` so every existing
+   * call site that hasn't been updated yet simply keeps not showing it,
+   * rather than erroring. */
+  isAdmin?: boolean;
 }
 
-export function TopBar({ credits, inventoryCount = 0, streakDays = 2, onCreditsChange }: TopBarProps) {
+export function TopBar({
+  credits,
+  inventoryCount = 0,
+  streakDays = 2,
+  onCreditsChange,
+  isAdmin = false,
+}: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
 
@@ -58,6 +74,18 @@ export function TopBar({ credits, inventoryCount = 0, streakDays = 2, onCreditsC
           <span>{creditsLabel} CR</span>
           <Link2 className="h-3.5 w-3.5 opacity-80" />
         </div>
+        {/* Admin-only shortcut to /admin — previously only reachable from
+            the homepage's big "Admin" button, which meant leaving the
+            homepage (e.g. into the World to tune a fight live) meant
+            clicking all the way back just to reach the panel again. */}
+        {isAdmin && (
+          <IconButton
+            icon={ShieldAlert}
+            label="Admin-Panel"
+            href="/admin"
+            className="bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200"
+          />
+        )}
       </div>
 
       {/* Center: clock + streak — always its own column, never overlapped */}

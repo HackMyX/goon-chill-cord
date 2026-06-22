@@ -7,7 +7,7 @@ import { Billboard, Text } from "@react-three/drei";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { CombatSharedState, MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
-import { applyIncomingDamage } from "@/lib/combat";
+import { applyIncomingDamage, ATTACK_HIT_RADIUS } from "@/lib/combat";
 
 interface MonsterProps {
   id: string;
@@ -97,6 +97,7 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
       typeId: type.id,
       getPosition: () => group.current?.position ?? new THREE.Vector3(...initialPosition),
       isAlive: () => alive.current,
+      hitRadius: ATTACK_HIT_RADIUS * type.scale,
       takeDamage: (amount) => {
         if (!alive.current) return 0;
         health.current = Math.max(0, health.current - amount);
@@ -125,9 +126,35 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handle captures stable refs only, never needs to re-register
   }, []);
 
-  const limbWidth = type.visualKind === "skeleton" ? 0.16 : 0.22;
-  const slouch = type.visualKind === "zombie" ? 0.22 : 0;
-  const eyeColor = type.visualKind === "skeleton" ? "#7dd3fc" : "#fca5a5";
+  // Per-visualKind tweaks on top of the shared humanoid rig — every variant
+  // except "slime" (a wholly different blob body, see the render branch
+  // below) reuses the exact same torso/head/arm/leg groups the original
+  // zombie/skeleton pair did, just with different proportions/colors/extra
+  // meshes (tusks, horns, wings) layered on, so the movement/attack/health-
+  // bar logic in useFrame below never has to know or care which kind it's
+  // animating.
+  const isSlime = type.visualKind === "slime";
+  const isGhost = type.visualKind === "ghost";
+  const isOrc = type.visualKind === "orc";
+  const isDemon = type.visualKind === "demon";
+  const limbWidth =
+    type.visualKind === "skeleton" ? 0.16 : isOrc ? 0.3 : isDemon ? 0.27 : 0.22;
+  const slouch = type.visualKind === "zombie" ? 0.22 : isOrc ? 0.12 : 0;
+  const eyeColor =
+    type.visualKind === "skeleton"
+      ? "#7dd3fc"
+      : isGhost
+        ? "#e0f2fe"
+        : isDemon
+          ? "#ff2424"
+          : isOrc
+            ? "#fbbf24"
+            : isSlime
+              ? "#dcfce7"
+              : "#fca5a5";
+  // Ghosts are translucent apparitions, not solid bodies — every body mesh
+  // in the shared humanoid branch below gets this opacity instead of 1.
+  const bodyOpacity = isGhost ? 0.5 : 1;
 
   useFrame((_, delta) => {
     const g = group.current;
@@ -184,6 +211,16 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
     if (armR.current) armR.current.rotation.x = swing * 0.8 - lunge.current * 1.7;
     if (upperBody.current) upperBody.current.rotation.x = slouch + lunge.current * 0.25;
 
+    // Cosmetic vertical bob — ghosts hover in place, slimes hop while
+    // closing distance. Purely visual: every chase/range/hit calculation
+    // above only ever reads `g.position.x/z`, never `.y`, so this can't
+    // affect anything but how the monster looks.
+    if (isGhost) {
+      g.position.y = initialPosition[1] + 0.3 + Math.sin(walkClock.current * 0.9) * 0.15;
+    } else if (isSlime) {
+      g.position.y = initialPosition[1] + (moving ? Math.max(0, Math.sin(walkClock.current * 3)) * 0.22 : 0);
+    }
+
     if (healthFill.current) {
       const frac = Math.max(0, health.current / type.health);
       healthFill.current.scale.x = Math.max(0.001, frac);
@@ -195,52 +232,161 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
 
   return (
     <group ref={group} position={initialPosition} scale={type.scale}>
-      <group ref={upperBody} position={[0, 1.1, 0]}>
-        <mesh position={[0, 0.4, 0]} castShadow>
-          <boxGeometry args={[0.5, 0.7, 0.3]} />
-          <meshStandardMaterial ref={torsoMaterial} color={type.colorHex} />
-        </mesh>
-        <mesh position={[0, 0.95, 0]} castShadow>
-          <boxGeometry args={[0.34, 0.34, 0.34]} />
-          <meshStandardMaterial color={type.colorHex} />
-        </mesh>
-        <mesh position={[-0.07, 0.97, 0.18]}>
-          <sphereGeometry args={[0.035, 8, 8]} />
-          <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
-        </mesh>
-        <mesh position={[0.07, 0.97, 0.18]}>
-          <sphereGeometry args={[0.035, 8, 8]} />
-          <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
-        </mesh>
-
-        <group ref={armL} position={[-0.32, 0.65, 0]}>
-          <mesh position={[0, -0.32, 0]} castShadow>
-            <boxGeometry args={[limbWidth, 0.62, limbWidth]} />
-            <meshStandardMaterial color={type.colorHex} />
+      {isSlime ? (
+        // Slime: a single squashable blob, no torso/limb rig at all —
+        // legL/legR/armL/armR simply never get a ref attached, which the
+        // useFrame animation above already guards against (`if (x.current)`),
+        // so it's a no-op there rather than a special case. `upperBody`
+        // doubles as the blob's own group so the existing lunge-tilt
+        // ("leans toward the player when it attacks") and hit-flash
+        // (`torsoMaterial`) logic keep working unmodified.
+        <group ref={upperBody} position={[0, 0.42, 0]}>
+          <mesh castShadow>
+            <sphereGeometry args={[0.42, 16, 12]} />
+            <meshStandardMaterial
+              ref={torsoMaterial}
+              color={type.colorHex}
+              transparent
+              opacity={0.82}
+              roughness={0.2}
+              emissive={type.colorHex}
+              emissiveIntensity={0.15}
+            />
+          </mesh>
+          <mesh position={[-0.13, 0.08, 0.32]}>
+            <sphereGeometry args={[0.05, 8, 8]} />
+            <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
+          </mesh>
+          <mesh position={[0.13, 0.08, 0.32]}>
+            <sphereGeometry args={[0.05, 8, 8]} />
+            <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
           </mesh>
         </group>
-        <group ref={armR} position={[0.32, 0.65, 0]}>
-          <mesh position={[0, -0.32, 0]} castShadow>
-            <boxGeometry args={[limbWidth, 0.62, limbWidth]} />
-            <meshStandardMaterial color={type.colorHex} />
-          </mesh>
-        </group>
-      </group>
+      ) : (
+        <>
+          <group ref={upperBody} position={[0, 1.1, 0]}>
+            <mesh position={[0, 0.4, 0]} castShadow>
+              <boxGeometry args={[0.5, 0.7, 0.3]} />
+              <meshStandardMaterial ref={torsoMaterial} color={type.colorHex} transparent={isGhost} opacity={bodyOpacity} />
+            </mesh>
+            <mesh position={[0, 0.95, 0]} castShadow>
+              <boxGeometry args={[0.34, 0.34, 0.34]} />
+              <meshStandardMaterial color={type.colorHex} transparent={isGhost} opacity={bodyOpacity} />
+            </mesh>
+            <mesh position={[-0.07, 0.97, 0.18]}>
+              <sphereGeometry args={[0.035, 8, 8]} />
+              <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
+            </mesh>
+            <mesh position={[0.07, 0.97, 0.18]}>
+              <sphereGeometry args={[0.035, 8, 8]} />
+              <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
+            </mesh>
 
-      <group ref={legL} position={[-0.15, 0.85, 0]}>
-        <mesh position={[0, -0.42, 0]} castShadow>
-          <boxGeometry args={[limbWidth + 0.02, 0.85, limbWidth + 0.02]} />
-          <meshStandardMaterial color={type.colorHex} />
-        </mesh>
-      </group>
-      <group ref={legR} position={[0.15, 0.85, 0]}>
-        <mesh position={[0, -0.42, 0]} castShadow>
-          <boxGeometry args={[limbWidth + 0.02, 0.85, limbWidth + 0.02]} />
-          <meshStandardMaterial color={type.colorHex} />
-        </mesh>
-      </group>
+            {/* Ork: a pair of tusks jutting up from the lower jaw — the one
+                detail that reads as "orc" rather than just "bigger zombie"
+                at a glance. */}
+            {isOrc && (
+              <>
+                <mesh position={[-0.08, 0.86, 0.19]} rotation={[0.35, 0, 0]} castShadow>
+                  <coneGeometry args={[0.03, 0.14, 6]} />
+                  <meshStandardMaterial color="#f5f5f4" />
+                </mesh>
+                <mesh position={[0.08, 0.86, 0.19]} rotation={[0.35, 0, 0]} castShadow>
+                  <coneGeometry args={[0.03, 0.14, 6]} />
+                  <meshStandardMaterial color="#f5f5f4" />
+                </mesh>
+              </>
+            )}
 
-      <Billboard ref={healthGroup} position={[0, 2.35, 0]}>
+            {/* Dämonenfürst: curved horns + a pair of translucent
+                membrane wings on the back — the boss-tier silhouette that
+                should be unmistakable from every other variant even at a
+                distance, before its health bar/name are even legible. */}
+            {isDemon && (
+              <>
+                <mesh position={[-0.1, 1.14, 0.06]} rotation={[0.25, 0, -0.35]} castShadow>
+                  <coneGeometry args={[0.045, 0.24, 6]} />
+                  <meshStandardMaterial color="#15100f" />
+                </mesh>
+                <mesh position={[0.1, 1.14, 0.06]} rotation={[0.25, 0, 0.35]} castShadow>
+                  <coneGeometry args={[0.045, 0.24, 6]} />
+                  <meshStandardMaterial color="#15100f" />
+                </mesh>
+                <mesh position={[-0.4, 0.42, -0.12]} rotation={[0, 0.35, 0.55]}>
+                  <boxGeometry args={[0.55, 0.5, 0.025]} />
+                  <meshStandardMaterial
+                    color="#3f0a0a"
+                    emissive="#7a1020"
+                    emissiveIntensity={0.45}
+                    transparent
+                    opacity={0.82}
+                    side={THREE.DoubleSide}
+                  />
+                </mesh>
+                <mesh position={[0.4, 0.42, -0.12]} rotation={[0, -0.35, -0.55]}>
+                  <boxGeometry args={[0.55, 0.5, 0.025]} />
+                  <meshStandardMaterial
+                    color="#3f0a0a"
+                    emissive="#7a1020"
+                    emissiveIntensity={0.45}
+                    transparent
+                    opacity={0.82}
+                    side={THREE.DoubleSide}
+                  />
+                </mesh>
+              </>
+            )}
+
+            <group ref={armL} position={[-0.32, 0.65, 0]}>
+              <mesh position={[0, -0.32, 0]} castShadow>
+                <boxGeometry args={[limbWidth, 0.62, limbWidth]} />
+                <meshStandardMaterial color={type.colorHex} transparent={isGhost} opacity={bodyOpacity} />
+              </mesh>
+            </group>
+            <group ref={armR} position={[0.32, 0.65, 0]}>
+              <mesh position={[0, -0.32, 0]} castShadow>
+                <boxGeometry args={[limbWidth, 0.62, limbWidth]} />
+                <meshStandardMaterial color={type.colorHex} transparent={isGhost} opacity={bodyOpacity} />
+              </mesh>
+            </group>
+          </group>
+
+          {isGhost ? (
+            // Geist: a tapering, faintly-glowing robe instead of legs — it
+            // hovers (the useFrame bob above), it never needs a walk-cycle
+            // leg-swing to read as "moving", so there's nothing to pivot
+            // legL/legR for in the first place.
+            <mesh position={[0, 0.5, 0]}>
+              <coneGeometry args={[0.4, 1.05, 14]} />
+              <meshStandardMaterial
+                color={type.colorHex}
+                transparent
+                opacity={0.38}
+                emissive={type.colorHex}
+                emissiveIntensity={0.25}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          ) : (
+            <>
+              <group ref={legL} position={[-0.15, 0.85, 0]}>
+                <mesh position={[0, -0.42, 0]} castShadow>
+                  <boxGeometry args={[limbWidth + 0.02, 0.85, limbWidth + 0.02]} />
+                  <meshStandardMaterial color={type.colorHex} />
+                </mesh>
+              </group>
+              <group ref={legR} position={[0.15, 0.85, 0]}>
+                <mesh position={[0, -0.42, 0]} castShadow>
+                  <boxGeometry args={[limbWidth + 0.02, 0.85, limbWidth + 0.02]} />
+                  <meshStandardMaterial color={type.colorHex} />
+                </mesh>
+              </group>
+            </>
+          )}
+        </>
+      )}
+
+      <Billboard ref={healthGroup} position={[0, isSlime ? 1.15 : 2.35, 0]}>
         <mesh>
           <planeGeometry args={[1, 0.12]} />
           <meshBasicMaterial color="#1a1a1a" transparent opacity={0.85} />
@@ -259,7 +405,7 @@ export function Monster({ id, type, initialPosition, combatRef, registryRef, onD
       ))}
 
       {bloodBursts.map((b) => (
-        <group key={b.id} position={[0, 1.1, 0]}>
+        <group key={b.id} position={[0, isSlime ? 0.45 : 1.1, 0]}>
           <BloodBurst />
         </group>
       ))}

@@ -44,6 +44,7 @@ interface AuctionsShellProps {
   viewerId: string;
   myItems: OwnedItem[];
   auctions: AuctionListEntry[];
+  isAdmin?: boolean;
 }
 
 function fmt(n: number) {
@@ -390,7 +391,14 @@ function AuctionRow({
   );
 }
 
-export function AuctionsShell({ credits, streakDays, viewerId, myItems, auctions }: AuctionsShellProps) {
+export function AuctionsShell({
+  credits,
+  streakDays,
+  viewerId,
+  myItems,
+  auctions,
+  isAdmin = false,
+}: AuctionsShellProps) {
   const [creating, setCreating] = useState(false);
   const sound = useSoundManager();
   const router = useRouter();
@@ -407,7 +415,7 @@ export function AuctionsShell({ credits, streakDays, viewerId, myItems, auctions
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={credits} streakDays={streakDays} />
+      <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} />
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
         <Link

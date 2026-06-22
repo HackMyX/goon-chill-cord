@@ -86,6 +86,13 @@ export interface MonsterHandle {
   /** Returns the amount actually dealt (0 if already dead) — lets the
    * caller decide whether to play a "hit" vs "no-op" reaction. */
   takeDamage: (amount: number) => number;
+  /** This monster's own melee hit-test radius (lib/combat.ts
+   * `ATTACK_HIT_RADIUS` scaled by its `lib/monsters.ts` `scale` —
+   * monster.tsx sets it once at spawn) — Player.tsx's attack scan passes
+   * this into `capsuleHitTest` *instead of* the flat default, so a visually
+   * huge variant (Dämonenfürst, scale 1.6) isn't hit-tested as if it were
+   * the same point-sized target as a tiny one (Slime, scale 0.85). */
+  hitRadius: number;
 }
 
 export type MonsterRegistry = React.RefObject<MonsterHandle[]>;

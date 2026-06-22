@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PlayerListShell, type PlayerCard } from "@/components/community/player-list-shell";
+import { isAdmin } from "@/lib/admin";
 import type { Rarity } from "@/lib/cases";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -15,7 +16,7 @@ export default async function CommunityPage() {
 
   const { data: viewerProfile } = await supabase
     .from("profiles")
-    .select("credits, streak_days")
+    .select("credits, streak_days, role, username")
     .eq("id", user.id)
     .single();
 
@@ -77,6 +78,7 @@ export default async function CommunityPage() {
       credits={viewerProfile?.credits ?? 0}
       streakDays={viewerProfile?.streak_days ?? 0}
       viewerId={user.id}
+      isAdmin={isAdmin(viewerProfile)}
     />
   );
 }

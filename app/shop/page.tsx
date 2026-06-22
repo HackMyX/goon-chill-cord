@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getTodayShop } from "@/lib/actions/shop";
 import { ShopShell } from "@/components/shop/shop-shell";
+import { isAdmin } from "@/lib/admin";
 
 export default async function ShopPage() {
   const supabase = await createClient();
@@ -12,7 +13,7 @@ export default async function ShopPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days, gender")
+    .select("credits, streak_days, gender, role, username")
     .eq("id", user.id)
     .single();
 
@@ -25,6 +26,7 @@ export default async function ShopPage() {
       gender={(profile?.gender as "m" | "w") ?? "m"}
       listings={listings}
       resetsAt={resetsAt}
+      isAdmin={isAdmin(profile)}
     />
   );
 }

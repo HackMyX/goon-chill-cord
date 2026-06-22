@@ -82,45 +82,62 @@ export const RESPAWN_INVULNERABLE_SEC = 1.5;
  * the ring visual in player.tsx), not an invisible guess.
  *
  * Deliberately bigger than every lib/monsters.ts variant's `attackRange`
- * (max 1.8) by a full player-width-and-then-some, and the player's own
- * move speed (4.5, 8.1 sprinting) is 1.8-5× every variant's `moveSpeed`
- * (max 2.5) — both gaps exist specifically so "hit it, then back off
- * before it reaches you" (kiting) is a real, comfortably-timed option,
- * not a frame-perfect trick. Don't shrink this below the monster
- * attackRange ceiling without re-checking that gap. */
+ * (max 2.0, Dämonenfürst) by a full player-width-and-then-some — land a hit
+ * right at max reach and you're never simultaneously inside *their* strike
+ * range, so landing the first hit is always the rewarded side of an even
+ * fight.
+ *
+ * Every variant's `moveSpeed` is faster than the player's unsprinted walk
+ * (4.5) and slower than sprinting (8.1) — see lib/monsters.ts' doc comment
+ * on that array for why kiting now requires the stamina-gated sprint
+ * instead of being free at a normal walk. Re-check that relationship (and
+ * this constant against the monster `attackRange` ceiling) any time a new
+ * variant is added with a higher attackRange, or a moveSpeed outside the
+ * (4.5, 8.1) band. */
 export const ATTACK_RANGE = 2.7;
-/** Half-angle of the forward hit cone, radians (~60° each side) — kept only
- * for the ground-ring visual's "anything in range at all" check in
- * player.tsx; the actual hit/miss decision uses `capsuleHitTest` below, not
- * this angle, as of the accuracy fix it documents. */
+/** Half-angle of the forward hit cone, radians (~60° each side, ~120° total)
+ * — *actually* drives `capsuleHitTest`'s widening cone below now (it used to
+ * be unused dead weight kept only for the ground-ring visual, back when the
+ * hit test was a fixed-width lane instead of a true cone). Generous on
+ * purpose: "anything roughly in front of me" should mean exactly that, not
+ * "anything within a couple of degrees of dead-center" — only the rear ~60°
+ * behind the player is excluded. */
 export const ATTACK_CONE_HALF_ANGLE = 1.05;
 /** Fixed cadence for every weapon (and bare fists) — see FIST_DAMAGE's
  * doc comment for how this and the damage numbers were balanced together. */
 export const ATTACK_COOLDOWN = 0.45;
 
 /** Effective radius of "something standing roughly where you're aiming",
- * world units — the half-width a punch/swing is forgiving of. */
+ * world units — the minimum half-width a punch/swing is forgiving of,
+ * regardless of distance (see `capsuleHitTest`'s point-blank case). */
 export const ATTACK_HIT_RADIUS = 0.55;
 
 /**
- * Sphere-cast-along-a-ray hit test, done in plain 2D trig (no three.js
- * dependency, so the same function can be reused server-side for PvP
- * validation later without dragging in a 3D math library): forms a
- * `range`-long, `hitRadius`-wide capsule extending from `(originX, originZ)`
- * in direction `heading` (radians, same sin/cos-forward convention as every
- * other heading in this app), and reports whether `(targetX, targetZ)`
- * falls inside it.
+ * Widening-cone hit test, done in plain 2D trig (no three.js dependency, so
+ * the same function can be reused server-side for PvP validation without
+ * dragging in a 3D math library): a target at `(targetX, targetZ)` is hit
+ * if it's within `range` of `(originX, originZ)` along `heading` (radians,
+ * same sin/cos-forward convention as every other heading in this app) and
+ * its lateral (sideways) offset from that forward axis is within whichever
+ * is bigger of `hitRadius` (a flat minimum, near the player) or
+ * `forwardDist * tan(coneHalfAngle)` (a true angular cone, farther out).
  *
- * Replaces the previous flat angle-cone test
- * (`Math.abs(angleDelta(...)) > ATTACK_CONE_HALF_ANGLE`), which had a real
- * accuracy bug: an angular cone's *linear* width at distance `d` is
- * `d * sin(angle)` — shrinking toward zero as `d` shrinks, meaning a
- * monster standing right in front of the player but a few degrees off
- * dead-center (e.g. mid-chase, not perfectly squared up) could whiff a
- * swing it was clearly standing inside. A fixed-radius capsule has the
- * same forgiving width at every distance, which is what "I should always
- * be able to hit something I'm standing next to and facing roughly at"
- * actually requires.
+ * Earlier history: a flat angle-cone test
+ * (`Math.abs(angleDelta(...)) > ATTACK_CONE_HALF_ANGLE`) had a *near-range*
+ * accuracy bug — its linear width at distance `d` is `d * sin(angle)`,
+ * shrinking toward zero as `d` shrinks, so a monster standing right next to
+ * the player but a few degrees off dead-center could whiff a swing it was
+ * clearly standing inside. Replacing it with a fixed-width capsule
+ * (`hitRadius` alone, no angle at all) fixed that but introduced the
+ * opposite bug at *long* range: a fixed 0.55-unit half-width over a
+ * 2.7-unit range is only an ~12° cone right at the edge of `ATTACK_RANGE`
+ * — so a target standing well inside the visible range ring, just not
+ * dead-center, regularly read as "in range" but still whiffed. This
+ * function is both at once: `hitRadius` near the player (no more
+ * near-range whiffing), widening into a real `coneHalfAngle` cone farther
+ * out (no more long-range sliver) — "anything roughly in front of me,
+ * within the range I can see" is hittable at every distance, not just
+ * near the player or only within a couple of degrees of dead-center.
  */
 export function capsuleHitTest(
   originX: number,
@@ -129,7 +146,8 @@ export function capsuleHitTest(
   targetX: number,
   targetZ: number,
   range: number,
-  hitRadius: number = ATTACK_HIT_RADIUS
+  hitRadius: number = ATTACK_HIT_RADIUS,
+  coneHalfAngle: number = ATTACK_CONE_HALF_ANGLE
 ): boolean {
   const toX = targetX - originX;
   const toZ = targetZ - originZ;
@@ -139,7 +157,8 @@ export function capsuleHitTest(
   if (forwardDist < -hitRadius || forwardDist > range + hitRadius) return false;
   const distSq = toX * toX + toZ * toZ;
   const lateralDistSq = Math.max(0, distSq - forwardDist * forwardDist);
-  return lateralDistSq <= hitRadius * hitRadius;
+  const allowedLateral = Math.max(hitRadius, forwardDist * Math.tan(coneHalfAngle));
+  return lateralDistSq <= allowedLateral * allowedLateral;
 }
 
 /** Sprinting/airborne attacks hit harder — a deliberate, felt reward for
