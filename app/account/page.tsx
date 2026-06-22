@@ -10,18 +10,36 @@ export default async function AccountPage() {
 
   if (!user) redirect("/");
 
+  // Core profile — must succeed for the page to render.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("username, avatar_url, credits, streak_days, cases_opened, role, created_at, accepts_trades, profile_visible, notification_prefs")
+    .select("username, avatar_url, credits, streak_days, cases_opened, role, created_at, accepts_trades, profile_visible")
     .eq("id", user.id)
     .single();
+
+  if (!profile) redirect("/");
 
   const { count: inventoryCount } = await supabase
     .from("inventory")
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id);
 
-  if (!profile) redirect("/");
+  // Notification prefs live in a new column — fetch separately so the page
+  // still works before the migration (scripts/add-notification-prefs.sql)
+  // has been applied. Any error here is silently swallowed.
+  let notificationPrefs: Record<string, boolean> = {};
+  try {
+    const { data: prefsRow, error } = await supabase
+      .from("profiles")
+      .select("notification_prefs")
+      .eq("id", user.id)
+      .single();
+    if (!error && prefsRow?.notification_prefs) {
+      notificationPrefs = prefsRow.notification_prefs as Record<string, boolean>;
+    }
+  } catch {
+    // Column not yet migrated — safe to proceed with defaults.
+  }
 
   return (
     <AccountShell
@@ -35,7 +53,7 @@ export default async function AccountPage() {
       inventoryCount={inventoryCount ?? 0}
       acceptsTrades={profile.accepts_trades ?? true}
       profileVisible={profile.profile_visible ?? true}
-      notificationPrefs={(profile.notification_prefs as Record<string, boolean>) ?? {}}
+      notificationPrefs={notificationPrefs}
     />
   );
 }

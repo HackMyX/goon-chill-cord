@@ -28,21 +28,37 @@ export async function notifyStaff(input: {
 }): Promise<void> {
   try {
     const admin = createAdminClient();
-    const { data: staff } = await admin
+
+    // Try to fetch with prefs so opted-out staff are skipped.
+    // If the column doesn't exist yet, fall back to fetching just id
+    // and send to everyone — we'd rather over-notify than drop messages.
+    let staffIds: string[] = [];
+    const { data: staffWithPrefs, error: prefsError } = await admin
       .from("profiles")
       .select("id, notification_prefs")
       .in("role", ["admin", "moderator"]);
-    if (!staff?.length) return;
 
-    const eligible = staff.filter((s: { id: string; notification_prefs: unknown }) => {
-      const prefs = (s.notification_prefs as Record<string, boolean>) ?? {};
-      return prefs[input.type] !== false;
-    });
-    if (!eligible.length) return;
+    if (!prefsError && staffWithPrefs?.length) {
+      staffIds = staffWithPrefs
+        .filter((s: { id: string; notification_prefs: unknown }) => {
+          const prefs = (s.notification_prefs as Record<string, boolean>) ?? {};
+          return prefs[input.type] !== false;
+        })
+        .map((s: { id: string }) => s.id);
+    } else {
+      // Column not yet migrated — send to all staff.
+      const { data: fallback } = await admin
+        .from("profiles")
+        .select("id")
+        .in("role", ["admin", "moderator"]);
+      staffIds = (fallback ?? []).map((s: { id: string }) => s.id);
+    }
+
+    if (!staffIds.length) return;
 
     await admin.from("notifications").insert(
-      eligible.map((s: { id: string }) => ({
-        user_id: s.id,
+      staffIds.map((id) => ({
+        user_id: id,
         type: input.type,
         title: input.title,
         message: input.message,
