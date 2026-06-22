@@ -18,6 +18,7 @@ import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { debugLog, debugWarn } from "@/lib/debug";
 import { RARITY_ORDER, type Rarity } from "@/lib/cases";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 export interface InventoryRow {
   id: string;
@@ -82,19 +83,20 @@ function CombatStatsPanel({ equippedByCategory }: { equippedByCategory: Record<s
   const equippedShield = equippedByCategory["shield_cosmetic"];
   const shieldHp = equippedShield?.shield_hp ?? 0;
   const shieldCooldown = equippedShield?.shield_regen_cooldown_sec ?? 0;
+  const { damageLabel, armorLabel } = useSiteConfig();
 
   const rows: StatRowDef[] = [
     {
       label: "Schaden",
-      value: `⚔ ${effectiveDmg} DMG${!equippedWeapon ? " (Fäuste)" : ""}`,
+      value: `⚔ ${effectiveDmg} ${damageLabel}${!equippedWeapon ? " (Fäuste)" : ""}`,
       color: effectiveDmg > FIST_DAMAGE ? "text-emerald-300" : "text-zinc-500",
       tooltip: equippedWeapon
         ? `Waffenschaden: Deine ausgerüstete Waffe verursacht ${effectiveDmg} Punkte pro Treffer im Kampf.`
-        : `Waffenschaden: Keine Waffe ausgerüstet — du greifst mit Fäusten an (${FIST_DAMAGE} DMG). Rüste eine Waffe aus, um mehr Schaden zu machen.`,
+        : `Waffenschaden: Keine Waffe ausgerüstet — du greifst mit Fäusten an (${FIST_DAMAGE} ${damageLabel}). Rüste eine Waffe aus, um mehr Schaden zu machen.`,
     },
     {
       label: "Rüstung",
-      value: `🛡 ${totalArmor} AP`,
+      value: `🛡 ${totalArmor} ${armorLabel}`,
       color: totalArmor > 0 ? "text-blue-300" : "text-zinc-500",
       tooltip: `Rüstungspunkte gesamt: Reduziert jeden eingehenden Schaden um ${totalArmor} Punkte (min. 1 Schaden geht immer durch). Kommt von Jacke, Hose, Hut und Schuhen zusammen.`,
     },

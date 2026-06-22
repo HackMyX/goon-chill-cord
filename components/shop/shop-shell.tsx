@@ -12,6 +12,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { purchaseShopItem, type ShopListingEntry } from "@/lib/actions/shop";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 interface ShopShellProps {
   credits: number;
@@ -81,6 +82,7 @@ function ShopCard({
   const sound = useSoundManager();
   const soldOut = listing.purchasedByMe >= listing.purchaseLimit;
   const canAfford = credits >= listing.priceCr;
+  const { currencyName } = useSiteConfig();
 
   async function handleBuy() {
     if (soldOut || !canAfford || buying) return;
@@ -145,7 +147,7 @@ function ShopCard({
       </div>
 
       <div className="mt-auto flex items-center justify-between gap-2">
-        <span className="text-lg font-extrabold text-purple-300">{fmt(listing.priceCr)} CR</span>
+        <span className="text-lg font-extrabold text-purple-300">{fmt(listing.priceCr)} {currencyName}</span>
         <button
           onMouseEnter={sound.hover}
           onClick={handleBuy}

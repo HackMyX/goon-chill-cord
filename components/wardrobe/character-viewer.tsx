@@ -4,6 +4,7 @@ import { X, Lock } from "lucide-react";
 import { getCategories } from "@/lib/wardrobe";
 import { CharacterPreview3D } from "@/components/wardrobe/character-preview-3d";
 import { isWeaponType, getEquippedDamage, formatDamage } from "@/lib/combat";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 export type { EquippedItem };
@@ -35,6 +36,7 @@ export function CharacterViewer({
   // sense as a browsing filter in the item list — it isn't a real equip
   // slot, so it has no place in this equipped-summary list.
   const categories = getCategories().filter((c) => c.dbType !== "*");
+  const { damageLabel } = useSiteConfig();
 
   return (
     <div className="rounded-2xl border border-purple-500/20 bg-black/30 p-5">
@@ -107,7 +109,7 @@ export function CharacterViewer({
                 </span>
                 {isWeaponType(category.dbType) && equipped && (
                   <span className="shrink-0 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
-                    {formatDamage(getEquippedDamage(equipped))}
+                    {formatDamage(getEquippedDamage(equipped), damageLabel)}
                   </span>
                 )}
                 {equipped?.id && (

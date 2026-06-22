@@ -5,6 +5,7 @@ import { Save, Skull } from "lucide-react";
 import { updateMonsterType } from "@/lib/actions/monsters";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 
 /**
@@ -35,6 +36,7 @@ export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const sound = useSoundManager();
+  const { currencyName } = useSiteConfig();
 
   async function handleSave() {
     setSaving(true);
@@ -199,7 +201,7 @@ export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
           </label>
 
           <label className="flex flex-col gap-1 text-xs text-zinc-400">
-            Belohnung min (CR)
+            Belohnung min ({currencyName})
             <input
               type="number"
               min={0}
@@ -209,7 +211,7 @@ export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
             />
           </label>
           <label className="flex flex-col gap-1 text-xs text-zinc-400">
-            Belohnung max (CR)
+            Belohnung max ({currencyName})
             <input
               type="number"
               min={0}

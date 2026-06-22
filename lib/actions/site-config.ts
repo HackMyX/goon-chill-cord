@@ -12,6 +12,9 @@ interface SiteConfigRow {
   logo_url: string | null;
   logo_icon_name: string;
   starting_credits: number | null;
+  currency_name: string | null;
+  damage_label: string | null;
+  armor_label: string | null;
 }
 
 /** Falls back to the code defaults whenever the table doesn't exist yet or
@@ -23,7 +26,7 @@ export async function getSiteConfig(): Promise<SiteConfig> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("site_config")
-    .select("site_name, logo_url, logo_icon_name, starting_credits")
+    .select("site_name, logo_url, logo_icon_name, starting_credits, currency_name, damage_label, armor_label")
     .eq("id", "default")
     .maybeSingle();
 
@@ -34,6 +37,9 @@ export async function getSiteConfig(): Promise<SiteConfig> {
     logoUrl: row.logo_url,
     logoIconName: row.logo_icon_name in SITE_LOGO_ICONS ? row.logo_icon_name : DEFAULT_SITE_LOGO_ICON,
     startingCredits: typeof row.starting_credits === "number" ? row.starting_credits : 500,
+    currencyName: row.currency_name?.trim() || DEFAULT_SITE_CONFIG.currencyName,
+    damageLabel: row.damage_label?.trim() || DEFAULT_SITE_CONFIG.damageLabel,
+    armorLabel: row.armor_label?.trim() || DEFAULT_SITE_CONFIG.armorLabel,
   };
 }
 
@@ -68,6 +74,13 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
   const startingCredits = Math.max(0, Math.min(1_000_000, Math.round(input.startingCredits ?? 500)));
   const iconName = input.logoIconName in SITE_LOGO_ICONS ? input.logoIconName : DEFAULT_SITE_LOGO_ICON;
 
+  const currencyName = input.currencyName?.trim().slice(0, 12);
+  if (!currencyName) return { success: false, error: "Währungsname darf nicht leer sein." };
+  const damageLabel = input.damageLabel?.trim().slice(0, 12);
+  if (!damageLabel) return { success: false, error: "Schadens-Label darf nicht leer sein." };
+  const armorLabel = input.armorLabel?.trim().slice(0, 12);
+  if (!armorLabel) return { success: false, error: "Rüstungs-Label darf nicht leer sein." };
+
   const admin = createAdminClient();
   const { error } = await admin.from("site_config").upsert({
     id: "default",
@@ -75,6 +88,9 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
     logo_url: trimmedLogo,
     logo_icon_name: iconName,
     starting_credits: startingCredits,
+    currency_name: currencyName,
+    damage_label: damageLabel,
+    armor_label: armorLabel,
     updated_at: new Date().toISOString(),
   });
 

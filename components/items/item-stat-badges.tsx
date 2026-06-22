@@ -1,5 +1,7 @@
 "use client";
 
+import { useSiteConfig } from "@/components/layout/site-config-provider";
+
 const PERK_ICONS: Record<string, string> = {
   speed_boost: "⚡",
   jump_boost: "↑",
@@ -81,6 +83,7 @@ export function ItemStatBadges({
     shield_regen_cooldown_sec !== null &&
     shield_regen_cooldown_sec !== undefined &&
     shield_regen_cooldown_sec > 0;
+  const { damageLabel, armorLabel } = useSiteConfig();
 
   if (!hasDmg && !hasArmor && !hasPerk && !hasShield) return null;
 
@@ -91,9 +94,9 @@ export function ItemStatBadges({
       {hasDmg && (
         <StatBadge
           badgeClass="border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
-          tooltip={`Waffenschaden: Diese Waffe verursacht ${damage} Punkte pro Treffer. Ohne ausgerüstete Waffe greifst du mit Fäusten an (8 DMG).`}
+          tooltip={`Waffenschaden: Diese Waffe verursacht ${damage} Punkte pro Treffer. Ohne ausgerüstete Waffe greifst du mit Fäusten an (8 ${damageLabel}).`}
         >
-          ⚔ {damage} DMG
+          ⚔ {damage} {damageLabel}
         </StatBadge>
       )}
       {hasArmor && (
@@ -101,7 +104,7 @@ export function ItemStatBadges({
           badgeClass="border-blue-400/30 bg-blue-500/10 text-blue-300"
           tooltip={`Rüstungspunkte: Reduzieren jeden eingehenden Schaden um ${armor} Punkte (mindestens 1 Schaden geht immer durch). Stapelt sich über Jacke, Hose, Hut und Schuhe.`}
         >
-          🛡 {armor} AP
+          🛡 {armor} {armorLabel}
         </StatBadge>
       )}
       {hasPerk && (

@@ -8,6 +8,7 @@ import { hasItemIcon, KNOWN_ICON_TYPES } from "@/lib/item-icons";
 import { ItemRenderer } from "@/components/items/item-renderer";
 import { useSoundManager } from "@/lib/sound-manager";
 import { isWeaponType, isArmorType, isPerkType, isShieldType, SUGGESTED_DAMAGE_BY_RARITY, type PerkType } from "@/lib/combat";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { ItemRow } from "@/components/admin/admin-shell";
 
 const PERK_TYPE_LABELS: Record<PerkType, string> = {
@@ -31,6 +32,7 @@ export function NewItemForm({ onCreated }: { onCreated: (item: ItemRow) => void 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
+  const { damageLabel } = useSiteConfig();
 
   async function handleCreate() {
     setSaving(true);
@@ -120,7 +122,7 @@ export function NewItemForm({ onCreated }: { onCreated: (item: ItemRow) => void 
             min={0}
             value={damage}
             onChange={(e) => setDamage(Math.max(0, Number(e.target.value) || 0))}
-            placeholder={`⚔ DMG (Vorschlag ${SUGGESTED_DAMAGE_BY_RARITY[rarity]})`}
+            placeholder={`⚔ ${damageLabel} (Vorschlag ${SUGGESTED_DAMAGE_BY_RARITY[rarity]})`}
             className="w-40 rounded-lg border border-emerald-400/30 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/60"
           />
         )}

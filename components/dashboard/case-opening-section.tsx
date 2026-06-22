@@ -15,6 +15,7 @@ import { getCaseIcon } from "@/lib/case-icons";
 import { useSoundManager } from "@/lib/sound-manager";
 import { debugLog } from "@/lib/debug";
 import { RARITY_HEX } from "@/lib/rarity-colors";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 const CONFETTI_BY_RARITY: Record<Rarity, () => void> = {
   normal: () => {
@@ -143,6 +144,7 @@ export function CaseOpeningSection({
   const [isFetching, setIsFetching] = useState(false);
   const mounted = useRef(false);
   const fetchingRef = useRef(false);
+  const { currencyName } = useSiteConfig();
   const sound = useSoundManager();
 
   // SSR + first client paint render the exact same placeholder reel. Real,
@@ -333,7 +335,7 @@ export function CaseOpeningSection({
         >
           {group.standard.enabled === false
             ? "DEAKTIVIERT"
-            : `${group.standard.label} — ${group.standard.price.toLocaleString("de-DE")} CR`}
+            : `${group.standard.label} — ${group.standard.price.toLocaleString("de-DE")} ${currencyName}`}
         </button>
 
         <button
@@ -351,7 +353,7 @@ export function CaseOpeningSection({
             <Zap className="h-4 w-4 text-amber-300" />
             {group.premium.enabled === false
               ? "DEAKTIVIERT"
-              : `${group.premium.label} — ${group.premium.price.toLocaleString("de-DE")} CR`}
+              : `${group.premium.label} — ${group.premium.price.toLocaleString("de-DE")} ${currencyName}`}
           </span>
           {group.premium.sublabel && group.premium.enabled !== false && (
             <span className="block text-[11px] font-semibold tracking-widest text-zinc-400">

@@ -27,6 +27,7 @@ import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 interface WorldShellProps {
   userId: string;
@@ -116,6 +117,7 @@ export function WorldShell({
   useRealtimeProfile((row) => {
     if (typeof row.credits === "number") setCredits(row.credits);
   });
+  const { currencyName, damageLabel } = useSiteConfig();
   const [attackFlash, setAttackFlash] = useState<"hit" | "miss" | null>(null);
   const [hp, setHp] = useState(characterConfig.playerMaxHp);
   const [maxHp, setMaxHp] = useState(characterConfig.playerMaxHp);
@@ -447,7 +449,7 @@ export function WorldShell({
               disconnectCountdown !== null
                 ? "Abbrechen — im Spiel bleiben, nichts wird gesichert"
                 : pendingStreakCr > 0
-                  ? `Sichert ${pendingStreakCr.toLocaleString("de-DE")} CR Kill-Streak-Guthaben`
+                  ? `Sichert ${pendingStreakCr.toLocaleString("de-DE")} ${currencyName} Kill-Streak-Guthaben`
                   : "Keine offene Kill-Streak"
             }
             className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-semibold backdrop-blur transition-colors ${
@@ -494,7 +496,7 @@ export function WorldShell({
                 <p className="text-sm text-zinc-400">Gesicherte Kill-Streak</p>
                 <div className="flex items-center gap-4">
                   <span className="flex items-center gap-1.5 text-lg font-bold text-amber-300">
-                    <Coins className="h-4 w-4" />+{disconnectSummary.securedCr.toLocaleString("de-DE")} CR
+                    <Coins className="h-4 w-4" />+{disconnectSummary.securedCr.toLocaleString("de-DE")} {currencyName}
                   </span>
                   <span className="flex items-center gap-1.5 text-lg font-bold text-orange-300">
                     <Flame className="h-4 w-4" />
@@ -575,7 +577,7 @@ export function WorldShell({
               <span className="font-bold text-orange-300">{streakKillCount}er Streak</span>
               <span className="text-zinc-400">·</span>
               <Coins className="h-3.5 w-3.5 text-amber-400" />
-              <span className="font-bold text-amber-300">{pendingStreakCr.toLocaleString("de-DE")} CR</span>
+              <span className="font-bold text-amber-300">{pendingStreakCr.toLocaleString("de-DE")} {currencyName}</span>
             </div>
           )}
           {damageTakenPopups.map((p) => (
@@ -618,7 +620,7 @@ export function WorldShell({
         >
           <Swords className="h-4 w-4 text-emerald-400" />
           <span className="font-semibold text-zinc-200">{weaponName}</span>
-          <span className="font-bold text-emerald-300">{formatDamage(weaponDamage)}</span>
+          <span className="font-bold text-emerald-300">{formatDamage(weaponDamage, damageLabel)}</span>
         </div>
 
         {/* Monster-kill reward toasts — top-center, separate from the
@@ -630,7 +632,7 @@ export function WorldShell({
               key={p.id}
               className="animate-[float-up_1.3s_ease-out_forwards] flex items-center gap-1 rounded-full border border-amber-400/50 bg-amber-500/15 px-3 py-1 text-sm font-bold text-amber-300 shadow-[0_0_16px_rgba(251,191,36,0.4)]"
             >
-              <Coins className="h-3.5 w-3.5" />+{p.amount.toLocaleString("de-DE")} CR
+              <Coins className="h-3.5 w-3.5" />+{p.amount.toLocaleString("de-DE")} {currencyName}
             </span>
           ))}
         </div>

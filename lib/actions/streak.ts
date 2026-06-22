@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
+import { getSiteConfig } from "@/lib/actions/site-config";
 import {
   computeStreakReward,
   decideStreak,
@@ -273,11 +274,12 @@ export async function claimDailyReward(): Promise<ClaimResult> {
 
   // Every claim gets a notification — full daily-reward history, with a
   // distinct title for milestone days.
+  const { currencyName } = await getSiteConfig();
   await notifyUser({
     userId: user.id,
     type: "streak_claim",
     title: result.isMilestone ? "Streak-Meilenstein erreicht!" : "Daily-Reward abgeholt",
-    message: `${decision.newStreak} Tage in Folge — du hast ${result.totalCredits.toLocaleString("de-DE")} CR erhalten.`,
+    message: `${decision.newStreak} Tage in Folge — du hast ${result.totalCredits.toLocaleString("de-DE")} ${currencyName} erhalten.`,
     link: "/account",
   });
 

@@ -6,6 +6,7 @@ import { updateKillStreakConfig } from "@/lib/actions/kill-streak";
 import { streakCrMultiplier, streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 interface FieldDef {
   key: keyof KillStreakConfig;
@@ -14,22 +15,24 @@ interface FieldDef {
   step?: number;
 }
 
-const FIELDS: FieldDef[] = [
-  {
-    key: "multiplierPerKill",
-    label: "CR-Multiplikator pro Kill",
-    hint: "+X auf den Multiplikator je Kill in der laufenden Serie (z.B. 0.04 = +4%)",
-    step: 0.01,
-  },
-  { key: "maxMultiplier", label: "Maximaler CR-Multiplikator", hint: "Deckel für den Multiplikator", step: 0.1 },
-  {
-    key: "mobScalePerKill",
-    label: "Monster-Skalierung pro Kill",
-    hint: "Erhöht Leben/Schaden selbst gespawnter Monster je Kill in der Serie (nur lokal, nicht global)",
-    step: 0.01,
-  },
-  { key: "mobScaleMax", label: "Maximale Monster-Skalierung", hint: "Deckel für die Monster-Skalierung", step: 0.1 },
-];
+function buildFields(currencyName: string): FieldDef[] {
+  return [
+    {
+      key: "multiplierPerKill",
+      label: `${currencyName}-Multiplikator pro Kill`,
+      hint: "+X auf den Multiplikator je Kill in der laufenden Serie (z.B. 0.04 = +4%)",
+      step: 0.01,
+    },
+    { key: "maxMultiplier", label: `Maximaler ${currencyName}-Multiplikator`, hint: "Deckel für den Multiplikator", step: 0.1 },
+    {
+      key: "mobScalePerKill",
+      label: "Monster-Skalierung pro Kill",
+      hint: "Erhöht Leben/Schaden selbst gespawnter Monster je Kill in der Serie (nur lokal, nicht global)",
+      step: 0.01,
+    },
+    { key: "mobScaleMax", label: "Maximale Monster-Skalierung", hint: "Deckel für die Monster-Skalierung", step: 0.1 },
+  ];
+}
 
 /**
  * Admin config for the kill-streak economy (lib/kill-streak.ts) — strictly
@@ -42,6 +45,8 @@ export function KillStreakConfigEditor({ config }: { config: KillStreakConfig })
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const sound = useSoundManager();
+  const { currencyName } = useSiteConfig();
+  const fields = buildFields(currencyName);
 
   function setField(key: keyof KillStreakConfig, value: number) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -74,7 +79,7 @@ export function KillStreakConfigEditor({ config }: { config: KillStreakConfig })
       }
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {FIELDS.map((field) => (
+        {fields.map((field) => (
           <label key={field.key} className="flex flex-col gap-1">
             <span className="text-xs font-semibold text-zinc-400">{field.label}</span>
             <input
@@ -94,7 +99,7 @@ export function KillStreakConfigEditor({ config }: { config: KillStreakConfig })
         {previewKills.map((kills) => (
           <div key={kills} className="flex min-w-[88px] flex-col items-center gap-1 rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
             <span className="text-[10px] text-zinc-500">{kills} Kills</span>
-            <span className="text-sm font-bold text-amber-300">{streakCrMultiplier(kills, form).toFixed(2)}x CR</span>
+            <span className="text-sm font-bold text-amber-300">{streakCrMultiplier(kills, form).toFixed(2)}x {currencyName}</span>
             <span className="text-[10px] text-red-300">{streakMobScale(kills, form).toFixed(2)}x Mobs</span>
           </div>
         ))}

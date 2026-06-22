@@ -52,6 +52,26 @@ export const ALL_SHOP_ITEM_TYPES = [
   "shield_cosmetic",
 ];
 
+/** German display labels for `ALL_SHOP_ITEM_TYPES` — shared by the global
+ * Automatik settings (components/admin/shop-tab.tsx) and the per-category
+ * type-filter picker (components/admin/shop-category-manager.tsx). */
+export const SHOP_ITEM_TYPE_LABELS: Record<string, string> = {
+  hat: "Hüte",
+  jacket: "Jacken",
+  pants: "Hosen",
+  shoes: "Schuhe",
+  weapon: "Waffen",
+  weapon_cosmetic: "Waffen-Skins",
+  pet: "Pets",
+  aura: "Auren",
+  trail: "Trails",
+  ring: "Ringe",
+  amulet: "Amulette",
+  hair: "Haare",
+  face: "Gesichter",
+  shield_cosmetic: "Schilde",
+};
+
 /** Rarer items get picked less often, but never zero chance — this is
  * what makes a Mythisch/Ultra item showing up in the shop feel like an
  * event instead of either "never happens" or "happens constantly". */

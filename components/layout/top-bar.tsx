@@ -46,7 +46,7 @@ export function TopBar({
 }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
-  const { siteName, logoUrl, logoIconName } = useSiteConfig();
+  const { siteName, logoUrl, logoIconName, currencyName } = useSiteConfig();
   const LogoIcon = resolveSiteLogoIcon(logoIconName);
 
   return (
@@ -84,7 +84,7 @@ export function TopBar({
           <span className="logo-text hidden font-extrabold tracking-tight sm:inline">{siteName}</span>
         </Link>
         <div className="flex items-center gap-1 rounded-full bg-purple-600/90 px-3 py-1 text-sm font-semibold text-white">
-          <span>{creditsLabel} CR</span>
+          <span>{creditsLabel} {currencyName}</span>
           <Link2 className="h-3.5 w-3.5 opacity-80" />
         </div>
         {/* Admin-only shortcut to /admin — previously only reachable from

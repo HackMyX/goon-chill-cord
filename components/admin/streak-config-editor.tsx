@@ -5,6 +5,7 @@ import { Flame, Save, Loader2 } from "lucide-react";
 import { updateStreakConfig } from "@/lib/actions/streak";
 import { computeStreakReward, type StreakConfig } from "@/lib/streak";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 interface FieldDef {
   key: keyof StreakConfig;
@@ -16,7 +17,7 @@ interface FieldDef {
 
 const NUMBER_FIELDS: FieldDef[] = [
   { key: "baseReward", label: "Basis-Reward", hint: "Belohnung an Tag 1 eines Streaks", suffix: "CR" },
-  { key: "dailyIncrement", label: "Tägliche Steigerung", hint: "+X CR pro weiterem Streak-Tag", suffix: "CR" },
+  { key: "dailyIncrement", label: "Tägliche Steigerung", hint: "+X pro weiterem Streak-Tag", suffix: "CR" },
   { key: "maxReward", label: "Maximaler Reward", hint: "Deckel — wächst nicht weiter darüber hinaus", suffix: "CR" },
   { key: "gracePeriodHours", label: "Gnadenfrist", hint: "Stunden nach Mitternacht, in denen ein verpasster Tag noch nachgeholt werden kann", suffix: "h" },
   { key: "milestoneInterval", label: "Meilenstein-Intervall", hint: "Jeder Nte Tag löst einen Bonus aus (0 = aus)", suffix: "Tage" },
@@ -35,6 +36,7 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const sound = useSoundManager();
+  const { currencyName } = useSiteConfig();
 
   function setField<K extends keyof StreakConfig>(key: K, value: StreakConfig[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -96,7 +98,9 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
                   onChange={(e) => setField(field.key, Number(e.target.value) as never)}
                   className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
                 />
-                {field.suffix && <span className="text-xs text-zinc-500">{field.suffix}</span>}
+                {field.suffix && (
+                  <span className="text-xs text-zinc-500">{field.suffix === "CR" ? currencyName : field.suffix}</span>
+                )}
               </div>
               <span className="text-[11px] text-zinc-600">{field.hint}</span>
             </label>

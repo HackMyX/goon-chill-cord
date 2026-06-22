@@ -6,14 +6,18 @@ import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { useSoundManager } from "@/lib/sound-manager";
 import {
+  getShopSettings,
   updateShopSettings,
+  getAdminShopListings,
   addManualShopListing,
   removeShopListing,
   updateShopListing,
   regenerateAutoShopListings,
   type AdminShopListing,
 } from "@/lib/actions/shop";
-import { ALL_SHOP_ITEM_TYPES, type ShopSettings } from "@/lib/shop";
+import { ALL_SHOP_ITEM_TYPES, SHOP_ITEM_TYPE_LABELS, type ShopSettings } from "@/lib/shop";
+import { ShopCategoryManager } from "@/components/admin/shop-category-manager";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { ItemRow } from "@/components/admin/admin-shell";
 
 interface ShopTabProps {
@@ -22,23 +26,6 @@ interface ShopTabProps {
   tomorrowListings: AdminShopListing[];
   items: ItemRow[];
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  hat: "Hüte",
-  jacket: "Jacken",
-  pants: "Hosen",
-  shoes: "Schuhe",
-  weapon: "Waffen",
-  weapon_cosmetic: "Waffen-Skins",
-  pet: "Pets",
-  aura: "Auren",
-  trail: "Trails",
-  ring: "Ringe",
-  amulet: "Amulette",
-  hair: "Haare",
-  face: "Gesichter",
-  shield_cosmetic: "Schilde",
-};
 
 function SettingsCard({ settings }: { settings: ShopSettings }) {
   const [form, setForm] = useState(settings);
@@ -146,7 +133,7 @@ function SettingsCard({ settings }: { settings: ShopSettings }) {
                 : "bg-white/5 text-zinc-500 hover:bg-white/10"
             }`}
           >
-            {CATEGORY_LABELS[type] ?? type}
+            {SHOP_ITEM_TYPE_LABELS[type] ?? type}
           </button>
         ))}
       </div>
@@ -169,13 +156,18 @@ function SettingsCard({ settings }: { settings: ShopSettings }) {
 
 function ListingRow({ listing, onChanged }: { listing: AdminShopListing; onChanged: () => void }) {
   const [priceCr, setPriceCr] = useState(listing.priceCr);
+  const [savingPrice, setSavingPrice] = useState(false);
+  const dirty = priceCr !== listing.priceCr;
   const sound = useSoundManager();
   const confirm = useConfirm();
+  const { currencyName } = useSiteConfig();
 
   async function savePrice() {
-    if (priceCr === listing.priceCr) return;
+    if (!dirty) return;
+    setSavingPrice(true);
     sound.click();
     await updateShopListing(listing.id, { priceCr });
+    setSavingPrice(false);
     onChanged();
   }
 
@@ -213,6 +205,11 @@ function ListingRow({ listing, onChanged }: { listing: AdminShopListing; onChang
         >
           {listing.source === "auto" ? "Automatik" : "Manuell"}
         </span>
+        {listing.categoryName && (
+          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-zinc-400">
+            {listing.categoryName}
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <input
@@ -223,7 +220,18 @@ function ListingRow({ listing, onChanged }: { listing: AdminShopListing; onChang
           onBlur={savePrice}
           className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
         />
-        <span className="text-[11px] text-zinc-500">CR</span>
+        <span className="text-[11px] text-zinc-500">{currencyName}</span>
+        {dirty && (
+          <button
+            onClick={savePrice}
+            disabled={savingPrice}
+            title="Preis speichern"
+            className="flex items-center gap-1 rounded-lg bg-purple-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-purple-500 disabled:opacity-60"
+          >
+            {savingPrice ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+            Speichern
+          </button>
+        )}
         <button onClick={handleRemove} className="text-zinc-500 hover:text-red-400">
           <Trash2 className="h-4 w-4" />
         </button>
@@ -377,32 +385,48 @@ function DayShopPanel({
   );
 }
 
-export function ShopTab({ settings, todayListings, tomorrowListings, items }: ShopTabProps) {
-  function onChanged() {
-    // Server actions already revalidatePath the admin route, but this
-    // component still holds the props from the last server render — a
-    // full reload is the simplest reliable way to pick up the fresh
-    // listings without threading a router-refresh callback through
-    // AdminShell just for this one tab.
-    window.location.reload();
+export function ShopTab({
+  settings: initialSettings,
+  todayListings: initialTodayListings,
+  tomorrowListings: initialTomorrowListings,
+  items,
+}: ShopTabProps) {
+  const [settings, setSettings] = useState(initialSettings);
+  const [todayListings, setTodayListings] = useState(initialTodayListings);
+  const [tomorrowListings, setTomorrowListings] = useState(initialTomorrowListings);
+
+  // Re-fetches just the listings (and settings, in case regenerate touched
+  // auto-generate state) in place — no page reload, so nothing the admin
+  // is mid-editing in this tab or any other gets blown away. Same
+  // self-contained load()-on-mutation pattern as TicketsTab/DebugLogTab.
+  async function refresh() {
+    const [freshSettings, freshToday, freshTomorrow] = await Promise.all([
+      getShopSettings(),
+      getAdminShopListings(0),
+      getAdminShopListings(1),
+    ]);
+    setSettings(freshSettings);
+    setTodayListings(freshToday);
+    setTomorrowListings(freshTomorrow);
   }
 
   return (
     <div className="flex flex-col gap-4">
       <SettingsCard settings={settings} />
+      <ShopCategoryManager onChanged={refresh} />
       <DayShopPanel
         label="Heutiger Shop"
         dateOffsetDays={0}
         listings={todayListings}
         items={items}
-        onChanged={onChanged}
+        onChanged={refresh}
       />
       <DayShopPanel
         label="Morgiger Shop (Vorschau / Vorab-Bestückung)"
         dateOffsetDays={1}
         listings={tomorrowListings}
         items={items}
-        onChanged={onChanged}
+        onChanged={refresh}
       />
     </div>
   );

@@ -6,6 +6,7 @@ import { updateCaseTier } from "@/lib/actions/admin";
 import { RARITY_LABELS, RARITY_ORDER, ALL_ITEM_TYPES, findCaseTier, type Rarity } from "@/lib/cases";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { CaseTierRow } from "@/components/admin/admin-shell";
 
 export function CaseTierEditor({ tier }: { tier: CaseTierRow }) {
@@ -18,6 +19,7 @@ export function CaseTierEditor({ tier }: { tier: CaseTierRow }) {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const sound = useSoundManager();
+  const { currencyName } = useSiteConfig();
 
   function toggleType(type: string) {
     setItemTypes((curr) =>
@@ -83,7 +85,7 @@ export function CaseTierEditor({ tier }: { tier: CaseTierRow }) {
       <div onClick={(e) => e.stopPropagation()}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-xs text-zinc-400">
-            Preis (CR)
+            Preis ({currencyName})
             <input
               type="number"
               value={price}

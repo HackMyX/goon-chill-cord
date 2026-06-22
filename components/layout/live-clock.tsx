@@ -8,6 +8,7 @@ import { DEFAULT_STREAK_CONFIG } from "@/lib/streak";
 import { StreakInfoPopover } from "@/components/layout/streak-info-popover";
 import { useSoundManager } from "@/lib/sound-manager";
 import { debugLog, debugWarn } from "@/lib/debug";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 function getMidnightCountdown() {
   const now = new Date();
@@ -53,6 +54,7 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
   const [previewReward, setPreviewReward] = useState(0);
   const [claiming, setClaiming] = useState(false);
   const [justClaimed, setJustClaimed] = useState<number | null>(null);
+  const { currencyName } = useSiteConfig();
   const sound = useSoundManager();
 
   useEffect(() => {
@@ -122,17 +124,17 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
           onMouseEnter={sound.hover}
           onClick={handleClaim}
           disabled={claiming}
-          title={`Tägliche Belohnung abholen (+${previewReward.toLocaleString("de-DE")} CR)`}
+          title={`Tägliche Belohnung abholen (+${previewReward.toLocaleString("de-DE")} ${currencyName})`}
           className="flex items-center gap-1.5 rounded-2xl border border-emerald-400/50 bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-300 shadow-[0_0_16px_rgba(52,211,153,0.35)] transition-all hover:bg-emerald-500/25 disabled:opacity-60"
         >
           {claiming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Gift className="h-3.5 w-3.5" />}
-          +{previewReward.toLocaleString("de-DE")} CR
+          +{previewReward.toLocaleString("de-DE")} {currencyName}
         </button>
       )}
 
       {justClaimed !== null && (
         <span className="animate-pulse rounded-2xl bg-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-300">
-          +{justClaimed.toLocaleString("de-DE")} CR erhalten!
+          +{justClaimed.toLocaleString("de-DE")} {currencyName} erhalten!
         </span>
       )}
     </div>

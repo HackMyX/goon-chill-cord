@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, type ProfileRole } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
+import { getSiteConfig } from "@/lib/actions/site-config";
 import type { Rarity } from "@/lib/cases";
 
 export interface AdminActionResult {
@@ -119,11 +120,12 @@ export async function updateUserCredits(
   if (error) return { success: false, error: "Update fehlgeschlagen." };
 
   await logAdminAction(user.id, "admin_set_credits", { targetUserId, credits });
+  const { currencyName } = await getSiteConfig();
   await notifyUser({
     userId: targetUserId,
     type: "admin_credits",
     title: "Guthaben geändert",
-    message: `Ein Admin hat dein Guthaben auf ${Math.floor(credits).toLocaleString("de-DE")} CR gesetzt.`,
+    message: `Ein Admin hat dein Guthaben auf ${Math.floor(credits).toLocaleString("de-DE")} ${currencyName} gesetzt.`,
     link: "/account",
   });
   revalidatePath("/admin");

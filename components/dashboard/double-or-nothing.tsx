@@ -6,6 +6,7 @@ import confetti from "canvas-confetti";
 import { Coins } from "lucide-react";
 import { flipDouble } from "@/lib/actions/double-or-nothing";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 function fireDoNConfetti() {
   confetti({
@@ -30,6 +31,7 @@ export function DoubleOrNothing({ credits, onCreditsChange }: DoubleOrNothingPro
   const [result, setResult] = useState<{ won: boolean; amount: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
+  const { currencyName } = useSiteConfig();
 
   const clampedAmount = Math.max(1, Math.min(amount, credits || 1));
 
@@ -106,8 +108,8 @@ export function DoubleOrNothing({ credits, onCreditsChange }: DoubleOrNothingPro
               }`}
             >
               {result.won
-                ? `🎉 Gewonnen! +${result.amount.toLocaleString("de-DE")} CR`
-                : `Verloren! -${result.amount.toLocaleString("de-DE")} CR`}
+                ? `🎉 Gewonnen! +${result.amount.toLocaleString("de-DE")} ${currencyName}`
+                : `Verloren! -${result.amount.toLocaleString("de-DE")} ${currencyName}`}
             </motion.p>
           )}
         </AnimatePresence>
@@ -172,7 +174,7 @@ export function DoubleOrNothing({ credits, onCreditsChange }: DoubleOrNothingPro
         </div>
 
         <p className="mt-3 text-xs text-zinc-400">
-          Guthaben: <span className="font-semibold text-purple-300">{credits.toLocaleString("de-DE")} Credits</span>{" "}
+          Guthaben: <span className="font-semibold text-purple-300">{credits.toLocaleString("de-DE")} {currencyName}</span>{" "}
           · Gewinn:{" "}
           <span className="font-semibold text-amber-300">
             {(clampedAmount * 2).toLocaleString("de-DE")}

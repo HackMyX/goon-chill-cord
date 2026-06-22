@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Crown, Trophy, Medal } from "lucide-react";
 import { useRealtimeAllProfiles } from "@/lib/use-realtime-profile";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 export interface LeaderboardEntry {
   id: string;
@@ -18,6 +19,7 @@ const RANK_ICONS = [
 
 export function Leaderboard({ entries: initialEntries }: { entries: LeaderboardEntry[] }) {
   const [entries, setEntries] = useState(initialEntries);
+  const { currencyName } = useSiteConfig();
 
   // Re-sorts and re-slices on every credits change anywhere — so a credit
   // change (case win, admin edit, trade, anything) reorders this list (and
@@ -68,7 +70,7 @@ export function Leaderboard({ entries: initialEntries }: { entries: LeaderboardE
                 <span className="font-semibold text-zinc-100">{entry.username}</span>
               </div>
               <span className="font-bold text-purple-300">
-                {entry.credits.toLocaleString("de-DE")} CR
+                {entry.credits.toLocaleString("de-DE")} {currencyName}
               </span>
             </div>
           );

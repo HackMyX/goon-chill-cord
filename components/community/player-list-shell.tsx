@@ -11,6 +11,7 @@ import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, type Rarity } from "@/lib/c
 import type { EquippedItem } from "@/lib/rarity-colors";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useRealtimeProfile, useRealtimeAllProfiles } from "@/lib/use-realtime-profile";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 export interface PlayerCard {
   id: string;
@@ -68,6 +69,7 @@ export function PlayerListShell({ players: initialPlayers, credits: initialCredi
     if (typeof row.credits === "number") setCredits(row.credits);
   });
   const [players, setPlayers] = useState(initialPlayers);
+  const { currencyName } = useSiteConfig();
   // Other players' credits (shown on each card) update live too — e.g. an
   // admin editing someone's balance, or anyone winning/spending, reflects
   // here immediately without a reload.
@@ -172,7 +174,7 @@ export function PlayerListShell({ players: initialPlayers, credits: initialCredi
                   </div>
 
                   <p className="flex items-center gap-1 text-sm font-semibold text-purple-300">
-                    {new Intl.NumberFormat("de-DE").format(player.credits)} CR
+                    {new Intl.NumberFormat("de-DE").format(player.credits)} {currencyName}
                   </p>
 
                   {total === 0 ? (

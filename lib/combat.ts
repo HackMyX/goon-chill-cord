@@ -384,7 +384,9 @@ export function getEquippedDamage(weapon: DamageSource | undefined | null, fistD
 
 /** Display label for damage badges — same "⚔" glyph everywhere a weapon's
  * power is shown, so a player learns to recognize it at a glance instead
- * of every surface inventing its own wording. */
-export function formatDamage(damage: number): string {
-  return `⚔ ${damage} DMG`;
+ * of every surface inventing its own wording. `label` defaults to "DMG"
+ * but every real call site passes the admin-configured
+ * `useSiteConfig().damageLabel` (lib/site-config.ts) instead. */
+export function formatDamage(damage: number, label: string = "DMG"): string {
+  return `⚔ ${damage} ${label}`;
 }

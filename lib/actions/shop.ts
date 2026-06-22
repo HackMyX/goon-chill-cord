@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
+import { getSiteConfig } from "@/lib/actions/site-config";
 import {
   DEFAULT_SHOP_SETTINGS,
   SHOP_RARITY_PICK_WEIGHT,
@@ -18,6 +19,229 @@ import type { Rarity } from "@/lib/cases";
 function logServerError(scope: string, message: string, detail?: string) {
   console.error(`[${scope}] ${message}`, detail ?? "");
   void logDebugEvent({ scope, message, detail });
+}
+
+// ---------------------------------------------------------------------------
+// Shop categories + per-day scheduling
+// ---------------------------------------------------------------------------
+
+export interface ShopCategoryDayRule {
+  id: string;
+  dayOfWeek: number | null;
+  specificDate: string | null;
+  enabled: boolean;
+  rarityFilter: Rarity[] | null;
+  typeFilter: string[] | null;
+  itemCountOverride: number | null;
+}
+
+export interface ShopCategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  enabled: boolean;
+  sortOrder: number;
+  rarityFilter: Rarity[] | null;
+  typeFilter: string[] | null;
+  itemCount: number;
+  priceMultiplierMin: number;
+  priceMultiplierMax: number;
+  dayRules: ShopCategoryDayRule[];
+}
+
+function mapDayRule(row: {
+  id: string;
+  day_of_week: number | null;
+  specific_date: string | null;
+  enabled: boolean;
+  rarity_filter: string[] | null;
+  type_filter: string[] | null;
+  item_count_override: number | null;
+}): ShopCategoryDayRule {
+  return {
+    id: row.id,
+    dayOfWeek: row.day_of_week,
+    specificDate: row.specific_date,
+    enabled: row.enabled,
+    rarityFilter: (row.rarity_filter as Rarity[] | null) ?? null,
+    typeFilter: row.type_filter,
+    itemCountOverride: row.item_count_override,
+  };
+}
+
+/** Admin-only — every read here is for the Shop tab's category manager,
+ * never the player-facing shop, so it's fine to always require admin. */
+export async function listShopCategories(): Promise<ShopCategory[]> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return [];
+
+  const admin = createAdminClient();
+  const [{ data: categories }, { data: rules }] = await Promise.all([
+    admin.from("shop_categories").select("*").order("sort_order", { ascending: true }),
+    admin.from("shop_category_day_rules").select("*"),
+  ]);
+
+  const rulesByCategory = new Map<string, ShopCategoryDayRule[]>();
+  for (const row of rules ?? []) {
+    const list = rulesByCategory.get(row.category_id) ?? [];
+    list.push(mapDayRule(row));
+    rulesByCategory.set(row.category_id, list);
+  }
+
+  return (categories ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: c.icon,
+    color: c.color,
+    enabled: c.enabled,
+    sortOrder: c.sort_order,
+    rarityFilter: (c.rarity_filter as Rarity[] | null) ?? null,
+    typeFilter: c.type_filter,
+    itemCount: c.item_count,
+    priceMultiplierMin: c.price_multiplier_min,
+    priceMultiplierMax: c.price_multiplier_max,
+    dayRules: rulesByCategory.get(c.id) ?? [],
+  }));
+}
+
+export interface UpsertShopCategoryInput {
+  id?: string;
+  name: string;
+  icon: string;
+  color: string;
+  enabled: boolean;
+  sortOrder: number;
+  rarityFilter: Rarity[] | null;
+  typeFilter: string[] | null;
+  itemCount: number;
+  priceMultiplierMin: number;
+  priceMultiplierMax: number;
+}
+
+export async function upsertShopCategory(input: UpsertShopCategoryInput): Promise<{ success: boolean; error?: string; id?: string }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { success: false, error: auth.error };
+
+  if (!input.name.trim()) return { success: false, error: "Name ist erforderlich." };
+  if (input.itemCount < 0 || input.itemCount > 50) return { success: false, error: "Item-Anzahl muss zwischen 0 und 50 liegen." };
+  if (input.priceMultiplierMin <= 0 || input.priceMultiplierMax <= 0 || input.priceMultiplierMin > input.priceMultiplierMax) {
+    return { success: false, error: "Ungültige Preis-Multiplikatoren." };
+  }
+
+  const admin = createAdminClient();
+  const payload = {
+    name: input.name.trim(),
+    icon: input.icon,
+    color: input.color,
+    enabled: input.enabled,
+    sort_order: Math.floor(input.sortOrder),
+    rarity_filter: input.rarityFilter,
+    type_filter: input.typeFilter,
+    item_count: Math.floor(input.itemCount),
+    price_multiplier_min: input.priceMultiplierMin,
+    price_multiplier_max: input.priceMultiplierMax,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = input.id
+    ? await admin.from("shop_categories").update(payload).eq("id", input.id).select("id").single()
+    : await admin.from("shop_categories").insert(payload).select("id").single();
+
+  if (error || !data) {
+    logServerError("Shop", "upsertShopCategory failed", error?.message);
+    return { success: false, error: "Speichern fehlgeschlagen — ist die Kategorien-Migration eingespielt?" };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/shop");
+  return { success: true, id: data.id };
+}
+
+export async function deleteShopCategory(id: string): Promise<{ success: boolean; error?: string }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { success: false, error: auth.error };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("shop_categories").delete().eq("id", id);
+  if (error) return { success: false, error: "Löschen fehlgeschlagen." };
+
+  revalidatePath("/admin");
+  revalidatePath("/shop");
+  return { success: true };
+}
+
+export interface UpsertShopCategoryDayRuleInput {
+  categoryId: string;
+  dayOfWeek?: number | null;
+  specificDate?: string | null;
+  enabled: boolean;
+  rarityFilter: Rarity[] | null;
+  typeFilter: string[] | null;
+  itemCountOverride: number | null;
+}
+
+/** Upserts by the same (category_id, day_of_week) / (category_id,
+ * specific_date) uniqueness the DB enforces — finds any existing row for
+ * that exact slot first since Supabase's `.upsert()` needs an explicit
+ * conflict target that matches a real constraint, and the two slot kinds
+ * share one table with two different partial-unique indexes. */
+export async function upsertShopCategoryDayRule(
+  input: UpsertShopCategoryDayRuleInput
+): Promise<{ success: boolean; error?: string }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { success: false, error: auth.error };
+
+  const hasDay = typeof input.dayOfWeek === "number";
+  const hasDate = typeof input.specificDate === "string" && input.specificDate.length > 0;
+  if (hasDay === hasDate) {
+    return { success: false, error: "Genau eines von Wochentag oder Datum muss gesetzt sein." };
+  }
+  if (hasDay && (input.dayOfWeek! < 0 || input.dayOfWeek! > 6)) {
+    return { success: false, error: "Ungültiger Wochentag." };
+  }
+
+  const admin = createAdminClient();
+  const payload = {
+    category_id: input.categoryId,
+    day_of_week: hasDay ? input.dayOfWeek : null,
+    specific_date: hasDate ? input.specificDate : null,
+    enabled: input.enabled,
+    rarity_filter: input.rarityFilter,
+    type_filter: input.typeFilter,
+    item_count_override: input.itemCountOverride,
+    updated_at: new Date().toISOString(),
+  };
+
+  let query = admin.from("shop_category_day_rules").select("id").eq("category_id", input.categoryId);
+  query = hasDay ? query.eq("day_of_week", input.dayOfWeek!) : query.eq("specific_date", input.specificDate!);
+  const { data: existing } = await query.maybeSingle();
+
+  const { error } = existing
+    ? await admin.from("shop_category_day_rules").update(payload).eq("id", existing.id)
+    : await admin.from("shop_category_day_rules").insert(payload);
+
+  if (error) {
+    logServerError("Shop", "upsertShopCategoryDayRule failed", error.message);
+    return { success: false, error: "Speichern fehlgeschlagen." };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/shop");
+  return { success: true };
+}
+
+export async function deleteShopCategoryDayRule(id: string): Promise<{ success: boolean; error?: string }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return { success: false, error: auth.error };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("shop_category_day_rules").delete().eq("id", id);
+  if (error) return { success: false, error: "Löschen fehlgeschlagen." };
+
+  revalidatePath("/admin");
+  revalidatePath("/shop");
+  return { success: true };
 }
 
 interface ShopSettingsRow {
@@ -126,15 +350,59 @@ function pickWeightedItems<T extends { id: string; rarity: Rarity }>(pool: T[], 
   return picked;
 }
 
+/** Day-of-week for a `shopDateKey()` string, UTC, 0=Sunday..6=Saturday —
+ * matches `shop_category_day_rules.day_of_week`'s convention. Parsing as
+ * an explicit UTC midnight (not `new Date(dateKey)`, which some JS
+ * engines treat as local time for date-only strings) keeps this in sync
+ * with shopDateKey()'s own UTC-day convention. */
+function dayOfWeekForDateKey(dateKey: string): number {
+  return new Date(`${dateKey}T00:00:00.000Z`).getUTCDay();
+}
+
+interface ResolvedCategoryRule {
+  enabled: boolean;
+  rarityFilter: Rarity[] | null;
+  typeFilter: string[] | null;
+  itemCount: number;
+}
+
+/** Specific-date rules beat day-of-week rules beat the category's own
+ * defaults — this is what lets "every Monday only selten" coexist with
+ * "but the 4th of July is a one-off ultra-only special" for the same
+ * category without the two ever conflicting on which one wins. */
+function resolveCategoryRuleForDate(category: ShopCategory, dateKey: string): ResolvedCategoryRule {
+  const dow = dayOfWeekForDateKey(dateKey);
+  const dateRule = category.dayRules.find((r) => r.specificDate === dateKey);
+  const dowRule = category.dayRules.find((r) => r.dayOfWeek === dow);
+  const rule = dateRule ?? dowRule ?? null;
+
+  return {
+    enabled: rule ? rule.enabled : true,
+    rarityFilter: rule?.rarityFilter ?? category.rarityFilter,
+    typeFilter: rule?.typeFilter ?? category.typeFilter,
+    itemCount: rule?.itemCountOverride ?? category.itemCount,
+  };
+}
+
+type ShopItemCandidate = { id: string; rarity: Rarity; type: string; price_cr: number };
+
 /**
  * Lazily generates the procedural ("Automatik") portion of a given day's
  * shop the first time anyone loads it that day — there's no cron job in
  * this app, same pattern as sweepExpiredAuctions(). Manual listings an
  * admin already staged for that date (e.g. pre-loading tomorrow's shop)
- * are counted first and never touched; generation only tops up the
- * remaining slots to reach the configured item count, which is exactly
- * what lets "the admin places a few exclusive items, the Automatik fills
- * in the rest" work as one combined shop.
+ * are counted first and never touched/duplicated; generation only adds on
+ * top of them.
+ *
+ * Category-aware: when `shop_categories` has any enabled rows, each one
+ * contributes its own slice of the day's shop — independently filtered by
+ * rarity/type, independently priced, and independently scheduled (a
+ * per-weekday or per-specific-date rule can change its filters, item
+ * count, or turn it off entirely for that one day; see
+ * resolveCategoryRuleForDate()). With zero categories configured (a fresh
+ * install, or before this feature existed), this falls back to the
+ * original flat global-settings behavior so nothing breaks for sites that
+ * haven't set categories up yet.
  */
 async function ensureShopGenerated(dateKey: string): Promise<void> {
   const admin = createAdminClient();
@@ -150,35 +418,106 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
   const alreadyGenerated = existingRows.some((row) => row.source === "auto");
   if (alreadyGenerated) return;
 
-  const needed = settings.autoGenerateItemCount - existingRows.length;
-  if (needed <= 0) return;
-
   const excludeIds = new Set(existingRows.map((row) => row.item_id));
-  const { data: candidatePool } = await admin
-    .from("items")
-    .select("id, rarity, price_cr")
-    .in("type", settings.autoGenerateItemTypes);
 
-  const pool = (candidatePool ?? []).filter((item) => !excludeIds.has(item.id));
-  if (pool.length === 0) return;
+  const { data: categoryRows } = await admin
+    .from("shop_categories")
+    .select("*")
+    .eq("enabled", true)
+    .order("sort_order", { ascending: true });
+  const { data: allRuleRows } =
+    categoryRows && categoryRows.length > 0
+      ? await admin.from("shop_category_day_rules").select("*").in("category_id", categoryRows.map((c) => c.id))
+      : { data: [] as never[] };
 
-  const chosen = pickWeightedItems(pool as { id: string; rarity: Rarity; price_cr: number }[], needed);
-  const rows = chosen.map((item) => {
-    const multiplier =
-      settings.autoGeneratePriceMultiplierMin +
-      Math.random() * (settings.autoGeneratePriceMultiplierMax - settings.autoGeneratePriceMultiplierMin);
-    const basePrice = Math.max(item.price_cr, 50);
-    return {
-      shop_date: dateKey,
-      item_id: item.id,
-      price_cr: roundToNicePrice(basePrice * multiplier),
-      purchase_limit: 1,
-      featured: item.rarity === "mythisch" || item.rarity === "ultra",
-      source: "auto",
-    };
-  });
+  const categories: ShopCategory[] = (categoryRows ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: c.icon,
+    color: c.color,
+    enabled: c.enabled,
+    sortOrder: c.sort_order,
+    rarityFilter: (c.rarity_filter as Rarity[] | null) ?? null,
+    typeFilter: c.type_filter,
+    itemCount: c.item_count,
+    priceMultiplierMin: c.price_multiplier_min,
+    priceMultiplierMax: c.price_multiplier_max,
+    dayRules: (allRuleRows ?? []).filter((r) => r.category_id === c.id).map(mapDayRule),
+  }));
 
-  const { error } = await admin.from("shop_listings").insert(rows);
+  const newRows: {
+    shop_date: string;
+    item_id: string;
+    price_cr: number;
+    purchase_limit: number;
+    featured: boolean;
+    source: "auto";
+    category_id: string | null;
+  }[] = [];
+
+  if (categories.length === 0) {
+    // Legacy fallback — no categories configured at all.
+    const needed = settings.autoGenerateItemCount - existingRows.length;
+    if (needed > 0) {
+      const { data: candidatePool } = await admin.from("items").select("id, rarity, price_cr").in("type", settings.autoGenerateItemTypes);
+      const pool = (candidatePool ?? []).filter((item) => !excludeIds.has(item.id));
+      const chosen = pickWeightedItems(pool as { id: string; rarity: Rarity; price_cr: number }[], needed);
+      for (const item of chosen) {
+        const multiplier =
+          settings.autoGeneratePriceMultiplierMin +
+          Math.random() * (settings.autoGeneratePriceMultiplierMax - settings.autoGeneratePriceMultiplierMin);
+        const basePrice = Math.max(item.price_cr, 50);
+        newRows.push({
+          shop_date: dateKey,
+          item_id: item.id,
+          price_cr: roundToNicePrice(basePrice * multiplier),
+          purchase_limit: 1,
+          featured: item.rarity === "mythisch" || item.rarity === "ultra",
+          source: "auto",
+          category_id: null,
+        });
+        excludeIds.add(item.id);
+      }
+    }
+  } else {
+    // One big pool, fetched once — each category below filters its own
+    // slice out of it client-side rather than re-querying per category.
+    const { data: allItems } = await admin.from("items").select("id, rarity, type, price_cr");
+    const itemPool = (allItems ?? []) as ShopItemCandidate[];
+
+    for (const category of categories) {
+      const rule = resolveCategoryRuleForDate(category, dateKey);
+      if (!rule.enabled || rule.itemCount <= 0) continue;
+
+      const candidates = itemPool.filter(
+        (item) =>
+          !excludeIds.has(item.id) &&
+          (rule.rarityFilter === null || rule.rarityFilter.includes(item.rarity)) &&
+          (rule.typeFilter === null || rule.typeFilter.includes(item.type))
+      );
+      if (candidates.length === 0) continue;
+
+      const chosen = pickWeightedItems(candidates, rule.itemCount);
+      for (const item of chosen) {
+        const multiplier = category.priceMultiplierMin + Math.random() * (category.priceMultiplierMax - category.priceMultiplierMin);
+        const basePrice = Math.max(item.price_cr, 50);
+        newRows.push({
+          shop_date: dateKey,
+          item_id: item.id,
+          price_cr: roundToNicePrice(basePrice * multiplier),
+          purchase_limit: 1,
+          featured: item.rarity === "mythisch" || item.rarity === "ultra",
+          source: "auto",
+          category_id: category.id,
+        });
+        excludeIds.add(item.id);
+      }
+    }
+  }
+
+  if (newRows.length === 0) return;
+
+  const { error } = await admin.from("shop_listings").insert(newRows);
   if (error) logServerError("Shop", "ensureShopGenerated insert failed", error.message);
 }
 
@@ -199,6 +538,7 @@ export interface ShopListingEntry {
   featured: boolean;
   source: "manual" | "auto";
   purchasedByMe: number;
+  categoryId: string | null;
 }
 
 /** The player-facing read — also the trigger point for that day's
@@ -215,10 +555,10 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
   const admin = createAdminClient();
   const withDamage = await admin
     .from("shop_listings")
-    .select("id, item_id, price_cr, purchase_limit, featured, source, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)")
+    .select("id, item_id, price_cr, purchase_limit, featured, source, category_id, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)")
     .eq("shop_date", today)
     .order("featured", { ascending: false });
-  let listings: { id: string; item_id: string; price_cr: number; purchase_limit: number; featured: boolean; source: string; item: unknown }[] | null =
+  let listings: { id: string; item_id: string; price_cr: number; purchase_limit: number; featured: boolean; source: string; category_id: string | null; item: unknown }[] | null =
     withDamage.data;
   if (withDamage.error) {
     const retry = await admin
@@ -228,6 +568,7 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
       .order("featured", { ascending: false });
     listings = (retry.data ?? []).map((row) => ({
       ...row,
+      category_id: null,
       item: row.item ? { ...row.item, damage: null, armor: null, perk_type: null, perk_magnitude: null, shield_hp: null, shield_regen_cooldown_sec: null } : null,
     }));
   }
@@ -276,6 +617,7 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
           featured: l.featured,
           source: l.source as "manual" | "auto",
           purchasedByMe: purchaseCounts.get(l.id) ?? 0,
+          categoryId: l.category_id,
         };
       }),
     resetsAt: tomorrow.toISOString(),
@@ -363,11 +705,12 @@ export async function purchaseShopItem(listingId: string): Promise<ShopPurchaseR
     // best-effort
   }
 
+  const { currencyName } = await getSiteConfig();
   await notifyUser({
     userId: user.id,
     type: "shop_purchase",
     title: "Kauf bestätigt",
-    message: `Du hast ${itemName} für ${listing.price_cr.toLocaleString("de-DE")} CR im Shop gekauft.`,
+    message: `Du hast ${itemName} für ${listing.price_cr.toLocaleString("de-DE")} ${currencyName} im Shop gekauft.`,
     link: "/shop",
   });
 
@@ -381,6 +724,7 @@ export async function purchaseShopItem(listingId: string): Promise<ShopPurchaseR
 
 export interface AdminShopListing extends ShopListingEntry {
   shopDate: string;
+  categoryName: string | null;
 }
 
 async function requireAdmin(): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -410,11 +754,11 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
   const withDamage = await admin
     .from("shop_listings")
     .select(
-      "id, item_id, price_cr, purchase_limit, featured, source, shop_date, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)"
+      "id, item_id, price_cr, purchase_limit, featured, source, category_id, shop_date, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)"
     )
     .eq("shop_date", dateKey)
     .order("featured", { ascending: false });
-  let data: { id: string; item_id: string; price_cr: number; purchase_limit: number; featured: boolean; source: string; shop_date: string; item: unknown }[] | null =
+  let data: { id: string; item_id: string; price_cr: number; purchase_limit: number; featured: boolean; source: string; category_id: string | null; shop_date: string; item: unknown }[] | null =
     withDamage.data;
   if (withDamage.error) {
     const retry = await admin
@@ -424,9 +768,15 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
       .order("featured", { ascending: false });
     data = (retry.data ?? []).map((row) => ({
       ...row,
+      category_id: null,
       item: row.item ? { ...row.item, damage: null, armor: null, perk_type: null, perk_magnitude: null, shield_hp: null, shield_regen_cooldown_sec: null } : null,
     }));
   }
+
+  const categoryIds = Array.from(new Set((data ?? []).map((l) => l.category_id).filter((id): id is string => !!id)));
+  const { data: categoryRows } =
+    categoryIds.length > 0 ? await admin.from("shop_categories").select("id, name").in("id", categoryIds) : { data: [] };
+  const categoryNames = new Map((categoryRows ?? []).map((c: { id: string; name: string }) => [c.id, c.name]));
 
   return (data ?? [])
     .filter((l) => l.item)
@@ -454,6 +804,8 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
         featured: l.featured,
         source: l.source as "manual" | "auto",
         purchasedByMe: 0,
+        categoryId: l.category_id,
+        categoryName: l.category_id ? categoryNames.get(l.category_id) ?? null : null,
         shopDate: l.shop_date,
       };
     });

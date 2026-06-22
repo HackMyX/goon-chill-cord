@@ -12,6 +12,7 @@ import { createAuction, placeBid, buyAuctionNow, cancelAuction } from "@/lib/act
 import { computeListingFee, MAX_ACTIVE_AUCTIONS_PER_USER } from "@/lib/auctions";
 import type { Rarity } from "@/lib/cases";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 export interface OwnedItem {
   inventoryId: string;
@@ -88,6 +89,7 @@ function CreateAuctionForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
+  const { currencyName } = useSiteConfig();
 
   const fee = computeListingFee(startingBid || 0);
 
@@ -149,7 +151,7 @@ function CreateAuctionForm({
         <>
           <div className="grid grid-cols-2 gap-4">
             <label className="flex flex-col gap-1">
-              <span className="text-xs font-semibold text-zinc-400">Startgebot (CR)</span>
+              <span className="text-xs font-semibold text-zinc-400">Startgebot ({currencyName})</span>
               <input
                 type="number"
                 min={1}
@@ -191,13 +193,13 @@ function CreateAuctionForm({
                 className="w-32 rounded-lg border border-emerald-400/30 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-emerald-400/60"
               />
               <span className="text-xs text-zinc-500">
-                CR — jeder andere Spieler kann für genau diesen Preis sofort kaufen, ohne zu bieten.
+                {currencyName} — jeder andere Spieler kann für genau diesen Preis sofort kaufen, ohne zu bieten.
               </span>
             </div>
           )}
 
           <p className="mt-3 text-xs text-amber-300">
-            Einstellgebühr: <span className="font-bold">{fmt(fee)} CR</span> (5%, min. 50 CR) — wird sofort
+            Einstellgebühr: <span className="font-bold">{fmt(fee)} {currencyName}</span> (5%, min. 50 {currencyName}) — wird sofort
             abgezogen, auch falls die Auktion ohne Gebot endet.
           </p>
 
@@ -238,6 +240,7 @@ function AuctionRow({
 }) {
   const sound = useSoundManager();
   const confirm = useConfirm();
+  const { currencyName } = useSiteConfig();
   const countdown = countdownLabel(auction.endsAt);
   const [bidAmount, setBidAmount] = useState(auction.currentBid + 1);
   const [submitting, setSubmitting] = useState(false);
@@ -279,7 +282,7 @@ function AuctionRow({
     sound.click();
     const ok = await confirm({
       title: "Sofort kaufen",
-      message: `Du kaufst dieses Item sofort für ${fmt(auction.buyoutPrice)} CR, ohne weiter zu bieten. Das kann nicht rückgängig gemacht werden.`,
+      message: `Du kaufst dieses Item sofort für ${fmt(auction.buyoutPrice)} ${currencyName}, ohne weiter zu bieten. Das kann nicht rückgängig gemacht werden.`,
       confirmLabel: "Sofort kaufen",
     });
     if (!ok) return;
@@ -318,7 +321,7 @@ function AuctionRow({
               <>
                 {" "}
                 · <Zap className="inline h-3 w-3 text-emerald-400" />{" "}
-                <span className="text-emerald-400">Sofortkauf: {fmt(auction.buyoutPrice)} CR</span>
+                <span className="text-emerald-400">Sofortkauf: {fmt(auction.buyoutPrice)} {currencyName}</span>
               </>
             )}
           </p>
@@ -326,7 +329,7 @@ function AuctionRow({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm font-bold text-purple-300">{fmt(auction.currentBid)} CR</span>
+        <span className="text-sm font-bold text-purple-300">{fmt(auction.currentBid)} {currencyName}</span>
         <span
           className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
             auction.status === "active"
@@ -367,7 +370,7 @@ function AuctionRow({
                 onMouseEnter={sound.hover}
                 onClick={handleBuyNow}
                 disabled={submitting || credits < auction.buyoutPrice}
-                title={credits < auction.buyoutPrice ? "Nicht genug Credits" : undefined}
+                title={credits < auction.buyoutPrice ? `Nicht genug ${currencyName}` : undefined}
                 className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-60"
               >
                 <Zap className="h-3.5 w-3.5" />

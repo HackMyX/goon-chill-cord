@@ -10,6 +10,7 @@ import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
 import { isWeaponType, isArmorType, isPerkType, isShieldType, SUGGESTED_DAMAGE_BY_RARITY, type PerkType } from "@/lib/combat";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { ItemRow } from "@/components/admin/admin-shell";
 
 const PERK_TYPE_LABELS: Record<PerkType, string> = {
@@ -39,6 +40,7 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
   const [deleting, setDeleting] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const sound = useSoundManager();
+  const { currencyName, damageLabel } = useSiteConfig();
 
   async function handleSave() {
     setSaving(true);
@@ -129,7 +131,7 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
             value={priceCr}
             onChange={(e) => setPriceCr(Number(e.target.value) || 0)}
             onClick={(e) => e.stopPropagation()}
-            title="Preis (CR)"
+            title={`Preis (${currencyName})`}
             className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
           />
 
@@ -171,8 +173,8 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
               min={0}
               value={damage}
               onChange={(e) => setDamage(Math.max(0, Number(e.target.value) || 0))}
-              title="Schaden (DMG)"
-              placeholder={`⚔ DMG (Vorschlag ${SUGGESTED_DAMAGE_BY_RARITY[rarity]})`}
+              title={`Schaden (${damageLabel})`}
+              placeholder={`⚔ ${damageLabel} (Vorschlag ${SUGGESTED_DAMAGE_BY_RARITY[rarity]})`}
               className="w-36 rounded-lg border border-emerald-400/30 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/60"
             />
           )}

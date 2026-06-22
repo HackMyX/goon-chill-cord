@@ -10,6 +10,7 @@ import { X, Loader2, ShieldCheck, Package, Calendar } from "lucide-react";
 import { CharacterModel } from "@/components/world/character-model";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
 import { getPublicProfile, type PublicProfile } from "@/lib/actions/community";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 interface ProfileModalProps {
   userId: string;
@@ -29,6 +30,7 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
   const [mounted, setMounted] = useState(false);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { currencyName } = useSiteConfig();
 
   useEffect(() => {
     const timeout = setTimeout(() => setMounted(true), 0);
@@ -144,7 +146,7 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
                 <div className="rounded-lg bg-white/[0.03] px-3 py-2">
                   <p className="text-[10px] uppercase tracking-wide text-zinc-500">Credits</p>
                   <p className="font-bold text-purple-300">
-                    {new Intl.NumberFormat("de-DE").format(profile.credits)} CR
+                    {new Intl.NumberFormat("de-DE").format(profile.credits)} {currencyName}
                   </p>
                 </div>
                 <div className="rounded-lg bg-white/[0.03] px-3 py-2">

@@ -17,6 +17,7 @@ import {
 } from "@/lib/actions/trading";
 import type { Rarity } from "@/lib/cases";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 export interface TradablePlayer {
   id: string;
@@ -131,6 +132,7 @@ function CreateTradeForm({
   const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
   const [offeredCredits, setOfferedCredits] = useState(0);
   const [requestedCredits, setRequestedCredits] = useState(0);
+  const { currencyName } = useSiteConfig();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
@@ -218,7 +220,7 @@ function CreateTradeForm({
                 emptyLabel="Keine Items"
               />
               <label className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
-                Credits dazu anbieten:
+                {currencyName} dazu anbieten:
                 <input
                   type="number"
                   min={0}
@@ -244,7 +246,7 @@ function CreateTradeForm({
                 />
               )}
               <label className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
-                Credits dazu fordern:
+                {currencyName} dazu fordern:
                 <input
                   type="number"
                   min={0}
@@ -288,6 +290,7 @@ function CreateTradeForm({
 }
 
 function ItemChips({ items, credits }: { items: { id: string; name: string; rarity: Rarity }[]; credits: number }) {
+  const { currencyName } = useSiteConfig();
   if (items.length === 0 && credits === 0) return <span className="text-xs text-zinc-600">nichts</span>;
   return (
     <div className="flex flex-wrap gap-1">
@@ -298,7 +301,7 @@ function ItemChips({ items, credits }: { items: { id: string; name: string; rari
       ))}
       {credits > 0 && (
         <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2 py-0.5 text-[11px] font-semibold text-purple-300">
-          {fmt(credits)} CR
+          {fmt(credits)} {currencyName}
         </span>
       )}
     </div>
@@ -315,6 +318,7 @@ const STATUS_LABEL: Record<TradeListEntry["status"], string> = {
 function TradeRow({ trade, viewerId, onChanged }: { trade: TradeListEntry; viewerId: string; onChanged: () => void }) {
   const sound = useSoundManager();
   const confirm = useConfirm();
+  const { currencyName } = useSiteConfig();
   const isReceiver = trade.receiverId === viewerId;
   const isSender = trade.senderId === viewerId;
   const otherName = isReceiver ? trade.senderName : trade.receiverName;
@@ -323,7 +327,7 @@ function TradeRow({ trade, viewerId, onChanged }: { trade: TradeListEntry; viewe
     sound.click();
     const ok = await confirm({
       title: "Trade annehmen",
-      message: "Items und Credits werden sofort ausgetauscht. Das kann nicht rückgängig gemacht werden.",
+      message: `Items und ${currencyName} werden sofort ausgetauscht. Das kann nicht rückgängig gemacht werden.`,
       confirmLabel: "Annehmen",
     });
     if (!ok) return;

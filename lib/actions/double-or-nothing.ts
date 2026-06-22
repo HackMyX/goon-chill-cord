@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications-internal";
+import { getSiteConfig } from "@/lib/actions/site-config";
 
 export interface FlipResult {
   success: boolean;
@@ -37,9 +38,11 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
     return { success: false, error: "Profil konnte nicht geladen werden." };
   }
 
+  const { currencyName } = await getSiteConfig();
+
   const stake = Math.min(Math.floor(amount), profile.credits);
   if (stake <= 0) {
-    return { success: false, error: "Nicht genug Credits." };
+    return { success: false, error: `Nicht genug ${currencyName}.` };
   }
 
   const won = Math.random() < 0.5;
@@ -54,7 +57,7 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
     .select("credits");
 
   if (updateError || !updatedRows || updatedRows.length === 0) {
-    return { success: false, error: "Nicht genug Credits." };
+    return { success: false, error: `Nicht genug ${currencyName}.` };
   }
 
   try {
@@ -74,8 +77,8 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
     type: "double_or_nothing",
     title: won ? "Double or Nothing gewonnen!" : "Double or Nothing verloren",
     message: won
-      ? `Du hast deinen Einsatz von ${stake.toLocaleString("de-DE")} CR verdoppelt!`
-      : `Du hast deinen Einsatz von ${stake.toLocaleString("de-DE")} CR verloren.`,
+      ? `Du hast deinen Einsatz von ${stake.toLocaleString("de-DE")} ${currencyName} verdoppelt!`
+      : `Du hast deinen Einsatz von ${stake.toLocaleString("de-DE")} ${currencyName} verloren.`,
     link: "/",
   });
 

@@ -24,6 +24,20 @@ export interface SiteConfig {
    * handle_new_user PostgreSQL trigger — run scripts/add-starting-credits.mjs
    * once to add the column and update the trigger. */
   startingCredits: number;
+  /** Currency label shown after every credit amount sitewide (TopBar,
+   * shop prices, notifications, audit log, ...) — e.g. "CR", "Coins",
+   * "Gold". Every formatted-amount call site reads this instead of a
+   * hardcoded string, both client (useSiteConfig()) and server (action
+   * functions call getSiteConfig() directly since they build persisted
+   * notification/audit text outside any React tree). */
+  currencyName: string;
+  /** Weapon-damage stat abbreviation shown in item badges/tooltips
+   * (components/items/item-stat-badges.tsx, lib/combat.ts's
+   * formatDamage()) — e.g. "DMG", "ATK". */
+  damageLabel: string;
+  /** Armor stat abbreviation shown the same places — e.g. "AP", "DEF",
+   * "AD". */
+  armorLabel: string;
 }
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
@@ -31,4 +45,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   logoUrl: null,
   logoIconName: DEFAULT_SITE_LOGO_ICON,
   startingCredits: 500,
+  currencyName: "CR",
+  damageLabel: "DMG",
+  armorLabel: "AP",
 };

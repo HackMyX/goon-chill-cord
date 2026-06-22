@@ -13,6 +13,7 @@ import {
 } from "@/lib/auctions";
 import { notifyUser } from "@/lib/notifications-internal";
 import { logDebugEvent } from "@/lib/debug-log-server";
+import { getSiteConfig } from "@/lib/actions/site-config";
 import type { Rarity } from "@/lib/cases";
 
 export interface AuctionEntry {
@@ -73,6 +74,8 @@ export async function sweepExpiredAuctions(): Promise<void> {
 
   if (expiredError) logServerError("Auctions", "sweep query failed", expiredError.message);
   if (!expired || expired.length === 0) return;
+
+  const { currencyName } = await getSiteConfig();
 
   for (const auction of expired) {
     const itemName = (auction.item as unknown as { name: string } | null)?.name ?? "ein Item";
@@ -140,14 +143,14 @@ export async function sweepExpiredAuctions(): Promise<void> {
       userId: auction.seller_id,
       type: "auction_sold",
       title: "Auktion verkauft!",
-      message: `${itemName} wurde für ${auction.current_bid.toLocaleString("de-DE")} CR verkauft.`,
+      message: `${itemName} wurde für ${auction.current_bid.toLocaleString("de-DE")} ${currencyName} verkauft.`,
       link: "/auctions",
     });
     await notifyUser({
       userId: auction.current_bidder_id,
       type: "auction_won",
       title: "Auktion gewonnen!",
-      message: `Du hast ${itemName} für ${auction.current_bid.toLocaleString("de-DE")} CR gewonnen.`,
+      message: `Du hast ${itemName} für ${auction.current_bid.toLocaleString("de-DE")} ${currencyName} gewonnen.`,
       link: "/auctions",
     });
   }
@@ -223,7 +226,8 @@ export async function createAuction(input: {
   const fee = computeListingFee(input.startingBid);
   const { data: profile } = await admin.from("profiles").select("credits").eq("id", user.id).single();
   if (!profile || profile.credits < fee) {
-    return { success: false, error: `Du brauchst ${fee} CR Einstellgebühr, um diese Auktion zu starten.` };
+    const { currencyName } = await getSiteConfig();
+    return { success: false, error: `Du brauchst ${fee} ${currencyName} Einstellgebühr, um diese Auktion zu starten.` };
   }
 
   const itemId = (invRow.item as unknown as { id: string } | null)?.id;
@@ -359,18 +363,19 @@ async function finalizeBuyout(
     // best-effort
   }
 
+  const { currencyName } = await getSiteConfig();
   await notifyUser({
     userId: auction.seller_id,
     type: "auction_sold",
     title: "Auktion sofort verkauft!",
-    message: `${buyerProfile.username ?? "Ein Spieler"} hat ${itemName} für ${price.toLocaleString("de-DE")} CR sofort gekauft.`,
+    message: `${buyerProfile.username ?? "Ein Spieler"} hat ${itemName} für ${price.toLocaleString("de-DE")} ${currencyName} sofort gekauft.`,
     link: "/auctions",
   });
   await notifyUser({
     userId: buyerId,
     type: "auction_won",
     title: "Sofortkauf erfolgreich!",
-    message: `Du hast ${itemName} für ${price.toLocaleString("de-DE")} CR sofort gekauft.`,
+    message: `Du hast ${itemName} für ${price.toLocaleString("de-DE")} ${currencyName} sofort gekauft.`,
     link: "/auctions",
   });
   // Anyone who had a standing bid just lost the item to the buyout instead
@@ -380,7 +385,7 @@ async function finalizeBuyout(
       userId: auction.current_bidder_id,
       type: "auction_outbid",
       title: "Auktion per Sofortkauf beendet",
-      message: `${itemName} wurde für ${price.toLocaleString("de-DE")} CR sofort gekauft, bevor deine Auktion endete.`,
+      message: `${itemName} wurde für ${price.toLocaleString("de-DE")} ${currencyName} sofort gekauft, bevor deine Auktion endete.`,
       link: "/auctions",
     });
   }
@@ -413,6 +418,7 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
   if (!user) return { success: false, error: "Du musst eingeloggt sein." };
 
   const admin = createAdminClient();
+  const { currencyName } = await getSiteConfig();
 
   let auction = await admin
     .from("auctions")
@@ -441,17 +447,17 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
     return { success: false, error: "Du kannst nicht auf deine eigene Auktion bieten." };
   }
   if (!Number.isFinite(amount) || amount < auction.current_bid + MIN_BID_INCREMENT) {
-    return { success: false, error: `Gebot muss mindestens ${auction.current_bid + MIN_BID_INCREMENT} CR sein.` };
+    return { success: false, error: `Gebot muss mindestens ${auction.current_bid + MIN_BID_INCREMENT} ${currencyName} sein.` };
   }
 
   const { data: profile } = await admin.from("profiles").select("credits").eq("id", user.id).single();
   if (!profile || profile.credits < amount) {
-    return { success: false, error: "Nicht genug Credits für dieses Gebot." };
+    return { success: false, error: `Nicht genug ${currencyName} für dieses Gebot.` };
   }
 
   if (auction.buyout_price !== null && amount >= auction.buyout_price) {
     if (profile.credits < auction.buyout_price) {
-      return { success: false, error: "Nicht genug Credits für den Sofortkauf-Preis." };
+      return { success: false, error: `Nicht genug ${currencyName} für den Sofortkauf-Preis.` };
     }
     return finalizeBuyout(admin, { id: auctionId, ...auction }, user.id, auction.buyout_price);
   }
@@ -479,7 +485,7 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
     userId: auction.seller_id,
     type: "auction_bid",
     title: "Neues Gebot",
-    message: `${bidderProfile?.username ?? "Ein Spieler"} hat ${Math.floor(amount).toLocaleString("de-DE")} CR auf ${itemName} geboten.`,
+    message: `${bidderProfile?.username ?? "Ein Spieler"} hat ${Math.floor(amount).toLocaleString("de-DE")} ${currencyName} auf ${itemName} geboten.`,
     link: "/auctions",
   });
   // Whoever held the high bid before this one just got outbid.
@@ -488,7 +494,7 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
       userId: auction.current_bidder_id,
       type: "auction_outbid",
       title: "Überboten!",
-      message: `Du wurdest bei ${itemName} überboten — aktuelles Gebot: ${Math.floor(amount).toLocaleString("de-DE")} CR.`,
+      message: `Du wurdest bei ${itemName} überboten — aktuelles Gebot: ${Math.floor(amount).toLocaleString("de-DE")} ${currencyName}.`,
       link: "/auctions",
     });
   }
@@ -535,7 +541,8 @@ export async function buyAuctionNow(auctionId: string): Promise<AuctionActionRes
 
   const { data: profile } = await admin.from("profiles").select("credits").eq("id", user.id).single();
   if (!profile || profile.credits < auction.buyout_price) {
-    return { success: false, error: "Nicht genug Credits für diesen Sofortkauf." };
+    const { currencyName } = await getSiteConfig();
+    return { success: false, error: `Nicht genug ${currencyName} für diesen Sofortkauf.` };
   }
 
   return finalizeBuyout(admin, { id: auctionId, ...auction }, user.id, auction.buyout_price);

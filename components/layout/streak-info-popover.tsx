@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Info, Flame, Trophy, Calendar, Snowflake, Sparkles } from "lucide-react";
 import { computeStreakReward, type StreakConfig } from "@/lib/streak";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 interface StreakInfoPopoverProps {
   streakDays: number;
@@ -26,6 +27,7 @@ export function StreakInfoPopover({ streakDays, bestStreakDays, config }: Streak
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const sound = useSoundManager();
+  const { currencyName } = useSiteConfig();
 
   useEffect(() => {
     const timeout = setTimeout(() => setMounted(true), 0);
@@ -106,13 +108,13 @@ export function StreakInfoPopover({ streakDays, bestStreakDays, config }: Streak
               <div className="space-y-1.5 text-[11px] text-zinc-400">
                 <p className="flex items-start gap-1.5">
                   <Calendar className="mt-0.5 h-3 w-3 shrink-0 text-zinc-500" />
-                  Jeder weitere Tag erhöht deinen Reward um {config.dailyIncrement} CR, bis maximal{" "}
-                  {config.maxReward} CR.
+                  Jeder weitere Tag erhöht deinen Reward um {config.dailyIncrement} {currencyName}, bis maximal{" "}
+                  {config.maxReward} {currencyName}.
                 </p>
                 {config.milestoneInterval > 0 && (
                   <p className="flex items-start gap-1.5">
                     <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-amber-400" />
-                    Jeder {config.milestoneInterval}. Tag gibt zusätzlich +{config.milestoneBonus} CR Bonus.
+                    Jeder {config.milestoneInterval}. Tag gibt zusätzlich +{config.milestoneBonus} {currencyName} Bonus.
                   </p>
                 )}
                 {config.weekendMultiplier !== 1 && (

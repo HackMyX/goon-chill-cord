@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -17,6 +17,7 @@ import { GamesTab } from "@/components/admin/games-tab";
 import { SiteConfigEditor } from "@/components/admin/site-config-editor";
 import { TicketsTab } from "@/components/admin/tickets-tab";
 import { DebugLogTab } from "@/components/admin/debug-log-tab";
+import { BackupTab } from "@/components/admin/backup-tab";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 import type { StreakConfig } from "@/lib/streak";
@@ -91,7 +92,7 @@ interface AdminShellProps {
   siteConfig: SiteConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "debug";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "debug" | "backup";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -106,6 +107,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "audit", label: "Audit-Log", icon: ScrollText },
   { id: "tickets", label: "Tickets", icon: MessageCircle },
   { id: "debug", label: "Debug Log", icon: Bug },
+  { id: "backup", label: "Backup", icon: Database },
 ];
 
 export function AdminShell({
@@ -258,6 +260,8 @@ export function AdminShell({
         {tab === "tickets" && <TicketsTab />}
 
         {tab === "debug" && <DebugLogTab />}
+
+        {tab === "backup" && <BackupTab />}
       </main>
     </div>
   );

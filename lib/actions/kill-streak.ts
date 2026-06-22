@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
+import { getSiteConfig } from "@/lib/actions/site-config";
 import { getMonsterTypes } from "@/lib/actions/monsters";
 import {
   DEFAULT_KILL_STREAK_CONFIG,
@@ -255,11 +256,12 @@ export async function commitStreakCr(): Promise<CommitStreakCrResult> {
     } catch {
       // best-effort
     }
+    const { currencyName } = await getSiteConfig();
     await notifyUser({
       userId: user.id,
       type: "streak_commit",
       title: "Kill-Streak ausgezahlt",
-      message: `Du hast ${committed.toLocaleString("de-DE")} CR aus deiner Kill-Streak eingelöst.`,
+      message: `Du hast ${committed.toLocaleString("de-DE")} ${currencyName} aus deiner Kill-Streak eingelöst.`,
       link: "/account",
     });
   }

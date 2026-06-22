@@ -1,6 +1,7 @@
 "use client";
 
 import { Skull, RotateCcw, Coins, Flame, ArrowLeft } from "lucide-react";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 interface DeathScreenProps {
   forfeitedCr: number;
@@ -25,6 +26,7 @@ interface DeathScreenProps {
  * deliberately never implies otherwise.
  */
 export function DeathScreen({ forfeitedCr, forfeitedKillCount, onRespawn, onLeave }: DeathScreenProps) {
+  const { currencyName } = useSiteConfig();
   return (
     <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-black/80 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-3">
@@ -39,7 +41,7 @@ export function DeathScreen({ forfeitedCr, forfeitedKillCount, onRespawn, onLeav
           <p className="text-sm text-zinc-400">Verlorene Kill-Streak</p>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5 text-lg font-bold text-amber-300">
-              <Coins className="h-4 w-4" />-{forfeitedCr.toLocaleString("de-DE")} CR
+              <Coins className="h-4 w-4" />-{forfeitedCr.toLocaleString("de-DE")} {currencyName}
             </span>
             <span className="flex items-center gap-1.5 text-lg font-bold text-orange-300">
               <Flame className="h-4 w-4" />
