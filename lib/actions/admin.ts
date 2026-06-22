@@ -562,3 +562,47 @@ export async function wipeUserInventory(targetUserId: string): Promise<AdminActi
   revalidatePath("/admin");
   return { success: true };
 }
+
+/**
+ * Resets a user to their "first login" state — zeroes credits, streak_days,
+ * cases_opened, streak_kill_count, and pending_streak_cr, then deletes all
+ * inventory rows. The auth account itself is left intact.
+ */
+export async function resetUser(targetUserId: string): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+  if (user.id === targetUserId) {
+    return { success: false, error: "Eigenes Konto kann nicht zurückgesetzt werden." };
+  }
+
+  const admin = createAdminClient();
+
+  const { error: profileError } = await admin
+    .from("profiles")
+    .update({
+      credits: 0,
+      streak_days: 0,
+      cases_opened: 0,
+      streak_kill_count: 0,
+      pending_streak_cr: 0,
+    })
+    .eq("id", targetUserId);
+
+  if (profileError) return { success: false, error: "Profil-Reset fehlgeschlagen." };
+
+  const { data: invData, error: invError } = await admin
+    .from("inventory")
+    .delete()
+    .eq("user_id", targetUserId)
+    .select("id");
+
+  if (invError) return { success: false, error: "Inventar-Reset fehlgeschlagen." };
+
+  await logAdminAction(user.id, "admin_full_reset", {
+    targetUserId,
+    deletedInventoryCount: invData?.length ?? 0,
+  });
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { success: true };
+}

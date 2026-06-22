@@ -9,6 +9,7 @@ import {
   PROJECTILE_SPEED,
   type ThrowRequest,
 } from "@/components/world/monster";
+import { RemoteMonster } from "@/components/world/remote-monster";
 import type { CombatSharedState, MonsterRegistry } from "@/components/world/combat-types";
 import {
   pickWeightedMonsterType,
@@ -22,7 +23,15 @@ import {
 import { streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import { WORLD_RADIUS } from "@/lib/world-config";
-import { subscribeToWorldRoster } from "@/lib/world-realtime";
+import {
+  subscribeToWorldRoster,
+  subscribeToMonsterSync,
+  subscribeToMonsterHit,
+  subscribeToMonsterKill,
+  broadcastMonsterSync,
+  broadcastMonsterKill,
+  type MonsterSyncPayload,
+} from "@/lib/world-realtime";
 
 interface MonsterSpawn {
   id: string;
@@ -37,6 +46,7 @@ interface LiveProjectile extends ThrowRequest {
 let projectileSeq = 0;
 
 interface MonstersFieldProps {
+  userId: string;
   monsterTypes: MonsterTypeConfig[];
   combatRef: React.RefObject<CombatSharedState>;
   registryRef: MonsterRegistry;
@@ -63,8 +73,14 @@ function randomSpawnPosition(): [number, number, number] {
  * manages its own AI/health/animation imperatively; this component's job
  * is purely "decide when a new one should appear, and stop rendering one
  * once its death animation has finished".
+ *
+ * Also handles cross-player monster sync: broadcasts own monster positions
+ * and health at ~4Hz, receives remote snapshots and renders ghost versions,
+ * processes incoming hit events for own monsters, and routes kill-streak
+ * rewards to the correct player (attacker, not owner) on cross-player kills.
  */
 export function MonstersField({
+  userId,
   monsterTypes,
   combatRef,
   registryRef,
@@ -79,6 +95,10 @@ export function MonstersField({
   // (unlike each <Monster>, which is positioned+scaled per spawn), so it's
   // the right place to render projectiles in real world-space coordinates.
   const [projectiles, setProjectiles] = useState<LiveProjectile[]>([]);
+  // Remote monsters keyed by ownerId — each owner's entry is replaced on
+  // every monster_sync broadcast from that player.
+  const [remoteMonsters, setRemoteMonsters] = useState<Map<string, MonsterSyncPayload["monsters"]>>(new Map());
+
   const spawnTimer = useRef(SPAWN_INTERVAL_MIN_SEC);
   // Live room population (lib/world-realtime.ts), always >= 1 (yourself) —
   // read in a ref, not React state, since useFrame below reads it every
@@ -87,12 +107,97 @@ export function MonstersField({
   // spawnIntervalScaleForPlayers doc comments for why a busier room means
   // *this client's own* spawn pool grows, not a shared one.
   const playerCount = useRef(1);
+  // Ref mirror of spawns so the sync interval (a setInterval, not useFrame)
+  // can always read the live list without being in the dependency array and
+  // forcing a new interval on every spawn/despawn.
+  const spawnsRef = useRef<MonsterSpawn[]>([]);
+  // Tracks which remote attacker last hit a given own monster id — used to
+  // route kill-streak credit to the correct player when a remote hit is
+  // the killing blow.
+  const lastRemoteHitterRef = useRef<Map<string, string>>(new Map());
 
+  useEffect(() => {
+    spawnsRef.current = spawns;
+  }, [spawns]);
+
+  // Roster: track player count + remove remote monsters for players who left.
   useEffect(() => {
     return subscribeToWorldRoster((onlineUserIds) => {
       playerCount.current = Math.max(1, onlineUserIds.size);
+      setRemoteMonsters((prev) => {
+        let changed = false;
+        const updated = new Map(prev);
+        for (const ownerId of updated.keys()) {
+          if (!onlineUserIds.has(ownerId)) {
+            updated.delete(ownerId);
+            changed = true;
+          }
+        }
+        return changed ? updated : prev;
+      });
     });
   }, []);
+
+  // Broadcast own monster pool at ~4Hz so other players can render them.
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const ownIds = new Set(spawnsRef.current.map((s) => s.id));
+      const snapshot = spawnsRef.current
+        .map((s) => {
+          // Only look up handles that belong to this player's own spawns.
+          const h = registryRef.current.find((h) => h.id === s.id && ownIds.has(h.id));
+          if (!h) return null;
+          const pos = h.getPosition();
+          return {
+            id: s.id,
+            typeId: s.type.id,
+            x: pos.x,
+            y: pos.y,
+            z: pos.z,
+            hp: h.getHp(),
+            maxHp: s.type.health,
+            alive: h.isAlive(),
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+      broadcastMonsterSync({ ownerId: userId, monsters: snapshot });
+    }, 250);
+    return () => clearInterval(intervalId);
+  }, [userId, registryRef]);
+
+  // Receive remote players' monster snapshots.
+  useEffect(() => {
+    return subscribeToMonsterSync((payload) => {
+      // self: false on the channel means we never receive our own broadcast,
+      // but guard anyway.
+      if (payload.ownerId === userId) return;
+      setRemoteMonsters((prev) => {
+        const updated = new Map(prev);
+        updated.set(payload.ownerId, payload.monsters.filter((m) => m.alive));
+        return updated;
+      });
+    });
+  }, [userId]);
+
+  // Apply incoming hits from other players on our own monsters.
+  useEffect(() => {
+    return subscribeToMonsterHit((payload) => {
+      if (payload.ownerId !== userId) return;
+      const handle = registryRef.current.find((h) => h.id === payload.monsterId);
+      if (!handle || !handle.isAlive()) return;
+      // Track last remote hitter for kill attribution before applying damage.
+      lastRemoteHitterRef.current.set(payload.monsterId, payload.attackerId);
+      handle.takeDamage(payload.amount);
+    });
+  }, [userId, registryRef]);
+
+  // Award kill-streak reward to local player if they are the credited killer.
+  useEffect(() => {
+    return subscribeToMonsterKill((payload) => {
+      if (payload.killerId !== userId) return;
+      onMonsterKilled(payload.typeId);
+    });
+  }, [userId, onMonsterKilled]);
 
   useFrame((_, delta) => {
     // Monsters/spawning are *not* paused or cleared while the player is
@@ -128,12 +233,25 @@ export function MonstersField({
               health: Math.round(type.health * scale),
               attackDamage: Math.round(type.attackDamage * scale),
             };
-      return [...curr, { id: `m${++spawnSeq}`, type: scaledType, position: randomSpawnPosition() }];
+      // Namespace the spawn id with the first 8 chars of userId to avoid id
+      // collisions with remote monsters that also use sequential counters.
+      return [...curr, { id: `${userId.slice(0, 8)}_m${++spawnSeq}`, type: scaledType, position: randomSpawnPosition() }];
     });
   });
 
   function handleDied(spawnId: string, typeId: string) {
-    onMonsterKilled(typeId);
+    const remoteKillerId = lastRemoteHitterRef.current.get(spawnId) ?? null;
+    lastRemoteHitterRef.current.delete(spawnId);
+
+    if (remoteKillerId !== null && remoteKillerId !== userId) {
+      // Remote player landed the killing blow — broadcast the kill so they
+      // receive the streak reward rather than us.
+      broadcastMonsterKill({ ownerId: userId, monsterId: spawnId, typeId, killerId: remoteKillerId });
+    } else {
+      // Local player's kill.
+      onMonsterKilled(typeId);
+    }
+
     setTimeout(() => {
       setSpawns((curr) => curr.filter((s) => s.id !== spawnId));
     }, MONSTER_DEATH_CLEANUP_MS);
@@ -147,6 +265,12 @@ export function MonstersField({
     const travelMs = (Math.hypot(tx - ox, ty - oy, tz - oz) / PROJECTILE_SPEED) * 1000 + 100;
     setTimeout(() => setProjectiles((curr) => curr.filter((p) => p.id !== throwId)), travelMs);
   }
+
+  // Build a flat list of all remote monsters for rendering, enriched with
+  // their MonsterTypeConfig (looked up by typeId from the monsterTypes prop).
+  const remoteMonsterList = Array.from(remoteMonsters.entries()).flatMap(([ownerId, monsters]) =>
+    monsters.map((m) => ({ ...m, ownerId }))
+  );
 
   return (
     <>
@@ -173,6 +297,26 @@ export function MonstersField({
           combatRef={combatRef}
         />
       ))}
+      {remoteMonsterList.map((m) => {
+        const type = monsterTypes.find((t) => t.id === m.typeId);
+        if (!type) return null;
+        return (
+          <RemoteMonster
+            key={`${m.ownerId}_${m.id}`}
+            ownerId={m.ownerId}
+            localUserId={userId}
+            id={m.id}
+            type={type}
+            x={m.x}
+            y={m.y}
+            z={m.z}
+            hp={m.hp}
+            maxHp={m.maxHp}
+            registryRef={registryRef}
+            characterConfig={characterConfig}
+          />
+        );
+      })}
     </>
   );
 }

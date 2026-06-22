@@ -62,11 +62,56 @@ export interface PvpDamagePayload {
  * caller's `.subscribe()` throws) — just with a second listener kind
  * (`broadcast`) layered on top of the same `presence` join/leave roster.
  */
+/** Periodic position+health snapshot of one player's entire local monster
+ * pool, broadcast at ~4Hz (250ms) so other clients can render ghost
+ * versions — one message per owner replaces the previous one, so receivers
+ * just overwrite the owner's entry in their remote-monster map. */
+export interface MonsterSyncPayload {
+  ownerId: string;
+  monsters: {
+    id: string;
+    typeId: string;
+    x: number;
+    y: number;
+    z: number;
+    hp: number;
+    maxHp: number;
+    alive: boolean;
+  }[];
+}
+
+/** Sent by an attacker when they melee a remote monster — the owner
+ * receives this and applies the damage to their local simulation (the
+ * monster lives entirely in the owner's scene). `amount` is the attacker's
+ * local weapon damage; cross-player monster hits are intentionally
+ * client-authored (unlike PvP, which is server-validated), since monster
+ * kill rewards are kill-streak credits rather than inventory items. */
+export interface MonsterHitPayload {
+  attackerId: string;
+  ownerId: string;
+  monsterId: string;
+  amount: number;
+}
+
+/** Broadcast by the owner the moment one of their monsters dies from a
+ * remote hit — lets the killer's client call `registerStreakKill` to
+ * award the correct reward, instead of the owner (who didn't land the
+ * killing blow) getting it by default. */
+export interface MonsterKillPayload {
+  ownerId: string;
+  monsterId: string;
+  typeId: string;
+  killerId: string;
+}
+
 let channel: RealtimeChannel | null = null;
 let subscribed = false;
 const transformListeners = new Set<(payload: WorldTransformPayload) => void>();
 const rosterListeners = new Set<(onlineUserIds: Set<string>) => void>();
 const pvpDamageListeners = new Set<(payload: PvpDamagePayload) => void>();
+const monsterSyncListeners = new Set<(payload: MonsterSyncPayload) => void>();
+const monsterHitListeners = new Set<(payload: MonsterHitPayload) => void>();
+const monsterKillListeners = new Set<(payload: MonsterKillPayload) => void>();
 
 function currentRoster(ch: RealtimeChannel): Set<string> {
   const state = ch.presenceState() as Record<string, { user_id?: string }[]>;
@@ -94,6 +139,15 @@ function ensureWorldChannel(): RealtimeChannel {
   });
   channel.on("broadcast", { event: "pvp_damage" }, ({ payload }) => {
     for (const listener of pvpDamageListeners) listener(payload as PvpDamagePayload);
+  });
+  channel.on("broadcast", { event: "monster_sync" }, ({ payload }) => {
+    for (const listener of monsterSyncListeners) listener(payload as MonsterSyncPayload);
+  });
+  channel.on("broadcast", { event: "monster_hit" }, ({ payload }) => {
+    for (const listener of monsterHitListeners) listener(payload as MonsterHitPayload);
+  });
+  channel.on("broadcast", { event: "monster_kill" }, ({ payload }) => {
+    for (const listener of monsterKillListeners) listener(payload as MonsterKillPayload);
   });
   channel.on("presence", { event: "sync" }, () => {
     const ids = currentRoster(channel!);
@@ -190,4 +244,50 @@ export function subscribeToWorldRoster(onSync: (onlineUserIds: Set<string>) => v
   return () => {
     rosterListeners.delete(listener);
   };
+}
+
+/** Broadcast the caller's local monster pool snapshot to all other players
+ * in the room — fire-and-forget at ~4Hz, next tick supersedes a dropped one. */
+export function broadcastMonsterSync(payload: MonsterSyncPayload): void {
+  if (!subscribed || !channel) return;
+  channel.httpSend("monster_sync", payload).catch(() => {});
+}
+
+/** Broadcast a hit attempt on another player's monster to the owner so
+ * they can apply the damage in their local simulation. */
+export function broadcastMonsterHit(payload: MonsterHitPayload): void {
+  if (!subscribed || !channel) return;
+  channel.httpSend("monster_hit", payload).catch(() => {});
+}
+
+/** Broadcast that one of the caller's monsters just died from a remote hit,
+ * identified by the killer's userId, so the killer's client can claim the
+ * kill-streak reward rather than the owner. */
+export function broadcastMonsterKill(payload: MonsterKillPayload): void {
+  if (!subscribed || !channel) return;
+  channel.httpSend("monster_kill", payload).catch(() => {});
+}
+
+/** Subscribe to periodic monster-pool snapshots from all other players.
+ * Each payload replaces the previous one from that owner. */
+export function subscribeToMonsterSync(fn: (payload: MonsterSyncPayload) => void): () => void {
+  ensureWorldChannel();
+  monsterSyncListeners.add(fn);
+  return () => monsterSyncListeners.delete(fn);
+}
+
+/** Subscribe to incoming hit attempts on your own monsters sent by other
+ * players — apply the damage in your local simulation on receipt. */
+export function subscribeToMonsterHit(fn: (payload: MonsterHitPayload) => void): () => void {
+  ensureWorldChannel();
+  monsterHitListeners.add(fn);
+  return () => monsterHitListeners.delete(fn);
+}
+
+/** Subscribe to monster-kill credit events — check `payload.killerId`
+ * against your own userId to claim the kill-streak reward. */
+export function subscribeToMonsterKill(fn: (payload: MonsterKillPayload) => void): () => void {
+  ensureWorldChannel();
+  monsterKillListeners.add(fn);
+  return () => monsterKillListeners.delete(fn);
 }

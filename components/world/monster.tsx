@@ -262,6 +262,7 @@ export function Monster({
       typeId: type.id,
       getPosition: () => group.current?.position ?? new THREE.Vector3(...initialPosition),
       isAlive: () => alive.current,
+      getHp: () => health.current,
       hitRadius: characterConfig.attackHitRadius * type.scale,
       takeDamage: (amount) => {
         if (!alive.current) return 0;

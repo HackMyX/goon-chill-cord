@@ -14,6 +14,7 @@ import {
   Gavel,
   Repeat,
   X,
+  RotateCcw,
   type LucideIcon,
 } from "lucide-react";
 
@@ -204,6 +205,14 @@ const ACTION_META: Record<string, ActionMeta> = {
     bg: "bg-red-500/10",
     border: "border-red-500/30",
     format: (p) => `Inventar geleert (${str(p.count, "0")} Items entfernt)`,
+  },
+  admin_full_reset: {
+    icon: RotateCcw,
+    color: "text-red-300",
+    bg: "bg-red-500/10",
+    border: "border-red-500/30",
+    format: (p) =>
+      `Account vollständig zurückgesetzt — Credits, Stats & Inventar (${str(p.deletedInventoryCount, "0")} Items) gelöscht`,
   },
   admin_monster_type_update: {
     icon: Settings,

@@ -169,6 +169,7 @@ export function Scene({
       <RemotePlayers selfUserId={userId} registryRef={remotePlayerRegistryRef} />
 
       <MonstersField
+        userId={userId}
         monsterTypes={monsterTypes}
         combatRef={combatRef}
         registryRef={monsterRegistryRef}

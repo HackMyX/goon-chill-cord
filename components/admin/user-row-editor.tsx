@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Save } from "lucide-react";
-import { updateUserCredits, updateUserRole } from "@/lib/actions/admin";
+import { Save, RotateCcw } from "lucide-react";
+import { updateUserCredits, updateUserRole, resetUser } from "@/lib/actions/admin";
 import { UserDetailPanel } from "@/components/admin/user-detail-panel";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -16,6 +16,8 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
   const [role, setRole] = useState<ProfileRole>(profile.role as ProfileRole);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const sound = useSoundManager();
 
   async function handleSave() {
@@ -27,6 +29,26 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
     ]);
     setSaving(false);
     setStatus(a.success && b.success ? "saved" : "error");
+  }
+
+  async function handleReset(e: React.MouseEvent) {
+    e.stopPropagation();
+    sound.click();
+    if (!resetConfirm) {
+      setResetConfirm(true);
+      setTimeout(() => setResetConfirm(false), 4000);
+      return;
+    }
+    setResetting(true);
+    setResetConfirm(false);
+    const result = await resetUser(profile.id);
+    setResetting(false);
+    if (result.success) {
+      setCredits(0);
+      setStatus("saved");
+    } else {
+      setStatus("error");
+    }
   }
 
   return (
@@ -78,6 +100,22 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
             <Save className="h-4 w-4" />
             {saving ? "..." : "Speichern"}
           </button>
+
+          <button
+            onMouseEnter={sound.hover}
+            onClick={handleReset}
+            disabled={resetting}
+            title="Account auf Erstzustand zurücksetzen — Credits, Stats und Inventar werden gelöscht"
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
+              resetConfirm
+                ? "border-red-400/70 bg-red-500/20 text-red-200 shadow-[0_0_10px_rgba(239,68,68,0.4)]"
+                : "border-red-500/30 bg-red-500/10 text-red-400 hover:border-red-400/60 hover:text-red-300"
+            }`}
+          >
+            <RotateCcw className="h-4 w-4" />
+            {resetting ? "..." : resetConfirm ? "Sicher?" : "Reset"}
+          </button>
+
           {status === "saved" && <span className="text-sm text-emerald-400">✓</span>}
           {status === "error" && <span className="text-sm text-red-400">Fehler</span>}
         </div>

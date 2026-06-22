@@ -89,6 +89,9 @@ export interface MonsterHandle {
   typeId: string;
   getPosition: () => THREE.Vector3;
   isAlive: () => boolean;
+  /** Current health — read by MonstersField to include in monster_sync
+   * broadcasts so remote players can display accurate health bars. */
+  getHp: () => number;
   /** Returns the amount actually dealt (0 if already dead) — lets the
    * caller decide whether to play a "hit" vs "no-op" reaction. */
   takeDamage: (amount: number) => number;

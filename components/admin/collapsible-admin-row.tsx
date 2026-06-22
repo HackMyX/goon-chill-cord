@@ -53,7 +53,7 @@ export function CollapsibleAdminRow({ header, children, className }: Collapsible
             {expanded ? (
               <>
                 <ChevronUp className="h-3.5 w-3.5" />
-                <span>Schliessen</span>
+                <span>Schließen</span>
               </>
             ) : (
               <>
