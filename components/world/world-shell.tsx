@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
-import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf } from "lucide-react";
+import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf, Settings } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { Scene } from "@/components/world/scene";
 import { DeathScreen } from "@/components/world/death-screen";
@@ -28,6 +28,8 @@ import type { CharacterConfig } from "@/lib/character-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { WorldSettingsPanel } from "@/components/world/world-settings-panel";
+import { loadWorldSettings, saveWorldSettings, type WorldSettings } from "@/lib/world-settings";
 
 interface WorldShellProps {
   userId: string;
@@ -118,6 +120,8 @@ export function WorldShell({
     if (typeof row.credits === "number") setCredits(row.credits);
   });
   const { currencyName, damageLabel } = useSiteConfig();
+  const [worldSettings, setWorldSettings] = useState<WorldSettings>(() => loadWorldSettings());
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [attackFlash, setAttackFlash] = useState<"hit" | "miss" | null>(null);
   const [hp, setHp] = useState(characterConfig.playerMaxHp);
   const [maxHp, setMaxHp] = useState(characterConfig.playerMaxHp);
@@ -367,6 +371,39 @@ export function WorldShell({
     };
   }, [disconnectCountdown]);
 
+  function handleSettingsChange(s: WorldSettings) {
+    setWorldSettings(s);
+    cameraControls.state.current.sensitivityMult = s.sensitivity;
+    cameraControls.state.current.moveSpeedMult   = s.moveSpeed;
+    sound.setVolume(s.volume);
+    saveWorldSettings(s);
+  }
+
+  // Apply saved settings on first mount.
+  useEffect(() => {
+    cameraControls.state.current.sensitivityMult = worldSettings.sensitivity;
+    cameraControls.state.current.moveSpeedMult   = worldSettings.moveSpeed;
+    sound.setVolume(worldSettings.volume);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Tab toggles the settings panel without releasing / losing pointer lock
+  // on close — pressing Tab again re-opens it. While the panel is open,
+  // pointer lock is released so the sliders are clickable; re-engage by
+  // closing the panel and clicking "Klicken zum Spielen".
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      e.preventDefault();
+      setSettingsOpen((prev) => {
+        if (!prev) cameraControls.releaseLock();
+        return !prev;
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [cameraControls]);
+
   function engageLock() {
     sound.click();
     cameraControls.requestLock();
@@ -425,6 +462,15 @@ export function WorldShell({
       />
 
       <div ref={canvasWrapRef} className="relative min-h-0 flex-1">
+        {/* Settings button — top-right, always on top */}
+        <button
+          onClick={() => { cameraControls.releaseLock(); setSettingsOpen(true); }}
+          title="Einstellungen (Tab)"
+          className="absolute top-4 right-4 z-20 rounded-lg border border-white/10 bg-black/50 p-2 text-zinc-400 backdrop-blur transition-colors hover:border-white/30 hover:text-zinc-100"
+        >
+          <Settings className="h-4 w-4" />
+        </button>
+
         <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
           <Link
             href="/"
@@ -656,6 +702,14 @@ export function WorldShell({
             forfeitedKillCount={deathStats.forfeitedKillCount}
             onRespawn={handleRespawn}
             onLeave={handleLeaveAfterDeath}
+          />
+        )}
+
+        {settingsOpen && (
+          <WorldSettingsPanel
+            settings={worldSettings}
+            onChange={handleSettingsChange}
+            onClose={() => setSettingsOpen(false)}
           />
         )}
 

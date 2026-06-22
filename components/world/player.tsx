@@ -490,7 +490,7 @@ export function Player({
       targetVelocity.current
         .copy(moveDir.current)
         .multiplyScalar(
-          characterConfig.moveSpeed * speedMultiplier * (sprinting ? characterConfig.sprintMultiplier : 1)
+          characterConfig.moveSpeed * speedMultiplier * cc.moveSpeedMult * (sprinting ? characterConfig.sprintMultiplier : 1)
         );
     } else {
       targetVelocity.current.set(0, 0, 0);

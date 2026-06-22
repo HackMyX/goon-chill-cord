@@ -232,19 +232,23 @@ export function AccountShell({
                 disabled={acceptsTradesSaving}
                 role="switch"
                 aria-checked={acceptsTrades}
-                className={`relative h-6 w-11 shrink-0 overflow-hidden rounded-full transition-colors disabled:opacity-50 ${
-                  acceptsTrades ? "bg-purple-600" : "bg-white/10"
-                }`}
+                className="shrink-0 rounded-full outline-none disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900"
               >
-                {acceptsTradesSaving ? (
-                  <Loader2 className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin text-zinc-300" />
-                ) : (
-                  <span
-                    className={`absolute top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                      acceptsTrades ? "translate-x-[22px]" : "translate-x-[2px]"
-                    }`}
-                  />
-                )}
+                <span
+                  className={`relative block h-6 w-11 overflow-hidden rounded-full transition-colors duration-200 ${
+                    acceptsTrades ? "bg-purple-600" : "bg-white/10"
+                  }`}
+                >
+                  {acceptsTradesSaving ? (
+                    <Loader2 className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin text-zinc-300" />
+                  ) : (
+                    <span
+                      className={`absolute left-0 top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                        acceptsTrades ? "translate-x-[22px]" : "translate-x-[2px]"
+                      }`}
+                    />
+                  )}
+                </span>
               </button>
             </div>
 
@@ -266,19 +270,23 @@ export function AccountShell({
                 disabled={profileVisibleSaving}
                 role="switch"
                 aria-checked={profileVisible}
-                className={`relative h-6 w-11 shrink-0 overflow-hidden rounded-full transition-colors disabled:opacity-50 ${
-                  profileVisible ? "bg-purple-600" : "bg-white/10"
-                }`}
+                className="shrink-0 rounded-full outline-none disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900"
               >
-                {profileVisibleSaving ? (
-                  <Loader2 className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin text-zinc-300" />
-                ) : (
-                  <span
-                    className={`absolute top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                      profileVisible ? "translate-x-[22px]" : "translate-x-[2px]"
-                    }`}
-                  />
-                )}
+                <span
+                  className={`relative block h-6 w-11 overflow-hidden rounded-full transition-colors duration-200 ${
+                    profileVisible ? "bg-purple-600" : "bg-white/10"
+                  }`}
+                >
+                  {profileVisibleSaving ? (
+                    <Loader2 className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin text-zinc-300" />
+                  ) : (
+                    <span
+                      className={`absolute left-0 top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                        profileVisible ? "translate-x-[22px]" : "translate-x-[2px]"
+                      }`}
+                    />
+                  )}
+                </span>
               </button>
             </div>
           </div>

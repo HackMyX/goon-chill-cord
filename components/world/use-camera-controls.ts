@@ -25,6 +25,14 @@ export interface CameraControlState {
    * pointer-locked — Player.tsx reads this to decide whether to keep
    * easing `freeLookYaw`/`freeLookPitch` back toward 0. */
   freeLookActive: boolean;
+  /** World-settings camera sensitivity multiplier (0.25–4, default 1).
+   * Written by world-shell.tsx when settings change; multiplied into
+   * YAW/PITCH_SENSITIVITY in onMouseMove so it takes effect immediately. */
+  sensitivityMult: number;
+  /** World-settings movement speed multiplier (0.5–2.5, default 1).
+   * Written by world-shell.tsx when settings change; read by player.tsx
+   * every frame to scale horizontal velocity. */
+  moveSpeedMult: number;
 }
 
 export const DEFAULT_YAW = 0;
@@ -118,6 +126,8 @@ export function useCameraControls(
     freeLookYaw: 0,
     freeLookPitch: 0,
     freeLookActive: false,
+    sensitivityMult: 1,
+    moveSpeedMult: 1,
   });
   const [locked, setLocked] = useState(false);
   // How many mousemove events to discard immediately after pointer lock
@@ -159,6 +169,8 @@ export function useCameraControls(
       // this should have flipped too, but didn't, which is exactly the
       // "drag mouse right, view goes left" regression that fix quietly
       // introduced.)
+      const ySens = YAW_SENSITIVITY   * state.current.sensitivityMult;
+      const pSens = PITCH_SENSITIVITY * state.current.sensitivityMult;
       if (state.current.freeLookActive) {
         // Right-mouse-held free-look: steers an *offset* on top of the
         // committed aim/movement yaw/pitch instead of the yaw/pitch
@@ -172,14 +184,14 @@ export function useCameraControls(
         // offset that reads as a long lingering spin when released.
         state.current.freeLookYaw = Math.max(
           -Math.PI,
-          Math.min(Math.PI, state.current.freeLookYaw - movementX * YAW_SENSITIVITY)
+          Math.min(Math.PI, state.current.freeLookYaw - movementX * ySens)
         );
         state.current.freeLookPitch = Math.max(
           PITCH_MIN - state.current.pitch,
-          Math.min(PITCH_MAX - state.current.pitch, state.current.freeLookPitch - movementY * PITCH_SENSITIVITY)
+          Math.min(PITCH_MAX - state.current.pitch, state.current.freeLookPitch - movementY * pSens)
         );
       } else {
-        state.current.yaw -= movementX * YAW_SENSITIVITY;
+        state.current.yaw -= movementX * ySens;
         // Normalise to (−π, π) to prevent floating-point growth and keep
         // all downstream sin/cos/angleDelta calls on small, precise values.
         state.current.yaw = state.current.yaw % (Math.PI * 2);
@@ -187,7 +199,7 @@ export function useCameraControls(
         else if (state.current.yaw > Math.PI) state.current.yaw -= Math.PI * 2;
         state.current.pitch = Math.max(
           PITCH_MIN,
-          Math.min(PITCH_MAX, state.current.pitch - movementY * PITCH_SENSITIVITY)
+          Math.min(PITCH_MAX, state.current.pitch - movementY * pSens)
         );
       }
     };

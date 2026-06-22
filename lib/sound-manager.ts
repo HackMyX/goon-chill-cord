@@ -46,6 +46,19 @@ class SoundManager {
   private queue: FxSound[] = [];
   private playing = false;
   private lastHoverAt = 0;
+  private _volume = 1;
+
+  setVolume(v: number): void {
+    this._volume = Math.max(0, Math.min(1, v));
+    for (const [name, audio] of this.interruptAudio) {
+      const base = name === "hover" ? 0.16 : name === "hit" ? 0.45 : 0.3;
+      audio.volume = base * this._volume;
+    }
+    for (const [name, audio] of this.fxPool) {
+      const base = name === "click" ? 0.32 : 0.55;
+      audio.volume = base * this._volume;
+    }
+  }
 
   private getInterruptAudio(name: InterruptSound): HTMLAudioElement | null {
     if (typeof window === "undefined") return null;
@@ -54,7 +67,7 @@ class SoundManager {
       audio = new Audio(INTERRUPT_SRC[name]);
       // hover/tick fire constantly (mouse movement, reel spin) — kept quiet
       // so a session of moving the mouse around doesn't wear the ears down.
-      audio.volume = name === "hover" ? 0.16 : name === "hit" ? 0.45 : 0.3;
+      audio.volume = (name === "hover" ? 0.16 : name === "hit" ? 0.45 : 0.3) * this._volume;
       this.interruptAudio.set(name, audio);
     }
     return audio;
@@ -65,7 +78,7 @@ class SoundManager {
     let audio = this.fxPool.get(name);
     if (!audio) {
       audio = new Audio(FX_SRC[name]);
-      audio.volume = name === "click" ? 0.32 : 0.55;
+      audio.volume = (name === "click" ? 0.32 : 0.55) * this._volume;
       this.fxPool.set(name, audio);
     }
     return audio;
@@ -150,5 +163,6 @@ export function useSoundManager() {
     click: () => soundManager.play("click"),
     error: () => soundManager.play("error"),
     flip: () => soundManager.play("flip"),
+    setVolume: (v: number) => soundManager.setVolume(v),
   };
 }
