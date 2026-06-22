@@ -185,13 +185,18 @@ export function SupportButton() {
   return (
     <>
       {!open && (
-        <button
-          onClick={handleOpen}
-          title="Support & Tickets"
-          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-purple-600 text-white shadow-[0_4px_20px_rgba(147,51,234,0.55)] transition-all hover:scale-110 hover:bg-purple-500 hover:shadow-[0_4px_30px_rgba(147,51,234,0.8)]"
-        >
-          <MessageCircle className="h-6 w-6" />
-        </button>
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-1.5">
+          <span className="text-[10px] font-semibold tracking-wide text-zinc-500">
+            Bug oder Vorschlag?
+          </span>
+          <button
+            onClick={handleOpen}
+            title="Support & Tickets"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-purple-600 text-white shadow-[0_4px_20px_rgba(147,51,234,0.55)] transition-all hover:scale-110 hover:bg-purple-500 hover:shadow-[0_4px_30px_rgba(147,51,234,0.8)]"
+          >
+            <MessageCircle className="h-6 w-6" />
+          </button>
+        </div>
       )}
 
       {open && (

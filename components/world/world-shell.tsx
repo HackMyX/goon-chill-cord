@@ -462,14 +462,16 @@ export function WorldShell({
       />
 
       <div ref={canvasWrapRef} className="relative min-h-0 flex-1">
-        {/* Settings button — top-right, always on top */}
-        <button
-          onClick={() => { cameraControls.releaseLock(); setSettingsOpen(true); }}
-          title="Einstellungen (Tab)"
-          className="absolute top-4 right-4 z-20 rounded-lg border border-white/10 bg-black/50 p-2 text-zinc-400 backdrop-blur transition-colors hover:border-white/30 hover:text-zinc-100"
-        >
-          <Settings className="h-4 w-4" />
-        </button>
+        {/* Settings button — only visible in ESC/pause mode, not during active play */}
+        {!cameraControls.locked && (
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="Einstellungen (Tab)"
+            className="absolute top-4 right-4 z-20 rounded-lg border border-white/10 bg-black/50 p-2 text-zinc-400 backdrop-blur transition-colors hover:border-white/30 hover:text-zinc-100"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        )}
 
         <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
           <Link

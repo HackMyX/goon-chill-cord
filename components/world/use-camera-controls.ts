@@ -289,7 +289,22 @@ export function useCameraControls(
     // correct since the only "recovery" is just clicking again a moment
     // later, which the still-visible "Klicken zum Spielen" overlay
     // already invites.
-    const result = canvasRef.current?.requestPointerLock();
+    // unadjustedMovement: true requests raw hardware counts from the OS,
+    // bypassing any pointer-acceleration or smoothing curve. That curve is
+    // the primary source of "camera feels jittery even at steady mouse speed"
+    // in WebGL pointer-lock games — with it off, movementX/Y values are
+    // linear with actual mouse velocity and the camera tracks exactly 1:1.
+    // Supported in Chromium 88+ / Edge 88+; Firefox silently ignores the
+    // option and still engages the lock normally, so no harm done there.
+    // Falls back to the no-options call on browsers that outright throw on
+    // an unrecognised options object (Chromium < 88, very rare in 2025).
+    let result: Promise<void> | void | undefined;
+    try {
+      result = (canvasRef.current as (HTMLElement & { requestPointerLock(opts?: { unadjustedMovement?: boolean }): Promise<void> | void }) | null)
+        ?.requestPointerLock({ unadjustedMovement: true });
+    } catch {
+      result = canvasRef.current?.requestPointerLock();
+    }
     if (result && typeof result.catch === "function") {
       result.catch(() => {
         // Cosmetic failure — the overlay stays up, the user just clicks
