@@ -6,9 +6,9 @@ import Link from "next/link";
 import { Gamepad2, ChevronDown, Globe, Pickaxe, Joystick } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 
-const PLACEHOLDER_ENTRIES = [
-  { icon: Joystick, label: "Snake" },
-  { icon: Pickaxe, label: "Mine" },
+const LIVE_GAMES = [
+  { icon: Joystick, label: "Snake", href: "/snake" },
+  { icon: Pickaxe, label: "Mine", href: "/mine" },
 ];
 
 /**
@@ -98,21 +98,17 @@ export function GamesMenu() {
               3D-Welt
             </Link>
 
-            {PLACEHOLDER_ENTRIES.map((entry) => (
-              <button
+            {LIVE_GAMES.map((entry) => (
+              <Link
                 key={entry.label}
+                href={entry.href}
                 onMouseEnter={sound.hover}
-                onClick={() => sound.click()}
-                className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm text-zinc-300 transition-colors hover:bg-purple-500/10 hover:text-purple-200"
+                onClick={() => { sound.click(); setOpen(false); }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-zinc-300 transition-colors hover:bg-purple-500/10 hover:text-purple-200"
               >
-                <span className="flex items-center gap-2">
-                  <entry.icon className="h-4 w-4 text-zinc-500" />
-                  {entry.label}
-                </span>
-                <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
-                  Bald
-                </span>
-              </button>
+                <entry.icon className="h-4 w-4 text-zinc-500" />
+                {entry.label}
+              </Link>
             ))}
           </div>,
           document.body

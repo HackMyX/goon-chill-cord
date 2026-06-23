@@ -723,6 +723,8 @@ export function WorldShell({
             settings={worldSettings}
             onChange={handleSettingsChange}
             onClose={() => setSettingsOpen(false)}
+            userId={userId}
+            username={username}
           />
         )}
 

@@ -132,6 +132,11 @@
   }
 }
 
+@keyframes sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
 @keyframes rgbBorder {
   from {
     background-position: 0% 50%;

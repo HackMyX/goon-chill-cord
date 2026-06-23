@@ -23,6 +23,8 @@ import { ModConfigEditor } from "@/components/admin/mod-config-editor";
 import { PatchNotesEditor } from "@/components/admin/patchnotes-editor";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
+import type { SnakeConfig } from "@/lib/snake-config";
+import type { MineConfig } from "@/lib/mine-config";
 import type { ModPermissions } from "@/lib/mod";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
@@ -107,6 +109,8 @@ interface AdminShellProps {
   modPermissions: ModPermissions;
   patchNotes: PatchNote[];
   donConfig: DonConfig;
+  snakeConfig: SnakeConfig;
+  mineConfig: MineConfig;
 }
 
 type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "debug" | "backup" | "security" | "patchnotes";
@@ -151,6 +155,8 @@ export function AdminShell({
   modPermissions,
   patchNotes,
   donConfig,
+  snakeConfig,
+  mineConfig,
 }: AdminShellProps) {
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
@@ -366,6 +372,8 @@ export function AdminShell({
             worldSpawnConfig={worldSpawnConfig}
             topProfiles={profiles}
             donConfig={donConfig}
+            snakeConfig={snakeConfig}
+            mineConfig={mineConfig}
           />
         )}
 

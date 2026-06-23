@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, X, MousePointer2, Volume2, RotateCcw, ArrowLeftRight, ArrowUpDown, Keyboard, Pencil } from "lucide-react";
+import { Settings, X, MousePointer2, Volume2, RotateCcw, ArrowLeftRight, ArrowUpDown, Keyboard, Pencil, Crown } from "lucide-react";
+import { WorldLeaderboard } from "@/components/world/world-leaderboard";
 import {
   type WorldSettings,
   type KeyBindings,
@@ -111,10 +112,13 @@ interface WorldSettingsPanelProps {
   settings: WorldSettings;
   onChange: (s: WorldSettings) => void;
   onClose: () => void;
+  userId?: string;
+  username?: string;
 }
 
-export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSettingsPanelProps) {
+export function WorldSettingsPanel({ settings, onChange, onClose, userId, username }: WorldSettingsPanelProps) {
   const [listeningFor, setListeningFor] = useState<keyof KeyBindings | null>(null);
+  const [panelTab, setPanelTab] = useState<"settings" | "leaderboard">("settings");
 
   function update<K extends keyof WorldSettings>(key: K, value: WorldSettings[K]) {
     onChange({ ...settings, [key]: value });
@@ -150,10 +154,10 @@ export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSetting
     >
       <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-950/95 p-6 shadow-[0_0_60px_rgba(0,0,0,0.8)] overflow-y-auto max-h-[90vh]">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-purple-400" />
-            <h2 className="text-lg font-bold text-zinc-100">Spielereinstellungen</h2>
+            <h2 className="text-lg font-bold text-zinc-100">3D Welt</h2>
           </div>
           <button
             onClick={() => { setListeningFor(null); onClose(); }}
@@ -163,7 +167,35 @@ export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSetting
           </button>
         </div>
 
-        <div className="flex flex-col gap-6">
+        {/* Tab switcher */}
+        <div className="mb-5 flex rounded-xl border border-white/8 bg-black/30 p-1">
+          <button
+            onClick={() => setPanelTab("settings")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-colors ${
+              panelTab === "settings" ? "bg-purple-500/20 text-purple-200" : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Settings className="h-3.5 w-3.5" />
+            Einstellungen
+          </button>
+          <button
+            onClick={() => setPanelTab("leaderboard")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-colors ${
+              panelTab === "leaderboard" ? "bg-amber-500/20 text-amber-300" : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Crown className="h-3.5 w-3.5" />
+            Bestenliste
+          </button>
+        </div>
+
+        {/* Leaderboard tab */}
+        {panelTab === "leaderboard" && userId && (
+          <WorldLeaderboard userId={userId} username={username ?? "Spieler"} />
+        )}
+
+        {/* Settings tab */}
+        {panelTab === "settings" && <div className="flex flex-col gap-6">
           {/* === Mouse section === */}
           <div className="flex items-center gap-2">
             <MousePointer2 className="h-4 w-4 text-cyan-400" />
@@ -236,8 +268,10 @@ export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSetting
             </div>
           </div>
         </div>
+        }
 
-        {/* Footer */}
+        {/* Footer — only in settings tab */}
+        {panelTab === "settings" && (<>
         <div className="mt-6 flex items-center justify-between border-t border-white/[0.06] pt-4">
           <button
             onClick={reset}
@@ -257,6 +291,7 @@ export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSetting
         <p className="mt-3 text-center text-[10px] text-zinc-700">
           Tab · Einstellungen ein-/ausblenden
         </p>
+        </>)}
       </div>
     </div>
   );

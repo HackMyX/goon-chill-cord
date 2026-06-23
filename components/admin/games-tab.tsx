@@ -7,6 +7,8 @@ import { WorldSpawnConfigEditor } from "@/components/admin/world-spawn-editor";
 import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
 import { CharacterConfigEditor } from "@/components/admin/character-config-editor";
 import { DonConfigEditor } from "@/components/admin/don-config-editor";
+import { SnakeConfigEditor } from "@/components/admin/snake-config-editor";
+import { MineConfigEditor } from "@/components/admin/mine-config-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import type { ProfileRow } from "@/components/admin/admin-shell";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
@@ -14,6 +16,8 @@ import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import type { DonConfig } from "@/lib/don-config";
+import type { SnakeConfig } from "@/lib/snake-config";
+import type { MineConfig } from "@/lib/mine-config";
 
 interface GameDef {
   id: string;
@@ -33,8 +37,8 @@ interface GameDef {
 const GAMES: GameDef[] = [
   { id: "world", name: "3D World", icon: Box, status: "live" },
   { id: "don", name: "Double or Nothing", icon: Dices, status: "live" },
-  { id: "snake", name: "Snake", icon: Joystick, status: "soon" },
-  { id: "mine", name: "Mine", icon: Pickaxe, status: "soon" },
+  { id: "snake", name: "Snake", icon: Joystick, status: "live" },
+  { id: "mine", name: "Mine", icon: Pickaxe, status: "live" },
 ];
 
 interface GamesTabProps {
@@ -44,6 +48,8 @@ interface GamesTabProps {
   worldSpawnConfig: WorldSpawnConfig;
   topProfiles: ProfileRow[];
   donConfig: DonConfig;
+  snakeConfig: SnakeConfig;
+  mineConfig: MineConfig;
 }
 
 /**
@@ -53,7 +59,7 @@ interface GamesTabProps {
  * anything real behind it; Snake/Mine render as inert "Bald" placeholders
  * so the tab's shape doesn't have to change again once they exist.
  */
-export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig, worldSpawnConfig, topProfiles, donConfig }: GamesTabProps) {
+export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig, worldSpawnConfig, topProfiles, donConfig, snakeConfig, mineConfig }: GamesTabProps) {
   const [openGame, setOpenGame] = useState<string>("");
 
   return (
@@ -100,6 +106,18 @@ export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig
             {isOpen && game.id === "don" && (
               <div className="border-t border-white/10 px-5 py-5">
                 <DonConfigEditor config={donConfig} />
+              </div>
+            )}
+
+            {isOpen && game.id === "snake" && (
+              <div className="border-t border-white/10 px-5 py-5">
+                <SnakeConfigEditor config={snakeConfig} />
+              </div>
+            )}
+
+            {isOpen && game.id === "mine" && (
+              <div className="border-t border-white/10 px-5 py-5">
+                <MineConfigEditor config={mineConfig} />
               </div>
             )}
 
