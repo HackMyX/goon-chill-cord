@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { usePetConfigs } from "@/lib/pet-config-context";
 import { getPetStatsForDisplay } from "@/lib/pets";
@@ -29,6 +31,10 @@ const PERK_TOOLTIPS: Record<string, (pct: number) => string> = {
     `HP-Regen-Boost: Erhöht die passive Lebensregeneration um +${pct}%. Die Regen setzt 4 Sekunden nach dem letzten Treffer ein. Amulett und Ring stapeln sich multiplikativ, gemeinsam auf maximal +40% begrenzt.`,
 };
 
+// StatBadge renders the tooltip via a portal at document.body level so it
+// escapes any parent overflow-hidden boundary (shop cards, wardrobe rows, etc.)
+// and is never clipped. Hover state is tracked with React state instead of
+// CSS named groups to guarantee exactly one tooltip shows at a time.
 function StatBadge({
   badgeClass,
   children,
@@ -38,16 +44,50 @@ function StatBadge({
   children: React.ReactNode;
   tooltip: string;
 }) {
+  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  function handleMouseEnter() {
+    if (spanRef.current) {
+      const rect = spanRef.current.getBoundingClientRect();
+      setPos({
+        // 8px above the badge top, centered horizontally — fixed so scroll doesn't shift it
+        top: rect.top - 8,
+        left: rect.left + rect.width / 2,
+      });
+    }
+    setVisible(true);
+  }
+
   return (
-    <div className="group/tip relative inline-flex">
+    <div
+      className="relative inline-flex"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setVisible(false)}
+    >
       <span
+        ref={spanRef}
         className={`cursor-help rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${badgeClass}`}
       >
         {children}
       </span>
-      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 w-56 -translate-x-1/2 rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-2 text-[11px] leading-relaxed text-zinc-300 opacity-0 shadow-xl transition-opacity duration-150 group-hover/tip:opacity-100">
-        {tooltip}
-      </div>
+      {mounted &&
+        visible &&
+        createPortal(
+          <div
+            className="pointer-events-none fixed z-[9999] w-56 -translate-x-1/2 -translate-y-full rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-2 text-[11px] leading-relaxed text-zinc-300 shadow-xl"
+            style={{ top: pos.top, left: pos.left }}
+          >
+            {tooltip}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
