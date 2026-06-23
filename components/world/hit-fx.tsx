@@ -47,10 +47,7 @@ export function BloodBurst() {
   return (
     <group>
       {PARTICLE_INDICES.map((i) => (
-        <mesh
-          key={i}
-          ref={(el) => { refs.current[i] = el; }}
-        >
+        <mesh key={i} ref={(el) => { refs.current[i] = el; }}>
           <sphereGeometry args={[0.045, 5, 5]} />
           <meshBasicMaterial color="#8b1a1a" transparent opacity={1} toneMapped={false} />
         </mesh>
@@ -60,104 +57,86 @@ export function BloodBurst() {
 }
 
 /**
- * One-shot diagonal slash trail — shown once per swing.
- * Replaced the old torus ring with 3 stacked planes in a diagonal "slash" orientation
- * so the effect reads as a real weapon swing, not a floating circle.
+ * One-shot weapon-swing arc trail — uses flat `ringGeometry` (2D arc) NOT
+ * `torusGeometry` (3D tube). The flat arc is oriented face-on in the direction
+ * the weapon swings, reads as a real slash trail (like the mark a blade leaves
+ * through the air), not a floating sausage ring.
+ *
+ * Two concentric ring layers:
+ *   · Outer glow  — wider arc, soft hue, low opacity
+ *   · Core arc    — thin, full-brightness weapon-rarity color
+ *
+ * The `hit` prop makes the effect larger and brighter when the swing connects.
  * Color is the equipped weapon's rarity color (off-white for bare fists).
- * The `hit` prop triggers a more dramatic scale/glow when the swing connects.
  */
-export const SLASH_EFFECT_LIFETIME_MS = 240;
+export const SLASH_EFFECT_LIFETIME_MS = 230;
 
 export function SlashEffect({ color, hit = false }: { color: string; hit?: boolean }) {
-  const groupRef = useRef<THREE.Group>(null);
-  // Individual material refs for each layer so opacity is updated without React state.
-  const matCore = useRef<THREE.MeshBasicMaterial>(null);
-  const matMid  = useRef<THREE.MeshBasicMaterial>(null);
-  const matGlow = useRef<THREE.MeshBasicMaterial>(null);
-  const matLine = useRef<THREE.MeshBasicMaterial>(null);
-  const age = useRef(0);
+  const groupRef  = useRef<THREE.Group>(null);
+  const matGlow   = useRef<THREE.MeshBasicMaterial>(null);
+  const matCore   = useRef<THREE.MeshBasicMaterial>(null);
+  const age       = useRef(0);
 
   useFrame((_, delta) => {
     age.current += delta;
     const g = groupRef.current;
     if (!g) return;
-    const t = Math.min(1, age.current / (SLASH_EFFECT_LIFETIME_MS / 1000));
 
-    // Quick pop-in using an eased curve, then hold slightly, then vanish
-    const popT = Math.min(1, t / 0.30);
-    const pop = Math.sin(popT * Math.PI * 0.5); // ease-out ramp to 1
-    const maxScale = hit ? 1.55 : 1.15;
-    g.scale.setScalar(0.25 + pop * maxScale);
+    const T = SLASH_EFFECT_LIFETIME_MS / 1000;
+    const t = Math.min(1, age.current / T);
 
-    // Sweep the slash slightly as it fades — reads as genuine motion, not a static decal
-    g.rotation.z = THREE.MathUtils.lerp(-1.05, -0.35, Math.min(1, t / 0.65));
+    // Scale: sharp pop-in over first 30 % of lifetime (ease-out curve).
+    // Hit swings reach a larger peak so the player feels the connect.
+    const popT  = Math.min(1, t / 0.30);
+    const peak  = hit ? 1.40 : 1.05;
+    const scale = 0.30 + Math.sin(popT * Math.PI * 0.5) * peak;
+    g.scale.setScalar(Math.max(0.30, scale));
 
-    const fade = Math.max(0, 1 - t);
-    const hitBoost = hit ? 1.25 : 1.0;
-    if (matCore.current) matCore.current.opacity = Math.min(1, fade * 0.95 * hitBoost);
-    if (matMid.current)  matMid.current.opacity  = Math.min(1, fade * 0.60 * hitBoost);
-    if (matGlow.current) matGlow.current.opacity = Math.min(1, fade * 0.20 * hitBoost);
-    if (matLine.current) matLine.current.opacity = Math.min(1, fade * 0.80 * hitBoost);
+    // Arc sweep: rotates from start to end angle over first 55 % of lifetime.
+    // Sweep range matches the original torus sweep so the motion feels right.
+    g.rotation.z = THREE.MathUtils.lerp(-1.30, 0.60, Math.min(1, t / 0.55));
+
+    // Opacity: instant full brightness → hold until 30 % → decay to 0.
+    const HOLD = 0.30;
+    const fade = t < HOLD ? 1.0 : Math.max(0, 1.0 - (t - HOLD) / (1.0 - HOLD));
+
+    if (matGlow.current) matGlow.current.opacity = fade * (hit ? 0.44 : 0.24);
+    if (matCore.current) matCore.current.opacity = Math.min(1, fade * (hit ? 1.10 : 0.92));
   });
 
   return (
-    // Initial rotation sets the diagonal angle; useFrame sweeps it further
-    <group ref={groupRef} rotation={[0, 0, -1.05]}>
-      {/* Soft glow halo behind the slash — wide, very transparent */}
+    // Initial angle: positions the arc at its start orientation.
+    // The useFrame sweep above then rotates it to the end angle.
+    <group ref={groupRef} rotation={[0, 0, -1.30]}>
+
+      {/* Outer glow — wider ring arc, very transparent, softens edges */}
       <mesh>
-        <planeGeometry args={[1.85, 0.55]} />
+        <ringGeometry args={[0.33, 0.72, 44, 1, 0, Math.PI * 0.82]} />
         <meshBasicMaterial
           ref={matGlow}
           color={color}
           transparent
-          opacity={0.20}
+          opacity={0.24}
           side={THREE.DoubleSide}
           depthWrite={false}
           toneMapped={false}
         />
       </mesh>
 
-      {/* Mid layer — slightly narrower, medium opacity */}
+      {/* Core slash arc — thin, fully opaque, the sharp "edge" of the swing */}
       <mesh position={[0, 0, 0.004]}>
-        <planeGeometry args={[1.45, 0.10]} />
-        <meshBasicMaterial
-          ref={matMid}
-          color={color}
-          transparent
-          opacity={0.60}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
-
-      {/* Core slash — bright thin line, the sharpest part */}
-      <mesh position={[0, 0, 0.008]}>
-        <planeGeometry args={[1.55, 0.055]} />
+        <ringGeometry args={[0.44, 0.61, 44, 1, 0, Math.PI * 0.76]} />
         <meshBasicMaterial
           ref={matCore}
           color={color}
           transparent
-          opacity={0.95}
+          opacity={0.92}
           side={THREE.DoubleSide}
           depthWrite={false}
           toneMapped={false}
         />
       </mesh>
 
-      {/* Second offset slash — angled slightly differently for depth */}
-      <mesh position={[0.06, 0.16, 0.006]} rotation={[0, 0, 0.22]}>
-        <planeGeometry args={[0.85, 0.048]} />
-        <meshBasicMaterial
-          ref={matLine}
-          color={color}
-          transparent
-          opacity={0.80}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
     </group>
   );
 }

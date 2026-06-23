@@ -147,21 +147,6 @@ function applyCameraShake(cam: THREE.Camera, shakeAmount: number) {
   cam.position.y += (Math.random() - 0.5) * shakeAmount;
 }
 
-// Reused every call below, never reallocated — `applyRingStyle` runs every
-// single frame (the range ring's color tween), and `new THREE.Color(...)`
-// allocating a fresh object 60×/sec was a small but genuinely continuous
-// stream of garbage, exactly the kind of "tiny, recurring stutter" a minor
-// GC pass causes. Module-scope, not a ref, since this is a plain function
-// (not a hook) and only ever one Player exists per client at a time.
-const ringTargetColorScratch = new THREE.Color();
-
-/** Same reasoning as applyCameraShake — keeps a plain-object-material
- * mutation out of the component scope React Compiler tracks. */
-function applyRingStyle(mat: THREE.MeshBasicMaterial, color: string, opacity: number, t: number) {
-  mat.color.lerp(ringTargetColorScratch.set(color), t);
-  mat.opacity = THREE.MathUtils.lerp(mat.opacity, opacity, t);
-}
-
 /** Same reasoning as applyCameraShake — `cc` is `cameraControls.state.current`,
  * a hook-argument-owned ref object, so easing its fields back toward 0
  * directly inside the component scope is what React Compiler's
@@ -229,7 +214,6 @@ export function Player({
 }: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const limbs = useRef<CharacterLimbRefs>(null);
-  const rangeRing = useRef<THREE.Mesh>(null);
   // Wraps CharacterModel only (not `group`, the camera-tracked/position-
   // authoritative root) — carries the death-fall/despawn pose so it can
   // rotate and shrink to nothing without touching `g.position`/`g.rotation`
@@ -860,11 +844,6 @@ export function Player({
       }
     }
 
-    if (rangeRing.current) {
-      const mat = rangeRing.current.material as THREE.MeshBasicMaterial;
-      // Ring kept in scene for logic tracking but invisible — user preference
-      applyRingStyle(mat, anyInRange ? "#f87171" : "#a855f7", 0, Math.min(1, delta * 8));
-    }
 
     // Sprinting pumps the legs faster (not just moving faster) — used to
     // also kick the FOV out a few degrees as a "you are now sprinting"
@@ -1176,13 +1155,6 @@ export function Player({
             petTypes={petTypes}
           />
         </group>
-        {/* Melee-range indicator — a flat ring on the ground centered on the
-            player, see the doc comment above for why this replaced a
-            screen-space crosshair. */}
-        <mesh ref={rangeRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
-          <ringGeometry args={[characterConfig.attackRange - 0.07, characterConfig.attackRange, 48]} />
-          <meshBasicMaterial color="#a855f7" transparent opacity={0.16} toneMapped={false} side={THREE.DoubleSide} />
-        </mesh>
       </group>
       {/* Slash VFX — deliberately a *sibling* of the group above, not a
           child of it: `position`/`rotationY` on each entry are already
