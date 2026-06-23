@@ -29,6 +29,27 @@ interface ItemPreviewModalProps {
   onClose: () => void;
 }
 
+const ITEM_DESCRIPTIONS: Record<string, string> = {
+  pet: "Dein treuer Begleiter folgt dir in der Welt und greift automatisch Gegner in seiner Reichweite an. Er kämpft an deiner Seite, solange er ausgerüstet ist — je nach Tierart mit unterschiedlichen Kampfwerten.",
+  weapon_cosmetic: "Erhöht deinen Waffenschaden bei jedem Treffer im Kampf. Ohne Waffe greifst du mit Fäusten an. Rüste eine Waffe aus, um mehr Schaden zu verursachen.",
+  jacket: "Jacken bieten Rüstungspunkte, die eingehenden Schaden Punkt für Punkt reduzieren. Kombiniere Jacke, Hose, Hut und Schuhe für maximalen Gesamtschutz.",
+  pants: "Beinschutz mit Rüstungspunkten. Stapelt sich mit Jacke, Hut und Schuhen für höheren Gesamtschutz im Kampf.",
+  shoes: "Schuhe mit Rüstungsbonus — schützen deine Beine und stapeln sich mit anderen Rüstungsteilen. Manche bieten zusätzliche passive Perks.",
+  hat: "Kopfschutz mit Rüstungspunkten. Stapelt sich mit allen anderen Rüstungsteilen. Manche Helme verleihen zusätzliche passive Perks.",
+  shield_cosmetic: "Eine Energieblase, die Schaden absorbiert, bevor deine HP sinken. Wird das Schild vollständig geleert, lädt es sich nach dem angezeigten Cooldown wieder vollständig auf.",
+  ring: "Passiver Ring mit Spezialbonus — Tempo, Sprungkraft oder HP-Regeneration. Stapelt sich multiplikativ mit deinem Amulett. Maximaler Bonus: +40 %.",
+  ring2: "Zweiter Ringslot — passiver Bonus wie Tempo, Sprung oder Regen. Beide Ringe und das Amulett stapeln sich miteinander bis zum gemeinsamen Cap.",
+  amulet: "Amulett mit passivem Bonus. Kombiniert mit Ringen entstehen sehr starke Effekte. Alle passiven Boni stapeln sich multiplikativ bis +40 % Gesamtbonus.",
+  aura: "Magische Aura rund um deinen Charakter — in der Welt für alle Spieler sichtbar. Rein kosmetisch, kein Kampfeffekt.",
+  trail: "Hinterlässt einen leuchtenden Spur-Effekt beim Laufen. Sieht in der Welt für alle Spieler spektakulär aus — rein kosmetisch.",
+  face: "Maske oder Gesichtsschutz — verändert das Aussehen deines Charakters komplett. In der Welt und der Garderobe sichtbar.",
+  hair: "Frisur für deinen Charakter. Passt sich je nach Geschlecht der Form an. In der Welt und der Garderobe für alle sichtbar.",
+};
+
+function getItemDescription(type: string): string {
+  return ITEM_DESCRIPTIONS[type] ?? "Kosmetisches Item für deinen Charakter. In der Welt für alle Mitspieler sichtbar.";
+}
+
 /**
  * "Solo" preview — the character with *only* this one item equipped and
  * nothing else, so you can actually see what a piece looks like on its own
@@ -85,19 +106,26 @@ export function ItemPreviewModal({ item, gender, onClose }: ItemPreviewModalProp
         </button>
 
         <div className="rounded-2xl border border-purple-500/30 bg-[#0b0814] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
-          <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
-            <p className="text-center text-sm font-semibold text-zinc-100">{item.name}</p>
-            <RarityBadge rarity={item.rarity} />
-            <ItemStatBadges
-              damage={item.damage}
-              armor={item.armor}
-              perk_type={item.perk_type}
-              perk_magnitude={item.perk_magnitude}
-              shield_hp={item.shield_hp}
-              shield_regen_cooldown_sec={item.shield_regen_cooldown_sec}
-              itemName={item.name}
-              itemType={item.type}
-            />
+          <div className="mb-3 space-y-2">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <p className="text-center text-sm font-semibold text-zinc-100">{item.name}</p>
+              <RarityBadge rarity={item.rarity} />
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              <ItemStatBadges
+                damage={item.damage}
+                armor={item.armor}
+                perk_type={item.perk_type}
+                perk_magnitude={item.perk_magnitude}
+                shield_hp={item.shield_hp}
+                shield_regen_cooldown_sec={item.shield_regen_cooldown_sec}
+                itemName={item.name}
+                itemType={item.type}
+              />
+            </div>
+            <p className="text-center text-[11px] leading-relaxed text-zinc-400">
+              {getItemDescription(item.type)}
+            </p>
           </div>
 
           <div className="h-80 w-full overflow-hidden rounded-xl border border-white/10 bg-[#08050f]">

@@ -29,6 +29,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: siteName,
     description: `Die Community-Hub für ${siteName}`,
+    icons: {
+      icon: "/icon",
+      shortcut: "/icon",
+      apple: "/icon",
+    },
   };
 }
 

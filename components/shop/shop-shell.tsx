@@ -143,6 +143,8 @@ function ShopCard({
           perk_magnitude={listing.itemPerkMagnitude}
           shield_hp={listing.itemShieldHp}
           shield_regen_cooldown_sec={listing.itemShieldCooldown}
+          itemName={listing.itemName}
+          itemType={listing.itemType}
         />
       </div>
 

@@ -410,6 +410,10 @@ function PetCompanion({
   const jumpPhase = useRef(0); // 0 = not jumping, otherwise 0→1 arc progress
   const facing = useRef(0);
   const flapClock = useRef(0);
+  /** Advances while the pet is actively moving — drives leg-walk animation
+   * in DogPet/CatPet (item-variants.tsx). Stays fixed when paused so legs
+   * hold their last pose rather than snapping to 0 mid-walk. */
+  const walkClockRef = useRef(0);
   const combatTarget = useRef<{ isAlive: () => boolean; getPosition: () => THREE.Vector3; takeDamage: (n: number) => number } | null>(
     null
   );
@@ -460,6 +464,7 @@ function PetCompanion({
       combatTarget.current = null;
     }
 
+    let petIsMoving = false;
     if (inCombat && combatTarget.current) {
       const monsterWorldPos = combatTarget.current.getPosition();
       const localTarget = g.parent ? g.parent.worldToLocal(monsterWorldPos.clone()) : monsterWorldPos;
@@ -471,6 +476,7 @@ function PetCompanion({
         if (Math.abs(toTarget.x) > 0.001 || Math.abs(toTarget.z) > 0.001) {
           facing.current = Math.atan2(toTarget.x, toTarget.z);
         }
+        petIsMoving = true;
       } else {
         attackCooldown.current -= delta;
         if (attackCooldown.current <= 0) {
@@ -493,10 +499,17 @@ function PetCompanion({
           if (Math.abs(toTarget.x) > 0.001 || Math.abs(toTarget.z) > 0.001) {
             facing.current = Math.atan2(toTarget.x, toTarget.z);
           }
+          petIsMoving = true;
         } else {
           paused.current = true;
         }
       }
+    }
+
+    // Advance walk clock only while actually moving — DogPet/CatPet read
+    // this to drive their leg swing animation (item-variants.tsx).
+    if (!flying && petIsMoving) {
+      walkClockRef.current += delta * 7;
     }
 
     // Ground hop: a quick symmetric arc, purely cosmetic (doesn't affect
@@ -521,13 +534,16 @@ function PetCompanion({
 
     if (bodyRef.current) {
       if (flying) {
-        // Banking into turns + a slight nose-down cruise tilt — reads as
+        // Banking into turns + nose-down cruise tilt — reads as
         // "flying under its own control", not "floating sprite".
         const turn = THREE.MathUtils.lerp(g.rotation.y, facing.current, 1) - g.rotation.y;
-        bodyRef.current.rotation.z = THREE.MathUtils.lerp(bodyRef.current.rotation.z, -turn * 4, 0.1);
-        bodyRef.current.rotation.x = -0.12;
+        bodyRef.current.rotation.z = THREE.MathUtils.lerp(bodyRef.current.rotation.z, -turn * 5, 0.12);
+        // Steeper nose-down while actively flying
+        bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, inCombat ? -0.25 : -0.18, 0.06);
       } else {
-        bodyRef.current.rotation.x = hopY > 0.01 ? -hopY * 0.6 : 0;
+        // Lean forward while running, snap back when still
+        const targetTiltX = hopY > 0.01 ? -hopY * 0.6 : petIsMoving ? -0.1 : 0;
+        bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, targetTiltX, 0.1);
       }
     }
   });
@@ -535,7 +551,7 @@ function PetCompanion({
   return (
     <group ref={groupRef}>
       <group ref={bodyRef}>
-        <PetVariant item={item} />
+        <PetVariant item={item} walkClockRef={walkClockRef} />
       </group>
     </group>
   );

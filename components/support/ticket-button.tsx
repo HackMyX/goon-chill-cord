@@ -186,7 +186,7 @@ export function SupportButton() {
     <>
       {!open && (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-1.5">
-          <span className="rounded-full bg-purple-500/15 px-2.5 py-0.5 text-[10px] font-bold tracking-wide text-purple-300 ring-1 ring-purple-500/30 shadow-[0_0_8px_rgba(147,51,234,0.25)]">
+          <span className="rounded-xl bg-purple-600 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_0_14px_rgba(147,51,234,0.75),0_2px_8px_rgba(0,0,0,0.4)]">
             Bug oder Vorschlag?
           </span>
           <button
