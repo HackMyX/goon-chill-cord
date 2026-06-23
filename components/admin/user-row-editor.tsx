@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Save, RotateCcw, MessageCircleOff, MessageCircle } from "lucide-react";
 import { updateUserCredits, updateUserRole, resetUser, setSupportBanned } from "@/lib/actions/admin";
 import { UserDetailPanel } from "@/components/admin/user-detail-panel";
@@ -21,6 +22,22 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
   const [supportBanned, setSupportBannedState] = useState(!!profile.support_banned);
   const [supportBanToggling, setSupportBanToggling] = useState(false);
   const sound = useSoundManager();
+  const router = useRouter();
+
+  // Track whether the admin is actively editing — don't overwrite their
+  // in-progress values if a realtime/router.refresh update arrives mid-edit.
+  const editingRef = useRef(false);
+
+  // Sync local display state from props when external changes arrive
+  // (realtime profile updates or parent router.refresh), but only when we're
+  // not currently saving (to avoid overwriting values mid-flight).
+  useEffect(() => {
+    if (!saving && !editingRef.current) {
+      setCredits(profile.credits);
+      setRole(profile.role as ProfileRole);
+      setSupportBannedState(!!profile.support_banned);
+    }
+  }, [profile.credits, profile.role, profile.support_banned, saving]);
 
   async function handleToggleSupportBan(e: React.MouseEvent) {
     e.stopPropagation();
@@ -32,6 +49,7 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
     if (res.success) {
       setSupportBannedState(next);
       setStatus("saved");
+      router.refresh();
     } else {
       setStatus("error");
     }
@@ -40,12 +58,24 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
   async function handleSave() {
     setSaving(true);
     setStatus("idle");
+    editingRef.current = false;
+
     const [a, b] = await Promise.all([
       updateUserCredits(profile.id, credits),
-      role !== profile.role ? updateUserRole(profile.id, role) : Promise.resolve({ success: true }),
+      updateUserRole(profile.id, role),
     ]);
+
     setSaving(false);
-    setStatus(a.success && b.success ? "saved" : "error");
+
+    if (a.success && b.success) {
+      setStatus("saved");
+      // Refresh server data so parent's profiles list reflects the change
+      // and any other admin's view on the same page stays in sync.
+      router.refresh();
+      setTimeout(() => setStatus("idle"), 2500);
+    } else {
+      setStatus("error");
+    }
   }
 
   async function handleReset(e: React.MouseEvent) {
@@ -63,6 +93,8 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
     if (result.success) {
       setCredits(0);
       setStatus("saved");
+      router.refresh();
+      setTimeout(() => setStatus("idle"), 2500);
     } else {
       setStatus("error");
     }
@@ -82,7 +114,11 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
             <input
               type="number"
               value={credits}
-              onChange={(e) => setCredits(Number(e.target.value) || 0)}
+              onChange={(e) => {
+                editingRef.current = true;
+                setCredits(Number(e.target.value) || 0);
+              }}
+              onBlur={() => { editingRef.current = false; }}
               onClick={(e) => e.stopPropagation()}
               className="w-28 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
             />
@@ -94,7 +130,11 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
               value={role}
               onMouseEnter={sound.hover}
               onClick={(e) => e.stopPropagation()}
-              onChange={(e) => setRole(e.target.value as ProfileRole)}
+              onChange={(e) => {
+                editingRef.current = true;
+                setRole(e.target.value as ProfileRole);
+              }}
+              onBlur={() => { editingRef.current = false; }}
               className="w-32 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
             >
               {ROLES.map((r) => (
@@ -152,8 +192,8 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
             {supportBanToggling ? "..." : supportBanned ? "Support gesperrt" : "Support sperren"}
           </button>
 
-          {status === "saved" && <span className="text-sm text-emerald-400">✓</span>}
-          {status === "error" && <span className="text-sm text-red-400">Fehler</span>}
+          {status === "saved" && <span className="text-sm font-semibold text-emerald-400">✓ Gespeichert</span>}
+          {status === "error" && <span className="text-sm font-semibold text-red-400">Fehler</span>}
         </div>
       }
     >

@@ -412,25 +412,44 @@ export async function getUserDetail(targetUserId: string): Promise<GetUserDetail
 
   const admin = createAdminClient();
 
-  const [{ data: inventory }, { data: logs }, { data: authUser }, { data: profile }] =
-    await Promise.all([
-      admin
-        .from("inventory")
-        .select("id, equipped, item:items(id, name, rarity, type)")
-        .eq("user_id", targetUserId)
-        .order("obtained_at", { ascending: false }),
-      // Personal log: actions this user performed themselves (user_id match)
-      // OR admin actions targeting them (payload.targetUserId match) — admin
-      // actions are logged under the *admin's* user_id, not the target's.
-      admin
-        .from("audit_logs")
-        .select("id, action, payload, created_at")
-        .or(`user_id.eq.${targetUserId},payload->>targetUserId.eq.${targetUserId}`)
-        .order("created_at", { ascending: false })
-        .limit(50),
-      admin.auth.admin.getUserById(targetUserId),
-      admin.from("profiles").select("gender").eq("id", targetUserId).single(),
-    ]);
+  // Fetch inventory, own audit logs, admin-action logs targeting this user,
+  // auth record, and profile in parallel. The two audit-log queries are
+  // split because PostgREST's .or() with JSONB operators is unreliable —
+  // we merge and deduplicate in code instead.
+  const [
+    { data: inventory },
+    { data: logsOwn },
+    { data: logsTarget },
+    { data: authUser },
+    { data: profile },
+  ] = await Promise.all([
+    admin
+      .from("inventory")
+      .select("id, equipped, item:items(id, name, rarity, type)")
+      .eq("user_id", targetUserId)
+      .order("obtained_at", { ascending: false }),
+    admin
+      .from("audit_logs")
+      .select("id, action, payload, created_at")
+      .eq("user_id", targetUserId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    admin
+      .from("audit_logs")
+      .select("id, action, payload, created_at")
+      .filter("payload->>targetUserId", "eq", targetUserId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    admin.auth.admin.getUserById(targetUserId),
+    admin.from("profiles").select("gender").eq("id", targetUserId).single(),
+  ]);
+
+  // Merge own + targeted logs, deduplicate, and sort newest-first
+  const seen = new Set<string>();
+  const logs = [...(logsOwn ?? []), ...(logsTarget ?? [])]
+    .filter((l) => { if (seen.has(l.id)) return false; seen.add(l.id); return true; })
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 50);
 
   const bannedUntil = authUser?.user?.banned_until;
   const banned = !!bannedUntil && new Date(bannedUntil).getTime() > Date.now();

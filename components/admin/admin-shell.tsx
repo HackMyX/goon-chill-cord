@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -34,6 +34,7 @@ import type { CharacterConfig } from "@/lib/character-config";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import type { SiteConfig } from "@/lib/site-config";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { createClient } from "@/lib/supabase/client";
 
 export interface AuditLogEntry {
   id: string;
@@ -126,9 +127,9 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
 export function AdminShell({
   credits: initialCredits,
   streakDays,
-  auditLog,
+  auditLog: initialAuditLog,
   caseTiers,
-  profiles,
+  profiles: initialProfiles,
   items: initialItems,
   streakConfig,
   shopSettings,
@@ -146,10 +147,94 @@ export function AdminShell({
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
   const [credits, setCredits] = useState(initialCredits);
+  const [profiles, setProfiles] = useState(initialProfiles);
+  const [auditLog, setAuditLog] = useState(initialAuditLog);
+  const [userSearch, setUserSearch] = useState("");
+  const profilesRef = useRef(profiles);
+  profilesRef.current = profiles;
+
   useRealtimeProfile((row) => {
     if (typeof row.credits === "number") setCredits(row.credits);
   });
+
+  // Live-update user list: reflect credit/role/ban changes by any admin or
+  // server action without requiring a page reload.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("admin-profiles-live")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          const row = payload.new as ProfileRow;
+          setProfiles((prev) =>
+            prev.map((p) => (p.id === row.id ? { ...p, ...row } : p))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "profiles" },
+        (payload) => {
+          const row = payload.new as ProfileRow;
+          setProfiles((prev) => {
+            if (prev.some((p) => p.id === row.id)) return prev;
+            // Prepend new registrations — they have no cases opened yet so
+            // they'd fall to the bottom of a credits sort anyway.
+            return [row, ...prev];
+          });
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  // Live-update audit log: new entries appear instantly without page reload.
+  // NOTE: audit_logs Realtime must be enabled in Supabase → Table Editor →
+  // audit_logs → Realtime toggle (same way profiles table is enabled).
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("admin-audit-live")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "audit_logs" },
+        (payload) => {
+          const row = payload.new as {
+            id: string;
+            user_id: string;
+            action: string;
+            payload: Record<string, unknown> | null;
+            created_at: string;
+          };
+          // Resolve the actor username from the profiles list in memory — avoids
+          // a separate fetch while still showing the correct name in most cases.
+          const actorName = profilesRef.current.find((p) => p.id === row.user_id)?.username ?? null;
+          const entry: AuditLogEntry = {
+            id: row.id,
+            action: row.action,
+            payload: row.payload,
+            created_at: row.created_at,
+            profiles: actorName ? { username: actorName } : null,
+          };
+          setAuditLog((prev) => [entry, ...prev].slice(0, 100));
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const sound = useSoundManager();
+
+  const filteredProfiles =
+    userSearch.trim().length > 0
+      ? profiles.filter(
+          (p) =>
+            p.username.toLowerCase().includes(userSearch.toLowerCase()) ||
+            p.id.toLowerCase().startsWith(userSearch.toLowerCase())
+        )
+      : profiles;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -217,7 +302,20 @@ export function AdminShell({
 
         {tab === "users" && (
           <div className="flex flex-col gap-3">
-            {profiles.map((profile) => (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Username oder ID suchen…"
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-black/30 py-2 pl-9 pr-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-purple-400/60"
+              />
+            </div>
+            {filteredProfiles.length === 0 && (
+              <p className="text-sm text-zinc-500">Kein User gefunden.</p>
+            )}
+            {filteredProfiles.map((profile) => (
               <UserRowEditor key={profile.id} profile={profile} />
             ))}
           </div>
@@ -272,6 +370,7 @@ export function AdminShell({
             }))}
           />
         )}
+
 
         {tab === "tickets" && <TicketsTab />}
 
