@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -19,6 +19,8 @@ import { TicketsTab } from "@/components/admin/tickets-tab";
 import { DebugLogTab } from "@/components/admin/debug-log-tab";
 import { BackupTab } from "@/components/admin/backup-tab";
 import { SecurityTab } from "@/components/admin/security-tab";
+import { ModConfigEditor } from "@/components/admin/mod-config-editor";
+import type { ModPermissions } from "@/lib/actions/mod";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 import type { StreakConfig } from "@/lib/streak";
@@ -96,9 +98,10 @@ interface AdminShellProps {
   worldSessionConfig: WorldSessionConfig;
   characterConfig: CharacterConfig;
   siteConfig: SiteConfig;
+  modPermissions: ModPermissions;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "debug" | "backup" | "security";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "debug" | "backup" | "security";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -112,6 +115,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "branding", label: "Branding", icon: Palette },
   { id: "audit", label: "Audit-Log", icon: ScrollText },
   { id: "tickets", label: "Tickets", icon: MessageCircle },
+  { id: "moderators", label: "Moderatoren", icon: Shield },
   { id: "debug", label: "Debug Log", icon: Bug },
   { id: "backup", label: "Backup", icon: Database },
   { id: "security", label: "Sicherheit", icon: ShieldAlert },
@@ -134,6 +138,7 @@ export function AdminShell({
   worldSessionConfig,
   characterConfig,
   siteConfig,
+  modPermissions,
 }: AdminShellProps) {
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
@@ -265,6 +270,8 @@ export function AdminShell({
         )}
 
         {tab === "tickets" && <TicketsTab />}
+
+        {tab === "moderators" && <ModConfigEditor permissions={modPermissions} />}
 
         {tab === "debug" && <DebugLogTab />}
 

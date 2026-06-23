@@ -10,6 +10,7 @@ import {
   Shirt,
   UserRound,
   ShieldAlert,
+  Shield,
 } from "lucide-react";
 import { IconButton } from "@/components/layout/icon-button";
 import { GamesMenu } from "@/components/layout/games-menu";
@@ -35,6 +36,7 @@ interface TopBarProps {
    * call site that hasn't been updated yet simply keeps not showing it,
    * rather than erroring. */
   isAdmin?: boolean;
+  isModerator?: boolean;
 }
 
 export function TopBar({
@@ -43,6 +45,7 @@ export function TopBar({
   streakDays = 2,
   onCreditsChange,
   isAdmin = false,
+  isModerator = false,
 }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
@@ -97,6 +100,14 @@ export function TopBar({
             label="Admin-Panel"
             href="/admin"
             className="bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200"
+          />
+        )}
+        {isModerator && !isAdmin && (
+          <IconButton
+            icon={Shield}
+            label="Mod-Panel"
+            href="/mod"
+            className="bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200"
           />
         )}
       </div>

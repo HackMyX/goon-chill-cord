@@ -1,40 +1,43 @@
 "use client";
 
 import { useState } from "react";
-import { Flame, Save, Loader2 } from "lucide-react";
+import { Flame, Save, Loader2, Zap, Calendar, TrendingUp, Star } from "lucide-react";
 import { updateStreakConfig } from "@/lib/actions/streak";
 import { computeStreakReward, type StreakConfig } from "@/lib/streak";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 
-interface FieldDef {
+const NUMBER_FIELDS: {
   key: keyof StreakConfig;
   label: string;
   hint: string;
   suffix?: string;
   step?: number;
-}
-
-const NUMBER_FIELDS: FieldDef[] = [
+  min?: number;
+}[] = [
   { key: "baseReward", label: "Basis-Reward", hint: "Belohnung an Tag 1 eines Streaks", suffix: "CR" },
   { key: "dailyIncrement", label: "Tägliche Steigerung", hint: "+X pro weiterem Streak-Tag", suffix: "CR" },
   { key: "maxReward", label: "Maximaler Reward", hint: "Deckel — wächst nicht weiter darüber hinaus", suffix: "CR" },
-  { key: "gracePeriodHours", label: "Gnadenfrist", hint: "Stunden nach Mitternacht, in denen ein verpasster Tag noch nachgeholt werden kann", suffix: "h" },
-  { key: "milestoneInterval", label: "Meilenstein-Intervall", hint: "Jeder Nte Tag löst einen Bonus aus (0 = aus)", suffix: "Tage" },
+  { key: "gracePeriodHours", label: "Gnadenfrist", hint: "Stunden nach Mitternacht zum Nachholen", suffix: "h", min: 0 },
+  { key: "milestoneInterval", label: "Meilenstein-Intervall", hint: "Jeder Nte Tag = Bonus (0 = deaktiviert)", suffix: "Tage" },
   { key: "milestoneBonus", label: "Meilenstein-Bonus", hint: "Einmaliger Extra-Bonus an Meilenstein-Tagen", suffix: "CR" },
-  { key: "weekendMultiplier", label: "Wochenend-Multiplikator", hint: "Multipliziert den Tagesreward Samstag & Sonntag (1.0 = aus)", suffix: "x", step: 0.1 },
+  { key: "weekendMultiplier", label: "Wochenend-Multiplikator", hint: "Multipliziert Tagesreward Sa+So (1.0 = aus)", suffix: "x", step: 0.1, min: 1 },
 ];
 
-/**
- * Full admin config surface for the daily-streak reward curve
- * (lib/streak.ts has the actual math) — every knob the system supports,
- * with a live preview table so an admin can see exactly what changing a
- * number does to the first two weeks of rewards before saving.
- */
+function rewardToColor(amount: number, max: number): string {
+  const ratio = Math.min(1, amount / max);
+  if (ratio >= 1) return "text-red-300 bg-red-500/20 border-red-400/50";
+  if (ratio >= 0.75) return "text-orange-300 bg-orange-500/15 border-orange-400/40";
+  if (ratio >= 0.5) return "text-amber-300 bg-amber-500/15 border-amber-400/40";
+  if (ratio >= 0.25) return "text-yellow-300 bg-yellow-500/10 border-yellow-400/30";
+  return "text-blue-300 bg-blue-500/8 border-blue-400/20";
+}
+
 export function StreakConfigEditor({ config }: { config: StreakConfig }) {
   const [form, setForm] = useState(config);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [previewWeekend, setPreviewWeekend] = useState(false);
   const sound = useSoundManager();
   const { currencyName } = useSiteConfig();
 
@@ -47,25 +50,20 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
     sound.click();
     const res = await updateStreakConfig(form);
     setSaving(false);
-    if (res.success) {
-      sound.win();
-      setMessage("Gespeichert.");
-    } else {
-      sound.error();
-      setMessage(res.error ?? "Fehler.");
-    }
+    if (res.success) { sound.win(); setMessage("Gespeichert."); }
+    else { sound.error(); setMessage(res.error ?? "Fehler."); }
     setTimeout(() => setMessage(null), 3000);
   }
 
-  const previewDays = Array.from({ length: 14 }, (_, i) => i + 1);
-  // A fixed Monday and a fixed Saturday — enough to preview both the
-  // weekday and weekend curve without needing a real calendar picker.
-  const weekdayPreviewDate = new Date("2024-01-01T12:00:00Z");
-  const weekendPreviewDate = new Date("2024-01-06T12:00:00Z");
-  const [previewWeekend, setPreviewWeekend] = useState(false);
+  const weekdayDate = new Date("2024-01-01T12:00:00Z");
+  const weekendDate = new Date("2024-01-06T12:00:00Z");
+  const previewDate = previewWeekend ? weekendDate : weekdayDate;
+  const previewDays = Array.from({ length: 30 }, (_, i) => i + 1);
+  const maxPreviewReward = Math.max(...previewDays.map((d) => computeStreakReward(d, form, previewDate).totalCredits));
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Main config card */}
       <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-base font-bold text-zinc-100">
@@ -76,9 +74,7 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
             onMouseEnter={sound.hover}
             onClick={() => setField("enabled", !form.enabled)}
             className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
-              form.enabled
-                ? "bg-emerald-500/20 text-emerald-300"
-                : "bg-red-500/20 text-red-300"
+              form.enabled ? "bg-emerald-500/20 text-emerald-300" : "bg-red-500/20 text-red-300"
             }`}
           >
             {form.enabled ? "AKTIV" : "DEAKTIVIERT"}
@@ -87,19 +83,21 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {NUMBER_FIELDS.map((field) => (
-            <label key={field.key} className="flex flex-col gap-1">
+            <label key={field.key as string} className="flex flex-col gap-1">
               <span className="text-xs font-semibold text-zinc-400">{field.label}</span>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
-                  min={0}
+                  min={field.min ?? 0}
                   step={field.step ?? 1}
                   value={form[field.key] as number}
                   onChange={(e) => setField(field.key, Number(e.target.value) as never)}
                   className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
                 />
                 {field.suffix && (
-                  <span className="text-xs text-zinc-500">{field.suffix === "CR" ? currencyName : field.suffix}</span>
+                  <span className="flex-shrink-0 text-xs text-zinc-500">
+                    {field.suffix === "CR" ? currencyName : field.suffix}
+                  </span>
                 )}
               </div>
               <span className="text-[11px] text-zinc-600">{field.hint}</span>
@@ -113,16 +111,10 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
               onChange={(e) => setField("resetOnMiss", e.target.value === "reset")}
               className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
             >
-              <option value="reset" className="bg-[#0f0e18]">
-                Streak zurücksetzen auf 1
-              </option>
-              <option value="freeze" className="bg-[#0f0e18]">
-                Streak einfrieren (nicht zurücksetzen)
-              </option>
+              <option value="reset" className="bg-[#0f0e18]">Streak zurücksetzen auf 1</option>
+              <option value="freeze" className="bg-[#0f0e18]">Streak einfrieren (nicht zurücksetzen)</option>
             </select>
-            <span className="text-[11px] text-zinc-600">
-              Außerhalb der Gnadenfrist greift dieses Verhalten
-            </span>
+            <span className="text-[11px] text-zinc-600">Außerhalb der Gnadenfrist</span>
           </label>
         </div>
 
@@ -140,52 +132,156 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#0f0e18] p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h4 className="text-sm font-bold text-zinc-300">
-            Vorschau — erste 14 Streak-Tage mit aktuellen Werten
-          </h4>
+      {/* Special Event card */}
+      <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-base font-bold text-zinc-100">
+            <Zap className="h-5 w-5 text-amber-400" />
+            Sonder-Event
+          </h3>
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => setField("specialEventEnabled", !form.specialEventEnabled)}
+            className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
+              form.specialEventEnabled ? "bg-amber-500/25 text-amber-200" : "bg-zinc-700 text-zinc-400"
+            }`}
+          >
+            {form.specialEventEnabled ? "AKTIV" : "DEAKTIVIERT"}
+          </button>
+        </div>
+
+        <p className="mb-4 text-[11px] text-zinc-500">
+          Wenn aktiviert, werden alle täglichen Streak-Rewards mit dem Event-Multiplikator
+          multipliziert. Wirkt zusätzlich zum Wochenend-Multiplikator.
+        </p>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold text-zinc-400">Event-Multiplikator</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                step={0.1}
+                value={form.specialEventMultiplier}
+                onChange={(e) => setField("specialEventMultiplier", Number(e.target.value))}
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60"
+              />
+              <span className="flex-shrink-0 text-xs text-zinc-500">x</span>
+            </div>
+            <span className="text-[11px] text-zinc-600">z.B. 2.0 für doppelte Credits</span>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold text-zinc-400">Event-Label</span>
+            <input
+              type="text"
+              value={form.specialEventLabel}
+              onChange={(e) => setField("specialEventLabel", e.target.value)}
+              placeholder="z.B. Doppelte Credits 🎉"
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60"
+            />
+            <span className="text-[11px] text-zinc-600">Wird im Streak-Banner angezeigt</span>
+          </label>
+        </div>
+
+        {form.specialEventEnabled && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+            <Zap className="h-4 w-4 flex-shrink-0" />
+            <span>Event aktiv: Alle Rewards werden mit <strong>{form.specialEventMultiplier}×</strong> multipliziert</span>
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onMouseEnter={sound.hover}
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-amber-500 disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Speichern
+          </button>
+          {message && <span className="text-sm text-zinc-400">{message}</span>}
+        </div>
+      </div>
+
+      {/* 30-day preview */}
+      <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h4 className="flex items-center gap-2 text-sm font-bold text-zinc-300">
+              <TrendingUp className="h-4 w-4 text-purple-400" />
+              Reward-Kurve — 30 Tage Vorschau
+            </h4>
+            <p className="mt-0.5 text-[11px] text-zinc-500">
+              Farbe = Reward-Stärke (blau → rot). Meilenstein-Tage sind gold umrandet.
+            </p>
+          </div>
           <div className="flex items-center gap-1 rounded-full bg-white/5 p-1 text-xs">
             <button
               onClick={() => setPreviewWeekend(false)}
-              className={`rounded-full px-2.5 py-1 font-semibold transition-colors ${
-                !previewWeekend ? "bg-purple-500/30 text-purple-200" : "text-zinc-500"
-              }`}
+              className={`rounded-full px-2.5 py-1 font-semibold transition-colors ${!previewWeekend ? "bg-purple-500/30 text-purple-200" : "text-zinc-500"}`}
             >
               Werktag
             </button>
             <button
               onClick={() => setPreviewWeekend(true)}
-              className={`rounded-full px-2.5 py-1 font-semibold transition-colors ${
-                previewWeekend ? "bg-purple-500/30 text-purple-200" : "text-zinc-500"
-              }`}
+              className={`rounded-full px-2.5 py-1 font-semibold transition-colors ${previewWeekend ? "bg-purple-500/30 text-purple-200" : "text-zinc-500"}`}
             >
               Wochenende
             </button>
           </div>
         </div>
-        <div className="flex gap-2">
+
+        <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-10">
           {previewDays.map((day) => {
-            const result = computeStreakReward(
-              day,
-              form,
-              previewWeekend ? weekendPreviewDate : weekdayPreviewDate
-            );
+            const result = computeStreakReward(day, form, previewDate);
+            const colorCls = rewardToColor(result.totalCredits, maxPreviewReward);
+            const isMilestone = result.isMilestone;
             return (
               <div
                 key={day}
-                className={`flex min-w-[64px] flex-col items-center gap-1 rounded-lg border px-2 py-2 ${
-                  result.isMilestone
-                    ? "border-amber-400/60 bg-amber-500/10"
-                    : "border-white/10 bg-white/[0.02]"
+                title={`Tag ${day}: ${result.totalCredits.toLocaleString("de-DE")} ${currencyName}${isMilestone ? " + Meilenstein" : ""}`}
+                className={`flex flex-col items-center gap-0.5 rounded-lg border px-1 py-2 text-center transition-all hover:scale-105 ${
+                  isMilestone
+                    ? "border-amber-400/60 bg-amber-500/15"
+                    : colorCls
                 }`}
               >
-                <span className="text-[10px] text-zinc-500">Tag {day}</span>
-                <span className="text-sm font-bold text-purple-300">{result.totalCredits}</span>
-                {result.isMilestone && <span className="text-[10px] text-amber-300">Meilenstein</span>}
+                <span className="text-[9px] text-zinc-500">{day}</span>
+                <span className={`text-[11px] font-bold leading-tight ${isMilestone ? "text-amber-200" : ""}`}>
+                  {result.totalCredits >= 1000
+                    ? `${(result.totalCredits / 1000).toFixed(1)}k`
+                    : result.totalCredits}
+                </span>
+                {isMilestone && <Star className="h-2.5 w-2.5 text-amber-400" />}
               </div>
             );
           })}
+        </div>
+
+        {/* Legend */}
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-[10px] text-zinc-500">
+          <span className="flex items-center gap-1.5">
+            <Star className="h-3 w-3 text-amber-400" />
+            Meilenstein-Tag (gold)
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Calendar className="h-3 w-3 text-zinc-500" />
+            Hover = exakter Wert
+          </span>
+          {form.specialEventEnabled && (
+            <span className="flex items-center gap-1.5 text-amber-400">
+              <Zap className="h-3 w-3" />
+              Sonder-Event aktiv ({form.specialEventMultiplier}×)
+            </span>
+          )}
+          {previewWeekend && (
+            <span className="flex items-center gap-1.5 text-purple-400">
+              Wochenend-Multiplikator ({form.weekendMultiplier}×) aktiv
+            </span>
+          )}
         </div>
       </div>
     </div>

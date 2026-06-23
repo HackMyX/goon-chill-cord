@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Zap, Shirt, Users, ShieldAlert } from "lucide-react";
+import { Zap, Shirt, Users, ShieldAlert, Shield } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseOpeningSection } from "@/components/dashboard/case-opening-section";
 import { DoubleOrNothing } from "@/components/dashboard/double-or-nothing";
@@ -38,6 +38,7 @@ interface DashboardShellProps {
   caseGroups: CaseGroup[];
   caseGroupPreviews: CaseGroupPreview[];
   isAdmin?: boolean;
+  isModerator?: boolean;
 }
 
 export function DashboardShell({
@@ -48,6 +49,7 @@ export function DashboardShell({
   caseGroups,
   caseGroupPreviews,
   isAdmin = false,
+  isModerator = false,
 }: DashboardShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -84,6 +86,7 @@ export function DashboardShell({
         streakDays={streakDays}
         onCreditsChange={handleCreditsChange}
         isAdmin={isAdmin}
+        isModerator={isModerator}
       />
       <main className="flex-1">
         <section className="mx-auto w-full max-w-2xl px-4 pt-12 pb-4 text-center">
@@ -131,6 +134,17 @@ export function DashboardShell({
               >
                 <ShieldAlert className="h-4 w-4" />
                 Admin
+              </Link>
+            )}
+            {isModerator && !isAdmin && (
+              <Link
+                href="/mod"
+                onMouseEnter={sound.hover}
+                onClick={sound.click}
+                className="flex items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/10 px-5 py-2.5 text-sm font-semibold text-sky-300 transition-colors hover:bg-sky-500/20"
+              >
+                <Shield className="h-4 w-4" />
+                Mod-Panel
               </Link>
             )}
           </div>

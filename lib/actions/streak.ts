@@ -25,6 +25,9 @@ interface StreakConfigRow {
   milestone_bonus: number;
   reset_on_miss: boolean;
   weekend_multiplier: number | null;
+  special_event_enabled: boolean | null;
+  special_event_multiplier: number | null;
+  special_event_label: string | null;
 }
 
 function rowToConfig(row: StreakConfigRow): StreakConfig {
@@ -38,6 +41,9 @@ function rowToConfig(row: StreakConfigRow): StreakConfig {
     milestoneBonus: row.milestone_bonus,
     resetOnMiss: row.reset_on_miss,
     weekendMultiplier: row.weekend_multiplier ?? DEFAULT_STREAK_CONFIG.weekendMultiplier,
+    specialEventEnabled: row.special_event_enabled ?? false,
+    specialEventMultiplier: row.special_event_multiplier ?? DEFAULT_STREAK_CONFIG.specialEventMultiplier,
+    specialEventLabel: row.special_event_label ?? DEFAULT_STREAK_CONFIG.specialEventLabel,
   };
 }
 
@@ -62,13 +68,19 @@ export async function getStreakConfig(): Promise<StreakConfig> {
   // just because one newer column isn't migrated yet.
   let { data, error } = await admin
     .from("streak_config")
-    .select(`${baseColumns}, weekend_multiplier`)
+    .select(`${baseColumns}, weekend_multiplier, special_event_enabled, special_event_multiplier, special_event_label`)
     .eq("id", "default")
     .single();
   if (error) {
-    const retry = await admin.from("streak_config").select(baseColumns).eq("id", "default").single();
-    data = retry.data ? { ...retry.data, weekend_multiplier: null } : null;
-    error = retry.error;
+    const withWeekend = await admin.from("streak_config").select(`${baseColumns}, weekend_multiplier`).eq("id", "default").single();
+    if (!withWeekend.error) {
+      data = withWeekend.data ? { ...withWeekend.data, special_event_enabled: null, special_event_multiplier: null, special_event_label: null } : null;
+      error = withWeekend.error;
+    } else {
+      const retry = await admin.from("streak_config").select(baseColumns).eq("id", "default").single();
+      data = retry.data ? { ...retry.data, weekend_multiplier: null, special_event_enabled: null, special_event_multiplier: null, special_event_label: null } : null;
+      error = retry.error;
+    }
   }
 
   if (error || !data) return DEFAULT_STREAK_CONFIG;
@@ -292,17 +304,7 @@ export async function claimDailyReward(): Promise<ClaimResult> {
   };
 }
 
-export async function updateStreakConfig(input: {
-  enabled: boolean;
-  baseReward: number;
-  dailyIncrement: number;
-  maxReward: number;
-  gracePeriodHours: number;
-  milestoneInterval: number;
-  milestoneBonus: number;
-  resetOnMiss: boolean;
-  weekendMultiplier: number;
-}): Promise<{ success: boolean; error?: string }> {
+export async function updateStreakConfig(input: StreakConfig): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -343,12 +345,20 @@ export async function updateStreakConfig(input: {
   // `weekend_multiplier` may not exist yet if that migration hasn't run —
   // try with it first, and if the column genuinely doesn't exist, fall
   // back to saving everything else rather than failing the whole save.
-  let { error } = await admin
-    .from("streak_config")
-    .upsert({ ...baseRow, weekend_multiplier: input.weekendMultiplier });
+  let { error } = await admin.from("streak_config").upsert({
+    ...baseRow,
+    weekend_multiplier: input.weekendMultiplier,
+    special_event_enabled: input.specialEventEnabled,
+    special_event_multiplier: input.specialEventMultiplier,
+    special_event_label: input.specialEventLabel,
+  });
   if (error) {
-    const retry = await admin.from("streak_config").upsert(baseRow);
-    error = retry.error;
+    const withWeekend = await admin.from("streak_config").upsert({ ...baseRow, weekend_multiplier: input.weekendMultiplier });
+    error = withWeekend.error;
+    if (error) {
+      const retry = await admin.from("streak_config").upsert(baseRow);
+      error = retry.error;
+    }
   }
 
   if (error) return { success: false, error: "Speichern fehlgeschlagen." };

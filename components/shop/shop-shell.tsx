@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Store, Clock, Sparkles, ShoppingCart, Check, Megaphone, Tag, Star, Zap, Package } from "lucide-react";
+import {
+  ArrowLeft, Store, Clock, Sparkles, ShoppingCart, Check, Megaphone,
+  Star, Zap, Package, TrendingUp, Eye, X,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { TopBar } from "@/components/layout/top-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
@@ -16,25 +20,29 @@ import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { resolveShopCategoryIcon, resolveShopCategoryColor } from "@/lib/shop-category-icons";
 import { RARITY_STYLES, type Rarity } from "@/lib/cases";
 
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
 const RARITY_GLOW: Record<Rarity, string> = {
-  normal:   "shadow-[0_0_20px_rgba(59,130,246,0.25)] hover:shadow-[0_0_30px_rgba(59,130,246,0.4)]",
-  selten:   "shadow-[0_0_20px_rgba(168,85,247,0.25)] hover:shadow-[0_0_30px_rgba(168,85,247,0.4)]",
-  mythisch: "shadow-[0_0_24px_rgba(245,158,11,0.35)] hover:shadow-[0_0_40px_rgba(245,158,11,0.5)]",
-  ultra:    "shadow-[0_0_28px_rgba(239,68,68,0.35)] hover:shadow-[0_0_44px_rgba(239,68,68,0.5)]",
+  normal:   "shadow-[0_0_18px_rgba(59,130,246,0.2)] hover:shadow-[0_0_32px_rgba(59,130,246,0.45)]",
+  selten:   "shadow-[0_0_18px_rgba(168,85,247,0.2)] hover:shadow-[0_0_32px_rgba(168,85,247,0.45)]",
+  mythisch: "shadow-[0_0_24px_rgba(245,158,11,0.3)] hover:shadow-[0_0_44px_rgba(245,158,11,0.55)]",
+  ultra:    "shadow-[0_0_28px_rgba(239,68,68,0.3)] hover:shadow-[0_0_50px_rgba(239,68,68,0.6)]",
 };
 
 const RARITY_CARD_BG: Record<Rarity, string> = {
-  normal:   "bg-gradient-to-b from-blue-500/5 to-transparent",
-  selten:   "bg-gradient-to-b from-purple-500/8 to-transparent",
-  mythisch: "bg-gradient-to-b from-amber-500/12 to-transparent",
-  ultra:    "bg-gradient-to-b from-red-500/12 to-transparent",
+  normal:   "bg-gradient-to-b from-blue-500/8 via-[#0a0a14] to-[#0a0a14]",
+  selten:   "bg-gradient-to-b from-purple-500/10 via-[#0a0a14] to-[#0a0a14]",
+  mythisch: "bg-gradient-to-b from-amber-500/14 via-[#0a0a14] to-[#0a0a14]",
+  ultra:    "bg-gradient-to-b from-red-500/14 via-[#0a0a14] to-[#0a0a14]",
 };
 
 const RARITY_BORDER: Record<Rarity, string> = {
-  normal:   "border-blue-400/30",
-  selten:   "border-purple-400/35",
-  mythisch: "border-amber-400/50",
-  ultra:    "border-red-400/50",
+  normal:   "border-blue-400/25 hover:border-blue-400/50",
+  selten:   "border-purple-400/30 hover:border-purple-400/55",
+  mythisch: "border-amber-400/45 hover:border-amber-400/70",
+  ultra:    "border-red-400/45 hover:border-red-400/70",
 };
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
@@ -44,22 +52,22 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
   amulet: "Amulett", weapon: "Waffe",
 };
 
-function useCountdown(targetIso: string): { label: string; urgent: boolean } {
+// ---------------------------------------------------------------------------
+// Hooks
+// ---------------------------------------------------------------------------
+
+function useCountdown(targetIso: string): { h: number; m: number; s: number; urgent: boolean } {
   const [diff, setDiff] = useState(0);
   useEffect(() => {
-    function tick() {
-      setDiff(Math.max(0, new Date(targetIso).getTime() - Date.now()));
-    }
+    function tick() { setDiff(Math.max(0, new Date(targetIso).getTime() - Date.now())); }
     tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, [targetIso]);
-
-  const h = Math.floor(diff / 3_600_000);
-  const m = Math.floor((diff % 3_600_000) / 60_000);
-  const s = Math.floor((diff % 60_000) / 1000);
   return {
-    label: [h, m, s].map((n) => n.toString().padStart(2, "0")).join(":"),
+    h: Math.floor(diff / 3_600_000),
+    m: Math.floor((diff % 3_600_000) / 60_000),
+    s: Math.floor((diff % 60_000) / 1000),
     urgent: diff < 3_600_000,
   };
 }
@@ -67,19 +75,21 @@ function useCountdown(targetIso: string): { label: string; urgent: boolean } {
 function fmt(n: number) { return new Intl.NumberFormat("de-DE").format(n); }
 
 // ---------------------------------------------------------------------------
-// Shop Card
+// Shop card
 // ---------------------------------------------------------------------------
 
 function ShopCard({
-  listing, credits, gender, onPreview, onPurchased,
+  listing, credits, gender, index, onPreview, onPurchased,
 }: {
   listing: ShopListingEntry;
   credits: number;
   gender: "m" | "w";
+  index: number;
   onPreview: (listing: ShopListingEntry) => void;
   onPurchased: (newCredits: number) => void;
 }) {
   const [buying, setBuying] = useState(false);
+  const [justBought, setJustBought] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
   const soldOut = listing.purchasedByMe >= listing.purchaseLimit;
@@ -97,7 +107,9 @@ function ShopCard({
     setBuying(false);
     if (res.success) {
       sound.win();
+      setJustBought(true);
       onPurchased(res.newCredits ?? credits);
+      setTimeout(() => setJustBought(false), 2000);
     } else {
       sound.error();
       setError(res.error ?? "Fehler.");
@@ -105,129 +117,147 @@ function ShopCard({
   }
 
   return (
-    <div
-      className={`group relative flex flex-col gap-3 rounded-2xl border p-4 transition-all duration-300 ${
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04, duration: 0.4, ease: "easeOut" }}
+      whileHover={{ y: -4 }}
+      className={`group relative flex flex-col gap-3 overflow-hidden rounded-2xl border p-4 transition-all duration-300 ${
         RARITY_BORDER[rarity]
-      } ${RARITY_CARD_BG[rarity]} ${RARITY_GLOW[rarity]} ${
-        soldOut ? "opacity-60" : ""
-      }`}
+      } ${RARITY_CARD_BG[rarity]} ${RARITY_GLOW[rarity]} ${soldOut ? "opacity-60" : ""}`}
     >
-      {/* Mythisch/Ultra glow overlay */}
-      {(rarity === "mythisch" || rarity === "ultra") && (
-        <div
-          className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-          style={{
-            background:
-              rarity === "ultra"
-                ? "radial-gradient(ellipse at 50% 0%, rgba(239,68,68,0.12) 0%, transparent 70%)"
-                : "radial-gradient(ellipse at 50% 0%, rgba(245,158,11,0.12) 0%, transparent 70%)",
-          }}
-        />
-      )}
-      {/* Rainbow border for ultra */}
+      {/* Ambient top glow */}
+      <div
+        className="pointer-events-none absolute -top-8 left-1/2 h-24 w-2/3 -translate-x-1/2 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+        style={{
+          background:
+            rarity === "ultra"   ? "radial-gradient(ellipse, rgba(239,68,68,0.2) 0%, transparent 70%)"
+          : rarity === "mythisch"? "radial-gradient(ellipse, rgba(245,158,11,0.2) 0%, transparent 70%)"
+          : rarity === "selten"  ? "radial-gradient(ellipse, rgba(168,85,247,0.15) 0%, transparent 70%)"
+          : "radial-gradient(ellipse, rgba(59,130,246,0.12) 0%, transparent 70%)",
+        }}
+      />
       {rarity === "ultra" && <span aria-hidden className="rainbow-border" />}
 
-      {/* Badges row */}
-      <div className="flex items-center gap-1.5">
+      {/* Badge row */}
+      <div className="flex flex-wrap items-center gap-1.5">
         {listing.featured && (
           <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-            <Star className="h-2.5 w-2.5" />
-            Featured
+            <Star className="h-2.5 w-2.5 fill-current" /> Featured
           </span>
         )}
         {rarity === "ultra" && (
           <span className="flex items-center gap-1 rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
-            <Zap className="h-2.5 w-2.5" />
-            Ultra Selten
+            <Zap className="h-2.5 w-2.5" /> Ultra
           </span>
         )}
         {rarity === "mythisch" && !listing.featured && (
           <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-            <Sparkles className="h-2.5 w-2.5" />
-            Mythisch
+            <Sparkles className="h-2.5 w-2.5" /> Mythisch
           </span>
         )}
-        {soldOut && (
-          <span className="ml-auto rounded-full bg-zinc-700 px-2 py-0.5 text-[10px] font-bold text-zinc-400">
-            Gekauft
-          </span>
-        )}
+        {soldOut && <span className="ml-auto rounded-full bg-zinc-700 px-2 py-0.5 text-[10px] font-bold text-zinc-400">Gekauft</span>}
       </div>
 
-      <ItemThumbnail3D
-        item={{ id: listing.itemId, name: listing.itemName, rarity: listing.itemRarity, type: listing.itemType, damage: listing.itemDamage }}
-        gender={gender}
-        onClick={() => { sound.click(); onPreview(listing); }}
-      />
+      {/* 3D item preview */}
+      <div className="relative">
+        <ItemThumbnail3D
+          item={{ id: listing.itemId, name: listing.itemName, rarity: listing.itemRarity, type: listing.itemType, damage: listing.itemDamage }}
+          gender={gender}
+          onClick={() => { sound.click(); onPreview(listing); }}
+        />
+        <button
+          onClick={() => { sound.click(); onPreview(listing); }}
+          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-white"
+          title="Vorschau"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
+      {/* Name */}
       <div>
-        <p className={`truncate font-bold ${rarity === "ultra" ? "rainbow-text" : style.text}`}>{listing.itemName}</p>
+        <p className={`truncate text-sm font-bold ${rarity === "ultra" ? "rainbow-text" : style.text}`}>{listing.itemName}</p>
         <p className="mt-0.5 text-[11px] text-zinc-500">{ITEM_TYPE_LABELS[listing.itemType] ?? listing.itemType}</p>
       </div>
 
+      {/* Rarity + stats */}
       <div className="flex flex-wrap items-center gap-1">
         <RarityBadge rarity={listing.itemRarity} />
         <ItemStatBadges
-          damage={listing.itemDamage}
-          armor={listing.itemArmor}
-          perk_type={listing.itemPerkType}
-          perk_magnitude={listing.itemPerkMagnitude}
-          shield_hp={listing.itemShieldHp}
-          shield_regen_cooldown_sec={listing.itemShieldCooldown}
-          itemName={listing.itemName}
-          itemType={listing.itemType}
+          damage={listing.itemDamage} armor={listing.itemArmor}
+          perk_type={listing.itemPerkType} perk_magnitude={listing.itemPerkMagnitude}
+          shield_hp={listing.itemShieldHp} shield_regen_cooldown_sec={listing.itemShieldCooldown}
+          itemName={listing.itemName} itemType={listing.itemType}
         />
       </div>
 
+      {/* Buy row */}
       <div className="mt-auto flex items-center justify-between gap-2">
-        <span className={`text-lg font-extrabold ${canAfford && !soldOut ? "text-purple-300" : "text-zinc-500"}`}>
-          {fmt(listing.priceCr)} {currencyName}
+        <span className={`text-base font-extrabold ${canAfford && !soldOut ? "text-purple-300" : "text-zinc-500"}`}>
+          {fmt(listing.priceCr)}<span className="ml-1 text-xs font-semibold opacity-70">{currencyName}</span>
         </span>
-        <button
+        <motion.button
           onMouseEnter={sound.hover}
           onClick={handleBuy}
           disabled={soldOut || !canAfford || buying}
-          className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all active:scale-95 ${
-            soldOut
-              ? "cursor-not-allowed bg-zinc-700 text-zinc-400"
-              : !canAfford
+          whileTap={soldOut || !canAfford ? {} : { scale: 0.93 }}
+          className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            justBought
+              ? "bg-emerald-600 text-white shadow-[0_0_16px_rgba(52,211,153,0.5)]"
+              : soldOut
                 ? "cursor-not-allowed bg-zinc-800 text-zinc-500"
-                : "bg-purple-600 text-white shadow-[0_0_12px_rgba(147,51,234,0.5)] hover:bg-purple-500 hover:shadow-[0_0_20px_rgba(147,51,234,0.7)]"
+                : !canAfford
+                  ? "cursor-not-allowed bg-zinc-800/80 text-zinc-600"
+                  : "bg-purple-600 text-white shadow-[0_0_14px_rgba(147,51,234,0.5)] hover:bg-purple-500 hover:shadow-[0_0_22px_rgba(147,51,234,0.7)]"
           }`}
         >
-          {buying ? (
-            <span className="animate-pulse">...</span>
-          ) : soldOut ? (
-            <><Check className="h-3.5 w-3.5" />Gekauft</>
-          ) : (
-            <><ShoppingCart className="h-3.5 w-3.5" />Kaufen</>
-          )}
-        </button>
+          <AnimatePresence mode="wait" initial={false}>
+            {buying ? (
+              <motion.span key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="animate-pulse">…</motion.span>
+            ) : justBought ? (
+              <motion.span key="done" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-1.5">
+                <Check className="h-3.5 w-3.5" />Gekauft!
+              </motion.span>
+            ) : soldOut ? (
+              <motion.span key="sold" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5">
+                <Check className="h-3.5 w-3.5" />Besessen
+              </motion.span>
+            ) : (
+              <motion.span key="buy" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5">
+                <ShoppingCart className="h-3.5 w-3.5" />Kaufen
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </motion.button>
       </div>
-      {error && <p className="text-[11px] font-medium text-red-400">{error}</p>}
-    </div>
+      {error && <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] font-medium text-red-400">{error}</motion.p>}
+    </motion.div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Featured Hero Card (for mythisch/ultra items)
+// Featured Hero Banner
 // ---------------------------------------------------------------------------
 
-function FeaturedHeroCard({
-  listing, credits, gender, onPreview, onPurchased,
+function FeaturedHero({
+  listings, credits, gender, onPreview, onPurchased,
 }: {
-  listing: ShopListingEntry;
+  listings: ShopListingEntry[];
   credits: number;
   gender: "m" | "w";
   onPreview: (listing: ShopListingEntry) => void;
   onPurchased: (newCredits: number) => void;
 }) {
+  const [active, setActive] = useState(0);
+  const listing = listings[active];
   const [buying, setBuying] = useState(false);
+  const [justBought, setJustBought] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
+  const { currencyName } = useSiteConfig();
   const soldOut = listing.purchasedByMe >= listing.purchaseLimit;
   const canAfford = credits >= listing.priceCr;
-  const { currencyName } = useSiteConfig();
   const rarity = listing.itemRarity;
   const style = RARITY_STYLES[rarity];
 
@@ -238,45 +268,92 @@ function FeaturedHeroCard({
     sound.click();
     const res = await purchaseShopItem(listing.id);
     setBuying(false);
-    if (res.success) { sound.win(); onPurchased(res.newCredits ?? credits); }
-    else { sound.error(); setError(res.error ?? "Fehler."); }
+    if (res.success) {
+      sound.win();
+      setJustBought(true);
+      onPurchased(res.newCredits ?? credits);
+      setTimeout(() => setJustBought(false), 2000);
+    } else {
+      sound.error();
+      setError(res.error ?? "Fehler.");
+    }
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-amber-400/30 bg-gradient-to-br from-amber-500/10 via-[#0f0e18] to-purple-500/10">
-      {rarity === "ultra" && <span aria-hidden className="rainbow-border" />}
-      <div className="pointer-events-none absolute inset-0" style={{
-        background: rarity === "ultra"
-          ? "radial-gradient(ellipse at 30% 50%, rgba(239,68,68,0.18) 0%, transparent 60%), radial-gradient(ellipse at 70% 50%, rgba(147,51,234,0.14) 0%, transparent 60%)"
-          : "radial-gradient(ellipse at 30% 50%, rgba(245,158,11,0.18) 0%, transparent 60%), radial-gradient(ellipse at 70% 50%, rgba(147,51,234,0.12) 0%, transparent 60%)",
-      }} />
+    <motion.div
+      initial={{ opacity: 0, y: -16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="relative overflow-hidden rounded-3xl border border-amber-400/30"
+    >
+      {/* Animated background */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={listing.id}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.6 }}
+          className="absolute inset-0"
+          style={{
+            background:
+              rarity === "ultra"
+                ? "radial-gradient(ellipse at 25% 50%, rgba(239,68,68,0.2) 0%, transparent 55%), radial-gradient(ellipse at 75% 30%, rgba(147,51,234,0.15) 0%, transparent 55%), #050410"
+                : "radial-gradient(ellipse at 25% 50%, rgba(245,158,11,0.18) 0%, transparent 55%), radial-gradient(ellipse at 75% 30%, rgba(147,51,234,0.12) 0%, transparent 55%), #050410",
+          }}
+        />
+      </AnimatePresence>
 
-      <div className="relative z-10 flex flex-col items-center gap-4 p-6 sm:flex-row sm:items-center sm:gap-8">
-        <div className="flex-shrink-0">
-          <ItemThumbnail3D
-            item={{ id: listing.itemId, name: listing.itemName, rarity: listing.itemRarity, type: listing.itemType, damage: listing.itemDamage }}
-            gender={gender}
-            onClick={() => { sound.click(); onPreview(listing); }}
+      {rarity === "ultra" && <span aria-hidden className="rainbow-border" />}
+
+      {/* Particle dots (pure CSS) */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        {[12, 28, 45, 62, 78].map((x, i) => (
+          <div
+            key={i}
+            className="absolute h-1 w-1 rounded-full bg-white/20 animate-pulse"
+            style={{ left: `${x}%`, top: `${20 + i * 15}%`, animationDelay: `${i * 0.4}s` }}
           />
+        ))}
+      </div>
+
+      <div className="relative z-10 flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:gap-8 lg:p-8">
+        {/* Thumbnail */}
+        <div className="flex flex-shrink-0 items-center justify-center sm:w-48">
+          <motion.div
+            key={listing.id}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.4 }}
+          >
+            <ItemThumbnail3D
+              item={{ id: listing.itemId, name: listing.itemName, rarity: listing.itemRarity, type: listing.itemType, damage: listing.itemDamage }}
+              gender={gender}
+              onClick={() => { sound.click(); onPreview(listing); }}
+            />
+          </motion.div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-3 text-center sm:text-left">
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-            <span className="flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-300">
-              <Star className="h-3.5 w-3.5" />
-              Heutiger Highlight
+        {/* Info */}
+        <div className="flex flex-1 flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1.5 rounded-full bg-amber-500/25 px-3 py-1 text-xs font-bold text-amber-200">
+              <Star className="h-3.5 w-3.5 fill-current" />
+              Heutiges Highlight
             </span>
             <RarityBadge rarity={listing.itemRarity} />
           </div>
 
-          <div>
-            <h3 className={`text-2xl font-extrabold ${rarity === "ultra" ? "rainbow-text" : style.text}`}>
-              {listing.itemName}
-            </h3>
-            <p className="mt-1 text-sm text-zinc-400">{ITEM_TYPE_LABELS[listing.itemType] ?? listing.itemType}</p>
-          </div>
+          <AnimatePresence mode="wait">
+            <motion.div key={listing.id} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+              <h2 className={`text-2xl font-extrabold sm:text-3xl ${rarity === "ultra" ? "rainbow-text" : style.text}`}>
+                {listing.itemName}
+              </h2>
+              <p className="mt-1 text-sm text-zinc-400">{ITEM_TYPE_LABELS[listing.itemType] ?? listing.itemType}</p>
+            </motion.div>
+          </AnimatePresence>
 
-          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:justify-start">
+          <div className="flex flex-wrap gap-1.5">
             <ItemStatBadges
               damage={listing.itemDamage} armor={listing.itemArmor}
               perk_type={listing.itemPerkType} perk_magnitude={listing.itemPerkMagnitude}
@@ -285,26 +362,79 @@ function FeaturedHeroCard({
             />
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:justify-start">
-            <span className="text-3xl font-extrabold text-purple-300">
-              {fmt(listing.priceCr)} <span className="text-xl">{currencyName}</span>
-            </span>
-            <button
+          <div className="flex flex-wrap items-center gap-4">
+            <div>
+              <p className="text-[11px] text-zinc-500">Preis</p>
+              <p className="text-3xl font-extrabold text-purple-300">
+                {fmt(listing.priceCr)}<span className="ml-1 text-lg font-semibold opacity-70">{currencyName}</span>
+              </p>
+            </div>
+            <motion.button
               onMouseEnter={sound.hover}
               onClick={handleBuy}
               disabled={soldOut || !canAfford || buying}
-              className={`flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-black uppercase tracking-wide transition-all active:scale-95 ${
-                soldOut
-                  ? "cursor-not-allowed bg-zinc-700 text-zinc-400"
-                  : !canAfford
+              whileTap={soldOut || !canAfford ? {} : { scale: 0.95 }}
+              className={`flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-black uppercase tracking-widest transition-all ${
+                justBought
+                  ? "bg-emerald-600 text-white shadow-[0_0_20px_rgba(52,211,153,0.5)]"
+                  : soldOut
                     ? "cursor-not-allowed bg-zinc-800 text-zinc-500"
-                    : "bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-[0_0_24px_rgba(147,51,234,0.6)] hover:shadow-[0_0_36px_rgba(147,51,234,0.8)]"
+                    : !canAfford
+                      ? "cursor-not-allowed bg-zinc-800/80 text-zinc-600"
+                      : "bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-[0_0_28px_rgba(147,51,234,0.6)] hover:shadow-[0_0_40px_rgba(147,51,234,0.8)]"
               }`}
             >
-              {buying ? "..." : soldOut ? <><Check className="h-4 w-4" />Gekauft</> : <><ShoppingCart className="h-4 w-4" />Jetzt kaufen</>}
-            </button>
+              {buying ? "…" : justBought ? <><Check className="h-4 w-4" />Gekauft!</> : soldOut ? <><Check className="h-4 w-4" />Besessen</> : <><ShoppingCart className="h-4 w-4" />Jetzt kaufen</>}
+            </motion.button>
           </div>
-          {error && <p className="text-sm font-medium text-red-400">{error}</p>}
+          {error && <p className="text-sm text-red-400">{error}</p>}
+        </div>
+      </div>
+
+      {/* Tab selectors if multiple featured */}
+      {listings.length > 1 && (
+        <div className="relative z-10 flex justify-center gap-2 pb-4">
+          {listings.map((l, i) => (
+            <button
+              key={l.id}
+              onClick={() => { sound.click(); setActive(i); setJustBought(false); setError(null); }}
+              className={`h-2 rounded-full transition-all duration-300 ${i === active ? "w-8 bg-purple-400" : "w-2 bg-zinc-700 hover:bg-zinc-500"}`}
+            />
+          ))}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Countdown display
+// ---------------------------------------------------------------------------
+
+function CountdownDisplay({ resetsAt }: { resetsAt: string }) {
+  const { h, m, s, urgent } = useCountdown(resetsAt);
+  const parts = [
+    { val: h, label: "H" },
+    { val: m, label: "M" },
+    { val: s, label: "S" },
+  ];
+  return (
+    <div className={`flex items-center gap-3 rounded-2xl border px-4 py-2.5 transition-colors ${
+      urgent ? "border-red-500/40 bg-red-500/10" : "border-white/10 bg-white/[0.03]"
+    }`}>
+      <Clock className={`h-4 w-4 flex-shrink-0 ${urgent ? "text-red-400" : "text-purple-400"}`} />
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-zinc-500">Reset in</span>
+        <div className="flex items-center gap-1">
+          {parts.map(({ val, label }, i) => (
+            <span key={label} className="flex items-end gap-0.5">
+              <span className={`font-mono text-lg font-extrabold tabular-nums ${urgent ? "text-red-300" : "text-purple-300"}`}>
+                {val.toString().padStart(2, "0")}
+              </span>
+              <span className="mb-0.5 text-[10px] text-zinc-500">{label}</span>
+              {i < 2 && <span className={`mb-1 text-sm font-bold ${urgent ? "text-red-400" : "text-purple-400"}`}>:</span>}
+            </span>
+          ))}
         </div>
       </div>
     </div>
@@ -315,20 +445,37 @@ function FeaturedHeroCard({
 // Section Header
 // ---------------------------------------------------------------------------
 
-function SectionHeader({ icon: Icon, label, colorClass }: { icon: typeof Store; label: string; colorClass: string }) {
+function SectionHeader({
+  icon: Icon, label, colorClass, count,
+}: {
+  icon: typeof Store;
+  label: string;
+  colorClass: string;
+  count?: number;
+}) {
   return (
-    <div className="flex items-center gap-3">
-      <div className={`flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 ${colorClass}`}>
-        <Icon className="h-4 w-4" />
+    <motion.div
+      initial={{ opacity: 0, x: -12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.35 }}
+      className="flex items-center gap-3"
+    >
+      <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 shadow-[0_0_12px_rgba(0,0,0,0.3)] ${colorClass}`}>
+        <Icon className="h-5 w-5" />
       </div>
-      <h2 className={`text-base font-bold ${colorClass}`}>{label}</h2>
-      <div className="h-px flex-1 bg-white/5" />
-    </div>
+      <h2 className={`text-lg font-extrabold ${colorClass}`}>{label}</h2>
+      {count !== undefined && (
+        <span className="rounded-full bg-white/5 px-2.5 py-0.5 text-xs font-semibold text-zinc-400">
+          {count}
+        </span>
+      )}
+      <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+    </motion.div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Main shell
+// Main shop shell
 // ---------------------------------------------------------------------------
 
 interface ShopShellProps {
@@ -356,54 +503,48 @@ export function ShopShell({
   useRealtimeProfile((row) => { if (typeof row.credits === "number") setCredits(row.credits); });
   const [rarityFilter, setRarityFilter] = useState<Rarity | "all">("all");
   const [previewListing, setPreviewListing] = useState<ShopListingEntry | null>(null);
+  const [motdDismissed, setMotdDismissed] = useState(false);
   const sound = useSoundManager();
   const router = useRouter();
-  const { label: countdown, urgent } = useCountdown(resetsAt);
+  const { currencyName } = useSiteConfig();
 
-  // Split into featured hero items (mythisch/ultra + featured flag) vs. rest
-  const heroItems = useMemo(() =>
-    listings.filter((l) => l.featured && (l.itemRarity === "mythisch" || l.itemRarity === "ultra"))
-      .slice(0, 2),
+  // Split featured hero items (mythisch/ultra + featured)
+  const heroItems = useMemo(
+    () => listings.filter((l) => l.featured && (l.itemRarity === "mythisch" || l.itemRarity === "ultra")).slice(0, 3),
     [listings]
   );
-
-  // Rarity filter options that are actually present
-  const availableRarities = useMemo(() => {
-    const set = new Set(listings.map((l) => l.itemRarity));
-    return (["ultra", "mythisch", "selten", "normal"] as Rarity[]).filter((r) => set.has(r));
-  }, [listings]);
-
-  // Items after rarity filter, excluding hero items so they don't duplicate
   const heroIds = useMemo(() => new Set(heroItems.map((l) => l.id)), [heroItems]);
-  const filteredListings = useMemo(() =>
-    listings.filter((l) => !heroIds.has(l.id) && (rarityFilter === "all" || l.itemRarity === rarityFilter)),
+
+  const availableRarities = useMemo(() => {
+    const set = new Set(listings.filter((l) => !heroIds.has(l.id)).map((l) => l.itemRarity));
+    return (["ultra", "mythisch", "selten", "normal"] as Rarity[]).filter((r) => set.has(r));
+  }, [listings, heroIds]);
+
+  const filteredListings = useMemo(
+    () => listings.filter((l) => !heroIds.has(l.id) && (rarityFilter === "all" || l.itemRarity === rarityFilter)),
     [listings, heroIds, rarityFilter]
   );
 
-  // Group by category (DB categories first, sorted by sort_order; uncategorized last)
-  type Section = { id: string | null; name: string; icon: string | null; color: string | null; items: ShopListingEntry[] };
+  // Group by category
+  type Section = { id: string | null; name: string; icon: string | null; color: string | null; items: ShopListingEntry[]; sortOrder: number };
   const sections = useMemo((): Section[] => {
-    const categoryOrder = categories.map((c) => c.id);
+    const catOrder = categories.map((c) => c.id);
     const byCategory = new Map<string | null, ShopListingEntry[]>();
     for (const l of filteredListings) {
-      const key = l.categoryId;
-      const list = byCategory.get(key) ?? [];
+      const list = byCategory.get(l.categoryId) ?? [];
       list.push(l);
-      byCategory.set(key, list);
+      byCategory.set(l.categoryId, list);
     }
-
     const result: Section[] = [];
-    // DB categories in sort_order
-    for (const catId of categoryOrder) {
+    for (const catId of catOrder) {
       const items = byCategory.get(catId);
-      if (!items || items.length === 0) continue;
+      if (!items?.length) continue;
       const cat = categories.find((c) => c.id === catId)!;
-      result.push({ id: catId, name: cat.name, icon: cat.icon, color: cat.color, items });
+      result.push({ id: catId, name: cat.name, icon: cat.icon, color: cat.color, items, sortOrder: cat.sortOrder });
     }
-    // Uncategorized
     const uncategorized = byCategory.get(null);
-    if (uncategorized && uncategorized.length > 0) {
-      result.push({ id: null, name: "Weitere Items", icon: "Tag", color: "purple", items: uncategorized });
+    if (uncategorized?.length) {
+      result.push({ id: null, name: "Weitere Items", icon: "Package", color: "purple", items: uncategorized, sortOrder: 9999 });
     }
     return result;
   }, [filteredListings, categories]);
@@ -413,161 +554,192 @@ export function ShopShell({
     router.refresh();
   }
 
+  const totalListings = listings.length;
+
   return (
     <div className="flex flex-1 flex-col">
       <TopBar credits={credits} streakDays={streakDays} onCreditsChange={setCredits} isAdmin={isAdmin} />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-        <Link
-          href="/"
-          onMouseEnter={sound.hover}
-          onClick={sound.click}
-          className="mb-6 inline-flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-200"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Zurück
-        </Link>
-
-        {/* Header */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="heading-shimmer flex items-center gap-2.5 text-3xl font-extrabold">
-              <Store className="heading-icon-bob h-7 w-7 text-purple-400" />
-              Tages-Shop
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              {listings.length} Items verfügbar · täglich neue Auswahl
-            </p>
-          </div>
-          <div className={`flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm transition-colors ${
-            urgent ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-white/10 bg-white/5 text-zinc-300"
-          }`}>
-            <Clock className={`h-4 w-4 ${urgent ? "text-red-400" : "text-purple-400"}`} />
-            <span className="text-zinc-400">Neuer Shop in</span>
-            <span className={`font-mono text-base font-bold ${urgent ? "text-red-300" : "text-purple-300"}`}>
-              {countdown}
-            </span>
+      {/* Hero banner area */}
+      <div className="relative overflow-hidden border-b border-white/5 bg-[#030305]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(147,51,234,0.12)_0%,transparent_60%)]" />
+        <div className="relative mx-auto w-full max-w-6xl px-4 py-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Link
+                href="/"
+                onMouseEnter={sound.hover}
+                onClick={sound.click}
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-500 transition-colors hover:border-white/20 hover:text-zinc-200"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Zurück
+              </Link>
+              <div>
+                <h1 className="heading-shimmer flex items-center gap-2 text-2xl font-extrabold sm:text-3xl">
+                  <Store className="heading-icon-bob h-6 w-6 text-purple-400" />
+                  Tages-Shop
+                </h1>
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  {totalListings} Items · täglich neue Auswahl
+                </p>
+              </div>
+            </div>
+            <CountdownDisplay resetsAt={resetsAt} />
           </div>
         </div>
+      </div>
 
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
         {/* MOTD Banner */}
-        {motd && (
-          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-transparent px-4 py-3">
-            <Megaphone className="mt-0.5 h-4 w-4 flex-shrink-0 text-purple-400" />
-            <p className="text-sm text-purple-200">{motd}</p>
-          </div>
-        )}
+        <AnimatePresence>
+          {motd && !motdDismissed && (
+            <motion.div
+              initial={{ opacity: 0, y: -10, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -10, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="mb-6 overflow-hidden"
+            >
+              <div className="flex items-start gap-3 rounded-2xl border border-purple-500/30 bg-gradient-to-r from-purple-500/15 via-purple-500/5 to-transparent px-4 py-3 shadow-[0_0_20px_rgba(147,51,234,0.1)]">
+                <Megaphone className="mt-0.5 h-4 w-4 flex-shrink-0 text-purple-400" />
+                <p className="flex-1 text-sm text-purple-200">{motd}</p>
+                <button onClick={() => setMotdDismissed(true)} className="text-zinc-600 hover:text-zinc-300">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {listings.length === 0 ? (
-          <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-20 text-center">
-            <Package className="h-12 w-12 text-zinc-700" />
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex flex-col items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] px-4 py-24 text-center"
+          >
+            <Package className="h-14 w-14 text-zinc-700" />
             <div>
-              <p className="text-base font-semibold text-zinc-400">Shop ist heute leer</p>
+              <p className="text-lg font-semibold text-zinc-400">Shop ist heute leer</p>
               <p className="mt-1 text-sm text-zinc-600">Schau morgen wieder vorbei.</p>
             </div>
-          </div>
+          </motion.div>
         ) : (
-          <div className="flex flex-col gap-10">
-            {/* Featured Hero Section */}
+          <div className="flex flex-col gap-12">
+
+            {/* Featured Hero */}
             {heroItems.length > 0 && (
               <div className="flex flex-col gap-4">
-                <SectionHeader icon={Sparkles} label="Heutiges Highlight" colorClass="text-amber-300" />
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {heroItems.map((listing) => (
-                    <FeaturedHeroCard
-                      key={listing.id}
-                      listing={listing}
-                      credits={credits}
-                      gender={gender}
-                      onPreview={setPreviewListing}
-                      onPurchased={handlePurchased}
-                    />
-                  ))}
-                </div>
+                <SectionHeader icon={Sparkles} label="Heutiger Highlight" colorClass="text-amber-300" />
+                <FeaturedHero
+                  listings={heroItems}
+                  credits={credits}
+                  gender={gender}
+                  onPreview={setPreviewListing}
+                  onPurchased={handlePurchased}
+                />
               </div>
             )}
 
-            {/* Rarity Filter */}
-            {availableRarities.length > 1 && (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => { sound.click(); setRarityFilter("all"); }}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    rarityFilter === "all" ? "border-purple-400/60 bg-purple-500/20 text-purple-200" : "border-white/10 text-zinc-500 hover:border-white/20"
-                  }`}
-                >
-                  Alle
-                </button>
-                {availableRarities.map((r) => {
-                  const s = RARITY_STYLES[r];
-                  return (
+            {/* Stats bar */}
+            {(filteredListings.length > 0 || availableRarities.length > 0) && (
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                {/* Rarity filter pills */}
+                {availableRarities.length > 1 && (
+                  <div className="flex flex-wrap gap-2">
                     <button
-                      key={r}
-                      onClick={() => { sound.click(); setRarityFilter(rarityFilter === r ? "all" : r); }}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        rarityFilter === r ? `${s.border} ${s.bg} ${s.text}` : "border-white/10 text-zinc-500 hover:border-white/20"
+                      onClick={() => { sound.click(); setRarityFilter("all"); }}
+                      className={`rounded-full border px-4 py-1.5 text-xs font-bold transition-all ${
+                        rarityFilter === "all" ? "border-purple-400/60 bg-purple-500/20 text-purple-200 shadow-[0_0_10px_rgba(147,51,234,0.3)]" : "border-white/10 text-zinc-500 hover:border-white/20 hover:text-zinc-300"
                       }`}
                     >
-                      {r === "normal" ? "Normal" : r === "selten" ? "Selten" : r === "mythisch" ? "Mythisch" : "Ultra"}
+                      Alle <span className="ml-1 opacity-60">({filteredListings.length})</span>
                     </button>
-                  );
-                })}
+                    {availableRarities.map((r) => {
+                      const s = RARITY_STYLES[r];
+                      const count = listings.filter((l) => !heroIds.has(l.id) && l.itemRarity === r).length;
+                      return (
+                        <button
+                          key={r}
+                          onClick={() => { sound.click(); setRarityFilter(rarityFilter === r ? "all" : r); }}
+                          className={`rounded-full border px-4 py-1.5 text-xs font-bold transition-all ${
+                            rarityFilter === r ? `${s.border} ${s.bg} ${s.text} shadow-[0_0_10px_rgba(0,0,0,0.3)]` : "border-white/10 text-zinc-500 hover:border-white/20 hover:text-zinc-300"
+                          }`}
+                        >
+                          {r === "normal" ? "Normal" : r === "selten" ? "Selten" : r === "mythisch" ? "Mythisch" : "Ultra"}
+                          <span className="ml-1 opacity-60">({count})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-xs text-zinc-600">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  <span>{filteredListings.length} Items</span>
+                </div>
               </div>
             )}
 
             {/* Category Sections */}
             {sections.length === 0 && filteredListings.length === 0 && (
-              <div className="py-8 text-center text-sm text-zinc-500">
+              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-10 text-center text-sm text-zinc-500">
                 Keine Items für diesen Filter.
-              </div>
+              </motion.p>
             )}
-            {sections.map((section) => {
+
+            {sections.map((section, si) => {
               const CatIcon = resolveShopCategoryIcon(section.icon);
               const catColor = resolveShopCategoryColor(section.color);
               return (
-                <div key={section.id ?? "uncategorized"} className="flex flex-col gap-4">
-                  <SectionHeader
-                    icon={CatIcon}
-                    label={section.name}
-                    colorClass={catColor.text}
-                  />
+                <motion.div
+                  key={section.id ?? "uncategorized"}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: si * 0.08, duration: 0.4 }}
+                  className="flex flex-col gap-5"
+                >
+                  <SectionHeader icon={CatIcon} label={section.name} colorClass={catColor.text} count={section.items.length} />
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {section.items.map((listing) => (
+                    {section.items.map((listing, i) => (
                       <ShopCard
                         key={listing.id}
                         listing={listing}
                         credits={credits}
                         gender={gender}
+                        index={i}
                         onPreview={setPreviewListing}
                         onPurchased={handlePurchased}
                       />
                     ))}
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
         )}
       </main>
 
-      {previewListing && (
-        <ItemPreviewModal
-          item={{
-            id: previewListing.itemId,
-            name: previewListing.itemName,
-            rarity: previewListing.itemRarity,
-            type: previewListing.itemType,
-            damage: previewListing.itemDamage,
-            armor: previewListing.itemArmor,
-            perk_type: previewListing.itemPerkType,
-            perk_magnitude: previewListing.itemPerkMagnitude,
-            shield_hp: previewListing.itemShieldHp,
-            shield_regen_cooldown_sec: previewListing.itemShieldCooldown,
-          }}
-          gender={gender}
-          onClose={() => setPreviewListing(null)}
-        />
-      )}
+      {/* Preview modal */}
+      <AnimatePresence>
+        {previewListing && (
+          <ItemPreviewModal
+            item={{
+              id: previewListing.itemId,
+              name: previewListing.itemName,
+              rarity: previewListing.itemRarity,
+              type: previewListing.itemType,
+              damage: previewListing.itemDamage,
+              armor: previewListing.itemArmor,
+              perk_type: previewListing.itemPerkType,
+              perk_magnitude: previewListing.itemPerkMagnitude,
+              shield_hp: previewListing.itemShieldHp,
+              shield_regen_cooldown_sec: previewListing.itemShieldCooldown,
+            }}
+            gender={gender}
+            onClose={() => setPreviewListing(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

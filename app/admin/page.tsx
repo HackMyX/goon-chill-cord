@@ -10,6 +10,7 @@ import { getKillStreakConfig } from "@/lib/actions/kill-streak";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import { getCharacterConfig } from "@/lib/actions/character-config";
 import { getSiteConfig } from "@/lib/actions/site-config";
+import { getModPermissions } from "@/lib/actions/mod";
 import { CASE_GROUPS } from "@/lib/cases";
 import {
   AdminShell,
@@ -124,6 +125,7 @@ export default async function AdminPage() {
     worldSessionConfig,
     characterConfig,
     siteConfig,
+    modPermissions,
   ] = await Promise.all([
     admin
       .from("audit_logs")
@@ -147,6 +149,7 @@ export default async function AdminPage() {
     getWorldSessionConfig(),
     getCharacterConfig(),
     getSiteConfig(),
+    getModPermissions(),
   ]);
 
   // Keep case tiers in the same order as CASE_GROUPS (standard before premium,
@@ -180,6 +183,7 @@ export default async function AdminPage() {
       worldSessionConfig={worldSessionConfig}
       characterConfig={characterConfig}
       siteConfig={siteConfig}
+      modPermissions={modPermissions}
     />
   );
 }

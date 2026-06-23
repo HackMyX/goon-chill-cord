@@ -771,7 +771,6 @@ export async function purchaseShopItem(listingId: string): Promise<ShopPurchaseR
 
 export interface AdminShopListing extends ShopListingEntry {
   shopDate: string;
-  categoryName: string | null;
 }
 
 async function requireAdmin(): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -822,8 +821,10 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
 
   const categoryIds = Array.from(new Set((data ?? []).map((l) => l.category_id).filter((id): id is string => !!id)));
   const { data: categoryRows } =
-    categoryIds.length > 0 ? await admin.from("shop_categories").select("id, name").in("id", categoryIds) : { data: [] };
-  const categoryNames = new Map((categoryRows ?? []).map((c: { id: string; name: string }) => [c.id, c.name]));
+    categoryIds.length > 0
+      ? await admin.from("shop_categories").select("id, name, icon, color, sort_order").in("id", categoryIds)
+      : { data: [] as { id: string; name: string; icon: string; color: string; sort_order: number }[] };
+  const categoryMeta = new Map((categoryRows ?? []).map((c: { id: string; name: string; icon: string; color: string; sort_order: number }) => [c.id, c]));
 
   return (data ?? [])
     .filter((l) => l.item)
@@ -852,7 +853,10 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
         source: l.source as "manual" | "auto",
         purchasedByMe: 0,
         categoryId: l.category_id,
-        categoryName: l.category_id ? categoryNames.get(l.category_id) ?? null : null,
+        categoryName: l.category_id ? categoryMeta.get(l.category_id)?.name ?? null : null,
+        categoryIcon: l.category_id ? categoryMeta.get(l.category_id)?.icon ?? null : null,
+        categoryColor: l.category_id ? categoryMeta.get(l.category_id)?.color ?? null : null,
+        categorySortOrder: l.category_id ? categoryMeta.get(l.category_id)?.sort_order ?? 999 : 999,
         shopDate: l.shop_date,
       };
     });

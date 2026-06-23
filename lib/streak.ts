@@ -29,6 +29,14 @@ export interface StreakConfig {
    * and Sunday — a standing "weekend event" admins can tune or disable
    * (1.0 = off) without having to remember to flip anything manually. */
   weekendMultiplier: number;
+  /** Temporary event: while enabled, all daily rewards are multiplied by
+   * `specialEventMultiplier` — e.g. 2× for a double-XP event. Stacks with
+   * the weekend multiplier (both apply). */
+  specialEventEnabled: boolean;
+  specialEventMultiplier: number;
+  /** Short label shown in the streak UI when the special event is active
+   * — e.g. "Doppelte Credits 🎉" */
+  specialEventLabel: string;
 }
 
 export const DEFAULT_STREAK_CONFIG: StreakConfig = {
@@ -41,6 +49,9 @@ export const DEFAULT_STREAK_CONFIG: StreakConfig = {
   milestoneBonus: 500,
   resetOnMiss: true,
   weekendMultiplier: 1.5,
+  specialEventEnabled: false,
+  specialEventMultiplier: 2.0,
+  specialEventLabel: "Sonder-Event",
 };
 
 export interface StreakRewardResult {
@@ -69,7 +80,10 @@ export function computeStreakReward(
   const growth = config.dailyIncrement * Math.max(0, newStreak - 1);
   const baseReward = Math.min(config.baseReward + growth, config.maxReward);
   const isWeekend = now.getUTCDay() === 0 || now.getUTCDay() === 6;
-  const reward = isWeekend ? Math.round(baseReward * config.weekendMultiplier) : baseReward;
+  let reward = isWeekend ? Math.round(baseReward * config.weekendMultiplier) : baseReward;
+  if (config.specialEventEnabled && config.specialEventMultiplier > 1) {
+    reward = Math.round(reward * config.specialEventMultiplier);
+  }
   const isMilestone = config.milestoneInterval > 0 && newStreak % config.milestoneInterval === 0;
   const milestoneBonus = isMilestone ? config.milestoneBonus : 0;
   return {

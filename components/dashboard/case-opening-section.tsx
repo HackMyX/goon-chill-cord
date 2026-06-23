@@ -379,11 +379,13 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
 
   const maxBatch = Math.min(group.standard.multiOpenMax ?? 10, group.premium.multiOpenMax ?? 10);
 
-  // During a live spin, only the button that STARTED the spin becomes the
-  // "Sofort anzeigen" skip button — the other tier's button is hidden entirely
-  // so the user can't accidentally trigger a skip-fee for the wrong tier.
-  const showStandard = !isSpinning || activeTier?.id === group.standard.id;
-  const showPremium  = !isSpinning || activeTier?.id === group.premium.id;
+  // From the moment the user clicks (pending) the layout switches immediately:
+  // the other tier hides and the clicked tier shows "⚡ SOFORT" (disabled
+  // until the server responds and spinning starts). This means the
+  // pending→spinning transition only changes disabled→enabled — never layout.
+  const inFlight = isSpinning || phase === "pending";
+  const showStandard = !inFlight || activeTier?.id === group.standard.id;
+  const showPremium  = !inFlight || activeTier?.id === group.premium.id;
 
   return (
     <section className="mx-auto w-full max-w-4xl px-4 py-10">
@@ -547,7 +549,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
           >
             {group.standard.enabled === false
               ? "DEAKTIVIERT"
-              : isSpinning
+              : inFlight
                 ? `⚡ SOFORT${(group.standard.previewCost ?? 0) > 0 ? ` (${(group.standard.previewCost ?? 0).toLocaleString("de-DE")} ${currencyName})` : ""}`
                 : batchMode
                   ? `${batchCount}× ${group.standard.label} — ${(group.standard.price * batchCount).toLocaleString("de-DE")} ${currencyName}`
@@ -575,13 +577,13 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
               <Zap className="h-4 w-4 text-amber-300" />
               {group.premium.enabled === false
                 ? "DEAKTIVIERT"
-                : isSpinning
+                : inFlight
                   ? `⚡ SOFORT${(group.premium.previewCost ?? 0) > 0 ? ` (${(group.premium.previewCost ?? 0).toLocaleString("de-DE")} ${currencyName})` : ""}`
                   : batchMode
                     ? `${batchCount}× ${group.premium.label} — ${(group.premium.price * batchCount).toLocaleString("de-DE")} ${currencyName}`
                     : `${group.premium.label} — ${group.premium.price.toLocaleString("de-DE")} ${currencyName}`}
             </span>
-            {group.premium.sublabel && group.premium.enabled !== false && !isSpinning && !batchMode && (
+            {group.premium.sublabel && group.premium.enabled !== false && !inFlight && !batchMode && (
               <span className="block text-[11px] font-semibold tracking-widest text-zinc-400">{group.premium.sublabel}</span>
             )}
           </button>

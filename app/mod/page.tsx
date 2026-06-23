@@ -1,0 +1,44 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { isModerator } from "@/lib/admin";
+import { ModShell } from "@/components/mod/mod-shell";
+import {
+  getModPermissions,
+  getModActions,
+  getMyModActions,
+  getModUsers,
+  getModTickets,
+} from "@/lib/actions/mod";
+
+export default async function ModPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, username")
+    .eq("id", user.id)
+    .single();
+
+  if (!isModerator(profile)) redirect("/");
+
+  const [permissions, users, tickets, recentActions, myActions] = await Promise.all([
+    getModPermissions(),
+    getModUsers(),
+    getModTickets(),
+    getModActions(50),
+    getMyModActions(20),
+  ]);
+
+  return (
+    <ModShell
+      modUsername={profile?.username ?? "Moderator"}
+      permissions={permissions}
+      users={users}
+      tickets={tickets}
+      recentActions={recentActions}
+      myActions={myActions}
+    />
+  );
+}

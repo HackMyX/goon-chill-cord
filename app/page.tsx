@@ -5,7 +5,7 @@ import { DiscordLoginButton } from "@/components/auth/discord-login-button";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { getCaseConfig } from "@/lib/cases-config";
 import { type Rarity } from "@/lib/cases";
-import { isAdmin } from "@/lib/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
 
@@ -112,6 +112,7 @@ export default async function Home() {
       caseGroups={caseGroups}
       caseGroupPreviews={caseGroupPreviews}
       isAdmin={isAdmin(profile)}
+      isModerator={isModerator(profile)}
     />
   );
 }
