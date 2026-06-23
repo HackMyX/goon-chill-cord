@@ -11,6 +11,8 @@ export interface ShopSettings {
   autoGeneratePriceMultiplierMin: number;
   autoGeneratePriceMultiplierMax: number;
   autoGenerateItemTypes: string[];
+  motd: string | null;
+  motdEnabled: boolean;
 }
 
 export const DEFAULT_SHOP_SETTINGS: ShopSettings = {
@@ -18,6 +20,8 @@ export const DEFAULT_SHOP_SETTINGS: ShopSettings = {
   autoGenerateItemCount: 8,
   autoGeneratePriceMultiplierMin: 3,
   autoGeneratePriceMultiplierMax: 8,
+  motd: null,
+  motdEnabled: false,
   autoGenerateItemTypes: [
     "hat",
     "jacket",

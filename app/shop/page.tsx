@@ -17,7 +17,7 @@ export default async function ShopPage() {
     .eq("id", user.id)
     .single();
 
-  const { listings, resetsAt } = await getTodayShop();
+  const { listings, resetsAt, motd, motdEnabled, categories } = await getTodayShop();
 
   return (
     <ShopShell
@@ -26,6 +26,8 @@ export default async function ShopPage() {
       gender={(profile?.gender as "m" | "w") ?? "m"}
       listings={listings}
       resetsAt={resetsAt}
+      motd={motdEnabled ? (motd ?? null) : null}
+      categories={categories}
       isAdmin={isAdmin(profile)}
     />
   );

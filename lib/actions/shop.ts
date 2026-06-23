@@ -250,6 +250,8 @@ interface ShopSettingsRow {
   auto_generate_price_multiplier_min: number;
   auto_generate_price_multiplier_max: number;
   auto_generate_item_types: string[] | null;
+  motd: string | null;
+  motd_enabled: boolean | null;
 }
 
 function rowToSettings(row: ShopSettingsRow): ShopSettings {
@@ -259,6 +261,8 @@ function rowToSettings(row: ShopSettingsRow): ShopSettings {
     autoGeneratePriceMultiplierMin: row.auto_generate_price_multiplier_min,
     autoGeneratePriceMultiplierMax: row.auto_generate_price_multiplier_max,
     autoGenerateItemTypes: row.auto_generate_item_types ?? DEFAULT_SHOP_SETTINGS.autoGenerateItemTypes,
+    motd: row.motd ?? null,
+    motdEnabled: row.motd_enabled ?? false,
   };
 }
 
@@ -270,7 +274,7 @@ export async function getShopSettings(): Promise<ShopSettings> {
   const { data, error } = await admin
     .from("shop_settings")
     .select(
-      "auto_generate_enabled, auto_generate_item_count, auto_generate_price_multiplier_min, auto_generate_price_multiplier_max, auto_generate_item_types"
+      "auto_generate_enabled, auto_generate_item_count, auto_generate_price_multiplier_min, auto_generate_price_multiplier_max, auto_generate_item_types, motd, motd_enabled"
     )
     .eq("id", "default")
     .single();
@@ -313,6 +317,8 @@ export async function updateShopSettings(
     auto_generate_price_multiplier_min: input.autoGeneratePriceMultiplierMin,
     auto_generate_price_multiplier_max: input.autoGeneratePriceMultiplierMax,
     auto_generate_item_types: input.autoGenerateItemTypes,
+    motd: input.motd ?? null,
+    motd_enabled: input.motdEnabled,
     updated_at: new Date().toISOString(),
   });
 
@@ -539,11 +545,31 @@ export interface ShopListingEntry {
   source: "manual" | "auto";
   purchasedByMe: number;
   categoryId: string | null;
+  categoryName: string | null;
+  categoryIcon: string | null;
+  categoryColor: string | null;
+  categorySortOrder: number;
+}
+
+export interface ShopCategoryMeta {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  sortOrder: number;
+}
+
+export interface TodayShopResult {
+  listings: ShopListingEntry[];
+  resetsAt: string;
+  motd: string | null;
+  motdEnabled: boolean;
+  categories: ShopCategoryMeta[];
 }
 
 /** The player-facing read — also the trigger point for that day's
  * auto-generation (see ensureShopGenerated above). */
-export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; resetsAt: string }> {
+export async function getTodayShop(): Promise<TodayShopResult> {
   const today = shopDateKey(new Date());
   await ensureShopGenerated(today);
 
@@ -573,18 +599,25 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
     }));
   }
 
-  let purchaseCounts = new Map<string, number>();
-  if (user && listings && listings.length > 0) {
-    const { data: purchases } = await admin
-      .from("shop_purchases")
-      .select("listing_id")
-      .eq("user_id", user.id)
-      .in("listing_id", listings.map((l) => l.id));
-    purchaseCounts = new Map();
-    for (const p of purchases ?? []) {
-      purchaseCounts.set(p.listing_id, (purchaseCounts.get(p.listing_id) ?? 0) + 1);
-    }
+  // Fetch category metadata for section headers in the player-facing shop
+  const listingCategoryIds = Array.from(new Set((listings ?? []).map((l) => l.category_id).filter((id): id is string => !!id)));
+  const [purchaseCountsResult, categoryMetaResult, shopSettingsResult] = await Promise.all([
+    user && listings && listings.length > 0
+      ? admin.from("shop_purchases").select("listing_id").eq("user_id", user.id).in("listing_id", listings!.map((l) => l.id))
+      : Promise.resolve({ data: [] as { listing_id: string }[] }),
+    listingCategoryIds.length > 0
+      ? admin.from("shop_categories").select("id, name, icon, color, sort_order").in("id", listingCategoryIds).order("sort_order", { ascending: true })
+      : Promise.resolve({ data: [] as { id: string; name: string; icon: string; color: string; sort_order: number }[] }),
+    admin.from("shop_settings").select("motd, motd_enabled").eq("id", "default").single(),
+  ]);
+
+  const purchaseCounts = new Map<string, number>();
+  for (const p of (purchaseCountsResult as { data: { listing_id: string }[] | null }).data ?? []) {
+    purchaseCounts.set(p.listing_id, (purchaseCounts.get(p.listing_id) ?? 0) + 1);
   }
+  const categoryMetaRows = (categoryMetaResult as { data: { id: string; name: string; icon: string; color: string; sort_order: number }[] | null }).data ?? [];
+  const categoryMetaMap = new Map(categoryMetaRows.map((c) => [c.id, c]));
+  const shopSettingsRow = (shopSettingsResult as { data: { motd: string | null; motd_enabled: boolean | null } | null }).data;
 
   const tomorrow = new Date();
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
@@ -600,6 +633,7 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
           perk_type: string | null; perk_magnitude: number | null;
           shield_hp: number | null; shield_regen_cooldown_sec: number | null;
         };
+        const catMeta = l.category_id ? categoryMetaMap.get(l.category_id) : undefined;
         return {
           id: l.id,
           itemId: item.id,
@@ -618,9 +652,22 @@ export async function getTodayShop(): Promise<{ listings: ShopListingEntry[]; re
           source: l.source as "manual" | "auto",
           purchasedByMe: purchaseCounts.get(l.id) ?? 0,
           categoryId: l.category_id,
+          categoryName: catMeta?.name ?? null,
+          categoryIcon: catMeta?.icon ?? null,
+          categoryColor: catMeta?.color ?? null,
+          categorySortOrder: catMeta?.sort_order ?? 999,
         };
       }),
     resetsAt: tomorrow.toISOString(),
+    motd: shopSettingsRow?.motd ?? null,
+    motdEnabled: shopSettingsRow?.motd_enabled ?? false,
+    categories: categoryMetaRows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon,
+      color: c.color,
+      sortOrder: c.sort_order,
+    })),
   };
 }
 

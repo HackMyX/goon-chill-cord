@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Store, Save, Loader2, Plus, Trash2, RefreshCw, Star, Search } from "lucide-react";
+import { Store, Save, Loader2, Plus, Trash2, RefreshCw, Star, Search, Megaphone } from "lucide-react";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -25,6 +25,73 @@ interface ShopTabProps {
   todayListings: AdminShopListing[];
   tomorrowListings: AdminShopListing[];
   items: ItemRow[];
+}
+
+function MotdCard({ settings }: { settings: ShopSettings }) {
+  const [motd, setMotd] = useState(settings.motd ?? "");
+  const [enabled, setEnabled] = useState(settings.motdEnabled);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const sound = useSoundManager();
+
+  async function handleSave() {
+    setSaving(true);
+    sound.click();
+    const res = await updateShopSettings({
+      ...settings,
+      motd: motd || null,
+      motdEnabled: enabled,
+    });
+    setSaving(false);
+    if (res.success) { sound.win(); setMessage("Gespeichert."); }
+    else { sound.error(); setMessage(res.error ?? "Fehler."); }
+    setTimeout(() => setMessage(null), 3000);
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-base font-bold text-zinc-100">
+          <Megaphone className="h-5 w-5 text-purple-400" />
+          Nachrichten-Banner (MOTD)
+        </h3>
+        <button
+          onMouseEnter={sound.hover}
+          onClick={() => setEnabled((v) => !v)}
+          className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
+            enabled ? "bg-emerald-500/20 text-emerald-300" : "bg-zinc-700 text-zinc-400"
+          }`}
+        >
+          {enabled ? "AKTIV" : "DEAKTIVIERT"}
+        </button>
+      </div>
+
+      <p className="mb-3 text-[11px] text-zinc-500">
+        Wird oben im Shop als farbiger Banner angezeigt — z.B. für Events, Wartungshinweise oder Aktionen.
+      </p>
+
+      <textarea
+        value={motd}
+        onChange={(e) => setMotd(e.target.value)}
+        placeholder="Nachricht eingeben (leer = kein Banner)..."
+        rows={3}
+        className="w-full resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+      />
+
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          onMouseEnter={sound.hover}
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Speichern
+        </button>
+        {message && <span className="text-sm text-zinc-400">{message}</span>}
+      </div>
+    </div>
+  );
 }
 
 function SettingsCard({ settings }: { settings: ShopSettings }) {
@@ -412,6 +479,7 @@ export function ShopTab({
 
   return (
     <div className="flex flex-col gap-4">
+      <MotdCard settings={settings} />
       <SettingsCard settings={settings} />
       <ShopCategoryManager onChanged={refresh} />
       <DayShopPanel
