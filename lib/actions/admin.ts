@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, type ProfileRole } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
+import { banDevicesForUser, unbanDevicesForUser } from "@/lib/actions/fingerprint";
 import type { Rarity } from "@/lib/cases";
 
 export interface AdminActionResult {
@@ -594,6 +595,14 @@ export async function setUserBanned(
 
   if (error) return { success: false, error: "Aktion fehlgeschlagen." };
 
+  // When banning: also ban every device fingerprint this user has ever logged in from.
+  // When un-banning: lift all device bans too — the person should be fully restored.
+  if (banned) {
+    await banDevicesForUser(targetUserId, user.id);
+  } else {
+    await unbanDevicesForUser(targetUserId);
+  }
+
   await logAdminAction(user.id, "admin_ban_user", { targetUserId, banned });
   await notifyUser({
     userId: targetUserId,
@@ -689,6 +698,110 @@ export async function wipeUserInventory(targetUserId: string): Promise<AdminActi
     message: "Ein Admin hat dein gesamtes Inventar geleert.",
     link: "/garderobe",
   });
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+/**
+ * Permanently deletes a user and ALL their data — auth account, profile,
+ * inventory, trades, auctions, tickets, login history, notifications, and
+ * device fingerprint bans. After this call the person can re-register with
+ * their Discord account and will receive a completely fresh profile with no
+ * trace of the previous one. This cannot be undone.
+ */
+export async function deleteUserCompletely(targetUserId: string): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+  if (user.id === targetUserId) {
+    return { success: false, error: "Du kannst dich nicht selbst löschen." };
+  }
+
+  const admin = createAdminClient();
+
+  // Ticket messages sent by this user (FK child of tickets — must go first)
+  await admin.from("ticket_messages").delete().eq("user_id", targetUserId);
+
+  // Messages in tickets *created* by this user (replies from staff, etc.)
+  const { data: ownedTickets } = await admin
+    .from("tickets")
+    .select("id")
+    .eq("user_id", targetUserId);
+  if (ownedTickets && ownedTickets.length > 0) {
+    await admin
+      .from("ticket_messages")
+      .delete()
+      .in("ticket_id", ownedTickets.map((t) => t.id));
+  }
+  await admin.from("tickets").delete().eq("user_id", targetUserId);
+
+  // Inventory
+  await admin.from("inventory").delete().eq("user_id", targetUserId);
+
+  // Notifications
+  await admin.from("notifications").delete().eq("user_id", targetUserId);
+
+  // Trades (sender or receiver) — delete trade_items first to avoid FK issues
+  try {
+    const { data: userTrades } = await admin
+      .from("trades")
+      .select("id")
+      .or(`sender_id.eq.${targetUserId},receiver_id.eq.${targetUserId}`);
+    if (userTrades && userTrades.length > 0) {
+      await admin
+        .from("trade_items")
+        .delete()
+        .in("trade_id", userTrades.map((t) => t.id));
+    }
+    await admin
+      .from("trades")
+      .delete()
+      .or(`sender_id.eq.${targetUserId},receiver_id.eq.${targetUserId}`);
+  } catch { /* trades table may not exist on this install */ }
+
+  // Auctions — delete bids first, then the auction rows
+  try {
+    const { data: userAuctions } = await admin
+      .from("auctions")
+      .select("id")
+      .eq("seller_id", targetUserId);
+    if (userAuctions && userAuctions.length > 0) {
+      await admin
+        .from("auction_bids")
+        .delete()
+        .in("auction_id", userAuctions.map((a) => a.id));
+    }
+    await admin.from("auction_bids").delete().eq("bidder_id", targetUserId);
+    await admin.from("auctions").delete().eq("seller_id", targetUserId);
+  } catch { /* auctions table may not exist on this install */ }
+
+  // Audit logs where this user is the actor
+  await admin.from("audit_logs").delete().eq("user_id", targetUserId);
+
+  // Login events (also removes any fingerprint associations)
+  await admin.from("login_events").delete().eq("user_id", targetUserId);
+
+  // Device bans tied to this user's fingerprints
+  await unbanDevicesForUser(targetUserId);
+
+  // Profile must come before auth user deletion
+  const { error: profileError } = await admin.from("profiles").delete().eq("id", targetUserId);
+  if (profileError) {
+    return {
+      success: false,
+      error: `Profil konnte nicht gelöscht werden: ${profileError.message}`,
+    };
+  }
+
+  // Auth user — final step, removes the Discord OAuth identity entirely
+  const { error: authError } = await admin.auth.admin.deleteUser(targetUserId);
+  if (authError) {
+    return {
+      success: false,
+      error: `Auth-Account konnte nicht gelöscht werden: ${authError.message}`,
+    };
+  }
+
+  await logAdminAction(user.id, "admin_delete_user_completely", { targetUserId });
   revalidatePath("/admin");
   return { success: true };
 }

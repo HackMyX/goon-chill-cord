@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isDeviceBanned } from "@/lib/actions/fingerprint";
 
 function sanitizeNext(value: string | null): string {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
@@ -28,6 +29,19 @@ export async function GET(request: Request) {
   });
 
   if (code) {
+    // Read fingerprint cookie set by FpRegistrar (client-side, before login click)
+    const fpCookie = request.headers.get("cookie")
+      ?.split(";")
+      .find((c) => c.trim().startsWith("_fp="))
+      ?.split("=")[1]
+      ?.trim() ?? null;
+
+    // Block banned devices BEFORE completing the OAuth session exchange.
+    // This means even a brand-new Discord account on a banned device is rejected.
+    if (fpCookie && await isDeviceBanned(fpCookie)) {
+      return NextResponse.redirect(`${origin}/auth/auth-code-error?reason=device_banned`);
+    }
+
     const supabase = await createClient();
     const { error, data } = await supabase.auth.exchangeCodeForSession(code);
 
@@ -68,11 +82,16 @@ export async function GET(request: Request) {
         );
       }
 
-      // Log the login event for IP-tracking (security section)
+      // Log the login event for IP-tracking (security section), include fingerprint
       const ip = extractIp(request);
       const ua = request.headers.get("user-agent") ?? null;
       try {
-        await admin.from("login_events").insert({ user_id: userId, ip_address: ip, user_agent: ua });
+        await admin.from("login_events").insert({
+          user_id: userId,
+          ip_address: ip,
+          user_agent: ua,
+          fingerprint: fpCookie ?? null,
+        });
       } catch { /* login_events may not exist yet on fresh installs — never block auth */ }
 
       return NextResponse.redirect(`${origin}${next}`);

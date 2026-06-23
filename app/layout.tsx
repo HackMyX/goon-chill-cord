@@ -7,6 +7,7 @@ import { ConfirmDialogProvider } from "@/components/layout/confirm-dialog-provid
 import { SiteConfigProvider } from "@/components/layout/site-config-provider";
 import { PresenceHeartbeat } from "@/components/layout/presence-heartbeat";
 import { SupportButton } from "@/components/support/ticket-button";
+import { FpRegistrar } from "@/components/auth/fp-registrar";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import "./globals.css";
 
@@ -53,6 +54,7 @@ export default async function RootLayout({
         <GlobalErrorLogger />
         <AmbientGlow />
         <PresenceHeartbeat />
+        <FpRegistrar />
         <SiteConfigProvider config={siteConfig}>
           <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
         </SiteConfigProvider>

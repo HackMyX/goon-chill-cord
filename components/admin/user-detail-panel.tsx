@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trash2, Plus, Loader2, LogOut, Ban, ShieldOff, Eraser, PackagePlus } from "lucide-react";
+import { Trash2, Plus, Loader2, LogOut, Ban, ShieldOff, Eraser, PackagePlus, UserX } from "lucide-react";
 import {
   getUserDetail,
   searchItems,
@@ -12,6 +12,7 @@ import {
   setUserGender,
   kickUser,
   wipeUserInventory,
+  deleteUserCompletely,
   type UserDetail,
 } from "@/lib/actions/admin";
 import { ItemRenderer } from "@/components/items/item-renderer";
@@ -122,6 +123,35 @@ export function UserDetailPanel({ userId }: { userId: string }) {
       setModMessage("Inventar geleert.");
     } else {
       setModMessage(res.error ?? "Fehler.");
+    }
+  }
+
+  async function handleDeleteCompletely() {
+    const ok = await confirm({
+      title: "User komplett löschen",
+      message:
+        "Diesen User und ALLE seine Daten (Inventar, Credits, Tickets, Login-Verlauf, …) dauerhaft löschen? Er kann sich danach mit seinem Discord neu registrieren — als komplett frischer Account ohne jede Erinnerung an diesen hier.",
+      confirmLabel: "Ja, unwiderruflich löschen",
+      danger: true,
+    });
+    if (!ok) return;
+
+    const ok2 = await confirm({
+      title: "Letzte Bestätigung",
+      message: "Wirklich alles löschen? Das kann NICHT rückgängig gemacht werden.",
+      confirmLabel: "Endgültig löschen",
+      danger: true,
+    });
+    if (!ok2) return;
+
+    setModAction("delete");
+    const res = await deleteUserCompletely(userId);
+    setModAction(null);
+    if (res.success) {
+      // User is gone — reload the admin page so the row disappears
+      window.location.reload();
+    } else {
+      setModMessage(res.error ?? "Fehler beim Löschen.");
     }
   }
 
@@ -249,8 +279,19 @@ export function UserDetailPanel({ userId }: { userId: string }) {
             ♀ W
           </button>
         </div>
+        <button
+          onMouseEnter={sound.hover}
+          onClick={handleDeleteCompletely}
+          disabled={modAction !== null}
+          title="User und ALLE Daten permanent löschen — er kann sich danach neu registrieren"
+          className="ml-auto flex items-center gap-1.5 rounded-lg border border-red-700/60 bg-red-700/10 px-3 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-700/20 disabled:opacity-50"
+        >
+          <UserX className="h-3.5 w-3.5" />
+          {modAction === "delete" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "User löschen"}
+        </button>
+
         {detail.banned && (
-          <span className="ml-auto rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
+          <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
             GEBANNT
           </span>
         )}

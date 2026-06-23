@@ -56,6 +56,7 @@ const USER_GROUPS: NotifGroup[] = [
 ];
 
 const STAFF_ENTRIES: NotifEntry[] = [
+  { type: "new_user",     label: "Neuer Spieler registriert",   desc: "Wenn sich ein neuer Spieler registriert" },
   { type: "ticket_new",   label: "Neues Support-Ticket",        desc: "Wenn ein Spieler ein Ticket oder Verbesserungsvorschlag einreicht" },
   { type: "ticket_reply", label: "User-Antwort auf Ticket",     desc: "Wenn ein Spieler auf ein bestehendes Ticket antwortet" },
 ];

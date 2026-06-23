@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { banDevicesForUser } from "@/lib/actions/fingerprint";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -124,7 +125,16 @@ export async function banUserById(targetUserId: string): Promise<{ success: bool
   if (targetUserId === user.id) return { success: false, error: "Du kannst dich nicht selbst bannen." };
 
   const admin = createAdminClient();
-  const { error } = await admin.from("profiles").update({ role: "banned" }).eq("id", targetUserId);
+  // Real auth-level ban — GoTrue rejects all sign-ins/refreshes for this user,
+  // same mechanism as setUserBanned() in admin.ts / user-detail-panel.
+  // Setting role: "banned" in profiles alone does NOT prevent login.
+  const { error } = await admin.auth.admin.updateUserById(targetUserId, {
+    ban_duration: "876000h",
+  });
   if (error) return { success: false, error: "Ban fehlgeschlagen." };
+
+  // Also device-ban — every fingerprint this user logged in from goes into device_bans.
+  await banDevicesForUser(targetUserId, user.id);
+
   return { success: true };
 }
