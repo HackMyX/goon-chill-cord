@@ -87,6 +87,14 @@ interface PlayerProps {
 // needed ~267 ms to reach the same percentage, which read as "floaty" or
 // "sliding" on stop.
 const ACCEL_RATE = 14;
+
+// Slide constants
+const SLIDE_DURATION      = 0.60;  // seconds active
+const SLIDE_COOLDOWN      = 1.15;  // seconds before another slide
+const SLIDE_SPEED_FACTOR  = 2.15;  // ×base speed at slide start
+const SLIDE_PARTICLE_COUNT     = 24;
+const SLIDE_PARTICLE_LIFETIME  = 0.42; // seconds each dust particle lives
+const SLIDE_PARTICLE_INTERVAL  = 0.033; // seconds between spawns
 /** Absolute world-space floor on the camera's Y position — scene.tsx's
  * ground plane sits at y≈-0.04 and is single-sided (invisible from
  * underneath), so this needs real clearance above that, not just "above
@@ -316,6 +324,28 @@ export function Player({
   const respawnRequested = useRef(false);
   const deathNotified = useRef(false);
 
+  // Slide state — all imperative refs so useFrame can read/write without re-renders
+  const slideCooldown  = useRef(0);
+  const slideActive    = useRef(false);
+  const slideTimer     = useRef(0);
+  const slideDirX      = useRef(0);
+  const slideDirZ      = useRef(0);
+  const slidePose      = useRef(0); // 0=normal  1=full-crouch, drives visual blend
+  const slideSpawnTimer = useRef(0);
+  // Float32Array particle positions updated imperatively every frame —
+  // no React state, no allocations inside useFrame.
+  const slideParticlePositions = useRef(new Float32Array(SLIDE_PARTICLE_COUNT * 3));
+  const slideParticleAges      = useRef<Float32Array>((() => {
+    const a = new Float32Array(SLIDE_PARTICLE_COUNT);
+    a.fill(-1); // -1 = dead / inactive
+    return a;
+  })());
+  const slideTrailRef   = useRef<THREE.Mesh>(null);
+  const slideTrailMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const slideGlowRef    = useRef<THREE.Mesh>(null);
+  const slideGlowMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const slideParticlesRef = useRef<THREE.Points>(null);
+
   useEffect(() => {
     if (respawnSignal === 0) return; // initial mount value, not a real click
     respawnRequested.current = true;
@@ -472,6 +502,20 @@ export function Player({
       );
     }
 
+    // --- Slide: consume one-shot flag before velocity is computed so we
+    // capture the *current* camera forward direction at slide start.
+    slideCooldown.current = Math.max(0, slideCooldown.current - delta);
+    const slideRequested = keys.consumeSlide();
+    if (!slideActive.current && locked && alive && grounded.current && slideCooldown.current <= 0 && slideRequested && moving) {
+      slideActive.current = true;
+      slideTimer.current = SLIDE_DURATION;
+      // Always slide in the camera's forward direction — WASD direction at the
+      // instant of the press, not the (slower-easing) body heading, matching
+      // how movement itself is already computed below.
+      slideDirX.current = Math.sin(cc.yaw);
+      slideDirZ.current = Math.cos(cc.yaw);
+    }
+
     if (moving) {
       // Forward/right basis vectors derived from the *camera* yaw, not the
       // (slower-easing) body heading — movement responds to the mouse
@@ -500,11 +544,34 @@ export function Player({
       targetVelocity.current.set(0, 0, 0);
     }
 
+    // Slide override: while active, replace targetVelocity with a boosted
+    // forward burst that decelerates over the slide duration. Ends early if
+    // the player leaves the ground (jumps or falls off an edge while sliding).
+    if (slideActive.current) {
+      slideTimer.current -= delta;
+      if (slideTimer.current <= 0 || !grounded.current) {
+        slideActive.current = false;
+        slideTimer.current  = 0;
+        if (grounded.current) slideCooldown.current = SLIDE_COOLDOWN;
+      } else {
+        // progress 0→1 over duration; speed tapers from FACTOR×base to ~0.5×base
+        const progress = 1 - slideTimer.current / SLIDE_DURATION;
+        const boost    = (1 - progress * 0.77) * SLIDE_SPEED_FACTOR;
+        const base     = characterConfig.moveSpeed * speedMultiplier * cc.moveSpeedMult;
+        targetVelocity.current.set(
+          slideDirX.current * base * boost,
+          0,
+          slideDirZ.current * base * boost,
+        );
+      }
+    }
+
     // Exponential smoothing (1 − e^(−rate·dt)) is frame-rate-independent:
     // the same time constant regardless of whether the game runs at 30 or
-    // 144 fps. Math.min(1, delta*rate) is a linear approximation that
-    // undershoots slightly at low fps and diverges at very high deltas.
-    velocity.current.lerp(targetVelocity.current, 1 - Math.exp(-delta * ACCEL_RATE));
+    // 144 fps. Slide uses a higher rate (snappy burst feel rather than the
+    // normal gradual build-up).
+    const accel = slideActive.current ? 40 : ACCEL_RATE;
+    velocity.current.lerp(targetVelocity.current, 1 - Math.exp(-delta * accel));
     g.position.addScaledVector(velocity.current, delta);
 
     // World border: a hard circular clamp, paired with the visible ring +
@@ -838,22 +905,23 @@ export function Player({
       const legTuckX = -0.25 * jp * fallBlend;
       const armRaiseX = -0.45 * jp * fallBlend;
 
+      const sp = slidePose.current;
       if (l.legL.current) {
-        l.legL.current.rotation.x = THREE.MathUtils.lerp(swing, legTuckX, jp) + attackSwing * 0.06;
+        // Slide: lead leg extends forward; lerp between walk and slide pose
+        const baseX = THREE.MathUtils.lerp(swing, legTuckX, jp) + attackSwing * 0.06;
+        l.legL.current.rotation.x = THREE.MathUtils.lerp(baseX, 0.48, sp);
         l.legL.current.rotation.z = -legSpread - Math.sin(fallWobble.current) * wobble;
       }
       if (l.legR.current) {
-        l.legR.current.rotation.x = THREE.MathUtils.lerp(-swing, legTuckX, jp) - attackSwing * 0.06;
+        // Slide: trail leg extends back
+        const baseX = THREE.MathUtils.lerp(-swing, legTuckX, jp) - attackSwing * 0.06;
+        l.legR.current.rotation.x = THREE.MathUtils.lerp(baseX, -0.55, sp);
         l.legR.current.rotation.z = legSpread + Math.sin(fallWobble.current + Math.PI) * wobble;
       }
       if (l.armL.current) {
-        // Off-hand counter-motion during a swing — pulls back and across
-        // the body for visual counter-balance, the same "the whole upper
-        // body reacts to a swing, not just the one arm that's swinging"
-        // read a real strike has. Additive on top of the walk/fall pose
-        // (both are exactly 0 while grounded and not attacking, so this
-        // never does anything outside an actual swing).
-        l.armL.current.rotation.x = THREE.MathUtils.lerp(-swing, armRaiseX, jp) + attackSwing * 0.5;
+        // Slide: both arms reach forward for momentum/balance
+        const baseX = THREE.MathUtils.lerp(-swing, armRaiseX, jp) + attackSwing * 0.5;
+        l.armL.current.rotation.x = THREE.MathUtils.lerp(baseX, -0.65, sp);
         l.armL.current.rotation.z =
           -armSpread - Math.sin(fallWobble.current * 1.3 + 1) * wobble - attackSwing * 0.25;
       }
@@ -878,29 +946,96 @@ export function Player({
         // the fist sideways across the face, the real cause of the
         // "swings through the head every time" report.
         const baseX = THREE.MathUtils.lerp(swing, armRaiseX, jp);
-        l.armR.current.rotation.x = THREE.MathUtils.lerp(baseX, -1.9, attackSwing);
+        const swingX = THREE.MathUtils.lerp(baseX, -1.9, attackSwing);
+        l.armR.current.rotation.x = THREE.MathUtils.lerp(swingX, -0.65, sp);
         l.armR.current.rotation.z =
           armSpread + Math.sin(fallWobble.current * 1.3 + 1 + Math.PI) * wobble - attackSwing * 0.45;
       }
     }
 
-    // No foot-bob at all — a previous version added a small ±0.04 vertical
-    // oscillation to the character (originally to `g.position.y`, the
-    // exact value the camera tracks every frame, then later moved to an
-    // isolated cosmetic-only wrapper once that turned out to bob the
-    // *camera* itself in sync with every step). Even fully isolated from
-    // the camera, it still read as a persistent "the character keeps
-    // jittering up and down while walking" complaint. Zero vertical
-    // motion tied to the walk cycle is the only way to guarantee that
-    // complaint can never recur: `g.position.y` is exactly `baseY` — real
-    // jump/gravity physics only, nothing else ever touches it.
-    g.position.y = baseY.current;
+    // Slide pose: 0=normal, 1=full crouch — lerps in on slide start,
+    // back out on end, giving a smooth visual transition at both ends.
+    slidePose.current = THREE.MathUtils.lerp(
+      slidePose.current,
+      slideActive.current ? 1 : 0,
+      Math.min(1, delta * 13),
+    );
+
+    // No foot-bob at all — g.position.y is physics (gravity) only, plus the
+    // slide crouch offset so the whole character and camera drop together.
+    g.position.y = baseY.current - slidePose.current * 0.28;
 
     // Squash-and-stretch: y-scale briefly compresses on landing and elongates
     // on jump launch, then springs back to 1 — reads as weight and impact.
+    // Slide squishes on top of that so the character visibly crouches.
     landingSquash.current = Math.max(0, landingSquash.current - delta * 9);
     jumpStretch.current   = Math.max(0, jumpStretch.current   - delta * 12);
-    g.scale.y = 1 - landingSquash.current * 0.22 + jumpStretch.current * 0.12;
+    g.scale.y = (1 - landingSquash.current * 0.22 + jumpStretch.current * 0.12) * (1 - slidePose.current * 0.30);
+
+    // Forward tilt during slide — reads as leaning into the momentum.
+    g.rotation.x = slidePose.current * 0.20;
+
+    // --- Slide trail: one elongated glow plane + a wider soft bloom ring
+    if (slideTrailRef.current && slideTrailMatRef.current) {
+      const visible = slidePose.current > 0.01;
+      slideTrailRef.current.visible = visible;
+      if (visible) {
+        const sp = slidePose.current;
+        slideTrailRef.current.position.set(
+          g.position.x - slideDirX.current * sp * 0.7,
+          g.position.y + 0.015,
+          g.position.z - slideDirZ.current * sp * 0.7,
+        );
+        slideTrailRef.current.rotation.y = Math.atan2(slideDirX.current, slideDirZ.current);
+        slideTrailRef.current.scale.set(0.38, 1, sp * 2.1 + 0.5);
+        slideTrailMatRef.current.opacity = sp * 0.52;
+      }
+    }
+    if (slideGlowRef.current && slideGlowMatRef.current) {
+      const visible = slidePose.current > 0.01;
+      slideGlowRef.current.visible = visible;
+      if (visible) {
+        slideGlowRef.current.position.set(g.position.x, g.position.y + 0.01, g.position.z);
+        slideGlowRef.current.scale.setScalar(slidePose.current * 1.4 + 0.3);
+        slideGlowMatRef.current.opacity = slidePose.current * 0.22;
+      }
+    }
+
+    // Slide dust particles: spawn new ones at player's feet while sliding,
+    // age them out, update positions in the shared Float32Array imperatively
+    // so useFrame never allocates anything on the heap mid-frame.
+    if (slideActive.current) {
+      slideSpawnTimer.current += delta;
+      while (slideSpawnTimer.current >= SLIDE_PARTICLE_INTERVAL) {
+        slideSpawnTimer.current -= SLIDE_PARTICLE_INTERVAL;
+        const slot = slideParticleAges.current.findIndex((a) => a < 0);
+        if (slot >= 0) {
+          slideParticleAges.current[slot] = 0;
+          slideParticlePositions.current[slot * 3]     = g.position.x + (Math.random() - 0.5) * 0.4;
+          slideParticlePositions.current[slot * 3 + 1] = g.position.y + 0.04 + Math.random() * 0.08;
+          slideParticlePositions.current[slot * 3 + 2] = g.position.z + (Math.random() - 0.5) * 0.4;
+        }
+      }
+    } else {
+      slideSpawnTimer.current = 0;
+    }
+    // Age out particles; dead ones are moved underground so they disappear
+    // without needing a geometry rebuild.
+    for (let i = 0; i < SLIDE_PARTICLE_COUNT; i++) {
+      if (slideParticleAges.current[i] < 0) continue;
+      slideParticleAges.current[i] += delta;
+      if (slideParticleAges.current[i] >= SLIDE_PARTICLE_LIFETIME) {
+        slideParticleAges.current[i] = -1;
+        slideParticlePositions.current[i * 3 + 1] = -999;
+      }
+    }
+    if (slideParticlesRef.current) {
+      const posAttr = slideParticlesRef.current.geometry.getAttribute("position") as THREE.BufferAttribute;
+      if (posAttr) {
+        posAttr.array.set(slideParticlePositions.current);
+        posAttr.needsUpdate = true;
+      }
+    }
 
     combatRef.current.playerPos.copy(g.position);
     combatRef.current.playerHeading = g.rotation.y;
@@ -1056,6 +1191,28 @@ export function Player({
           <SlashEffect color={s.color} />
         </group>
       ))}
+
+      {/* Slide trail — elongated glow ribbon behind the player.
+          Siblings of `group`, positioned in world space from useFrame. */}
+      <mesh ref={slideTrailRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <planeGeometry args={[0.42, 1.9]} />
+        <meshBasicMaterial ref={slideTrailMatRef} color="#c084fc" transparent opacity={0} side={THREE.DoubleSide} toneMapped={false} />
+      </mesh>
+      {/* Wider soft bloom ring at player feet during slide */}
+      <mesh ref={slideGlowRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <circleGeometry args={[0.7, 32]} />
+        <meshBasicMaterial ref={slideGlowMatRef} color="#7c3aed" transparent opacity={0} toneMapped={false} />
+      </mesh>
+      {/* Dust particle cloud — positions updated imperatively every frame */}
+      <points ref={slideParticlesRef}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[slideParticlePositions.current, 3]}
+          />
+        </bufferGeometry>
+        <pointsMaterial color="#d8b4fe" size={0.10} transparent opacity={0.75} sizeAttenuation toneMapped={false} />
+      </points>
     </>
   );
 }

@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { TopBar } from "@/components/layout/top-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
-import { ItemThumbnail3D } from "@/components/shop/item-thumbnail-3d";
+import { ItemRenderer } from "@/components/items/item-renderer";
 import { useSoundManager } from "@/lib/sound-manager";
 import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { purchaseShopItem, type ShopListingEntry, type ShopCategoryMeta } from "@/lib/actions/shop";
@@ -159,19 +159,36 @@ function ShopCard({
         {soldOut && <span className="ml-auto rounded-full bg-zinc-700 px-2 py-0.5 text-[10px] font-bold text-zinc-400">Gekauft</span>}
       </div>
 
-      {/* 3D item preview */}
+      {/* 2D item preview — one WebGL context per card was hitting the browser
+          limit (~16) for items past the 16th, making those cards render white.
+          A styled 2D preview fixes this; the full 3D model is still available
+          via the preview modal (which uses a single shared Canvas). */}
       <div className="relative">
-        <ItemThumbnail3D
-          item={{ id: listing.itemId, name: listing.itemName, rarity: listing.itemRarity, type: listing.itemType, damage: listing.itemDamage }}
-          gender={gender}
-          onClick={() => { sound.click(); onPreview(listing); }}
-        />
         <button
           onClick={() => { sound.click(); onPreview(listing); }}
-          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-white"
-          title="Vorschau"
+          className="group/thumb relative flex h-36 w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-white/5 transition-all hover:border-white/15"
+          style={{
+            background:
+              rarity === "ultra"    ? "radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.18) 0%, #060610 65%)"
+            : rarity === "mythisch" ? "radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.18) 0%, #060610 65%)"
+            : rarity === "selten"   ? "radial-gradient(ellipse at 50% 30%, rgba(168,85,247,0.14) 0%, #060610 65%)"
+            : "radial-gradient(ellipse at 50% 30%, rgba(59,130,246,0.12) 0%, #060610 65%)",
+          }}
+          title="3D Vorschau anzeigen"
         >
-          <Eye className="h-3.5 w-3.5" />
+          {/* Floating item icon */}
+          <motion.div
+            animate={{ y: [0, -5, 0] }}
+            transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <ItemRenderer type={listing.itemType} rarity={rarity} size="xl" />
+          </motion.div>
+          {/* Hover overlay label */}
+          <div className="absolute inset-0 flex items-end justify-center pb-2 opacity-0 transition-opacity group-hover/thumb:opacity-100">
+            <span className="flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[10px] font-bold text-zinc-300">
+              <Eye className="h-3 w-3" /> 3D Vorschau
+            </span>
+          </div>
         </button>
       </div>
 
@@ -318,20 +335,36 @@ function FeaturedHero({
       </div>
 
       <div className="relative z-10 flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:gap-8 lg:p-8">
-        {/* Thumbnail */}
+        {/* Thumbnail — 2D styled preview (same reason as ShopCard: WebGL context limit) */}
         <div className="flex flex-shrink-0 items-center justify-center sm:w-48">
-          <motion.div
+          <motion.button
             key={listing.id}
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.4 }}
+            onClick={() => { sound.click(); onPreview(listing); }}
+            className="group/fhero relative flex h-40 w-40 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-white/8 transition-all hover:border-white/20"
+            style={{
+              background:
+                rarity === "ultra"    ? "radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.22) 0%, #060610 65%)"
+              : rarity === "mythisch" ? "radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.22) 0%, #060610 65%)"
+              : rarity === "selten"   ? "radial-gradient(ellipse at 50% 30%, rgba(168,85,247,0.18) 0%, #060610 65%)"
+              : "radial-gradient(ellipse at 50% 30%, rgba(59,130,246,0.16) 0%, #060610 65%)",
+            }}
+            title="3D Vorschau"
           >
-            <ItemThumbnail3D
-              item={{ id: listing.itemId, name: listing.itemName, rarity: listing.itemRarity, type: listing.itemType, damage: listing.itemDamage }}
-              gender={gender}
-              onClick={() => { sound.click(); onPreview(listing); }}
-            />
-          </motion.div>
+            <motion.div
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <ItemRenderer type={listing.itemType} rarity={listing.itemRarity} size="xl" />
+            </motion.div>
+            <div className="absolute inset-0 flex items-end justify-center pb-2 opacity-0 transition-opacity group-hover/fhero:opacity-100">
+              <span className="flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[10px] font-bold text-zinc-300">
+                <Eye className="h-3 w-3" /> 3D Vorschau
+              </span>
+            </div>
+          </motion.button>
         </div>
 
         {/* Info */}

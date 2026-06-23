@@ -30,6 +30,7 @@ import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { WorldSettingsPanel } from "@/components/world/world-settings-panel";
 import { loadWorldSettings, saveWorldSettings, type WorldSettings } from "@/lib/world-settings";
+import { setActiveKeybinds } from "@/components/world/use-keyboard-controls";
 
 interface WorldShellProps {
   userId: string;
@@ -376,6 +377,7 @@ export function WorldShell({
     cameraControls.state.current.sensitivityXMult = s.sensitivityX;
     cameraControls.state.current.sensitivityYMult = s.sensitivityY;
     sound.setVolume(s.volume);
+    setActiveKeybinds(s.keybinds);
     saveWorldSettings(s);
   }
 
@@ -384,6 +386,7 @@ export function WorldShell({
     cameraControls.state.current.sensitivityXMult = worldSettings.sensitivityX;
     cameraControls.state.current.sensitivityYMult = worldSettings.sensitivityY;
     sound.setVolume(worldSettings.volume);
+    setActiveKeybinds(worldSettings.keybinds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

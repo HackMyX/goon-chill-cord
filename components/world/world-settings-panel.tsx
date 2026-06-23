@@ -1,7 +1,19 @@
 "use client";
 
-import { Settings, X, MousePointer2, Volume2, RotateCcw, ArrowLeftRight, ArrowUpDown } from "lucide-react";
-import { type WorldSettings, SETTINGS_BOUNDS, DEFAULT_WORLD_SETTINGS } from "@/lib/world-settings";
+import { useState } from "react";
+import { Settings, X, MousePointer2, Volume2, RotateCcw, ArrowLeftRight, ArrowUpDown, Keyboard, Pencil } from "lucide-react";
+import {
+  type WorldSettings,
+  type KeyBindings,
+  SETTINGS_BOUNDS,
+  DEFAULT_WORLD_SETTINGS,
+  KEYBIND_LABELS,
+  formatKeyCode,
+} from "@/lib/world-settings";
+
+// ---------------------------------------------------------------------------
+// Sensitivity Slider
+// ---------------------------------------------------------------------------
 
 interface SliderProps {
   label: string;
@@ -11,7 +23,6 @@ interface SliderProps {
   max: number;
   step: number;
   onChange: (v: number) => void;
-  /** Optional secondary label shown right of the icon (e.g. unit or axis) */
   sublabel?: string;
 }
 
@@ -54,6 +65,48 @@ function Slider({ label, icon, value, min, max, step, onChange, sublabel }: Slid
   );
 }
 
+// ---------------------------------------------------------------------------
+// Keybind editor row
+// ---------------------------------------------------------------------------
+
+const ACTION_ORDER: (keyof KeyBindings)[] = [
+  "forward", "backward", "strafeLeft", "strafeRight", "sprint", "jump", "slide",
+];
+
+function KeybindRow({
+  action,
+  currentCode,
+  listening,
+  onStartListen,
+  onCancel,
+}: {
+  action: keyof KeyBindings;
+  currentCode: string;
+  listening: boolean;
+  onStartListen: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className={`flex items-center justify-between rounded-lg px-3 py-2 transition-colors ${listening ? "bg-purple-500/15 ring-1 ring-purple-400/50" : "hover:bg-white/[0.03]"}`}>
+      <span className="text-sm text-zinc-300">{KEYBIND_LABELS[action]}</span>
+      <button
+        onClick={listening ? onCancel : onStartListen}
+        className={`min-w-[72px] rounded-lg border px-3 py-1.5 text-xs font-bold transition-all ${
+          listening
+            ? "animate-pulse border-purple-400 bg-purple-500/20 text-purple-200"
+            : "border-white/15 bg-black/30 text-zinc-300 hover:border-purple-400/50 hover:text-purple-200"
+        }`}
+      >
+        {listening ? "Taste…" : formatKeyCode(currentCode)}
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main panel
+// ---------------------------------------------------------------------------
+
 interface WorldSettingsPanelProps {
   settings: WorldSettings;
   onChange: (s: WorldSettings) => void;
@@ -61,20 +114,41 @@ interface WorldSettingsPanelProps {
 }
 
 export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSettingsPanelProps) {
+  const [listeningFor, setListeningFor] = useState<keyof KeyBindings | null>(null);
+
   function update<K extends keyof WorldSettings>(key: K, value: WorldSettings[K]) {
     onChange({ ...settings, [key]: value });
   }
 
   function reset() {
+    setListeningFor(null);
     onChange({ ...DEFAULT_WORLD_SETTINGS });
+  }
+
+  function startListen(action: keyof KeyBindings) {
+    setListeningFor(action);
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.code === "Escape") {
+        setListeningFor(null);
+        window.removeEventListener("keydown", onKey, true);
+        return;
+      }
+      const newBinds: KeyBindings = { ...settings.keybinds, [action]: e.code };
+      onChange({ ...settings, keybinds: newBinds });
+      setListeningFor(null);
+      window.removeEventListener("keydown", onKey, true);
+    };
+    window.addEventListener("keydown", onKey, true);
   }
 
   return (
     <div
       className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) { setListeningFor(null); onClose(); } }}
     >
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-950/95 p-6 shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-950/95 p-6 shadow-[0_0_60px_rgba(0,0,0,0.8)] overflow-y-auto max-h-[90vh]">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -82,16 +156,15 @@ export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSetting
             <h2 className="text-lg font-bold text-zinc-100">Spielereinstellungen</h2>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => { setListeningFor(null); onClose(); }}
             className="rounded-full p-1.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-200"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Sliders */}
         <div className="flex flex-col gap-6">
-          {/* Mouse section header */}
+          {/* === Mouse section === */}
           <div className="flex items-center gap-2">
             <MousePointer2 className="h-4 w-4 text-cyan-400" />
             <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Mausbewegung</span>
@@ -120,7 +193,6 @@ export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSetting
             onChange={(v) => update("sensitivityY", v)}
           />
 
-          {/* Divider */}
           <div className="h-px bg-white/[0.06]" />
 
           <Slider
@@ -132,6 +204,37 @@ export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSetting
             step={SETTINGS_BOUNDS.volume.step}
             onChange={(v) => update("volume", v)}
           />
+
+          <div className="h-px bg-white/[0.06]" />
+
+          {/* === Keybinds section === */}
+          <div className="flex items-center gap-2">
+            <Keyboard className="h-4 w-4 text-emerald-400" />
+            <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Tastenbelegung</span>
+            <div className="h-px flex-1 bg-white/[0.06]" />
+          </div>
+
+          <div className="flex flex-col gap-0.5">
+            {listeningFor && (
+              <p className="mb-2 text-center text-[11px] text-purple-300">
+                Drücke eine Taste für <span className="font-bold">{KEYBIND_LABELS[listeningFor]}</span> — Escape = Abbrechen
+              </p>
+            )}
+            {ACTION_ORDER.map((action) => (
+              <KeybindRow
+                key={action}
+                action={action}
+                currentCode={settings.keybinds[action]}
+                listening={listeningFor === action}
+                onStartListen={() => startListen(action)}
+                onCancel={() => setListeningFor(null)}
+              />
+            ))}
+            <div className="mt-2 flex items-center gap-1.5 text-[10px] text-zinc-600">
+              <Pencil className="h-3 w-3" />
+              Klicke eine Taste zum Neuzuweisen
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
@@ -141,10 +244,10 @@ export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSetting
             className="flex items-center gap-1.5 text-xs text-zinc-600 transition-colors hover:text-zinc-400"
           >
             <RotateCcw className="h-3 w-3" />
-            Zurücksetzen
+            Alles zurücksetzen
           </button>
           <button
-            onClick={onClose}
+            onClick={() => { setListeningFor(null); onClose(); }}
             className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white shadow-[0_0_16px_rgba(147,51,234,0.4)] transition-colors hover:bg-purple-500"
           >
             Schließen

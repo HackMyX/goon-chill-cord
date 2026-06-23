@@ -261,6 +261,12 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   const mounted = useRef(false);
   const fetchingRef = useRef(false);
   const caseReelRef = useRef<CaseReelHandle>(null);
+  // When the user clicks "Sofort anzeigen" while the server is still in-flight
+  // (phase === "pending"), we can't call skipToResult() yet because the reel
+  // isn't spinning yet. Queue the intent here; a useEffect fires the actual
+  // skip the moment phase transitions to "spinning".
+  const skipQueuedRef  = useRef(false);
+  const skipTierRef    = useRef<CaseTier | null>(null);
   const { currencyName } = useSiteConfig();
   const sound = useSoundManager();
 
@@ -373,9 +379,29 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  const isIdle = phase === "idle";
-  const isBusy = phase === "pending" || phase === "batch_pending";
+  // Fire queued skip the first frame after spinning actually starts.
+  // Using a brief timeout so CaseReel receives spinning=true, mounts its
+  // animation, and is ready for skipToResult() before we call it.
+  useEffect(() => {
+    if (phase !== "spinning") return;
+    if (!skipQueuedRef.current || !skipTierRef.current) return;
+    const tier = skipTierRef.current;
+    skipQueuedRef.current = false;
+    skipTierRef.current   = null;
+    const t = setTimeout(() => void handleSkip(tier), 30);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  const isIdle     = phase === "idle";
+  // isBusy only blocks the quantity selector and batch mode — NOT the single
+  // open button, which must remain clickable during pending so the user can
+  // queue a skip (skipQueuedRef) before the server even responds.
+  const isBusy     = phase === "batch_pending";
   const isSpinning = phase === "spinning";
+  // "pending" is treated as "in-flight" visually but NOT as disabled for the
+  // single-open button — that button's click handler checks phase directly.
+  const isPending  = phase === "pending";
 
   const maxBatch = Math.min(group.standard.multiOpenMax ?? 10, group.premium.multiOpenMax ?? 10);
 
@@ -536,6 +562,12 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
           <button
             onMouseEnter={sound.hover}
             onClick={() => {
+              if (isPending) {
+                // Queue skip — fires the moment the reel starts spinning
+                skipQueuedRef.current = true;
+                skipTierRef.current   = group.standard;
+                return;
+              }
               if (isSpinning) { void handleSkip(group.standard); }
               else if (batchMode) { void handleBatchOpen(group.standard); }
               else { void handleOpen(group.standard); }
@@ -561,6 +593,11 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
           <button
             onMouseEnter={sound.hover}
             onClick={() => {
+              if (isPending) {
+                skipQueuedRef.current = true;
+                skipTierRef.current   = group.premium;
+                return;
+              }
               if (isSpinning) { void handleSkip(group.premium); }
               else if (batchMode) { void handleBatchOpen(group.premium); }
               else { void handleOpen(group.premium); }
