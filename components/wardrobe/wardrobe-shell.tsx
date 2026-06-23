@@ -106,7 +106,7 @@ function CombatStatsPanel({ equippedByCategory }: { equippedByCategory: Record<s
             label: "Tempo",
             value: `⚡ +${Math.round((speedMult - 1) * 100)}%`,
             color: "text-amber-300",
-            tooltip: `Tempo-Boost: Deine ausgerüsteten Perks erhöhen die Laufgeschwindigkeit um +${Math.round((speedMult - 1) * 100)}%. Amulett und Ring stapeln sich multiplikativ (max. +40% gesamt).`,
+            tooltip: `Tempo-Boost: Deine ausgerüsteten Perks erhöhen die Laufgeschwindigkeit um +${Math.round((speedMult - 1) * 100)}%. Amulett und Ringe stapeln sich multiplikativ (max. +40% gesamt).`,
           },
         ]
       : []),
@@ -116,7 +116,7 @@ function CombatStatsPanel({ equippedByCategory }: { equippedByCategory: Record<s
             label: "Sprung",
             value: `↑ +${Math.round((jumpMult - 1) * 100)}%`,
             color: "text-amber-300",
-            tooltip: `Sprung-Boost: Deine ausgerüsteten Perks erhöhen Sprunghöhe und -weite um +${Math.round((jumpMult - 1) * 100)}%. Amulett und Ring stapeln sich multiplikativ (max. +40% gesamt).`,
+            tooltip: `Sprung-Boost: Deine ausgerüsteten Perks erhöhen Sprunghöhe und -weite um +${Math.round((jumpMult - 1) * 100)}%. Amulett und Ringe stapeln sich multiplikativ (max. +40% gesamt).`,
           },
         ]
       : []),
@@ -126,7 +126,7 @@ function CombatStatsPanel({ equippedByCategory }: { equippedByCategory: Record<s
             label: "Regen",
             value: `♥ +${Math.round((regenMult - 1) * 100)}%`,
             color: "text-amber-300",
-            tooltip: `HP-Regen-Boost: Deine ausgerüsteten Perks erhöhen die passive Lebensregeneration um +${Math.round((regenMult - 1) * 100)}%. Regen setzt 4 Sekunden nach dem letzten Treffer ein. Amulett und Ring stapeln sich multiplikativ (max. +40% gesamt).`,
+            tooltip: `HP-Regen-Boost: Deine ausgerüsteten Perks erhöhen die passive Lebensregeneration um +${Math.round((regenMult - 1) * 100)}%. Regen setzt 4 Sekunden nach dem letzten Treffer ein. Amulett und Ringe stapeln sich multiplikativ (max. +40% gesamt).`,
           },
         ]
       : []),
@@ -286,21 +286,43 @@ export function WardrobeShell({
 
   const equippedByCategory = useMemo(() => {
     const map: Record<string, EquippedItem | undefined> = {};
+    // Rings get special treatment: up to 2 can be equipped simultaneously.
+    // Sort by obtained_at so the oldest ring always lands in "ring" (right arm)
+    // and the newer one in "ring2" (left arm) — stable across re-renders.
+    const equippedRings = inventory
+      .filter((r) => r.equipped && r.item.type === "ring")
+      .sort((a, b) => (a.obtained_at ?? "").localeCompare(b.obtained_at ?? ""));
+
     for (const row of inventory) {
-      if (row.equipped) {
-        map[row.item.type] = {
-          id: row.id,
-          name: row.item.name,
-          rarity: row.item.rarity,
-          damage: row.item.damage,
-          armor: row.item.armor,
-          perk_type: row.item.perk_type as EquippedItem["perk_type"],
-          perk_magnitude: row.item.perk_magnitude,
-          shield_hp: row.item.shield_hp,
-          shield_regen_cooldown_sec: row.item.shield_regen_cooldown_sec,
-        };
-      }
+      if (!row.equipped || row.item.type === "ring") continue;
+      map[row.item.type] = {
+        id: row.id,
+        name: row.item.name,
+        rarity: row.item.rarity,
+        damage: row.item.damage,
+        armor: row.item.armor,
+        perk_type: row.item.perk_type as EquippedItem["perk_type"],
+        perk_magnitude: row.item.perk_magnitude,
+        shield_hp: row.item.shield_hp,
+        shield_regen_cooldown_sec: row.item.shield_regen_cooldown_sec,
+      };
     }
+
+    const toEquippedItem = (row: InventoryRow): EquippedItem => ({
+      id: row.id,
+      name: row.item.name,
+      rarity: row.item.rarity,
+      damage: row.item.damage,
+      armor: row.item.armor,
+      perk_type: row.item.perk_type as EquippedItem["perk_type"],
+      perk_magnitude: row.item.perk_magnitude,
+      shield_hp: row.item.shield_hp,
+      shield_regen_cooldown_sec: row.item.shield_regen_cooldown_sec,
+    });
+
+    if (equippedRings[0]) map["ring"] = toEquippedItem(equippedRings[0]);
+    if (equippedRings[1]) map["ring2"] = toEquippedItem(equippedRings[1]);
+
     return map;
   }, [inventory]);
 
@@ -317,13 +339,25 @@ export function WardrobeShell({
     sound.click();
     debugLog("Wardrobe", "toggleEquip start", { id, name: row.item.name, dbType, nextEquipped });
 
-    setInventory((curr) =>
-      curr.map((r) => {
+    setInventory((curr) => {
+      if (nextEquipped && dbType === "ring") {
+        // Up to 2 rings at once. If both slots taken, evict the oldest.
+        const equippedRings = curr
+          .filter((r) => r.id !== id && r.equipped && r.item.type === "ring")
+          .sort((a, b) => (a.obtained_at ?? "").localeCompare(b.obtained_at ?? ""));
+        const toUnequipId = equippedRings.length >= 2 ? equippedRings[0].id : null;
+        return curr.map((r) => {
+          if (r.id === id) return { ...r, equipped: true };
+          if (toUnequipId && r.id === toUnequipId) return { ...r, equipped: false };
+          return r;
+        });
+      }
+      return curr.map((r) => {
         if (r.id === id) return { ...r, equipped: nextEquipped };
         if (nextEquipped && r.item.type === dbType) return { ...r, equipped: false };
         return r;
-      })
-    );
+      });
+    });
 
     const category = getCategoryByDbType(dbType);
     if (!category) {

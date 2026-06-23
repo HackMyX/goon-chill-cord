@@ -40,17 +40,25 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
     admin
       .from("inventory")
       .select(
-        "item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)"
+        "obtained_at, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)"
       )
       .eq("user_id", targetUserId)
-      .eq("equipped", true),
+      .eq("equipped", true)
+      .order("obtained_at", { ascending: true }),
   ]);
 
   if (!profile) return { success: false, error: "Profil nicht gefunden." };
 
   const equippedByCategory: Record<string, EquippedItem> = {};
+  let ringCount = 0;
   for (const row of (inventory ?? []) as unknown as { item: (EquippedItem & { type: string }) | null }[]) {
-    if (row.item) equippedByCategory[row.item.type] = row.item;
+    if (!row.item) continue;
+    if (row.item.type === "ring") {
+      equippedByCategory[ringCount === 0 ? "ring" : "ring2"] = row.item;
+      ringCount++;
+    } else {
+      equippedByCategory[row.item.type] = row.item;
+    }
   }
 
   return {

@@ -93,7 +93,7 @@ export function CharacterViewer({
       <div className="mt-5 space-y-1.5">
         {categories.map((category) => {
           const Icon = category.icon;
-          const equipped = equippedByCategory[category.dbType];
+          const equipped = equippedByCategory[category.slotKey ?? category.dbType];
           return (
             <div
               key={category.id}

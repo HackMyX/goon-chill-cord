@@ -275,8 +275,11 @@ interface PerkSource {
   perk_magnitude?: number | null;
 }
 
-/** Slots that can carry a perk. */
-const PERK_SLOTS = ["amulet", "ring"] as const;
+/** Slots that can carry a perk — amulet + both ring slots (ring = right arm,
+ * ring2 = left arm). All three stack multiplicatively, still capped at
+ * PERK_MULTIPLIER_CAP so the second ring can't push walking speed past
+ * sprint or break the monster-speed balance. */
+const PERK_SLOTS = ["amulet", "ring", "ring2"] as const;
 
 /** Hard ceiling on the *combined* multiplier from stacking the same perk
  * type on both amulet and ring at once. Two Ultra items of the same

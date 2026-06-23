@@ -53,8 +53,9 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
       .single(),
     admin
       .from("inventory")
-      .select("id, equipped, item:items(id, name, rarity, type)")
-      .eq("user_id", targetUserId),
+      .select("id, equipped, obtained_at, item:items(id, name, rarity, type)")
+      .eq("user_id", targetUserId)
+      .order("obtained_at", { ascending: true }),
     admin.auth.admin.getUserById(targetUserId),
   ]);
 
@@ -72,21 +73,25 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
   const rows = (inventory ?? []) as unknown as {
     id: string;
     equipped: boolean;
+    obtained_at: string | null;
     item: { id: string; name: string; rarity: Rarity; type: string } | null;
   }[];
 
   const equippedByCategory: PublicProfile["equippedByCategory"] = {};
   const rarityCounts: Record<Rarity, number> = { normal: 0, selten: 0, mythisch: 0, ultra: 0 };
+  let ringCount = 0;
 
   for (const row of rows) {
     if (!row.item) continue;
     rarityCounts[row.item.rarity] += 1;
     if (row.equipped) {
-      equippedByCategory[row.item.type] = {
-        id: row.item.id,
-        name: row.item.name,
-        rarity: row.item.rarity,
-      };
+      if (row.item.type === "ring") {
+        const slotKey = ringCount === 0 ? "ring" : "ring2";
+        equippedByCategory[slotKey] = { id: row.item.id, name: row.item.name, rarity: row.item.rarity };
+        ringCount++;
+      } else {
+        equippedByCategory[row.item.type] = { id: row.item.id, name: row.item.name, rarity: row.item.rarity };
+      }
     }
   }
 

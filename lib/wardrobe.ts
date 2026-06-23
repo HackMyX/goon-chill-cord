@@ -23,6 +23,10 @@ export interface WardrobeCategory {
    * pseudo-category — no real item has this type, it's a sentinel the
    * wardrobe UI checks for to skip the type filter entirely. */
   dbType: string;
+  /** Key used to look up this slot in the equippedByCategory map.
+   * Only needed when a slot shares a dbType with another slot (ring2
+   * shares dbType "ring" but lives at equippedByCategory["ring2"]). */
+  slotKey?: string;
 }
 
 /** Shown first, ahead of every real slot — lets you browse/search the
@@ -51,7 +55,12 @@ export const WARDROBE_CATEGORIES: WardrobeCategory[] = [
   { id: "hair", label: "Haare", icon: User, dbType: "hair" },
   { id: "pet", label: "Haustier", icon: PawPrint, dbType: "pet" },
   { id: "weapon", label: "Waffe", icon: Sword, dbType: "weapon_cosmetic" },
-  { id: "ring", label: "Ring", icon: Circle, dbType: "ring" },
+  // Two ring slots — one per arm. Both share dbType "ring" (same item
+  // catalogue), but map to distinct keys in equippedByCategory:
+  //   "ring"  → right arm (slot 1, oldest-equipped ring)
+  //   "ring2" → left arm  (slot 2, newest-equipped ring)
+  { id: "ring", label: "Ring (rechts)", icon: Circle, dbType: "ring" },
+  { id: "ring2", label: "Ring (links)", icon: Circle, dbType: "ring", slotKey: "ring2" },
   { id: "amulet", label: "Amulett", icon: Gem, dbType: "amulet" },
 ];
 

@@ -39,14 +39,16 @@ export default async function WorldPage() {
     .from("inventory")
     .select("item:items(name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)")
     .eq("user_id", user.id)
-    .eq("equipped", true);
+    .eq("equipped", true)
+    .order("obtained_at", { ascending: true });
   let equipped: { item: unknown }[] | null = withStats.data;
   if (withStats.error) {
     const retry = await supabase
       .from("inventory")
       .select("item:items(name, rarity, type)")
       .eq("user_id", user.id)
-      .eq("equipped", true);
+      .eq("equipped", true)
+      .order("obtained_at", { ascending: true });
     equipped = (retry.data ?? []).map((row) => ({
       item: row.item ? { ...row.item, damage: null, armor: 0, perk_type: "none", perk_magnitude: 0, shield_hp: 0, shield_regen_cooldown_sec: 0 } : null,
     }));
@@ -63,8 +65,15 @@ export default async function WorldPage() {
   const characterConfig = await getCharacterConfig();
 
   const equippedByCategory: Record<string, EquippedItem> = {};
+  let worldRingCount = 0;
   for (const row of (equipped ?? []) as unknown as { item: EquippedItem & { type: string } }[]) {
-    if (row.item) equippedByCategory[row.item.type] = row.item;
+    if (!row.item) continue;
+    if (row.item.type === "ring") {
+      equippedByCategory[worldRingCount === 0 ? "ring" : "ring2"] = row.item;
+      worldRingCount++;
+    } else {
+      equippedByCategory[row.item.type] = row.item;
+    }
   }
 
   return (

@@ -112,6 +112,7 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
     const trail = equippedByCategory.trail;
     const pet = equippedByCategory.pet;
     const ring = equippedByCategory.ring;
+    const ring2 = equippedByCategory.ring2;
     const amulet = equippedByCategory.amulet;
     const build = BUILD[gender];
 
@@ -143,6 +144,7 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
         "trail",
         "pet",
         "ring",
+        "ring2",
         "amulet",
       ]);
       for (const type of Object.keys(equippedByCategory)) {
@@ -226,13 +228,19 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
           </group>
         )}
 
-        {/* left arm: shoulder-pivoted group, shield (if any) rides on it */}
+        {/* left arm: shoulder-pivoted group, shield (if any) rides on it;
+            ring2 sits at the wrist so it's visible with or without a shield */}
         <group ref={armL} position={[-build.armX, SHOULDER_Y, 0]}>
           <mesh position={[0, -0.375, 0]}>
             <boxGeometry args={[0.22, 0.75, 0.22]} />
             <meshStandardMaterial color={SKIN} />
           </mesh>
           {shield && <ShieldVariant item={shield} />}
+          {ring2 && (
+            <group position={[0, -0.62, 0]}>
+              <RingVariant item={ring2} />
+            </group>
+          )}
         </group>
 
         {/* right arm: shoulder-pivoted group, weapon (if any) swings with it */}

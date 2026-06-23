@@ -24,19 +24,34 @@ export async function toggleEquip(
   }
 
   if (nextEquipped) {
-    // Only one item per slot may be equipped at a time.
-    const { data: sameSlot } = await supabase
-      .from("inventory")
-      .select("id, items!inner(type)")
-      .eq("user_id", user.id)
-      .eq("items.type", dbType);
-
-    const idsToUnequip = (sameSlot ?? []).map((row) => row.id);
-    if (idsToUnequip.length > 0) {
-      await supabase
+    if (dbType === "ring") {
+      // Allow up to 2 rings simultaneously (one per arm). Only unequip the
+      // oldest-equipped ring when both slots are already taken.
+      const { data: equippedRings } = await supabase
         .from("inventory")
-        .update({ equipped: false })
-        .in("id", idsToUnequip);
+        .select("id, obtained_at, items!inner(type)")
+        .eq("user_id", user.id)
+        .eq("equipped", true)
+        .eq("items.type", "ring");
+
+      const rings = (equippedRings ?? []) as { id: string; obtained_at: string | null }[];
+      rings.sort((a, b) => (a.obtained_at ?? "").localeCompare(b.obtained_at ?? ""));
+
+      if (rings.length >= 2) {
+        await supabase.from("inventory").update({ equipped: false }).eq("id", rings[0].id);
+      }
+    } else {
+      // Only one item per slot may be equipped at a time.
+      const { data: sameSlot } = await supabase
+        .from("inventory")
+        .select("id, items!inner(type)")
+        .eq("user_id", user.id)
+        .eq("items.type", dbType);
+
+      const idsToUnequip = (sameSlot ?? []).map((row) => row.id);
+      if (idsToUnequip.length > 0) {
+        await supabase.from("inventory").update({ equipped: false }).in("id", idsToUnequip);
+      }
     }
   }
 

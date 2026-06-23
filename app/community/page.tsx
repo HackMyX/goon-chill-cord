@@ -56,7 +56,12 @@ export default async function CommunityPage() {
 
     if (row.equipped) {
       const equipped = equippedByUser.get(row.user_id) ?? {};
-      equipped[row.item.type] = { id: row.item.id, name: row.item.name, rarity: row.item.rarity };
+      if (row.item.type === "ring") {
+        const slotKey = equipped["ring"] ? "ring2" : "ring";
+        equipped[slotKey] = { id: row.item.id, name: row.item.name, rarity: row.item.rarity };
+      } else {
+        equipped[row.item.type] = { id: row.item.id, name: row.item.name, rarity: row.item.rarity };
+      }
       equippedByUser.set(row.user_id, equipped);
     }
   }
