@@ -39,13 +39,13 @@ function StatBadge({
   tooltip: string;
 }) {
   return (
-    <div className="group relative inline-flex">
+    <div className="group/tip relative inline-flex">
       <span
         className={`cursor-help rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${badgeClass}`}
       >
         {children}
       </span>
-      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 w-56 -translate-x-1/2 rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-2 text-[11px] leading-relaxed text-zinc-300 opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100">
+      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 w-56 -translate-x-1/2 rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-2 text-[11px] leading-relaxed text-zinc-300 opacity-0 shadow-xl transition-opacity duration-150 group-hover/tip:opacity-100">
         {tooltip}
       </div>
     </div>
