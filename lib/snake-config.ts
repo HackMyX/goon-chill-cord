@@ -13,6 +13,17 @@ export interface SnakeConfig {
   leaderboardSize: number;
   sectionTitle: string;
   sectionSubtitle: string;
+  // Bonus system
+  bonusEveryN: number;
+  bonusCrFlat: number;
+  bonusMultiplierApples: number;
+  // Golden apple
+  goldenAppleEnabled: boolean;
+  goldenAppleCrMultiplier: number;
+  goldenAppleLifeApples: number;
+  // Visual
+  startLength: number;
+  particlesEnabled: boolean;
 }
 
 export const DEFAULT_SNAKE_CONFIG: SnakeConfig = {
@@ -30,4 +41,12 @@ export const DEFAULT_SNAKE_CONFIG: SnakeConfig = {
   leaderboardSize: 20,
   sectionTitle: "Snake",
   sectionSubtitle: "Sammle Äpfel, verdiene Credits",
+  bonusEveryN: 10,
+  bonusCrFlat: 50,
+  bonusMultiplierApples: 5,
+  goldenAppleEnabled: true,
+  goldenAppleCrMultiplier: 5,
+  goldenAppleLifeApples: 8,
+  startLength: 3,
+  particlesEnabled: true,
 };

@@ -137,6 +137,56 @@
   100% { transform: translateX(200%); }
 }
 
+/* Mine animations */
+@keyframes pickaxe-swing {
+  0%, 100% { transform: rotate(-35deg) translateY(0px); }
+  35% { transform: rotate(22deg) translateY(5px); }
+  60% { transform: rotate(-8deg) translateY(-2px); }
+}
+@keyframes pickaxe-swing-alt {
+  0%, 100% { transform: rotate(30deg) translateY(0px) scaleX(-1); }
+  35% { transform: rotate(-25deg) translateY(5px) scaleX(-1); }
+  60% { transform: rotate(8deg) translateY(-2px) scaleX(-1); }
+}
+@keyframes ore-float {
+  0% { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+  100% { transform: translateY(-60px) rotate(90deg) scale(0.3); opacity: 0; }
+}
+@keyframes mine-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(217, 119, 6, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(217, 119, 6, 0.5), 0 0 60px rgba(217, 119, 6, 0.2); }
+}
+@keyframes mine-shimmer {
+  0% { transform: translateX(-100%) skewX(-20deg); }
+  100% { transform: translateX(400%) skewX(-20deg); }
+}
+@keyframes mine-collect-burst {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.9; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes float-up {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-80px); opacity: 0; }
+}
+
+/* Snake / general game animations */
+@keyframes snake-bonus-flash {
+  0%, 100% { opacity: 0; }
+  20%, 80% { opacity: 1; }
+}
+@keyframes snake-banner-in {
+  0% { transform: translateY(-100%) scaleY(0.8); opacity: 0; }
+  15% { transform: translateY(0) scaleY(1); opacity: 1; }
+  75% { transform: translateY(0) scaleY(1); opacity: 1; }
+  100% { transform: translateY(-100%) scaleY(0.8); opacity: 0; }
+}
+@keyframes score-pop {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
 @keyframes rgbBorder {
   from {
     background-position: 0% 50%;

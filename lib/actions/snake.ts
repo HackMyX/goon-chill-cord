@@ -51,6 +51,14 @@ export async function getSnakeConfig(): Promise<SnakeConfig> {
     leaderboardSize: data.leaderboard_size ?? d.leaderboardSize,
     sectionTitle: data.section_title?.trim() || d.sectionTitle,
     sectionSubtitle: data.section_subtitle?.trim() || d.sectionSubtitle,
+    bonusEveryN: data.bonus_every_n ?? d.bonusEveryN,
+    bonusCrFlat: data.bonus_cr_flat ?? d.bonusCrFlat,
+    bonusMultiplierApples: data.bonus_multiplier_apples ?? d.bonusMultiplierApples,
+    goldenAppleEnabled: data.golden_apple_enabled ?? d.goldenAppleEnabled,
+    goldenAppleCrMultiplier: data.golden_apple_cr_multiplier ?? d.goldenAppleCrMultiplier,
+    goldenAppleLifeApples: data.golden_apple_life_apples ?? d.goldenAppleLifeApples,
+    startLength: data.start_length ?? d.startLength,
+    particlesEnabled: data.particles_enabled ?? d.particlesEnabled,
   };
 }
 
@@ -80,6 +88,14 @@ export async function updateSnakeConfig(
     leaderboard_size: Math.max(5, Math.min(100, Math.round(input.leaderboardSize))),
     section_title: input.sectionTitle?.trim() || DEFAULT_SNAKE_CONFIG.sectionTitle,
     section_subtitle: input.sectionSubtitle?.trim() || DEFAULT_SNAKE_CONFIG.sectionSubtitle,
+    bonus_every_n: Math.max(1, Math.round(input.bonusEveryN)),
+    bonus_cr_flat: Math.max(0, Math.round(input.bonusCrFlat)),
+    bonus_multiplier_apples: Math.max(0, Math.round(input.bonusMultiplierApples)),
+    golden_apple_enabled: input.goldenAppleEnabled,
+    golden_apple_cr_multiplier: Math.max(1, input.goldenAppleCrMultiplier),
+    golden_apple_life_apples: Math.max(1, Math.round(input.goldenAppleLifeApples)),
+    start_length: Math.max(1, Math.min(10, Math.round(input.startLength))),
+    particles_enabled: input.particlesEnabled,
     updated_at: new Date().toISOString(),
   });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw, Save, CheckCircle, XCircle, Joystick } from "lucide-react";
+import { RotateCcw, Save, CheckCircle, XCircle, Joystick, Gift, Star, Sparkles, Zap } from "lucide-react";
 import { updateSnakeConfig } from "@/lib/actions/snake";
 import { DEFAULT_SNAKE_CONFIG, type SnakeConfig } from "@/lib/snake-config";
 
@@ -169,6 +169,98 @@ export function SnakeConfigEditor({ config }: SnakeConfigEditorProps) {
               className={`relative h-6 w-11 rounded-full transition-colors ${form.wallWrap ? "bg-emerald-500" : "bg-white/10"}`}
             >
               <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${form.wallWrap ? "left-6" : "left-1"}`} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Bonus system */}
+      <div className="rounded-xl border border-amber-400/20 bg-amber-500/5 p-4">
+        <h4 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-amber-400">
+          <Gift className="h-3.5 w-3.5" /> Bonus-System
+        </h4>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold text-zinc-400">Bonus alle N Äpfel</span>
+            <input type="number" min={1} max={100} value={form.bonusEveryN}
+              onChange={(e) => set("bonusEveryN", Math.max(1, parseInt(e.target.value) || 10))}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold text-zinc-400">Bonus-CR (flach)</span>
+            <input type="number" min={0} max={10000} value={form.bonusCrFlat}
+              onChange={(e) => set("bonusCrFlat", Math.max(0, parseInt(e.target.value) || 0))}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60" />
+          </label>
+          <label className="col-span-2 flex flex-col gap-1">
+            <span className="text-xs font-semibold text-zinc-400">
+              2× Multiplikator für die nächsten N Äpfel nach Bonus (0 = deaktiviert)
+            </span>
+            <input type="number" min={0} max={50} value={form.bonusMultiplierApples}
+              onChange={(e) => set("bonusMultiplierApples", Math.max(0, parseInt(e.target.value) || 0))}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60" />
+          </label>
+        </div>
+        <p className="mt-2 text-[11px] text-zinc-600">
+          Alle {form.bonusEveryN} Äpfel → +{form.bonusCrFlat} CR flat{form.bonusMultiplierApples > 0 ? ` + 2× für ${form.bonusMultiplierApples} Äpfel` : ""}.
+        </p>
+      </div>
+
+      {/* Golden apple */}
+      <div className="rounded-xl border border-yellow-400/20 bg-yellow-500/5 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-yellow-400">
+            <Star className="h-3.5 w-3.5" /> Goldener Apfel
+          </h4>
+          <button
+            onClick={() => set("goldenAppleEnabled", !form.goldenAppleEnabled)}
+            className={`relative h-6 w-11 rounded-full transition-colors ${form.goldenAppleEnabled ? "bg-yellow-500" : "bg-white/10"}`}
+          >
+            <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${form.goldenAppleEnabled ? "left-6" : "left-1"}`} />
+          </button>
+        </div>
+        {form.goldenAppleEnabled && (
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-zinc-400">CR-Multiplikator (×normal)</span>
+              <input type="number" min={1} max={50} step={0.5} value={form.goldenAppleCrMultiplier}
+                onChange={(e) => set("goldenAppleCrMultiplier", Math.max(1, parseFloat(e.target.value) || 5))}
+                className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-yellow-400/60" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-zinc-400">Verschwindet nach N Äpfeln</span>
+              <input type="number" min={1} max={50} value={form.goldenAppleLifeApples}
+                onChange={(e) => set("goldenAppleLifeApples", Math.max(1, parseInt(e.target.value) || 8))}
+                className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-yellow-400/60" />
+            </label>
+          </div>
+        )}
+      </div>
+
+      {/* Visual settings */}
+      <div className="rounded-xl border border-white/8 bg-black/10 p-4">
+        <h4 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
+          <Sparkles className="h-3.5 w-3.5" /> Visuals
+        </h4>
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-zinc-400">Startlänge der Schlange</span>
+              <input type="number" min={1} max={10} value={form.startLength}
+                onChange={(e) => set("startLength", Math.max(1, Math.min(10, parseInt(e.target.value) || 3)))}
+                className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+            </label>
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-white/8 bg-black/20 px-4 py-3">
+            <div>
+              <p className="text-sm font-bold text-zinc-200">Partikel-Effekte</p>
+              <p className="text-xs text-zinc-500">Explosionen beim Apfel essen, Bonus-Bursts</p>
+            </div>
+            <button
+              onClick={() => set("particlesEnabled", !form.particlesEnabled)}
+              className={`relative h-6 w-11 rounded-full transition-colors ${form.particlesEnabled ? "bg-purple-500" : "bg-white/10"}`}
+            >
+              <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${form.particlesEnabled ? "left-6" : "left-1"}`} />
             </button>
           </div>
         </div>
