@@ -15,8 +15,11 @@ import {
 import { debugWarn } from "@/lib/debug";
 import type { RemotePlayerRegistry } from "@/components/world/combat-types";
 
-const POSITION_LERP_RATE = 9;
-const HEADING_TURN_RATE = 9;
+const POSITION_LERP_RATE = 14;
+const HEADING_TURN_RATE = 12;
+// Dead-reckoning: max look-ahead window (seconds). Keeps prediction
+// from overshooting when a sync is late or the peer stops abruptly.
+const DR_MAX_LOOKAHEAD = 0.12;
 
 let pvpBloodBurstSeq = 0;
 
@@ -101,6 +104,9 @@ function RemotePlayerAvatar({
   // Same "ref for hot data, state for what actually needs a re-render"
   // split Player.tsx uses throughout.
   const target = useRef({ x: 0, z: 0, yaw: 0 });
+  const velocity = useRef({ vx: 0, vz: 0 });
+  const lastSyncTime = useRef(0);
+  const prevSyncPos = useRef({ x: 0, z: 0 });
   const hasReceivedFirst = useRef(false);
   const walkClock = useRef(0);
   const walkAmplitude = useRef(0);
@@ -141,22 +147,36 @@ function RemotePlayerAvatar({
   useEffect(() => {
     return subscribeToWorldTransforms((payload) => {
       if (payload.id !== userId) return;
-      target.current.x = payload.x;
-      target.current.z = payload.z;
-      target.current.yaw = payload.yaw;
-      movingRef.current = payload.moving;
-      sprintingRef.current = payload.sprinting;
+
+      const now = performance.now();
       if (!hasReceivedFirst.current) {
         hasReceivedFirst.current = true;
-        // First sample: snap instead of lerping in from the origin, which
-        // would otherwise visibly slide the avatar in from (0,0) the
-        // instant it spawns.
+        target.current = { x: payload.x, z: payload.z, yaw: payload.yaw };
+        prevSyncPos.current = { x: payload.x, z: payload.z };
+        lastSyncTime.current = now;
+        velocity.current = { vx: 0, vz: 0 };
         const g = group.current;
         if (g) {
           g.position.set(payload.x, 0, payload.z);
           g.rotation.y = payload.yaw;
         }
+      } else {
+        const dtSec = Math.max(0.05, (now - lastSyncTime.current) / 1000);
+        if (payload.moving) {
+          // Derive velocity (units/sec) from position delta between syncs.
+          velocity.current.vx = (payload.x - prevSyncPos.current.x) / dtSec;
+          velocity.current.vz = (payload.z - prevSyncPos.current.z) / dtSec;
+        } else {
+          // Peer stopped — zero out so we don't overshoot into a wall.
+          velocity.current = { vx: 0, vz: 0 };
+        }
+        prevSyncPos.current = { x: payload.x, z: payload.z };
+        lastSyncTime.current = now;
+        target.current = { x: payload.x, z: payload.z, yaw: payload.yaw };
       }
+
+      movingRef.current = payload.moving;
+      sprintingRef.current = payload.sprinting;
     });
   }, [userId]);
 
@@ -164,8 +184,16 @@ function RemotePlayerAvatar({
     const g = group.current;
     if (!g || !hasReceivedFirst.current) return;
 
-    g.position.x = THREE.MathUtils.lerp(g.position.x, target.current.x, Math.min(1, delta * POSITION_LERP_RATE));
-    g.position.z = THREE.MathUtils.lerp(g.position.z, target.current.z, Math.min(1, delta * POSITION_LERP_RATE));
+    // Dead-reckoning: extrapolate ahead by how long it's been since the last
+    // sync (capped at DR_MAX_LOOKAHEAD so a late packet can't fling the avatar
+    // far off course). When the peer is standing still velocity is zero so the
+    // predicted position equals the authoritative one — no drift.
+    const timeSinceSync = Math.min((performance.now() - lastSyncTime.current) / 1000, DR_MAX_LOOKAHEAD);
+    const predX = target.current.x + velocity.current.vx * timeSinceSync;
+    const predZ = target.current.z + velocity.current.vz * timeSinceSync;
+
+    g.position.x = THREE.MathUtils.lerp(g.position.x, predX, Math.min(1, delta * POSITION_LERP_RATE));
+    g.position.z = THREE.MathUtils.lerp(g.position.z, predZ, Math.min(1, delta * POSITION_LERP_RATE));
     g.rotation.y += angleDelta(g.rotation.y, target.current.yaw) * Math.min(1, delta * HEADING_TURN_RATE);
 
     // Cosmetic walk-cycle driven by the peer's own reported moving/sprinting

@@ -48,12 +48,13 @@ export interface UpdateCaseTierInput {
   rarityWeights: Partial<Record<Rarity, number>>;
   enabled: boolean;
   itemTypes: string[];
-  /** Specific item IDs pinned to this tier. Empty array / undefined = use itemTypes pool. */
   itemIds?: string[] | null;
-  /** Group display title — stored on the standard-tier row, applies to the whole group. */
   groupLabel?: string | null;
-  /** Group display subtitle. */
   groupSubtitle?: string | null;
+  /** Credits deducted when clicking "Sofort anzeigen". 0 = free. */
+  previewCost?: number;
+  /** Max cases openable at once (2–10). */
+  multiOpenMax?: number;
 }
 
 export async function updateCaseTier(input: UpdateCaseTierInput): Promise<AdminActionResult> {
@@ -77,17 +78,18 @@ export async function updateCaseTier(input: UpdateCaseTierInput): Promise<AdminA
       item_ids: input.itemIds ?? null,
       group_label: input.groupLabel ?? null,
       group_subtitle: input.groupSubtitle ?? null,
+      preview_cost: input.previewCost ?? 0,
+      multi_open_max: Math.min(10, Math.max(2, input.multiOpenMax ?? 10)),
     })
     .eq("id", input.tierId)
     .select("id");
 
-  // New columns (item_ids, group_label, group_subtitle) may not exist yet —
-  // retry without them rather than blocking the save.
+  // New columns may not exist yet — retry without them rather than blocking the save.
   if (
     error?.message &&
-    (error.message.includes("item_ids") ||
-      error.message.includes("group_label") ||
-      error.message.includes("group_subtitle"))
+    (error.message.includes("item_ids") || error.message.includes("group_label") ||
+      error.message.includes("group_subtitle") || error.message.includes("preview_cost") ||
+      error.message.includes("multi_open_max"))
   ) {
     const retry = await admin
       .from("case_tiers")

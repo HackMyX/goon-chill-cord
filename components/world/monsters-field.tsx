@@ -138,7 +138,7 @@ export function MonstersField({
     });
   }, []);
 
-  // Broadcast own monster pool at ~4Hz so other players can render them.
+  // Broadcast own monster pool at ~8Hz so other players can render smooth movement.
   useEffect(() => {
     const intervalId = setInterval(() => {
       const ownIds = new Set(spawnsRef.current.map((s) => s.id));
@@ -161,7 +161,7 @@ export function MonstersField({
         })
         .filter((x): x is NonNullable<typeof x> => x !== null);
       broadcastMonsterSync({ ownerId: userId, monsters: snapshot });
-    }, 250);
+    }, 125);
     return () => clearInterval(intervalId);
   }, [userId, registryRef]);
 

@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-/**
- * `next` arrives as a raw query param — without this guard a value like
- * "//evil.com" or "https://evil.com" would be an open redirect, and
- * (more relevantly to past bug reports here) a malformed value could send
- * the browser straight back into a page that immediately bounces it again,
- * which *looks like* an infinite login<->home loop. Only same-app, root-
- * relative paths are accepted; anything else falls back to "/".
- */
 function sanitizeNext(value: string | null): string {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
   return value;
+}
+
+function extractIp(request: Request): string {
+  const fwd = request.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return request.headers.get("x-real-ip") ?? "unknown";
 }
 
 export async function GET(request: Request) {
@@ -20,15 +19,6 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const next = sanitizeNext(searchParams.get("next"));
 
-  // The single most common cause of "login works but I end up on the wrong
-  // domain / bounce forever" is that this exact origin (e.g.
-  // http://localhost:3000) isn't in Supabase's Authentication -> URL
-  // Configuration -> Redirect URLs allowlist. When that's the case Supabase
-  // silently ignores `redirectTo` and sends the browser back to the
-  // project's configured Site URL instead — which, on a project shared
-  // between local dev and production, is the live site. Logging the
-  // request's actual origin here makes that mismatch immediately visible
-  // in the server console instead of having to guess from symptoms.
   console.log("[auth/callback]", {
     origin,
     next,
@@ -39,11 +29,56 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
+    const { error, data } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (!error && data.user) {
+      const userId = data.user.id;
+      const admin = createAdminClient();
+
+      // Ensure a profile row exists — guards against the trigger failing silently
+      // (e.g. username uniqueness race) or the user being deleted+re-created.
+      const { data: existing } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (!existing) {
+        const meta = data.user.user_metadata ?? {};
+        const baseName = (meta.username ?? meta.full_name ?? meta.name ?? data.user.email?.split("@")[0] ?? "Spieler").slice(0, 28);
+
+        const { data: siteConf } = await admin
+          .from("site_config")
+          .select("starting_credits")
+          .eq("id", "default")
+          .maybeSingle();
+        const startingCredits = siteConf?.starting_credits ?? 500;
+
+        // Check uniqueness, append suffix if needed
+        const { data: nameTaken } = await admin
+          .from("profiles")
+          .select("id")
+          .eq("username", baseName)
+          .maybeSingle();
+        const username = nameTaken ? `${baseName}_${userId.slice(0, 5)}` : baseName;
+
+        await admin.from("profiles").upsert(
+          { id: userId, username, credits: startingCredits, cases_opened: 0, role: "user" },
+          { onConflict: "id", ignoreDuplicates: true }
+        );
+      }
+
+      // Log the login event for IP-tracking (security section)
+      const ip = extractIp(request);
+      const ua = request.headers.get("user-agent") ?? null;
+      try {
+        await admin.from("login_events").insert({ user_id: userId, ip_address: ip, user_agent: ua });
+      } catch { /* login_events may not exist yet on fresh installs — never block auth */ }
+
       return NextResponse.redirect(`${origin}${next}`);
     }
-    console.error("[auth/callback] exchangeCodeForSession failed", error.message);
+
+    console.error("[auth/callback] exchangeCodeForSession failed", error?.message);
   } else {
     console.error("[auth/callback] no ?code in callback URL — query was", requestUrl.search);
   }

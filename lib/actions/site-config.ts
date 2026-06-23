@@ -5,7 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { DEFAULT_SITE_CONFIG, type SiteConfig } from "@/lib/site-config";
-import { SITE_LOGO_ICONS, DEFAULT_SITE_LOGO_ICON } from "@/lib/site-logo-icons";
+// Import only server-safe name validation — NOT lib/site-logo-icons.ts, which
+// imports lucide-react "use client" components. When Next.js bundles this server
+// action into the /icon metadata route, that "use client" import triggers a hard
+// runtime error ("Attempted to call the default export of Icon.mjs from the server").
+import { VALID_ICON_NAMES, DEFAULT_ICON_NAME } from "@/lib/icon-svg-paths";
 
 interface SiteConfigRow {
   site_name: string;
@@ -35,7 +39,7 @@ export async function getSiteConfig(): Promise<SiteConfig> {
   return {
     siteName: row.site_name,
     logoUrl: row.logo_url,
-    logoIconName: row.logo_icon_name in SITE_LOGO_ICONS ? row.logo_icon_name : DEFAULT_SITE_LOGO_ICON,
+    logoIconName: VALID_ICON_NAMES.has(row.logo_icon_name) ? row.logo_icon_name : DEFAULT_ICON_NAME,
     startingCredits: typeof row.starting_credits === "number" ? row.starting_credits : 500,
     currencyName: row.currency_name?.trim() || DEFAULT_SITE_CONFIG.currencyName,
     damageLabel: row.damage_label?.trim() || DEFAULT_SITE_CONFIG.damageLabel,
@@ -72,7 +76,7 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
   }
 
   const startingCredits = Math.max(0, Math.min(1_000_000, Math.round(input.startingCredits ?? 500)));
-  const iconName = input.logoIconName in SITE_LOGO_ICONS ? input.logoIconName : DEFAULT_SITE_LOGO_ICON;
+  const iconName = VALID_ICON_NAMES.has(input.logoIconName) ? input.logoIconName : DEFAULT_ICON_NAME;
 
   const currencyName = input.currencyName?.trim().slice(0, 12);
   if (!currencyName) return { success: false, error: "Währungsname darf nicht leer sein." };

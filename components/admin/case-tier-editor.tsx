@@ -19,6 +19,8 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
   const [itemIds, setItemIds] = useState<string[]>(tier.item_ids ?? []);
   const [groupLabel, setGroupLabel] = useState(tier.group_label ?? "");
   const [groupSubtitle, setGroupSubtitle] = useState(tier.group_subtitle ?? "");
+  const [previewCost, setPreviewCost] = useState(tier.preview_cost ?? 0);
+  const [multiOpenMax, setMultiOpenMax] = useState(tier.multi_open_max ?? 10);
   const [itemSearch, setItemSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
@@ -59,6 +61,8 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
       itemIds,
       groupLabel: isStandard ? (groupLabel.trim() || null) : null,
       groupSubtitle: isStandard ? (groupSubtitle.trim() || null) : null,
+      previewCost: Math.max(0, previewCost),
+      multiOpenMax: Math.min(10, Math.max(2, multiOpenMax)),
     });
     setSaving(false);
     setStatus(res.success ? "saved" : "error");
@@ -140,6 +144,27 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
               value={price}
               onChange={(e) => setPrice(Number(e.target.value) || 0)}
               className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Sofort-Zeigen Kosten ({currencyName}, 0 = gratis)
+            <input
+              type="number"
+              min={0}
+              value={previewCost}
+              onChange={(e) => setPreviewCost(Math.max(0, Number(e.target.value) || 0))}
+              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Max. Batch-Open (2–10)
+            <input
+              type="number"
+              min={2}
+              max={10}
+              value={multiOpenMax}
+              onChange={(e) => setMultiOpenMax(Math.min(10, Math.max(2, Number(e.target.value) || 2)))}
+              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-blue-400/60"
             />
           </label>
 

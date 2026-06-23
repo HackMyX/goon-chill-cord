@@ -29,10 +29,11 @@ interface RemoteMonsterProps {
  * the local player), but it IS registered in the local MonsterRegistry so
  * the local player can melee it. `takeDamage` broadcasts `monster_hit` to
  * the owner, who applies the real damage in their own simulation; the visual
- * HP bar updates on the next `monster_sync` snapshot (~250ms later).
+ * HP bar updates on the next `monster_sync` snapshot (~125ms later).
  *
  * Slightly transparent so players can instantly distinguish remote monsters
- * from their own.
+ * from their own. Walk animation is driven by comparing consecutive sync
+ * positions — no flags needed.
  */
 export function RemoteMonster({
   ownerId,
@@ -49,13 +50,29 @@ export function RemoteMonster({
 }: RemoteMonsterProps) {
   const group = useRef<THREE.Group>(null);
   const healthFill = useRef<THREE.Mesh>(null);
+  const armL = useRef<THREE.Group>(null);
+  const armR = useRef<THREE.Group>(null);
+  const legL = useRef<THREE.Group>(null);
+  const legR = useRef<THREE.Group>(null);
+
   // Lerp target — updated via useEffect when sync arrives, animated in useFrame.
   const targetPos = useRef(new THREE.Vector3(x, y, z));
+  // Track previous sync position to infer movement state.
+  const lastSyncX = useRef(x);
+  const lastSyncZ = useRef(z);
+  const movingRef = useRef(false);
+  const walkClock = useRef(0);
+  const walkAmplitude = useRef(0);
+
   // Keep hp/maxHp in refs so the registry handle closure always reads current values.
   const hpRef = useRef(hp);
   const maxHpRef = useRef(maxHp);
 
   useEffect(() => {
+    const dist = Math.hypot(x - lastSyncX.current, z - lastSyncZ.current);
+    movingRef.current = dist > 0.05;
+    lastSyncX.current = x;
+    lastSyncZ.current = z;
     targetPos.current.set(x, y, z);
   }, [x, y, z]);
 
@@ -66,7 +83,25 @@ export function RemoteMonster({
 
   useFrame((_, delta) => {
     if (!group.current) return;
-    group.current.position.lerp(targetPos.current, Math.min(1, delta * 8));
+
+    // Smooth position interpolation — rate 14 instead of 8 so the avatar
+    // stays close to the owner's real position at 8Hz updates.
+    group.current.position.lerp(targetPos.current, Math.min(1, delta * 14));
+
+    // Walk animation driven by movement state inferred from sync position delta.
+    walkAmplitude.current = THREE.MathUtils.lerp(
+      walkAmplitude.current,
+      movingRef.current ? 1 : 0,
+      Math.min(1, delta * 8)
+    );
+    if (movingRef.current || walkAmplitude.current > 0.01) {
+      walkClock.current += delta * 7;
+    }
+    const swing = Math.sin(walkClock.current) * walkAmplitude.current * 0.42;
+    if (legL.current) legL.current.rotation.x = swing;
+    if (legR.current) legR.current.rotation.x = -swing;
+    if (armL.current) armL.current.rotation.x = -swing * 0.8;
+    if (armR.current) armR.current.rotation.x = swing * 0.8;
 
     if (healthFill.current) {
       const frac = maxHpRef.current > 0 ? Math.max(0, hpRef.current / maxHpRef.current) : 0;
@@ -94,7 +129,7 @@ export function RemoteMonster({
     return () => {
       registryRef.current = registryRef.current.filter((h) => h !== handle);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable identifiers only; re-registration not needed on position/hp changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable identifiers only
   }, []);
 
   const isSlime = type.visualKind === "slime";
@@ -137,26 +172,34 @@ export function RemoteMonster({
               opacity={isGhost ? REMOTE_OPACITY * 0.6 : REMOTE_OPACITY}
             />
           </mesh>
-          {/* Arms */}
-          <mesh position={[-0.32, 1.42, 0]} castShadow>
-            <boxGeometry args={[0.2, 0.6, 0.2]} />
-            <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
-          </mesh>
-          <mesh position={[0.32, 1.42, 0]} castShadow>
-            <boxGeometry args={[0.2, 0.6, 0.2]} />
-            <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
-          </mesh>
-          {/* Legs (not for ghost) */}
+          {/* Arms — animated groups */}
+          <group ref={armL} position={[-0.32, 1.72, 0]}>
+            <mesh position={[0, -0.3, 0]} castShadow>
+              <boxGeometry args={[0.2, 0.6, 0.2]} />
+              <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
+            </mesh>
+          </group>
+          <group ref={armR} position={[0.32, 1.72, 0]}>
+            <mesh position={[0, -0.3, 0]} castShadow>
+              <boxGeometry args={[0.2, 0.6, 0.2]} />
+              <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
+            </mesh>
+          </group>
+          {/* Legs — animated groups (not for ghost) */}
           {!isGhost && (
             <>
-              <mesh position={[-0.15, 0.85, 0]} castShadow>
-                <boxGeometry args={[0.22, 0.85, 0.22]} />
-                <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
-              </mesh>
-              <mesh position={[0.15, 0.85, 0]} castShadow>
-                <boxGeometry args={[0.22, 0.85, 0.22]} />
-                <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
-              </mesh>
+              <group ref={legL} position={[-0.15, 1.1, 0]}>
+                <mesh position={[0, -0.42, 0]} castShadow>
+                  <boxGeometry args={[0.22, 0.85, 0.22]} />
+                  <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
+                </mesh>
+              </group>
+              <group ref={legR} position={[0.15, 1.1, 0]}>
+                <mesh position={[0, -0.42, 0]} castShadow>
+                  <boxGeometry args={[0.22, 0.85, 0.22]} />
+                  <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
+                </mesh>
+              </group>
             </>
           )}
           {isGhost && (

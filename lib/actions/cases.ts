@@ -208,3 +208,152 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
     newCredits: updatedRows[0].credits,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Skip-fee: charge credits when the player clicks "Sofort anzeigen"
+// ---------------------------------------------------------------------------
+
+export interface ChargeSkipFeeResult {
+  success: boolean;
+  error?: string;
+  newCredits?: number;
+}
+
+export async function chargeSkipFee(tierId: string): Promise<ChargeSkipFeeResult> {
+  const caseGroups = await getCaseConfig();
+  const found = findCaseTier(tierId, caseGroups);
+  if (!found) return { success: false, error: "Unbekanntes Case." };
+  const { tier } = found;
+  const cost = tier.previewCost ?? 0;
+  if (cost <= 0) return { success: true }; // free — no DB round-trip needed
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const { data: current } = await supabase
+    .from("profiles").select("credits").eq("id", user.id).single();
+  if (!current || current.credits < cost) {
+    return { success: false, error: "Nicht genug Credits für Sofort-Anzeige." };
+  }
+
+  const { data: rows, error } = await supabase
+    .from("profiles")
+    .update({ credits: current.credits - cost })
+    .eq("id", user.id)
+    .gte("credits", cost)
+    .select("credits");
+
+  if (error || !rows || rows.length === 0) {
+    return { success: false, error: "Nicht genug Credits für Sofort-Anzeige." };
+  }
+  return { success: true, newCredits: rows[0].credits };
+}
+
+// ---------------------------------------------------------------------------
+// Batch open: open N cases of the same tier atomically
+// ---------------------------------------------------------------------------
+
+export interface OpenCaseBatchResult {
+  success: boolean;
+  error?: string;
+  items?: WonItem[];
+  newCredits?: number;
+  openedCount?: number;
+}
+
+export async function openCaseBatch(tierId: string, count: number): Promise<OpenCaseBatchResult> {
+  const safeCount = Math.max(2, Math.min(10, Math.round(count)));
+  const caseGroups = await getCaseConfig();
+  const found = findCaseTier(tierId, caseGroups);
+  if (!found) return { success: false, error: "Unbekanntes Case." };
+  const { group, tier } = found;
+
+  if (tier.enabled === false) return { success: false, error: "Dieses Case ist deaktiviert." };
+  const maxAllowed = tier.multiOpenMax ?? 10;
+  if (safeCount > maxAllowed) {
+    return { success: false, error: `Maximal ${maxAllowed} Cases gleichzeitig erlaubt.` };
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Du musst eingeloggt sein." };
+
+  const { data: profile } = await supabase
+    .from("profiles").select("credits, cases_opened").eq("id", user.id).single();
+  if (!profile) return { success: false, error: "Profil nicht gefunden." };
+
+  const totalCost = tier.price * safeCount;
+  if (profile.credits < totalCost) {
+    return { success: false, error: `Nicht genug Credits (benötigt: ${totalCost.toLocaleString("de-DE")}).` };
+  }
+
+  // Load item pool once, reuse for all N rolls
+  const useSpecificItems = tier.itemIds && tier.itemIds.length > 0;
+  const itemTypes = tier.itemTypes ?? group.itemTypes;
+  const FULL_SELECT = "id, name, rarity, type, image_url, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec";
+  const { data: fullPool } = useSpecificItems
+    ? await supabase.from("items").select(FULL_SELECT).in("id", tier.itemIds!).limit(500)
+    : await supabase.from("items").select(FULL_SELECT).in("type", itemTypes).limit(500);
+
+  if (!fullPool || fullPool.length === 0) {
+    return { success: false, error: "Keine Items im Pool gefunden." };
+  }
+
+  // Roll N items, each filtered by rolled rarity, with fallback to any rarity
+  const wonItems: WonItem[] = [];
+  for (let i = 0; i < safeCount; i++) {
+    const rarity = pickRarity(tier.rarityWeights);
+    const rarityPool = fullPool.filter((it) => it.rarity === rarity);
+    const draw = rarityPool.length > 0 ? rarityPool : fullPool;
+    wonItems.push(draw[Math.floor(Math.random() * draw.length)] as WonItem);
+  }
+
+  // Atomic deduction: gte guard prevents double-spend
+  const { data: updated, error: updateErr } = await supabase
+    .from("profiles")
+    .update({ credits: profile.credits - totalCost, cases_opened: profile.cases_opened + safeCount })
+    .eq("id", user.id)
+    .gte("credits", totalCost)
+    .select("credits");
+
+  if (updateErr || !updated || updated.length === 0) {
+    return { success: false, error: "Credits konnten nicht abgezogen werden." };
+  }
+
+  // Grant all items to inventory in one batch insert
+  await supabase.from("inventory").insert(
+    wonItems.map((item) => ({ user_id: user.id, item_id: item.id }))
+  );
+
+  // Audit — best-effort
+  try {
+    await createAdminClient().from("audit_logs").insert({
+      user_id: user.id,
+      action: "case_batch_open",
+      payload: { tierId: tier.id, count: safeCount, totalCost, wonItemIds: wonItems.map((i) => i.id) },
+    });
+  } catch { /* ignore */ }
+
+  revalidatePath("/");
+
+  // Single summary notification for batch opens
+  const bestRarity = (["ultra", "mythisch", "selten", "normal"] as const).find(
+    (r) => wonItems.some((i) => i.rarity === r)
+  ) ?? "normal";
+  const bestLabel = RARITY_LABELS[bestRarity];
+  await notifyUser({
+    userId: user.id,
+    type: "case_opened",
+    title: bestRarity === "ultra" || bestRarity === "mythisch" ? `${bestLabel}-Drop in Batch!` : `${safeCount}× Case geöffnet`,
+    message: `Du hast ${safeCount} ${tier.label}-Cases geöffnet. Bestes Item: ${bestRarity === "ultra" || bestRarity === "mythisch" ? `„${wonItems.find((i) => i.rarity === bestRarity)?.name}" (${bestLabel})` : `${bestLabel}`}.`,
+    link: "/garderobe",
+  });
+
+  return {
+    success: true,
+    items: wonItems,
+    newCredits: updated[0].credits,
+    openedCount: safeCount,
+  };
+}

@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Loader2,
   Calendar,
+  FileDown,
 } from "lucide-react";
 import {
   getDebugLogs,
@@ -32,6 +33,51 @@ const LEVEL_ICON: Record<DebugLogEntry["level"], typeof Bug> = {
   warn: AlertTriangle,
   info: Info,
 };
+
+function exportEntryAsPdf(entry: DebugLogEntry) {
+  const ts = new Date(entry.createdAt).toLocaleString("de-DE", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const LEVEL_COLOR: Record<DebugLogEntry["level"], string> = {
+    error: "#ef4444", warn: "#f59e0b", info: "#3b82f6",
+  };
+  const color = LEVEL_COLOR[entry.level];
+  const detailHtml = entry.detail
+    ? `<h3>Stack-Trace / Detail</h3><pre>${escapeHtml(entry.detail)}</pre>`
+    : "";
+  const contextHtml = entry.context
+    ? `<h3>Kontext (JSON)</h3><pre>${escapeHtml(JSON.stringify(entry.context, null, 2))}</pre>`
+    : "";
+  const html = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
+<title>Debug-Log — ${escapeHtml(entry.message)}</title>
+<style>
+  body { font-family: monospace; font-size: 12px; color: #111; max-width: 900px; margin: 2rem auto; }
+  h1 { font-size: 16px; margin: 0 0 .25rem; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 99px; color: #fff;
+    font-weight: 700; font-size: 11px; background: ${color}; margin-right: 8px; }
+  .scope { border: 1px solid #ccc; padding: 2px 8px; border-radius: 99px; font-size: 11px; }
+  .meta { color: #555; font-size: 11px; margin: .5rem 0 1rem; }
+  h3 { font-size: 12px; font-weight: 700; color: #333; margin: 1rem 0 .25rem; border-top: 1px solid #eee; padding-top: .75rem; }
+  pre { background: #f5f5f5; padding: .75rem 1rem; border-radius: 6px; white-space: pre-wrap; word-break: break-all; font-size: 11px; line-height: 1.5; }
+  @media print { body { margin: .5rem; } }
+</style></head><body>
+<span class="badge">${entry.level.toUpperCase()}</span><span class="scope">${escapeHtml(entry.scope)}</span>
+<h1>${escapeHtml(entry.message)}</h1>
+<p class="meta">Zeitstempel: ${ts} &nbsp;|&nbsp; ID: ${escapeHtml(entry.id)}</p>
+${detailHtml}${contextHtml}
+</body></html>`;
+  const win = window.open("", "_blank", "width=900,height=700");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 function LogRow({ entry, onDeleted }: { entry: DebugLogEntry; onDeleted: () => void }) {
   const [expanded, setExpanded] = useState(false);
@@ -101,6 +147,13 @@ function LogRow({ entry, onDeleted }: { entry: DebugLogEntry; onDeleted: () => v
           {!entry.detail && !entry.context && (
             <p className="text-xs text-zinc-600">Keine weiteren Details vorhanden.</p>
           )}
+          <button
+            onClick={() => { sound.click(); exportEntryAsPdf(entry); }}
+            className="mt-3 flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-400 hover:border-purple-400/50 hover:text-purple-300 transition-colors"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            Als PDF exportieren
+          </button>
         </div>
       )}
     </div>

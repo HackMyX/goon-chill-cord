@@ -100,6 +100,10 @@ export interface CaseTier {
   groupLabel?: string;
   /** Group-level subtitle stored on the standard tier row. */
   groupSubtitle?: string;
+  /** Credits charged when the player clicks "Sofort anzeigen" (skip animation). 0 = free. */
+  previewCost?: number;
+  /** Max number of cases that can be opened simultaneously (2–10). */
+  multiOpenMax?: number;
 }
 
 /** Every dbType currently in circulation — shown to the admin as the known

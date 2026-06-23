@@ -63,6 +63,16 @@ export const ICON_SVG_PATHS: Record<string, string> = {
     '<path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/>',
 };
 
+/** Default icon name — matches DEFAULT_SITE_LOGO_ICON in lib/site-logo-icons.ts
+ * but importable here without pulling in lucide-react (server-safe). */
+export const DEFAULT_ICON_NAME = "Gamepad2";
+
+/** Valid icon names as a Set — lets server-only code (lib/actions/site-config.ts)
+ * validate icon names without importing lib/site-logo-icons.ts (which imports
+ * lucide-react "use client" components and causes a runtime error in the
+ * /icon metadata route handler). */
+export const VALID_ICON_NAMES: ReadonlySet<string> = new Set(Object.keys(ICON_SVG_PATHS));
+
 /** Returns the inner SVG path markup for a named icon, falling back to
  * Gamepad2 (the default logo icon). */
 export function getIconSvgPaths(name: string | null | undefined): string {

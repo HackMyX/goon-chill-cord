@@ -74,7 +74,7 @@ function FloatingDamageNumber({ amount }: { amount: number }) {
  * ever happens" — every monster keeps slowly circulating even with no
  * target at all, so eventually one wanders within aggro range of any
  * given spot instead of waiting forever for the player to walk to it. */
-const WANDER_SPEED_FRACTION = 0.32;
+const WANDER_SPEED_FRACTION = 0.42;
 const WANDER_MIN_INTERVAL_SEC = 3;
 const WANDER_MAX_INTERVAL_SEC = 7;
 
@@ -398,18 +398,21 @@ export function Monster({
       g.position.z += dirZ * type.moveSpeed * delta;
       g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, Math.atan2(dirX, dirZ), Math.min(1, delta * 6));
     } else if (!hasTarget) {
-      // Idle wander — see WANDER_SPEED_FRACTION's doc comment for why this
-      // exists at all: without it, a monster with nobody in its aggro
-      // range just stood completely still forever, meaning a player who
-      // simply never approached one could stand around indefinitely with
-      // zero risk. Slowly drifts in `wanderAngle`, picking a fresh one
-      // every few seconds, and turns back toward the world center if it
-      // ever nears the edge instead of piling up against the border.
+      // Idle wander with player-seeking bias — 65% of wander direction changes
+      // drift toward the player (±0.5 rad spread), 35% are fully random.
+      // This ensures monsters spawned far away naturally converge on the player
+      // over time instead of permanently circling in a distant corner.
       wanderTimer.current -= delta;
       if (wanderTimer.current <= 0) {
         wanderTimer.current =
           WANDER_MIN_INTERVAL_SEC + Math.random() * (WANDER_MAX_INTERVAL_SEC - WANDER_MIN_INTERVAL_SEC);
-        wanderAngle.current = Math.random() * Math.PI * 2;
+        if (Math.random() < 0.65) {
+          // Seek player — angle toward them with a small random spread so it
+          // still looks organic rather than a beeline once they're close.
+          wanderAngle.current = Math.atan2(dx, dz) + (Math.random() - 0.5) * 1.0;
+        } else {
+          wanderAngle.current = Math.random() * Math.PI * 2;
+        }
       }
       const distFromCenter = Math.hypot(g.position.x, g.position.z);
       if (distFromCenter > WORLD_RADIUS - 4) {

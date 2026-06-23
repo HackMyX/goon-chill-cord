@@ -10,6 +10,8 @@ interface CaseTierRow {
   item_ids: string[] | null;
   group_label: string | null;
   group_subtitle: string | null;
+  preview_cost: number | null;
+  multi_open_max: number | null;
 }
 
 function mergeTier(tier: CaseTier, override?: CaseTierRow): CaseTier {
@@ -23,6 +25,8 @@ function mergeTier(tier: CaseTier, override?: CaseTierRow): CaseTier {
     itemIds: override.item_ids?.length ? override.item_ids : undefined,
     groupLabel: override.group_label ?? undefined,
     groupSubtitle: override.group_subtitle ?? undefined,
+    previewCost: override.preview_cost ?? 0,
+    multiOpenMax: Math.min(10, Math.max(2, override.multi_open_max ?? 10)),
   };
 }
 
@@ -38,7 +42,7 @@ export async function getCaseConfig(): Promise<CaseGroup[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("case_tiers")
-    .select("id, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle");
+    .select("id, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, preview_cost, multi_open_max");
 
   if (error || !data || data.length === 0) {
     return CASE_GROUPS;

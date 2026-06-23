@@ -40,9 +40,19 @@ export default async function AdminPage() {
   async function fetchTierRows() {
     const withAll = await admin
       .from("case_tiers")
-      .select("id, group_id, label, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, updated_at")
+      .select("id, group_id, label, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, preview_cost, multi_open_max, updated_at")
       .order("group_id", { ascending: true });
     if (!withAll.error) return withAll.data;
+
+    const withOld = await admin
+      .from("case_tiers")
+      .select("id, group_id, label, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, updated_at")
+      .order("group_id", { ascending: true });
+    if (!withOld.error) {
+      return (withOld.data ?? []).map((row) => ({
+        ...row, preview_cost: 0, multi_open_max: 10,
+      }));
+    }
 
     const withTypes = await admin
       .from("case_tiers")
@@ -50,7 +60,7 @@ export default async function AdminPage() {
       .order("group_id", { ascending: true });
     if (!withTypes.error) {
       return (withTypes.data ?? []).map((row) => ({
-        ...row, item_ids: null, group_label: null, group_subtitle: null,
+        ...row, item_ids: null, group_label: null, group_subtitle: null, preview_cost: 0, multi_open_max: 10,
       }));
     }
 
@@ -59,7 +69,7 @@ export default async function AdminPage() {
       .select("id, group_id, label, price, rarity_weights, enabled, updated_at")
       .order("group_id", { ascending: true });
     return (withoutTypes.data ?? []).map((row) => ({
-      ...row, item_types: null, item_ids: null, group_label: null, group_subtitle: null,
+      ...row, item_types: null, item_ids: null, group_label: null, group_subtitle: null, preview_cost: 0, multi_open_max: 10,
     }));
   }
 
