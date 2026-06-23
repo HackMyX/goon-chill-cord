@@ -153,35 +153,44 @@ function computeDamage(type, rarity, id) {
 async function main() {
   console.log("=== Goon'n Chill Cord — Balance Overhaul ===\n");
 
-  // 1. Fetch all items
-  console.log("1/4  Fetching items from DB…");
-  const { data: items, error: fetchErr } = await admin
+  // 1. Quick count check
+  console.log("1/5  Checking DB connection…");
+  const { count, error: fetchErr } = await admin
     .from("items")
-    .select("id, rarity, type");
-
-  if (fetchErr || !items) {
-    console.error("  ERROR:", fetchErr?.message ?? "no data");
+    .select("id", { count: "exact", head: true });
+  if (fetchErr) {
+    console.error("  ERROR:", fetchErr.message);
     process.exit(1);
   }
-  console.log(`     Loaded ${items.length} items.\n`);
+  console.log(`     ${count} items in DB.\n`);
 
   // 2. Compute new stat values and build upsert rows
-  console.log("2/4  Computing new stats…");
+  // NOTE: must include name/type/rarity/image_url in every row because
+  // Supabase upsert validates the INSERT path (NOT NULL constraint on name)
+  // even though every row already exists and the conflict UPDATE runs instead.
+  console.log("2/4  Fetching full item rows for safe upsert…");
+  const { data: fullItems, error: fullErr } = await admin
+    .from("items")
+    .select("id, name, rarity, type, price_cr, image_url, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec");
+  if (fullErr || !fullItems) {
+    console.error("  ERROR:", fullErr?.message ?? "no data");
+    process.exit(1);
+  }
 
   const typeStats = {};
-  for (const item of items) {
+  for (const item of fullItems) {
     typeStats[item.type] = (typeStats[item.type] || 0) + 1;
   }
   console.log("     Distribution:", JSON.stringify(typeStats));
 
-  const updates = items.map((item) => {
-    const row = {
-      id: item.id,
-      price_cr: computePrice(item.type, item.rarity, item.id),
-    };
+  const updates = fullItems.map((item) => {
+    // Start with all existing columns (satisfies NOT NULL constraint on name etc.)
+    const row = { ...item };
 
-    const isArmor = ["hat", "jacket", "pants", "shoes"].includes(item.type);
-    const isPerk  = ["ring", "amulet"].includes(item.type);
+    row.price_cr = computePrice(item.type, item.rarity, item.id);
+
+    const isArmor  = ["hat", "jacket", "pants", "shoes"].includes(item.type);
+    const isPerk   = ["ring", "amulet"].includes(item.type);
     const isShield = item.type === "shield_cosmetic";
     const isWeapon = item.type === "weapon_cosmetic";
 
@@ -191,19 +200,20 @@ async function main() {
       row.perk_magnitude = computePerkMag(item.type, item.rarity, item.id);
     }
     if (isShield) {
-      row.shield_hp                  = computeShieldHp(item.type, item.rarity, item.id);
-      row.shield_regen_cooldown_sec  = computeShieldCd(item.type, item.rarity, item.id);
+      row.shield_hp                 = computeShieldHp(item.type, item.rarity, item.id);
+      row.shield_regen_cooldown_sec = computeShieldCd(item.type, item.rarity, item.id);
     }
     if (isWeapon) row.damage = computeDamage(item.type, item.rarity, item.id);
 
     return row;
   });
 
-  // Spot-check a few
-  const sample = updates.filter((u) => u.perk_type);
+  // Spot-check perk distribution
   const perkDist = {};
-  sample.forEach((u) => { perkDist[u.perk_type] = (perkDist[u.perk_type] || 0) + 1; });
-  console.log(`     Perk distribution (${sample.length} items):`, perkDist);
+  updates.filter((u) => u.perk_type && u.perk_type !== "none").forEach((u) => {
+    perkDist[u.perk_type] = (perkDist[u.perk_type] || 0) + 1;
+  });
+  console.log(`     Perk distribution (${Object.values(perkDist).reduce((a,b)=>a+b,0)} items):`, perkDist);
 
   // 3. Upsert in batches of 200
   console.log("\n3/4  Upserting item stats…");
@@ -221,8 +231,8 @@ async function main() {
   }
   console.log("\n     Done.\n");
 
-  // 4. Update shop settings (global fallback)
-  console.log("4/5  Updating shop settings…");
+  // 5. Update shop settings (global fallback)
+  console.log("5/6  Updating shop settings…");
   const { error: shopErr } = await admin.from("shop_settings").upsert({
     id: "default",
     auto_generate_enabled: true,
@@ -238,8 +248,8 @@ async function main() {
   });
   console.log("    ", shopErr ? "ERROR: " + shopErr.message : "OK");
 
-  // 5. Create shop categories (replace all)
-  console.log("\n5/5  Configuring shop categories…");
+  // 6. Create shop categories (replace all)
+  console.log("\n6/6  Configuring shop categories…");
 
   // Delete all existing categories first (day rules cascade)
   const { error: delErr } = await admin
@@ -328,7 +338,7 @@ async function main() {
 
   console.log("\n=== Balance overhaul complete ===");
   console.log("\nSummary:");
-  console.log("  Items updated:  ", items.length);
+  console.log("  Items updated:  ", fullItems.length);
   console.log("  Shop categories:", categories.length, "(22 items/day total)");
   console.log("  Price bands:    fully differentiated by type + rarity");
   console.log("  Armor:          differentiated by slot (chest>legs>head>feet)");
