@@ -42,7 +42,7 @@ export const DEFAULT_PITCH = 0.32;
 const DEFAULT_DISTANCE = 6.5;
 
 const YAW_SENSITIVITY = 0.0024;
-const PITCH_SENSITIVITY = 0.0021;
+const PITCH_SENSITIVITY = 0.00063;
 export const PITCH_MIN = -0.3;
 export const PITCH_MAX = 1.1;
 const DISTANCE_MIN = 3;

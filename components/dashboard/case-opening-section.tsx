@@ -266,8 +266,12 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   // (phase === "pending"), we can't call skipToResult() yet because the reel
   // isn't spinning yet. Queue the intent here; a useEffect fires the actual
   // skip the moment phase transitions to "spinning".
-  const skipQueuedRef  = useRef(false);
-  const skipTierRef    = useRef<CaseTier | null>(null);
+  // Set to true when the user clicks SOFORT while the server is still in-flight.
+  // handleOpen checks this after await and jumps straight to result instead of
+  // starting the spin — no fragile 30ms timing needed.
+  const skipOnResultRef = useRef(false);
+  // Spam-guard: prevents double-fire of handleSkip (e.g. rapid-click during spin).
+  const sofortFiredRef  = useRef(false);
   const { currencyName } = useSiteConfig();
   const sound = useSoundManager();
 
@@ -311,15 +315,32 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
       return;
     }
 
+    setWonItem(result.item);
+    onCreditsChange(result.newCredits!);
+
+    // User clicked SOFORT while server was in-flight — skip spin entirely and
+    // go straight to the result overlay. Charge the preview fee if applicable.
+    if (skipOnResultRef.current) {
+      skipOnResultRef.current = false;
+      const cost = tier.previewCost ?? 0;
+      if (cost > 0) {
+        const feeRes = await chargeSkipFee(tier.id);
+        if (feeRes.success && feeRes.newCredits !== undefined) onCreditsChange(feeRes.newCredits);
+      }
+      const r = result.item.rarity as Rarity;
+      if (r === "ultra") sound.ultraWin?.(); else sound.win?.();
+      fireWinCelebration(r);
+      setPhase("result");
+      return;
+    }
+
     const target: ReelEntry = { key: "target", rarity: result.item.rarity as Rarity, type: result.item.type, name: result.item.name };
     const before = buildFiller(40, "before", previewPool, group.itemTypes);
     const after = buildFiller(8, "after", previewPool, group.itemTypes);
     setReel([...before, target, ...after]);
     setTargetIndex(before.length);
-    setWonItem(result.item);
     setPhase("spinning");
     setSpinToken((t) => t + 1);
-    onCreditsChange(result.newCredits!);
   }
 
   async function handleBatchOpen(tier: CaseTier) {
@@ -355,11 +376,14 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   }
 
   async function handleSkip(tier: CaseTier) {
+    if (sofortFiredRef.current) return;
+    sofortFiredRef.current = true;
     const cost = tier.previewCost ?? 0;
     if (cost > 0) {
       const res = await chargeSkipFee(tier.id);
       if (!res.success) {
         setError(res.error ?? "Fehler beim Abbuchung.");
+        sofortFiredRef.current = false;
         return;
       }
       if (res.newCredits !== undefined) onCreditsChange(res.newCredits);
@@ -369,6 +393,8 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
 
   function handleContinue() {
     openCooldownUntil.current = Date.now() + 600;
+    skipOnResultRef.current = false;
+    sofortFiredRef.current  = false;
     setReel(idleReelRef.current);
     setTargetIndex(Math.floor(PLACEHOLDER_COUNT / 2));
     setWonItem(null);
@@ -378,21 +404,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
 
   useEffect(() => {
     if (phase !== "result") return;
-    const t = setTimeout(handleContinue, 3000);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
-
-  // Fire queued skip the first frame after spinning actually starts.
-  // Using a brief timeout so CaseReel receives spinning=true, mounts its
-  // animation, and is ready for skipToResult() before we call it.
-  useEffect(() => {
-    if (phase !== "spinning") return;
-    if (!skipQueuedRef.current || !skipTierRef.current) return;
-    const tier = skipTierRef.current;
-    skipQueuedRef.current = false;
-    skipTierRef.current   = null;
-    const t = setTimeout(() => void handleSkip(tier), 30);
+    const t = setTimeout(handleContinue, 1500);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
@@ -567,9 +579,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
             onMouseEnter={sound.hover}
             onClick={() => {
               if (isPending) {
-                // Queue skip — fires the moment the reel starts spinning
-                skipQueuedRef.current = true;
-                skipTierRef.current   = group.standard;
+                skipOnResultRef.current = true;
                 return;
               }
               if (isSpinning) { void handleSkip(group.standard); }
@@ -598,8 +608,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
             onMouseEnter={sound.hover}
             onClick={() => {
               if (isPending) {
-                skipQueuedRef.current = true;
-                skipTierRef.current   = group.premium;
+                skipOnResultRef.current = true;
                 return;
               }
               if (isSpinning) { void handleSkip(group.premium); }
