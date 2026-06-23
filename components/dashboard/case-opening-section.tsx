@@ -141,7 +141,6 @@ export function CaseOpeningSection({
   const [error, setError] = useState<string | null>(null);
   const [wonItem, setWonItem] = useState<WonItem | null>(null);
   const [spinToken, setSpinToken] = useState(0);
-  const [isFetching, setIsFetching] = useState(false);
   const mounted = useRef(false);
   const fetchingRef = useRef(false);
   const { currencyName } = useSiteConfig();
@@ -175,28 +174,25 @@ export function CaseOpeningSection({
   }, [phase]);
 
   async function handleOpen(tier: CaseTier) {
-    // Only guard against overlapping *network* round-trips — once a result
-    // is back, clicking again (mid-spin OR while the result is showing)
-    // immediately redirects the reel toward the new target instead of
-    // forcing the user to close the previous result first.
-    if (fetchingRef.current) return;
+    // Only allow a new open when the UI is fully idle — spin and result phases
+    // both lock the button so the player always sees what they won before the
+    // next spin can start. The fetchingRef guards against the rare race where
+    // the button is clicked twice before the first React re-render disables it.
+    if (fetchingRef.current || phase !== "idle") return;
     fetchingRef.current = true;
-    setIsFetching(true);
+    setPhase("pending"); // lock buttons immediately, before server roundtrip
     setError(null);
     setWonItem(null);
     sound.click();
 
     const result = await openCase(tier.id);
     fetchingRef.current = false;
-    setIsFetching(false);
     debugLog("CaseOpening", `server result for tier "${tier.id}"`, result);
 
     if (!result.success || !result.item) {
       setError(result.error ?? "Unbekannter Fehler.");
       sound.error();
-      // Don't yank the reel back to idle if a previous click is still
-      // mid-flight — let that animation land undisturbed.
-      if (phase !== "spinning") setPhase("idle");
+      setPhase("idle"); // always return to idle on error so buttons unlock
       return;
     }
 
@@ -327,7 +323,7 @@ export function CaseOpeningSection({
           onMouseEnter={sound.hover}
           onClick={() => handleOpen(group.standard)}
           disabled={
-            isFetching ||
+            phase !== "idle" ||
             credits < group.standard.price ||
             group.standard.enabled === false
           }
@@ -342,7 +338,7 @@ export function CaseOpeningSection({
           onMouseEnter={sound.hover}
           onClick={() => handleOpen(group.premium)}
           disabled={
-            isFetching ||
+            phase !== "idle" ||
             credits < group.premium.price ||
             group.premium.enabled === false
           }
