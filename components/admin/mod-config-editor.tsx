@@ -26,9 +26,13 @@ function Toggle({
       </div>
       <button
         onClick={() => onChange(!value)}
-        className={`h-6 w-11 flex-shrink-0 rounded-full transition-colors relative ${value ? "bg-purple-600" : "bg-zinc-700"}`}
+        role="switch"
+        aria-checked={value}
+        className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900"
       >
-        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${value ? "translate-x-5" : "translate-x-0.5"}`} />
+        <span className={`relative block h-6 w-11 overflow-hidden rounded-full transition-colors duration-200 ${value ? "bg-purple-600" : "bg-zinc-700"}`}>
+          <span className={`absolute left-0 top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${value ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
+        </span>
       </button>
     </div>
   );

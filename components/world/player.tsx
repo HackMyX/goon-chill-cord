@@ -249,7 +249,7 @@ export function Player({
   // popups/blood-bursts. A handful of these mounted at once (rapid
   // clicking) is the absolute ceiling, never a re-render-per-frame concern.
   const [slashEffects, setSlashEffects] = useState<
-    { id: number; color: string; position: [number, number, number]; rotationY: number }[]
+    { id: number; color: string; position: [number, number, number]; rotationY: number; hit: boolean }[]
   >([]);
 
   // Amulet/ring perks — equipped items never change mid-session (see
@@ -325,7 +325,10 @@ export function Player({
   const deathNotified = useRef(false);
 
   // Slide state — all imperative refs so useFrame can read/write without re-renders
-  const slideCooldown  = useRef(0);
+  const slideCooldown      = useRef(0);
+  // When slide is pressed while airborne, we queue it for up to 500 ms so
+  // landing immediately into a slide feels responsive rather than being eaten.
+  const slideQueuedUntil   = useRef(0);
   const slideActive    = useRef(false);
   const slideTimer     = useRef(0);
   const slideDirX      = useRef(0);
@@ -506,7 +509,12 @@ export function Player({
     // capture the *current* camera forward direction at slide start.
     slideCooldown.current = Math.max(0, slideCooldown.current - delta);
     const slideRequested = keys.consumeSlide();
-    if (!slideActive.current && locked && alive && grounded.current && slideCooldown.current <= 0 && slideRequested && moving) {
+    // Queue slide for up to 500 ms when pressed mid-air so landing into a
+    // slide is immediately responsive (press C while airborne → slide on touch-down).
+    if (slideRequested && !grounded.current) slideQueuedUntil.current = Date.now() + 500;
+    const wantsSlide = slideRequested || (Date.now() < slideQueuedUntil.current);
+    if (!slideActive.current && locked && alive && grounded.current && slideCooldown.current <= 0 && wantsSlide && moving) {
+      slideQueuedUntil.current = 0;
       slideActive.current = true;
       slideTimer.current = SLIDE_DURATION;
       // Always slide in the camera's forward direction — WASD direction at the
@@ -787,9 +795,10 @@ export function Player({
         g.position.y + slashLocal.y,
         g.position.z + (slashLocal.x * slashSin + slashLocal.z * slashCos),
       ];
+      const hit = nearestMonster !== null || nearestPlayerId !== null;
       setSlashEffects((curr) => [
         ...curr,
-        { id: slashId, color: slashColor, position: slashPosition, rotationY: cc.yaw },
+        { id: slashId, color: slashColor, position: slashPosition, rotationY: cc.yaw, hit },
       ]);
       setTimeout(
         () => setSlashEffects((curr) => curr.filter((s) => s.id !== slashId)),
@@ -806,7 +815,6 @@ export function Player({
             characterConfig.airborneDamageMultiplier
           )
       );
-      const hit = nearestMonster !== null || nearestPlayerId !== null;
       if (nearestMonster) {
         nearestMonster.takeDamage(dmg);
         cameraShake.current = 1;
@@ -854,12 +862,8 @@ export function Player({
 
     if (rangeRing.current) {
       const mat = rangeRing.current.material as THREE.MeshBasicMaterial;
-      applyRingStyle(
-        mat,
-        anyInRange ? "#f87171" : "#a855f7",
-        anyInRange ? 0.55 : 0.16,
-        Math.min(1, delta * 8)
-      );
+      // Ring kept in scene for logic tracking but invisible — user preference
+      applyRingStyle(mat, anyInRange ? "#f87171" : "#a855f7", 0, Math.min(1, delta * 8));
     }
 
     // Sprinting pumps the legs faster (not just moving faster) — used to
@@ -955,10 +959,11 @@ export function Player({
 
     // Slide pose: 0=normal, 1=full crouch — lerps in on slide start,
     // back out on end, giving a smooth visual transition at both ends.
+    // Rate 10 (was 13) gives a slightly slower, more fluid blend.
     slidePose.current = THREE.MathUtils.lerp(
       slidePose.current,
       slideActive.current ? 1 : 0,
-      Math.min(1, delta * 13),
+      Math.min(1, delta * 10),
     );
 
     // No foot-bob at all — g.position.y is physics (gravity) only, plus the
@@ -967,13 +972,14 @@ export function Player({
 
     // Squash-and-stretch: y-scale briefly compresses on landing and elongates
     // on jump launch, then springs back to 1 — reads as weight and impact.
-    // Slide squishes on top of that so the character visibly crouches.
+    // Slide squish reduced from 0.30 to 0.20 to prevent the "pancake" look.
     landingSquash.current = Math.max(0, landingSquash.current - delta * 9);
     jumpStretch.current   = Math.max(0, jumpStretch.current   - delta * 12);
-    g.scale.y = (1 - landingSquash.current * 0.22 + jumpStretch.current * 0.12) * (1 - slidePose.current * 0.30);
+    g.scale.y = (1 - landingSquash.current * 0.22 + jumpStretch.current * 0.12) * (1 - slidePose.current * 0.20);
 
-    // Forward tilt during slide — reads as leaning into the momentum.
-    g.rotation.x = slidePose.current * 0.20;
+    // Forward tilt during slide — increased from 0.20 to 0.30 for a more
+    // dynamic, speed-forward lean that sells the momentum.
+    g.rotation.x = slidePose.current * 0.30;
 
     // --- Slide trail: one elongated glow plane + a wider soft bloom ring
     if (slideTrailRef.current && slideTrailMatRef.current) {
@@ -988,7 +994,7 @@ export function Player({
         );
         slideTrailRef.current.rotation.y = Math.atan2(slideDirX.current, slideDirZ.current);
         slideTrailRef.current.scale.set(0.38, 1, sp * 2.1 + 0.5);
-        slideTrailMatRef.current.opacity = sp * 0.52;
+        slideTrailMatRef.current.opacity = sp * 0.72;
       }
     }
     if (slideGlowRef.current && slideGlowMatRef.current) {
@@ -997,7 +1003,7 @@ export function Player({
       if (visible) {
         slideGlowRef.current.position.set(g.position.x, g.position.y + 0.01, g.position.z);
         slideGlowRef.current.scale.setScalar(slidePose.current * 1.4 + 0.3);
-        slideGlowMatRef.current.opacity = slidePose.current * 0.22;
+        slideGlowMatRef.current.opacity = slidePose.current * 0.40;
       }
     }
 
@@ -1188,7 +1194,7 @@ export function Player({
           still faces. */}
       {slashEffects.map((s) => (
         <group key={s.id} position={s.position} rotation={[0, s.rotationY, 0]}>
-          <SlashEffect color={s.color} />
+          <SlashEffect color={s.color} hit={s.hit} />
         </group>
       ))}
 

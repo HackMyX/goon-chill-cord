@@ -301,9 +301,7 @@ export async function updateTicketStatus(input: {
   return { success: true };
 }
 
-/** Staff-only cleanup — only allowed on already-closed tickets, since
- * deleting an open/active conversation would just erase the user's own
- * support history out from under them. */
+/** Staff-only cleanup — any ticket status can be deleted by admins/mods. */
 export async function deleteTicket(ticketId: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   const {
@@ -315,18 +313,60 @@ export async function deleteTicket(ticketId: string): Promise<{ success: boolean
   const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
   if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
 
-  const { data: ticket } = await admin.from("tickets").select("status").eq("id", ticketId).single();
-  if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
-  if (ticket.status !== "closed") {
-    return { success: false, error: "Nur geschlossene Tickets können gelöscht werden." };
-  }
-
   await admin.from("ticket_messages").delete().eq("ticket_id", ticketId);
   const { error } = await admin.from("tickets").delete().eq("id", ticketId);
   if (error) return { success: false, error: "Löschen fehlgeschlagen." };
 
   revalidatePath("/admin");
   return { success: true };
+}
+
+/** Bulk-delete multiple tickets — admin/mod only. */
+export async function deleteTicketsBulk(ticketIds: string[]): Promise<{ success: boolean; error?: string; deleted: number }> {
+  if (ticketIds.length === 0) return { success: true, deleted: 0 };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt.", deleted: 0 };
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  if (!isModerator(profile)) return { success: false, error: "Kein Zugriff.", deleted: 0 };
+
+  await admin.from("ticket_messages").delete().in("ticket_id", ticketIds);
+  const { data, error } = await admin.from("tickets").delete().in("id", ticketIds).select("id");
+  if (error) return { success: false, error: "Löschen fehlgeschlagen.", deleted: 0 };
+
+  revalidatePath("/admin");
+  return { success: true, deleted: data?.length ?? 0 };
+}
+
+/** Delete tickets by creation date range — admin/mod only. */
+export async function deleteTicketsByDateRange(input: {
+  before: string;
+  statuses?: TicketStatus[];
+}): Promise<{ success: boolean; error?: string; deleted: number }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt.", deleted: 0 };
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  if (!isModerator(profile)) return { success: false, error: "Kein Zugriff.", deleted: 0 };
+
+  let query = admin.from("tickets").select("id").lt("created_at", input.before);
+  if (input.statuses && input.statuses.length > 0) {
+    query = query.in("status", input.statuses);
+  }
+  const { data: rows } = await query;
+  const ids = (rows ?? []).map((r: { id: string }) => r.id);
+  if (ids.length === 0) return { success: true, deleted: 0 };
+
+  await admin.from("ticket_messages").delete().in("ticket_id", ids);
+  const { data, error } = await admin.from("tickets").delete().in("id", ids).select("id");
+  if (error) return { success: false, error: "Löschen fehlgeschlagen.", deleted: 0 };
+
+  revalidatePath("/admin");
+  return { success: true, deleted: data?.length ?? 0 };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

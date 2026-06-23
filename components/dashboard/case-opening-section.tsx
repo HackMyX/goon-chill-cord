@@ -260,6 +260,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   const [batchMode, setBatchMode] = useState(false);
   const mounted = useRef(false);
   const fetchingRef = useRef(false);
+  const openCooldownUntil = useRef(0);
   const caseReelRef = useRef<CaseReelHandle>(null);
   // When the user clicks "Sofort anzeigen" while the server is still in-flight
   // (phase === "pending"), we can't call skipToResult() yet because the reel
@@ -291,6 +292,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
 
   async function handleOpen(tier: CaseTier) {
     if (fetchingRef.current || phase !== "idle") return;
+    if (Date.now() < openCooldownUntil.current) return;
     fetchingRef.current = true;
     setActiveTier(tier);
     setPhase("pending");   // → warmup kicks in immediately in CaseReel
@@ -322,6 +324,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
 
   async function handleBatchOpen(tier: CaseTier) {
     if (fetchingRef.current || phase !== "idle") return;
+    if (Date.now() < openCooldownUntil.current) return;
     fetchingRef.current = true;
     setActiveTier(tier);
     setPhase("batch_pending");
@@ -365,6 +368,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   }
 
   function handleContinue() {
+    openCooldownUntil.current = Date.now() + 600;
     setReel(idleReelRef.current);
     setTargetIndex(Math.floor(PLACEHOLDER_COUNT / 2));
     setWonItem(null);
