@@ -112,8 +112,6 @@ function QuantitySelector({
 // ---------------------------------------------------------------------------
 
 const RARITY_RANK: Record<Rarity, number> = { normal: 0, selten: 1, mythisch: 2, ultra: 3 };
-
-// Card width in px — drives both the inline style and max-items-per-row logic.
 const CARD_W = 148;
 
 function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => void }) {
@@ -127,7 +125,6 @@ function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => 
       className="fixed inset-0 z-50 flex flex-col items-center justify-start bg-black/88 px-4 pt-8 pb-4 overflow-y-auto"
       onClick={onClose}
     >
-      {/* Background glow for best rarity */}
       <div
         className="pointer-events-none fixed inset-0"
         style={{ background: `radial-gradient(ellipse at 50% 35%, ${RARITY_HEX[best.rarity as Rarity]}28 0%, transparent 60%)` }}
@@ -140,7 +137,6 @@ function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => 
         className="relative z-10 flex w-full max-w-2xl flex-col items-center gap-5"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="text-center">
           <motion.p
             initial={{ opacity: 0, scale: 0.9 }}
@@ -174,7 +170,6 @@ function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => 
           )}
         </div>
 
-        {/* Item cards — flex-wrap + justify-center: ALWAYS centered regardless of count */}
         <div className="flex flex-wrap items-start justify-center gap-3">
           {items.map((item, idx) => (
             <motion.div
@@ -189,7 +184,6 @@ function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => 
                 boxShadow: `0 0 14px ${RARITY_HEX[item.rarity as Rarity]}22`,
               }}
             >
-              {/* Per-card rarity glow */}
               <div
                 className="pointer-events-none absolute inset-0 rounded-xl opacity-[0.18]"
                 style={{ background: `radial-gradient(ellipse at 50% 25%, ${RARITY_HEX[item.rarity as Rarity]} 0%, transparent 72%)` }}
@@ -205,7 +199,6 @@ function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => 
           ))}
         </div>
 
-        {/* Rarity summary */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -294,7 +287,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
     if (fetchingRef.current || phase !== "idle") return;
     fetchingRef.current = true;
     setActiveTier(tier);
-    setPhase("pending");
+    setPhase("pending");   // → warmup kicks in immediately in CaseReel
     setError(null);
     setWonItem(null);
     sound.click();
@@ -344,7 +337,6 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
     setPhase("batch_result");
     onCreditsChange(result.newCredits!);
 
-    // Confetti for best rarity
     const bestRarity = (["ultra", "mythisch", "selten", "normal"] as Rarity[]).find(
       (r) => result.items!.some((i) => i.rarity === r)
     ) ?? "normal";
@@ -385,8 +377,13 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   const isBusy = phase === "pending" || phase === "batch_pending";
   const isSpinning = phase === "spinning";
 
-  // Max batch count is the minimum of standard + premium limits
   const maxBatch = Math.min(group.standard.multiOpenMax ?? 10, group.premium.multiOpenMax ?? 10);
+
+  // During a live spin, only the button that STARTED the spin becomes the
+  // "Sofort anzeigen" skip button — the other tier's button is hidden entirely
+  // so the user can't accidentally trigger a skip-fee for the wrong tier.
+  const showStandard = !isSpinning || activeTier?.id === group.standard.id;
+  const showPremium  = !isSpinning || activeTier?.id === group.premium.id;
 
   return (
     <section className="mx-auto w-full max-w-4xl px-4 py-10">
@@ -446,7 +443,8 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
             ref={caseReelRef}
             items={reel}
             targetIndex={targetIndex}
-            spinning={phase === "spinning"}
+            spinning={isSpinning}
+            warmup={phase === "pending"}
             spinToken={spinToken}
             onTick={sound.tick}
             onSpinComplete={() => {
@@ -526,62 +524,68 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
 
       {error && <p className="mt-3 text-center text-sm font-medium text-red-400">{error}</p>}
 
-      {/* Action buttons */}
+      {/* Action buttons
+          During a live spin: only the tier that was spun shows its "Sofort anzeigen" button.
+          The other tier disappears entirely to avoid skip-fee confusion.
+          Outside of spinning: both buttons show normally at all times. */}
       <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-        {/* Standard tier button */}
-        <button
-          onMouseEnter={sound.hover}
-          onClick={() => {
-            if (isSpinning) { void handleSkip(group.standard); }
-            else if (batchMode) { void handleBatchOpen(group.standard); }
-            else { void handleOpen(group.standard); }
-          }}
-          disabled={
-            isBusy || phase === "result" || phase === "batch_result" ||
-            (isIdle && credits < group.standard.price * (batchMode ? batchCount : 1)) ||
-            group.standard.enabled === false
-          }
-          className="w-full rounded-xl border-2 border-[#3898ff] bg-[linear-gradient(135deg,#1e699e_0%,rgba(13,76,132,0.6)_100%)] px-8 py-3 text-base font-black uppercase tracking-widest text-white shadow-[inset_0_0_16px_rgba(56,152,255,0.45)] transition-transform hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100 sm:w-auto"
-        >
-          {group.standard.enabled === false
-            ? "DEAKTIVIERT"
-            : isSpinning
-              ? `⚡ SOFORT${(group.standard.previewCost ?? 0) > 0 ? ` (${(group.standard.previewCost ?? 0).toLocaleString("de-DE")} ${currencyName})` : ""}`
-              : batchMode
-                ? `${batchCount}× ${group.standard.label} — ${(group.standard.price * batchCount).toLocaleString("de-DE")} ${currencyName}`
-                : `${group.standard.label} — ${group.standard.price.toLocaleString("de-DE")} ${currencyName}`}
-        </button>
 
-        {/* Premium tier button */}
-        <button
-          onMouseEnter={sound.hover}
-          onClick={() => {
-            if (isSpinning) { void handleSkip(group.premium); }
-            else if (batchMode) { void handleBatchOpen(group.premium); }
-            else { void handleOpen(group.premium); }
-          }}
-          disabled={
-            isBusy || phase === "result" || phase === "batch_result" ||
-            (isIdle && credits < group.premium.price * (batchMode ? batchCount : 1)) ||
-            group.premium.enabled === false
-          }
-          className="relative w-full rounded-xl bg-black/50 px-8 py-2.5 text-center transition-transform hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100 sm:w-auto"
-        >
-          <span aria-hidden className="rainbow-border" />
-          <span className="rainbow-text flex items-center justify-center gap-1.5 text-base font-black uppercase tracking-widest">
-            <Zap className="h-4 w-4 text-amber-300" />
-            {group.premium.enabled === false
+        {showStandard && (
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => {
+              if (isSpinning) { void handleSkip(group.standard); }
+              else if (batchMode) { void handleBatchOpen(group.standard); }
+              else { void handleOpen(group.standard); }
+            }}
+            disabled={
+              isBusy || phase === "result" || phase === "batch_result" ||
+              (isIdle && credits < group.standard.price * (batchMode ? batchCount : 1)) ||
+              group.standard.enabled === false
+            }
+            className="w-full rounded-xl border-2 border-[#3898ff] bg-[linear-gradient(135deg,#1e699e_0%,rgba(13,76,132,0.6)_100%)] px-8 py-3 text-base font-black uppercase tracking-widest text-white shadow-[inset_0_0_16px_rgba(56,152,255,0.45)] transition-transform hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100 sm:w-auto"
+          >
+            {group.standard.enabled === false
               ? "DEAKTIVIERT"
               : isSpinning
-                ? `⚡ SOFORT${(group.premium.previewCost ?? 0) > 0 ? ` (${(group.premium.previewCost ?? 0).toLocaleString("de-DE")} ${currencyName})` : ""}`
+                ? `⚡ SOFORT${(group.standard.previewCost ?? 0) > 0 ? ` (${(group.standard.previewCost ?? 0).toLocaleString("de-DE")} ${currencyName})` : ""}`
                 : batchMode
-                  ? `${batchCount}× ${group.premium.label} — ${(group.premium.price * batchCount).toLocaleString("de-DE")} ${currencyName}`
-                  : `${group.premium.label} — ${group.premium.price.toLocaleString("de-DE")} ${currencyName}`}
-          </span>
-          {group.premium.sublabel && group.premium.enabled !== false && !isSpinning && !batchMode && (
-            <span className="block text-[11px] font-semibold tracking-widest text-zinc-400">{group.premium.sublabel}</span>
-          )}
-        </button>
+                  ? `${batchCount}× ${group.standard.label} — ${(group.standard.price * batchCount).toLocaleString("de-DE")} ${currencyName}`
+                  : `${group.standard.label} — ${group.standard.price.toLocaleString("de-DE")} ${currencyName}`}
+          </button>
+        )}
+
+        {showPremium && (
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => {
+              if (isSpinning) { void handleSkip(group.premium); }
+              else if (batchMode) { void handleBatchOpen(group.premium); }
+              else { void handleOpen(group.premium); }
+            }}
+            disabled={
+              isBusy || phase === "result" || phase === "batch_result" ||
+              (isIdle && credits < group.premium.price * (batchMode ? batchCount : 1)) ||
+              group.premium.enabled === false
+            }
+            className="relative w-full rounded-xl bg-black/50 px-8 py-2.5 text-center transition-transform hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100 sm:w-auto"
+          >
+            <span aria-hidden className="rainbow-border" />
+            <span className="rainbow-text flex items-center justify-center gap-1.5 text-base font-black uppercase tracking-widest">
+              <Zap className="h-4 w-4 text-amber-300" />
+              {group.premium.enabled === false
+                ? "DEAKTIVIERT"
+                : isSpinning
+                  ? `⚡ SOFORT${(group.premium.previewCost ?? 0) > 0 ? ` (${(group.premium.previewCost ?? 0).toLocaleString("de-DE")} ${currencyName})` : ""}`
+                  : batchMode
+                    ? `${batchCount}× ${group.premium.label} — ${(group.premium.price * batchCount).toLocaleString("de-DE")} ${currencyName}`
+                    : `${group.premium.label} — ${group.premium.price.toLocaleString("de-DE")} ${currencyName}`}
+            </span>
+            {group.premium.sublabel && group.premium.enabled !== false && !isSpinning && !batchMode && (
+              <span className="block text-[11px] font-semibold tracking-widest text-zinc-400">{group.premium.sublabel}</span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Batch result modal */}

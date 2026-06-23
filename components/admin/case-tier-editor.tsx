@@ -3,11 +3,25 @@
 import { useState } from "react";
 import { Save, Search, X } from "lucide-react";
 import { updateCaseTier } from "@/lib/actions/admin";
-import { RARITY_LABELS, RARITY_ORDER, ALL_ITEM_TYPES, findCaseTier, type Rarity } from "@/lib/cases";
+import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, ALL_ITEM_TYPES, findCaseTier, type Rarity } from "@/lib/cases";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { CaseTierRow, ItemRow } from "@/components/admin/admin-shell";
+
+const RARITY_FILTER_STYLES: Record<Rarity, { active: string; inactive: string }> = {
+  normal:   { active: "border-blue-400/60 bg-blue-500/15 text-blue-200",    inactive: "border-white/10 text-zinc-500 hover:border-blue-400/40 hover:text-blue-400" },
+  selten:   { active: "border-purple-400/60 bg-purple-500/15 text-purple-200", inactive: "border-white/10 text-zinc-500 hover:border-purple-400/40 hover:text-purple-400" },
+  mythisch: { active: "border-amber-400/60 bg-amber-500/15 text-amber-200",  inactive: "border-white/10 text-zinc-500 hover:border-amber-400/40 hover:text-amber-400" },
+  ultra:    { active: "border-red-400/60 bg-red-500/15 text-red-200",        inactive: "border-white/10 text-zinc-500 hover:border-red-400/40 hover:text-red-400" },
+};
+
+const RARITY_DOT: Record<Rarity, string> = {
+  normal: "bg-blue-400",
+  selten: "bg-purple-400",
+  mythisch: "bg-amber-400",
+  ultra: "bg-red-400",
+};
 
 export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: ItemRow[] }) {
   const [price, setPrice] = useState(tier.price);
@@ -22,6 +36,8 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
   const [previewCost, setPreviewCost] = useState(tier.preview_cost ?? 0);
   const [multiOpenMax, setMultiOpenMax] = useState(tier.multi_open_max ?? 10);
   const [itemSearch, setItemSearch] = useState("");
+  const [rarityFilter, setRarityFilter] = useState<Rarity | "all">("all");
+  const [showPinnedOnly, setShowPinnedOnly] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const sound = useSoundManager();
@@ -41,13 +57,21 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
     );
   }
 
-  const filteredItems = itemSearch.trim()
-    ? items.filter(
-        (item) =>
-          item.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
-          item.type.toLowerCase().includes(itemSearch.toLowerCase())
-      )
-    : items;
+  const filteredItems = items.filter((item) => {
+    const matchesSearch =
+      !itemSearch.trim() ||
+      item.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+      item.type.toLowerCase().includes(itemSearch.toLowerCase());
+    const matchesRarity = rarityFilter === "all" || item.rarity === rarityFilter;
+    const matchesPinned = !showPinnedOnly || itemIds.includes(item.id);
+    return matchesSearch && matchesRarity && matchesPinned;
+  });
+
+  // Count pinned items per rarity for the summary badges
+  const pinnedPerRarity = RARITY_ORDER.reduce<Record<Rarity, number>>((acc, r) => {
+    acc[r] = items.filter((i) => itemIds.includes(i.id) && i.rarity === r).length;
+    return acc;
+  }, { normal: 0, selten: 0, mythisch: 0, ultra: 0 });
 
   async function handleSave() {
     setSaving(true);
@@ -103,6 +127,7 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
             className="flex items-center gap-2 rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-semibold text-white shadow-[0_0_10px_rgba(147,51,234,0.5)] transition-colors hover:bg-purple-500 disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
+            Speichern
           </button>
           {status === "saved" && <span className="text-sm font-medium text-emerald-400">Gespeichert.</span>}
           {status === "error" && <span className="text-sm font-medium text-red-400">Fehler.</span>}
@@ -170,7 +195,7 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
 
           {RARITY_ORDER.map((rarity) => (
             <label key={rarity} className="flex flex-col gap-1 text-xs text-zinc-400">
-              {RARITY_LABELS[rarity]} (%)
+              <span className={RARITY_STYLES[rarity].text}>{RARITY_LABELS[rarity]} (%)</span>
               <input
                 type="number"
                 step="0.01"
@@ -210,12 +235,26 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
         {/* Pinned item IDs — when set, override type-based pool entirely */}
         <div className="mt-5">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold tracking-wide text-amber-300">
-              EXAKTE ITEMS{" "}
-              {itemIds.length > 0
-                ? `(${itemIds.length} gepinnt — überschreibt Typen-Pool)`
-                : "(leer = Typen-Pool wird genutzt)"}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold tracking-wide text-amber-300">
+                EXAKTE ITEMS
+              </p>
+              {itemIds.length > 0 ? (
+                <>
+                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                    {itemIds.length} gepinnt — überschreibt Typen-Pool
+                  </span>
+                  {/* Per-rarity count badges */}
+                  {RARITY_ORDER.filter((r) => pinnedPerRarity[r] > 0).map((r) => (
+                    <span key={r} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${RARITY_STYLES[r].bg} ${RARITY_STYLES[r].text}`}>
+                      {pinnedPerRarity[r]}× {RARITY_LABELS[r]}
+                    </span>
+                  ))}
+                </>
+              ) : (
+                <span className="text-[10px] text-zinc-500">(leer = Typen-Pool wird genutzt)</span>
+              )}
+            </div>
             {itemIds.length > 0 && (
               <button
                 onMouseEnter={sound.hover}
@@ -227,6 +266,51 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
               >
                 <X className="h-3 w-3" />
                 Alle entfernen
+              </button>
+            )}
+          </div>
+
+          {/* Rarity filter row */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <button
+              onMouseEnter={sound.hover}
+              onClick={() => { sound.click(); setRarityFilter("all"); }}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                rarityFilter === "all"
+                  ? "border-white/30 bg-white/10 text-zinc-100"
+                  : "border-white/10 text-zinc-500 hover:border-white/20"
+              }`}
+            >
+              Alle
+            </button>
+            {RARITY_ORDER.map((r) => (
+              <button
+                key={r}
+                onMouseEnter={sound.hover}
+                onClick={() => { sound.click(); setRarityFilter(rarityFilter === r ? "all" : r); }}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  rarityFilter === r
+                    ? RARITY_FILTER_STYLES[r].active
+                    : RARITY_FILTER_STYLES[r].inactive
+                }`}
+              >
+                {RARITY_LABELS[r]}
+                {pinnedPerRarity[r] > 0 && (
+                  <span className="ml-1 opacity-70">·{pinnedPerRarity[r]}</span>
+                )}
+              </button>
+            ))}
+            {itemIds.length > 0 && (
+              <button
+                onMouseEnter={sound.hover}
+                onClick={() => { sound.click(); setShowPinnedOnly((v) => !v); }}
+                className={`ml-auto rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  showPinnedOnly
+                    ? "border-amber-400/60 bg-amber-500/15 text-amber-200"
+                    : "border-white/10 text-zinc-500 hover:border-white/20"
+                }`}
+              >
+                Nur Gepinnte
               </button>
             )}
           </div>
@@ -248,6 +332,7 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
             ) : (
               filteredItems.map((item) => {
                 const pinned = itemIds.includes(item.id);
+                const rarity = item.rarity as Rarity;
                 return (
                   <button
                     key={item.id}
@@ -261,13 +346,15 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
                     }`}
                   >
                     <span
-                      className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                        pinned ? "bg-amber-400" : "bg-zinc-600"
+                      className={`h-2 w-2 flex-shrink-0 rounded-full ${
+                        pinned ? "bg-amber-400" : RARITY_DOT[rarity] ?? "bg-zinc-600"
                       }`}
                     />
                     <span className="flex-1 truncate">{item.name}</span>
                     <span className="text-zinc-600">{item.type}</span>
-                    <span className="ml-1 text-zinc-600">{item.rarity}</span>
+                    <span className={`ml-1 text-[10px] font-semibold ${RARITY_STYLES[rarity]?.text ?? "text-zinc-500"}`}>
+                      {RARITY_LABELS[rarity] ?? item.rarity}
+                    </span>
                   </button>
                 );
               })

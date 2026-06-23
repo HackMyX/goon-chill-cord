@@ -7,12 +7,13 @@ import { ItemRenderer } from "@/components/items/item-renderer";
 import { debugLog } from "@/lib/debug";
 
 export const ITEM_WIDTH = 116;
-// Single source of truth for item + gap step (px) used for all position math.
 const GAP = 8;
 const STEP = ITEM_WIDTH + GAP;
 
-// Idle scroll: seconds per item passing the center window.
 const IDLE_SEC_PER_ITEM = 1.25;
+// Warmup speed: 10× faster than idle — gives immediate visual feedback while
+// the server call is in flight.
+const WARMUP_SEC_PER_ITEM = IDLE_SEC_PER_ITEM * 0.1;
 
 export interface ReelEntry {
   key: string;
@@ -22,7 +23,6 @@ export interface ReelEntry {
 }
 
 export interface CaseReelHandle {
-  /** Skip the running spin animation and snap immediately to the result. */
   skipToResult: () => void;
 }
 
@@ -30,14 +30,16 @@ interface CaseReelProps {
   items: ReelEntry[];
   targetIndex: number;
   spinning: boolean;
-  /** Bump on every new spin request to trigger the animation effect. */
+  /** True while the server call is in flight — speeds up the idle scroll so
+   *  it feels like the machine is "charging up" before the real spin lands. */
+  warmup?: boolean;
   spinToken?: number;
   onTick?: () => void;
   onSpinComplete?: () => void;
 }
 
 export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseReel(
-  { items, targetIndex, spinning, spinToken = 0, onTick, onSpinComplete },
+  { items, targetIndex, spinning, warmup = false, spinToken = 0, onTick, onSpinComplete },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,7 +47,6 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
   const x = useMotionValue(0);
   const [justLanded, setJustLanded] = useState(false);
 
-  // Refs for stable access from useImperativeHandle (avoids stale closures).
   const activeControlsRef = useRef<ReturnType<typeof animate> | null>(null);
   const translateXRef = useRef(0);
   const onSpinCompleteRef = useRef(onSpinComplete);
@@ -61,12 +62,9 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
     return () => observer.disconnect();
   }, []);
 
-  // During idle: display doubled items for seamless looping.
-  // During spinning: display the full spin reel (single copy, 40+1+8 items).
   const displayItems = spinning ? items : [...items, ...items];
 
   const translateX = -(targetIndex * STEP) + (containerWidth / 2 - ITEM_WIDTH / 2);
-  // Keep ref current so skipToResult always snaps to the right position.
   translateXRef.current = translateX;
 
   useImperativeHandle(
@@ -84,97 +82,113 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
   );
 
   useEffect(() => {
-    if (!spinning) {
-      // Idle infinite scroll: animate from x=0 → x=-(items.length*STEP),
-      // then instantly reset to 0 (seamless because displayItems is doubled).
-      x.set(0);
-      const loopDist = items.length * STEP;
-      const duration = items.length * IDLE_SEC_PER_ITEM;
-      let cancelled = false;
+    let cancelled = false;
+    const loopDist = items.length * STEP;
 
-      function loop() {
-        if (cancelled) return;
-        animate(x, -loopDist, {
-          duration,
-          ease: "linear",
-          onComplete: () => {
-            if (cancelled) return;
-            x.set(0);
-            loop();
-          },
-        });
-      }
-      loop();
+    if (spinning) {
+      // ── Spin animation ────────────────────────────────────────────────────
+      // Backtrack a little so every spin visually "starts" from the left even
+      // if the target is close to where we are now.
+      const BACKTRACK_ITEMS = 18 + Math.floor(Math.random() * 6);
+      x.set(translateX + BACKTRACK_ITEMS * STEP);
+
+      debugLog("CaseReel", "spin start", {
+        targetIndex,
+        itemAtTarget: items[targetIndex]?.name,
+        translateX,
+        backtrackItems: BACKTRACK_ITEMS,
+        containerWidth,
+        reelLength: items.length,
+      });
+
+      let lastTickIndex = Math.round(x.get() / -STEP);
+      const trackTicks = (latest: number) => {
+        const idx = Math.round(latest / -STEP);
+        if (idx !== lastTickIndex) { lastTickIndex = idx; onTick?.(); }
+      };
+
+      const SNAP_DISTANCE = STEP * 0.12;
+      const bulkTarget = translateX + SNAP_DISTANCE;
+
+      activeControlsRef.current = animate(x, bulkTarget, {
+        duration: 2.2,
+        ease: [0.12, 1, 0.28, 1],
+        onUpdate: trackTicks,
+        onComplete: () => {
+          if (cancelled) return;
+          activeControlsRef.current = animate(x, translateX, {
+            type: "spring",
+            stiffness: 260,
+            damping: 30,
+            mass: 1,
+            onUpdate: trackTicks,
+            onComplete: () => {
+              if (cancelled) return;
+              debugLog("CaseReel", "spin landed", {
+                targetIndex,
+                itemAtTarget: items[targetIndex]?.name,
+                finalX: x.get(),
+                expectedX: translateX,
+              });
+              setJustLanded(true);
+              onSpinComplete?.();
+              setTimeout(() => setJustLanded(false), 520);
+            },
+          });
+        },
+      });
 
       return () => {
         cancelled = true;
+        activeControlsRef.current?.stop();
       };
     }
 
-    // Spinning: jump back then fast-travel to target, spring-snap to exact pixel.
-    // The backtrack makes every spin feel like a real spin even when the target
-    // mathematically lands near where the previous spin ended.
-    const BACKTRACK_ITEMS = 18 + Math.floor(Math.random() * 6); // 18–23
-    x.set(translateX + BACKTRACK_ITEMS * STEP);
+    if (warmup) {
+      // ── Warmup: fast scroll from current x position (no jarring reset) ───
+      // displayItems is doubled so wrapping just means setting x += loopDist.
+      let fromX = x.get();
 
-    debugLog("CaseReel", "spin start", {
-      targetIndex,
-      itemAtTarget: items[targetIndex]?.name,
-      translateX,
-      startX: x.get(),
-      backtrackItems: BACKTRACK_ITEMS,
-      containerWidth,
-      reelLength: items.length,
-    });
-
-    let lastTickIndex = Math.round(x.get() / -STEP);
-
-    const trackTicks = (latest: number) => {
-      const idx = Math.round(latest / -STEP);
-      if (idx !== lastTickIndex) {
-        lastTickIndex = idx;
-        onTick?.();
-      }
-    };
-
-    // Stage 1: high-speed bulk travel with strong deceleration, stopping just
-    // short of the target so stage 2 has a real (short) snap to add tactile
-    // weight without the neighboring item ever looking "settled".
-    const SNAP_DISTANCE = STEP * 0.12;
-    const bulkTarget = translateX + SNAP_DISTANCE;
-
-    activeControlsRef.current = animate(x, bulkTarget, {
-      duration: 2.8,
-      ease: [0.12, 1, 0.28, 1],
-      onUpdate: trackTicks,
-      onComplete: () => {
-        // Stage 2: spring snap — crisp landing, faint tactile "give", zero bounce.
-        activeControlsRef.current = animate(x, translateX, {
-          type: "spring",
-          stiffness: 260,
-          damping: 30,
-          mass: 1,
-          onUpdate: trackTicks,
+      function loopFast() {
+        if (cancelled) return;
+        const toX = fromX - loopDist;
+        animate(x, toX, {
+          duration: items.length * WARMUP_SEC_PER_ITEM,
+          ease: "linear",
           onComplete: () => {
-            debugLog("CaseReel", "spin landed", {
-              targetIndex,
-              itemAtTarget: items[targetIndex]?.name,
-              finalX: x.get(),
-              expectedX: translateX,
-            });
-            setJustLanded(true);
-            onSpinComplete?.();
-            setTimeout(() => setJustLanded(false), 520);
+            if (cancelled) return;
+            fromX = toX + loopDist; // wrap: visually same position (doubled list)
+            x.set(fromX);
+            loopFast();
           },
         });
-      },
-    });
+      }
+      loopFast();
 
-    return () => {
-      activeControlsRef.current?.stop();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- spinToken bump re-triggers on each new spin; items.length dep not needed (spinning flag change is what matters)
-  }, [spinning, spinToken]);
+      return () => { cancelled = true; };
+    }
+
+    // ── Normal idle scroll ────────────────────────────────────────────────
+    x.set(0);
+    function loopIdle() {
+      if (cancelled) return;
+      animate(x, -loopDist, {
+        duration: items.length * IDLE_SEC_PER_ITEM,
+        ease: "linear",
+        onComplete: () => {
+          if (cancelled) return;
+          x.set(0);
+          loopIdle();
+        },
+      });
+    }
+    loopIdle();
+
+    return () => { cancelled = true; };
+    // items.length is in deps so the idle loop resets with correct loopDist
+    // after a spin (when the spin reel is swapped back to the idle reel).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spinning, spinToken, warmup, items.length]);
 
   return (
     <div
@@ -183,7 +197,7 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
         justLanded ? "animate-case-shake" : ""
       }`}
     >
-      {/* amber focus window — center guide rail + pointer arrows */}
+      {/* amber focus window */}
       <div
         className="pointer-events-none absolute top-0 bottom-0 left-1/2 z-20 -translate-x-1/2 border-x-2 border-amber-400/60 bg-amber-400/[0.06] shadow-[inset_0_4px_10px_rgba(0,0,0,0.45)]"
         style={{ width: ITEM_WIDTH }}
@@ -191,14 +205,21 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
       <div className="pointer-events-none absolute -top-[2px] left-1/2 z-20 h-0 w-0 -translate-x-1/2 border-x-[8px] border-t-[10px] border-x-transparent border-t-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
       <div className="pointer-events-none absolute -bottom-[2px] left-1/2 z-20 h-0 w-0 -translate-x-1/2 border-x-[8px] border-b-[10px] border-x-transparent border-b-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
 
-      {/* left/right vignette fades — smooth the strip into the background */}
+      {/* vignette fades */}
       <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-[#030305] to-transparent" />
       <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-[#030305] to-transparent" />
+
+      {/* warmup glow pulse — amber scanline that signals "charging" */}
+      {warmup && (
+        <div
+          className="pointer-events-none absolute inset-0 z-25 animate-pulse rounded-xl"
+          style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(245,158,11,0.18) 0%, transparent 70%)" }}
+        />
+      )}
 
       <motion.div className="flex h-full items-center" style={{ x, gap: GAP }}>
         {displayItems.map((entry, i) => {
           const style = RARITY_STYLES[entry.rarity];
-          // Only mark a target during a real spin — never during the idle scroll.
           const isTarget = spinning && i === targetIndex;
 
           return (

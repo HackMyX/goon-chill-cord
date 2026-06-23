@@ -10,6 +10,7 @@ import { getKillStreakConfig } from "@/lib/actions/kill-streak";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import { getCharacterConfig } from "@/lib/actions/character-config";
 import { getSiteConfig } from "@/lib/actions/site-config";
+import { CASE_GROUPS } from "@/lib/cases";
 import {
   AdminShell,
   type AuditLogEntry,
@@ -148,12 +149,25 @@ export default async function AdminPage() {
     getSiteConfig(),
   ]);
 
+  // Keep case tiers in the same order as CASE_GROUPS (standard before premium,
+  // cosmetics before weapons) regardless of DB return order, so the admin panel
+  // positions never shift after a save/revalidate.
+  const KNOWN_TIER_ORDER = CASE_GROUPS.flatMap((g) => [g.standard.id, g.premium.id]);
+  const sortedTierRows = [...(tierRows ?? [])].sort((a, b) => {
+    const ai = KNOWN_TIER_ORDER.indexOf(a.id);
+    const bi = KNOWN_TIER_ORDER.indexOf(b.id);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.id.localeCompare(b.id);
+  });
+
   return (
     <AdminShell
       credits={profile?.credits ?? 0}
       streakDays={profile?.streak_days ?? 0}
       auditLog={(auditRows ?? []) as unknown as AuditLogEntry[]}
-      caseTiers={(tierRows ?? []) as unknown as CaseTierRow[]}
+      caseTiers={sortedTierRows as unknown as CaseTierRow[]}
       profiles={(profileRows ?? []) as unknown as ProfileRow[]}
       items={((itemRows ?? []) as unknown[]) as ItemRow[]}
       streakConfig={streakConfig}

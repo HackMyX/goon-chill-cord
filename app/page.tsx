@@ -60,21 +60,36 @@ export default async function Home() {
 
   const caseGroupPreviews = await Promise.all(
     caseGroups.map(async (group) => {
-      // A tier can narrow its pool below the group default via the admin
-      // panel — union both tiers so the preview reel reflects everything
-      // actually reachable in this group, not just the static default.
-      const types = Array.from(
-        new Set([
-          ...(group.standard.itemTypes ?? group.itemTypes),
-          ...(group.premium.itemTypes ?? group.itemTypes),
-        ])
-      );
+      const stdIds = group.standard.itemIds?.length ? group.standard.itemIds : null;
+      const premIds = group.premium.itemIds?.length ? group.premium.itemIds : null;
 
-      const { data: pool, count } = await supabase
-        .from("items")
-        .select("rarity, type, name", { count: "exact" })
-        .in("type", types)
-        .limit(100);
+      let pool: { rarity: string; type: string; name: string }[] | null = null;
+      let count: number | null = null;
+
+      if (stdIds || premIds) {
+        // At least one tier has pinned items — preview reel shows exactly those
+        const allIds = [...new Set([...(stdIds ?? []), ...(premIds ?? [])])];
+        const { data, count: cnt } = await supabase
+          .from("items")
+          .select("rarity, type, name", { count: "exact" })
+          .in("id", allIds)
+          .limit(200);
+        pool = data; count = cnt;
+      } else {
+        // Type-based pool — union both tiers' item types
+        const types = Array.from(
+          new Set([
+            ...(group.standard.itemTypes ?? group.itemTypes),
+            ...(group.premium.itemTypes ?? group.itemTypes),
+          ])
+        );
+        const { data, count: cnt } = await supabase
+          .from("items")
+          .select("rarity, type, name", { count: "exact" })
+          .in("type", types)
+          .limit(100);
+        pool = data; count = cnt;
+      }
 
       return {
         groupId: group.id,
