@@ -113,11 +113,10 @@ function QuantitySelector({
 
 const RARITY_RANK: Record<Rarity, number> = { normal: 0, selten: 1, mythisch: 2, ultra: 3 };
 
-function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => void }) {
-  const colClass = items.length <= 4 ? "grid-cols-2 sm:grid-cols-4" :
-    items.length <= 6 ? "grid-cols-3 sm:grid-cols-3" :
-    "grid-cols-3 sm:grid-cols-5";
+// Card width in px — drives both the inline style and max-items-per-row logic.
+const CARD_W = 148;
 
+function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => void }) {
   const best = items.reduce((b, i) => RARITY_RANK[i.rarity as Rarity] > RARITY_RANK[b.rarity as Rarity] ? i : b, items[0]);
 
   return (
@@ -125,66 +124,93 @@ function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 px-4 py-8 overflow-y-auto"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-start bg-black/88 px-4 pt-8 pb-4 overflow-y-auto"
       onClick={onClose}
     >
-      {/* Glow behind best item */}
-      <motion.div
-        initial={{ scale: 0.5, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="pointer-events-none absolute inset-0"
-        style={{ background: `radial-gradient(ellipse at 50% 40%, ${RARITY_HEX[best.rarity as Rarity]}33 0%, transparent 65%)` }}
+      {/* Background glow for best rarity */}
+      <div
+        className="pointer-events-none fixed inset-0"
+        style={{ background: `radial-gradient(ellipse at 50% 35%, ${RARITY_HEX[best.rarity as Rarity]}28 0%, transparent 60%)` }}
       />
 
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
+        initial={{ y: 24, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.1 }}
-        className="relative z-10 flex w-full max-w-3xl flex-col items-center gap-6"
+        transition={{ delay: 0.05, type: "spring", stiffness: 280, damping: 26 }}
+        className="relative z-10 flex w-full max-w-2xl flex-col items-center gap-5"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Header */}
         <div className="text-center">
-          <p className="text-xs font-bold tracking-widest text-zinc-500 uppercase">{items.length} Cases geöffnet</p>
-          <h3 className="mt-1 text-2xl font-extrabold text-zinc-50">Deine Gewinne</h3>
+          <motion.p
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.08 }}
+            className="text-xs font-bold tracking-widest text-zinc-500 uppercase"
+          >
+            {items.length} Cases geöffnet
+          </motion.p>
+          <motion.h3
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
+            className="mt-0.5 text-2xl font-extrabold text-zinc-50"
+          >
+            Deine Gewinne
+          </motion.h3>
           {best && (
-            <p className="mt-0.5 text-sm text-zinc-400">
-              Bestes Item: <span style={{ color: RARITY_HEX[best.rarity as Rarity] }} className="font-bold">{best.name}</span>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.18 }}
+              className="mt-0.5 text-sm text-zinc-400"
+            >
+              Bestes:{" "}
+              <span style={{ color: RARITY_HEX[best.rarity as Rarity] }} className="font-bold">
+                {best.name}
+              </span>
               <span className="ml-1 text-zinc-500">({RARITY_LABELS[best.rarity as Rarity]})</span>
-            </p>
+            </motion.p>
           )}
         </div>
 
-        <div className={`grid w-full gap-3 ${colClass}`}>
+        {/* Item cards — flex-wrap + justify-center: ALWAYS centered regardless of count */}
+        <div className="flex flex-wrap items-start justify-center gap-3">
           {items.map((item, idx) => (
             <motion.div
               key={`${item.id}-${idx}`}
-              initial={{ rotateY: 90, opacity: 0, scale: 0.8 }}
+              initial={{ rotateY: 90, opacity: 0, scale: 0.75 }}
               animate={{ rotateY: 0, opacity: 1, scale: 1 }}
-              transition={{ delay: idx * 0.07, type: "spring", stiffness: 300, damping: 22 }}
-              className="relative flex flex-col items-center gap-1.5 rounded-xl border bg-black/60 p-3 text-center"
-              style={{ borderColor: `${RARITY_HEX[item.rarity as Rarity]}55` }}
+              transition={{ delay: 0.1 + idx * 0.055, type: "spring", stiffness: 320, damping: 24 }}
+              className="relative flex flex-col items-center gap-1.5 rounded-xl border bg-black/70 p-3 text-center"
+              style={{
+                width: CARD_W,
+                borderColor: `${RARITY_HEX[item.rarity as Rarity]}55`,
+                boxShadow: `0 0 14px ${RARITY_HEX[item.rarity as Rarity]}22`,
+              }}
             >
-              {/* Subtle rarity glow bg */}
+              {/* Per-card rarity glow */}
               <div
-                className="pointer-events-none absolute inset-0 rounded-xl opacity-20"
-                style={{ background: `radial-gradient(ellipse at 50% 30%, ${RARITY_HEX[item.rarity as Rarity]} 0%, transparent 70%)` }}
+                className="pointer-events-none absolute inset-0 rounded-xl opacity-[0.18]"
+                style={{ background: `radial-gradient(ellipse at 50% 25%, ${RARITY_HEX[item.rarity as Rarity]} 0%, transparent 72%)` }}
               />
-              <div className="relative z-10 flex flex-col items-center gap-1">
+              <div className="relative z-10 flex flex-col items-center gap-1.5">
                 <ItemRenderer type={item.type} rarity={item.rarity as Rarity} size="md" />
-                <p className="text-[11px] font-bold leading-tight text-zinc-100 line-clamp-2">{item.name}</p>
+                <p className="w-full text-[11px] font-bold leading-tight text-zinc-100 line-clamp-2 break-words">
+                  {item.name}
+                </p>
                 <RarityBadge rarity={item.rarity as Rarity} />
               </div>
             </motion.div>
           ))}
         </div>
 
-        {/* Summary bar */}
+        {/* Rarity summary */}
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: items.length * 0.07 + 0.15 }}
-          className="flex flex-wrap items-center justify-center gap-3"
+          transition={{ delay: 0.1 + items.length * 0.055 + 0.1 }}
+          className="flex flex-wrap items-center justify-center gap-2"
         >
           {(["ultra", "mythisch", "selten", "normal"] as Rarity[]).map((r) => {
             const cnt = items.filter((i) => i.rarity === r).length;
@@ -193,7 +219,7 @@ function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => 
               <span
                 key={r}
                 className="rounded-full border px-3 py-1 text-xs font-bold"
-                style={{ borderColor: `${RARITY_HEX[r]}66`, color: RARITY_HEX[r] }}
+                style={{ borderColor: `${RARITY_HEX[r]}55`, color: RARITY_HEX[r] }}
               >
                 {cnt}× {RARITY_LABELS[r]}
               </span>
@@ -201,12 +227,15 @@ function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => 
           })}
         </motion.div>
 
-        <button
+        <motion.button
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.1 + items.length * 0.055 + 0.22 }}
           onClick={onClose}
-          className="rounded-xl bg-purple-600 px-8 py-2.5 text-sm font-bold text-white shadow-[0_0_18px_rgba(147,51,234,0.55)] hover:bg-purple-500 transition-colors"
+          className="rounded-xl bg-purple-600 px-10 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_rgba(147,51,234,0.6)] hover:bg-purple-500 active:scale-95 transition-all"
         >
           Weiter
-        </button>
+        </motion.button>
       </motion.div>
     </motion.div>
   );

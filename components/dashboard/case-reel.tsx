@@ -114,7 +114,7 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
     // Spinning: jump back then fast-travel to target, spring-snap to exact pixel.
     // The backtrack makes every spin feel like a real spin even when the target
     // mathematically lands near where the previous spin ended.
-    const BACKTRACK_ITEMS = 30 + Math.floor(Math.random() * 8); // 30–37
+    const BACKTRACK_ITEMS = 18 + Math.floor(Math.random() * 6); // 18–23
     x.set(translateX + BACKTRACK_ITEMS * STEP);
 
     debugLog("CaseReel", "spin start", {
@@ -144,8 +144,8 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
     const bulkTarget = translateX + SNAP_DISTANCE;
 
     activeControlsRef.current = animate(x, bulkTarget, {
-      duration: 4.2,
-      ease: [0.16, 1, 0.3, 1],
+      duration: 2.8,
+      ease: [0.12, 1, 0.28, 1],
       onUpdate: trackTicks,
       onComplete: () => {
         // Stage 2: spring snap — crisp landing, faint tactile "give", zero bounce.

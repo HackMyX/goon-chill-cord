@@ -188,7 +188,7 @@ export function useCameraControls(
         );
         state.current.freeLookPitch = Math.max(
           PITCH_MIN - state.current.pitch,
-          Math.min(PITCH_MAX - state.current.pitch, state.current.freeLookPitch - movementY * pSens)
+          Math.min(PITCH_MAX - state.current.pitch, state.current.freeLookPitch + movementY * pSens)
         );
       } else {
         state.current.yaw -= movementX * ySens;
@@ -199,7 +199,7 @@ export function useCameraControls(
         else if (state.current.yaw > Math.PI) state.current.yaw -= Math.PI * 2;
         state.current.pitch = Math.max(
           PITCH_MIN,
-          Math.min(PITCH_MAX, state.current.pitch - movementY * pSens)
+          Math.min(PITCH_MAX, state.current.pitch + movementY * pSens)
         );
       }
     };
