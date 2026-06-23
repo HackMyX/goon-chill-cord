@@ -47,6 +47,9 @@ export interface CaseTierRow {
   rarity_weights: Partial<Record<Rarity, number>>;
   enabled: boolean;
   item_types: string[] | null;
+  item_ids: string[] | null;
+  group_label: string | null;
+  group_subtitle: string | null;
   updated_at: string;
 }
 
@@ -184,7 +187,7 @@ export function AdminShell({
                 aus.
               </p>
             ) : (
-              caseTiers.map((tier) => <CaseTierEditor key={tier.id} tier={tier} />)
+              caseTiers.map((tier) => <CaseTierEditor key={tier.id} tier={tier} items={items} />)
             )}
           </div>
         )}

@@ -9,6 +9,7 @@ import { CaseOpeningSection } from "@/components/dashboard/case-opening-section"
 import { DoubleOrNothing } from "@/components/dashboard/double-or-nothing";
 import { Leaderboard, type LeaderboardEntry } from "@/components/dashboard/leaderboard";
 import { subscribeToPresence } from "@/lib/presence-client";
+import { createClient } from "@/lib/supabase/client";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { CaseGroup, Rarity } from "@/lib/cases";
@@ -56,6 +57,19 @@ export function DashboardShell({
   const sound = useSoundManager();
   const onlineCount = useOnlineCount();
   const { siteName } = useSiteConfig();
+
+  // Live-refresh case config whenever an admin changes case_tiers — so the
+  // chance bars and prices update without a manual page reload.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("case_tiers_live")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "case_tiers" }, () => {
+        router.refresh();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [router]);
 
   function handleCreditsChange(newCredits: number) {
     setCredits(newCredits);

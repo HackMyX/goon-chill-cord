@@ -64,29 +64,43 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
   }
 
   const rolledRarity = pickRarity(tier.rarityWeights);
-  // A tier's own item_types (set via the admin panel) takes precedence over
-  // the parent group's default pool, so admins can scope a specific tier
-  // (e.g. a future "Hut Case") to a subset of types. Hair is a single
-  // unisex "hair" dbType (lib/wardrobe.ts) — there's no wrong-gender variant
-  // to exclude anymore, every player can win every hair item, same as any
-  // other slot.
-  const itemTypes = tier.itemTypes ?? group.itemTypes;
 
-  let { data: pool, error: poolError } = await supabase
-    .from("items")
-    .select("id, name, rarity, type, image_url, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec")
-    .eq("rarity", rolledRarity)
-    .in("type", itemTypes)
-    .limit(500);
+  // Item pool resolution:
+  // 1. itemIds (specific items pinned via admin) — highest priority
+  // 2. itemTypes (category filter set via admin) — falls back to group default
+  const useSpecificItems = tier.itemIds && tier.itemIds.length > 0;
+  const itemTypes = tier.itemTypes ?? group.itemTypes;
+  const FULL_SELECT = "id, name, rarity, type, image_url, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec";
+
+  let { data: pool, error: poolError } = useSpecificItems
+    ? await supabase
+        .from("items")
+        .select(FULL_SELECT)
+        .in("id", tier.itemIds!)
+        .eq("rarity", rolledRarity)
+        .limit(500)
+    : await supabase
+        .from("items")
+        .select(FULL_SELECT)
+        .eq("rarity", rolledRarity)
+        .in("type", itemTypes)
+        .limit(500);
 
   // Fallback if stat columns haven't been migrated yet — still open the case.
   if (poolError) {
-    const retry = await supabase
-      .from("items")
-      .select("id, name, rarity, type, image_url")
-      .eq("rarity", rolledRarity)
-      .in("type", itemTypes)
-      .limit(500);
+    const retry = useSpecificItems
+      ? await supabase
+          .from("items")
+          .select("id, name, rarity, type, image_url")
+          .in("id", tier.itemIds!)
+          .eq("rarity", rolledRarity)
+          .limit(500)
+      : await supabase
+          .from("items")
+          .select("id, name, rarity, type, image_url")
+          .eq("rarity", rolledRarity)
+          .in("type", itemTypes)
+          .limit(500);
     pool = (retry.data ?? []).map((row) => ({
       ...row,
       damage: null, armor: null, perk_type: null,
@@ -95,16 +109,20 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
     poolError = retry.error;
   }
 
-  // Fallback: the exact rarity has no items yet (e.g. DB import still in
-  // progress) — broaden to any rarity within this case's item pool instead
-  // of failing the whole case open. The rolled rarity odds still apply
-  // overall once the real catalogue is fully imported.
+  // Fallback: rolled rarity has no matching items in the pool — broaden to
+  // any rarity so the case never hard-errors while the catalogue is filling up.
   if (!poolError && (!pool || pool.length === 0)) {
-    const fallback = await supabase
-      .from("items")
-      .select("id, name, rarity, type, image_url, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec")
-      .in("type", itemTypes)
-      .limit(500);
+    const fallback = useSpecificItems
+      ? await supabase
+          .from("items")
+          .select(FULL_SELECT)
+          .in("id", tier.itemIds!)
+          .limit(500)
+      : await supabase
+          .from("items")
+          .select(FULL_SELECT)
+          .in("type", itemTypes)
+          .limit(500);
     pool = fallback.data;
     poolError = fallback.error;
   }

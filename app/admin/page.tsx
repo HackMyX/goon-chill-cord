@@ -36,20 +36,31 @@ export default async function AdminPage() {
 
   const admin = createAdminClient();
 
-  // `item_types` may not exist yet (one-time SQL not run) — degrade to the
-  // column-less select rather than losing the whole Economy tab.
+  // Graceful column fallback: try with all new columns, degrade if not yet migrated.
   async function fetchTierRows() {
+    const withAll = await admin
+      .from("case_tiers")
+      .select("id, group_id, label, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, updated_at")
+      .order("group_id", { ascending: true });
+    if (!withAll.error) return withAll.data;
+
     const withTypes = await admin
       .from("case_tiers")
       .select("id, group_id, label, price, rarity_weights, enabled, item_types, updated_at")
       .order("group_id", { ascending: true });
-    if (!withTypes.error) return withTypes.data;
+    if (!withTypes.error) {
+      return (withTypes.data ?? []).map((row) => ({
+        ...row, item_ids: null, group_label: null, group_subtitle: null,
+      }));
+    }
 
     const withoutTypes = await admin
       .from("case_tiers")
       .select("id, group_id, label, price, rarity_weights, enabled, updated_at")
       .order("group_id", { ascending: true });
-    return (withoutTypes.data ?? []).map((row) => ({ ...row, item_types: null }));
+    return (withoutTypes.data ?? []).map((row) => ({
+      ...row, item_types: null, item_ids: null, group_label: null, group_subtitle: null,
+    }));
   }
 
   // `damage`/stat columns may not exist yet (one-time SQL not run) —

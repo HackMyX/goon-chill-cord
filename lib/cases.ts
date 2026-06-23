@@ -92,6 +92,14 @@ export interface CaseTier {
   enabled?: boolean;
   /** Overrides the parent group's itemTypes when set via the admin panel. */
   itemTypes?: string[];
+  /** When set, the case draws only from these exact item IDs (still filtered by
+   * rolled rarity). Empty array / undefined = fall back to itemTypes pool. */
+  itemIds?: string[];
+  /** Group-level display label stored on the standard tier row — shown as the
+   * case group's title in the dashboard when set by the admin. */
+  groupLabel?: string;
+  /** Group-level subtitle stored on the standard tier row. */
+  groupSubtitle?: string;
 }
 
 /** Every dbType currently in circulation — shown to the admin as the known

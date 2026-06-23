@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { createClient } from "@/lib/supabase/server";
 import { DiscordLoginButton } from "@/components/auth/discord-login-button";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";

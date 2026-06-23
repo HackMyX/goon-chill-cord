@@ -48,6 +48,12 @@ export interface UpdateCaseTierInput {
   rarityWeights: Partial<Record<Rarity, number>>;
   enabled: boolean;
   itemTypes: string[];
+  /** Specific item IDs pinned to this tier. Empty array / undefined = use itemTypes pool. */
+  itemIds?: string[] | null;
+  /** Group display title — stored on the standard-tier row, applies to the whole group. */
+  groupLabel?: string | null;
+  /** Group display subtitle. */
+  groupSubtitle?: string | null;
 }
 
 export async function updateCaseTier(input: UpdateCaseTierInput): Promise<AdminActionResult> {
@@ -55,29 +61,48 @@ export async function updateCaseTier(input: UpdateCaseTierInput): Promise<AdminA
   if (!user) return { success: false, error: "Kein Zugriff." };
 
   const admin = createAdminClient();
+
+  const basePayload = {
+    price: input.price,
+    rarity_weights: input.rarityWeights,
+    enabled: input.enabled,
+    updated_at: new Date().toISOString(),
+  };
+
   let { data, error } = await admin
     .from("case_tiers")
     .update({
-      price: input.price,
-      rarity_weights: input.rarityWeights,
-      enabled: input.enabled,
+      ...basePayload,
       item_types: input.itemTypes,
-      updated_at: new Date().toISOString(),
+      item_ids: input.itemIds ?? null,
+      group_label: input.groupLabel ?? null,
+      group_subtitle: input.groupSubtitle ?? null,
     })
     .eq("id", input.tierId)
     .select("id");
 
-  // `item_types` column may not exist yet (one-time SQL not run) — retry
-  // without it rather than failing price/weights/enabled saves entirely.
+  // New columns (item_ids, group_label, group_subtitle) may not exist yet —
+  // retry without them rather than blocking the save.
+  if (
+    error?.message &&
+    (error.message.includes("item_ids") ||
+      error.message.includes("group_label") ||
+      error.message.includes("group_subtitle"))
+  ) {
+    const retry = await admin
+      .from("case_tiers")
+      .update({ ...basePayload, item_types: input.itemTypes })
+      .eq("id", input.tierId)
+      .select("id");
+    data = retry.data;
+    error = retry.error;
+  }
+
+  // `item_types` column also not yet in DB — retry with base only.
   if (error?.message?.includes("item_types")) {
     const retry = await admin
       .from("case_tiers")
-      .update({
-        price: input.price,
-        rarity_weights: input.rarityWeights,
-        enabled: input.enabled,
-        updated_at: new Date().toISOString(),
-      })
+      .update(basePayload)
       .eq("id", input.tierId)
       .select("id");
     data = retry.data;

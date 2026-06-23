@@ -7,6 +7,9 @@ interface CaseTierRow {
   rarity_weights: Partial<Record<Rarity, number>>;
   enabled: boolean;
   item_types: string[] | null;
+  item_ids: string[] | null;
+  group_label: string | null;
+  group_subtitle: string | null;
 }
 
 function mergeTier(tier: CaseTier, override?: CaseTierRow): CaseTier {
@@ -17,6 +20,9 @@ function mergeTier(tier: CaseTier, override?: CaseTierRow): CaseTier {
     rarityWeights: override.rarity_weights,
     enabled: override.enabled,
     itemTypes: override.item_types ?? tier.itemTypes,
+    itemIds: override.item_ids?.length ? override.item_ids : undefined,
+    groupLabel: override.group_label ?? undefined,
+    groupSubtitle: override.group_subtitle ?? undefined,
   };
 }
 
@@ -32,7 +38,7 @@ export async function getCaseConfig(): Promise<CaseGroup[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("case_tiers")
-    .select("id, price, rarity_weights, enabled, item_types");
+    .select("id, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle");
 
   if (error || !data || data.length === 0) {
     return CASE_GROUPS;
@@ -40,9 +46,16 @@ export async function getCaseConfig(): Promise<CaseGroup[]> {
 
   const overridesById = new Map(data.map((row) => [row.id, row as CaseTierRow]));
 
-  return CASE_GROUPS.map((group) => ({
-    ...group,
-    standard: mergeTier(group.standard, overridesById.get(group.standard.id)),
-    premium: mergeTier(group.premium, overridesById.get(group.premium.id)),
-  }));
+  return CASE_GROUPS.map((group) => {
+    const stdOverride = overridesById.get(group.standard.id);
+    const merged = {
+      ...group,
+      // Admin can rename the group title/subtitle via the standard-tier row
+      title: stdOverride?.group_label || group.title,
+      subtitle: stdOverride?.group_subtitle ?? group.subtitle,
+      standard: mergeTier(group.standard, stdOverride),
+      premium: mergeTier(group.premium, overridesById.get(group.premium.id)),
+    };
+    return merged;
+  });
 }
