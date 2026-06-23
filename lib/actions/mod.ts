@@ -3,74 +3,16 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isModerator, isAdmin } from "@/lib/admin";
+import {
+  DEFAULT_MOD_PERMISSIONS,
+  type ModPermissions,
+  type ModActionRow,
+  type ModUserSummary,
+  type ModTicket,
+} from "@/lib/mod";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface ModPermissions {
-  canViewTickets: boolean;
-  canCloseTickets: boolean;
-  canWarnUsers: boolean;
-  canTempBanUsers: boolean;
-  canViewUserDetails: boolean;
-  canViewAuditLog: boolean;
-  canAddCredits: boolean;
-  maxTempBanHours: number;
-  warnRequiresReason: boolean;
-}
-
-export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
-  canViewTickets: true,
-  canCloseTickets: true,
-  canWarnUsers: true,
-  canTempBanUsers: false,
-  canViewUserDetails: true,
-  canViewAuditLog: false,
-  canAddCredits: false,
-  maxTempBanHours: 24,
-  warnRequiresReason: true,
-};
-
-export interface ModActionRow {
-  id: string;
-  modId: string;
-  modUsername: string | null;
-  targetUserId: string | null;
-  targetUsername: string | null;
-  actionType: "warning" | "note" | "temp_ban" | "ticket_close" | "credits_add";
-  reason: string | null;
-  details: Record<string, unknown> | null;
-  expiresAt: string | null;
-  createdAt: string;
-}
-
-export interface ModUserSummary {
-  id: string;
-  username: string;
-  role: string;
-  credits: number;
-  streakDays: number;
-  tempBannedUntil: string | null;
-  createdAt: string;
-  warningCount: number;
-  noteCount: number;
-}
-
-export interface ModTicket {
-  id: string;
-  userId: string;
-  username: string;
-  subject: string;
-  message: string;
-  status: string;
-  createdAt: string;
-  closedAt: string | null;
-  closedByUsername: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Permission helpers
+// Internal auth helpers (not exported — not async functions consumers call)
 // ---------------------------------------------------------------------------
 
 async function requireMod() {
@@ -152,17 +94,13 @@ export async function getModActions(limit = 50): Promise<ModActionRow[]> {
 
   if (!data || data.length === 0) return [];
 
-  // Resolve usernames for mods and targets
   const allIds = Array.from(
     new Set([
       ...data.map((r) => r.mod_id),
       ...data.map((r) => r.target_user_id).filter((id): id is string => !!id),
     ])
   );
-  const { data: profiles } = await admin
-    .from("profiles")
-    .select("id, username")
-    .in("id", allIds);
+  const { data: profiles } = await admin.from("profiles").select("id, username").in("id", allIds);
   const byId = new Map((profiles ?? []).map((p) => [p.id, p.username as string | null]));
 
   return data.map((r) => ({
@@ -291,7 +229,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Actions: warn, note, temp ban, close ticket
+// Actions: warn, note, temp ban, close ticket, credits
 // ---------------------------------------------------------------------------
 
 export async function modWarnUser(
@@ -303,19 +241,14 @@ export async function modWarnUser(
     const perms = await getModPermissions();
     if (!perms.canWarnUsers) return { success: false, error: "Keine Berechtigung zum Verwarnen." };
     if (perms.warnRequiresReason && !reason.trim()) return { success: false, error: "Begründung erforderlich." };
-
     const admin = createAdminClient();
     const { error } = await admin.from("mod_actions").insert({
-      mod_id: user.id,
-      target_user_id: targetUserId,
-      action_type: "warning",
-      reason: reason.trim() || null,
+      mod_id: user.id, target_user_id: targetUserId,
+      action_type: "warning", reason: reason.trim() || null,
     });
     if (error) return { success: false, error: error.message };
     return { success: true };
-  } catch (e) {
-    return { success: false, error: String(e) };
-  }
+  } catch (e) { return { success: false, error: String(e) }; }
 }
 
 export async function modAddNote(
@@ -326,19 +259,14 @@ export async function modAddNote(
     const { user } = await requireMod();
     const perms = await getModPermissions();
     if (!perms.canWarnUsers) return { success: false, error: "Keine Berechtigung." };
-
     const admin = createAdminClient();
     const { error } = await admin.from("mod_actions").insert({
-      mod_id: user.id,
-      target_user_id: targetUserId,
-      action_type: "note",
-      reason: note.trim() || null,
+      mod_id: user.id, target_user_id: targetUserId,
+      action_type: "note", reason: note.trim() || null,
     });
     if (error) return { success: false, error: error.message };
     return { success: true };
-  } catch (e) {
-    return { success: false, error: String(e) };
-  }
+  } catch (e) { return { success: false, error: String(e) }; }
 }
 
 export async function modTempBan(
@@ -351,28 +279,20 @@ export async function modTempBan(
     const perms = await getModPermissions();
     if (!perms.canTempBanUsers) return { success: false, error: "Keine Berechtigung für Temp-Bans." };
     const cappedHours = Math.min(hours, perms.maxTempBanHours);
-
     const expiresAt = new Date(Date.now() + cappedHours * 3_600_000).toISOString();
     const admin = createAdminClient();
-
     const [actionRes, banRes] = await Promise.all([
       admin.from("mod_actions").insert({
-        mod_id: user.id,
-        target_user_id: targetUserId,
-        action_type: "temp_ban",
-        reason: reason.trim() || null,
-        expires_at: expiresAt,
-        details: { hours: cappedHours },
+        mod_id: user.id, target_user_id: targetUserId,
+        action_type: "temp_ban", reason: reason.trim() || null,
+        expires_at: expiresAt, details: { hours: cappedHours },
       }),
       admin.from("profiles").update({ temp_banned_until: expiresAt }).eq("id", targetUserId),
     ]);
-
     if (actionRes.error) return { success: false, error: actionRes.error.message };
     if (banRes.error) return { success: false, error: banRes.error.message };
     return { success: true };
-  } catch (e) {
-    return { success: false, error: String(e) };
-  }
+  } catch (e) { return { success: false, error: String(e) }; }
 }
 
 export async function modLiftBan(
@@ -382,24 +302,18 @@ export async function modLiftBan(
     const { user } = await requireMod();
     const perms = await getModPermissions();
     if (!perms.canTempBanUsers) return { success: false, error: "Keine Berechtigung." };
-
     const admin = createAdminClient();
     const [actionRes, liftRes] = await Promise.all([
       admin.from("mod_actions").insert({
-        mod_id: user.id,
-        target_user_id: targetUserId,
-        action_type: "note",
-        reason: "Ban manuell aufgehoben",
+        mod_id: user.id, target_user_id: targetUserId,
+        action_type: "note", reason: "Ban manuell aufgehoben",
       }),
       admin.from("profiles").update({ temp_banned_until: null }).eq("id", targetUserId),
     ]);
-
     if (liftRes.error) return { success: false, error: liftRes.error.message };
     if (actionRes.error) return { success: false, error: actionRes.error.message };
     return { success: true };
-  } catch (e) {
-    return { success: false, error: String(e) };
-  }
+  } catch (e) { return { success: false, error: String(e) }; }
 }
 
 export async function modCloseTicket(
@@ -410,31 +324,22 @@ export async function modCloseTicket(
     const { user } = await requireMod();
     const perms = await getModPermissions();
     if (!perms.canCloseTickets) return { success: false, error: "Keine Berechtigung zum Schließen." };
-
     const admin = createAdminClient();
     const { data: ticket } = await admin.from("tickets").select("user_id").eq("id", ticketId).single();
-
     const [ticketRes, actionRes] = await Promise.all([
       admin.from("tickets").update({
-        status: "closed",
-        closed_at: new Date().toISOString(),
-        closed_by: user.id,
+        status: "closed", closed_at: new Date().toISOString(), closed_by: user.id,
       }).eq("id", ticketId),
       admin.from("mod_actions").insert({
-        mod_id: user.id,
-        target_user_id: ticket?.user_id ?? null,
-        action_type: "ticket_close",
-        reason: reason.trim() || null,
+        mod_id: user.id, target_user_id: ticket?.user_id ?? null,
+        action_type: "ticket_close", reason: reason.trim() || null,
         details: { ticket_id: ticketId },
       }),
     ]);
-
     if (ticketRes.error) return { success: false, error: ticketRes.error.message };
     if (actionRes.error) return { success: false, error: actionRes.error.message };
     return { success: true };
-  } catch (e) {
-    return { success: false, error: String(e) };
-  }
+  } catch (e) { return { success: false, error: String(e) }; }
 }
 
 export async function modAddCredits(
@@ -447,27 +352,20 @@ export async function modAddCredits(
     const perms = await getModPermissions();
     if (!perms.canAddCredits) return { success: false, error: "Keine Berechtigung." };
     if (amount === 0) return { success: false, error: "Betrag darf nicht 0 sein." };
-
     const admin = createAdminClient();
     const { data: target } = await admin.from("profiles").select("credits").eq("id", targetUserId).single();
     if (!target) return { success: false, error: "Nutzer nicht gefunden." };
-
     const newCredits = Math.max(0, (target.credits ?? 0) + amount);
     const [updateRes, actionRes] = await Promise.all([
       admin.from("profiles").update({ credits: newCredits }).eq("id", targetUserId),
       admin.from("mod_actions").insert({
-        mod_id: user.id,
-        target_user_id: targetUserId,
-        action_type: "credits_add",
-        reason: reason.trim() || null,
+        mod_id: user.id, target_user_id: targetUserId,
+        action_type: "credits_add", reason: reason.trim() || null,
         details: { amount, newTotal: newCredits },
       }),
     ]);
-
     if (updateRes.error) return { success: false, error: updateRes.error.message };
     if (actionRes.error) return { success: false, error: actionRes.error.message };
     return { success: true };
-  } catch (e) {
-    return { success: false, error: String(e) };
-  }
+  } catch (e) { return { success: false, error: String(e) }; }
 }

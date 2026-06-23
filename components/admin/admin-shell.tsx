@@ -20,7 +20,7 @@ import { DebugLogTab } from "@/components/admin/debug-log-tab";
 import { BackupTab } from "@/components/admin/backup-tab";
 import { SecurityTab } from "@/components/admin/security-tab";
 import { ModConfigEditor } from "@/components/admin/mod-config-editor";
-import type { ModPermissions } from "@/lib/actions/mod";
+import type { ModPermissions } from "@/lib/mod";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 import type { StreakConfig } from "@/lib/streak";

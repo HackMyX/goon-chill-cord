@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Shield, Save, Loader2, Info } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
-import { updateModPermissions, type ModPermissions } from "@/lib/actions/mod";
+import { updateModPermissions } from "@/lib/actions/mod";
+import type { ModPermissions } from "@/lib/mod";
 
 interface Props {
   permissions: ModPermissions;

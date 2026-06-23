@@ -11,8 +11,8 @@ import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { useSoundManager } from "@/lib/sound-manager";
 import {
   modWarnUser, modAddNote, modTempBan, modLiftBan, modCloseTicket, modAddCredits,
-  type ModPermissions, type ModActionRow, type ModUserSummary, type ModTicket,
 } from "@/lib/actions/mod";
+import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket } from "@/lib/mod";
 
 // ---------------------------------------------------------------------------
 // Helpers
