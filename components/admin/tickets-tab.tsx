@@ -24,6 +24,7 @@ import {
   getTicketDetail,
   addTicketMessage,
   updateTicketStatus,
+  setTicketPriority,
   deleteTicket,
   deleteTicketsBulk,
   deleteTicketsByDateRange,
@@ -31,6 +32,7 @@ import {
   type TicketDetail,
   type TicketStatus,
   type TicketCategory,
+  type TicketPriority,
 } from "@/lib/actions/tickets";
 import { useSoundManager } from "@/lib/sound-manager";
 
@@ -56,6 +58,29 @@ const STATUS_ICON: Record<TicketStatus, typeof MessageCircle> = {
 };
 
 const ALL_STATUSES: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
+const ALL_PRIORITIES: TicketPriority[] = ["low", "normal", "high", "urgent"];
+
+const PRIORITY_LABEL: Record<TicketPriority, string> = {
+  low: "Niedrig",
+  normal: "Normal",
+  high: "Hoch",
+  urgent: "Dringend",
+};
+
+const PRIORITY_STYLE: Record<TicketPriority, string> = {
+  low: "text-zinc-400 bg-zinc-500/10 border-zinc-500/30",
+  normal: "text-blue-300 bg-blue-500/10 border-blue-500/30",
+  high: "text-amber-300 bg-amber-500/10 border-amber-500/30",
+  urgent: "text-red-300 bg-red-500/15 border-red-500/40",
+};
+
+function PriorityBadge({ priority }: { priority: TicketPriority }) {
+  return (
+    <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${PRIORITY_STYLE[priority]}`}>
+      {PRIORITY_LABEL[priority]}
+    </span>
+  );
+}
 
 const CATEGORY_LABEL: Record<TicketCategory, string> = {
   bug: "Problem",
@@ -109,6 +134,7 @@ function TicketRow({
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [priorityChanging, setPriorityChanging] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const sound = useSoundManager();
@@ -147,6 +173,15 @@ function TicketRow({
     onUpdated();
   }
 
+  async function handlePriorityChange(priority: TicketPriority) {
+    setPriorityChanging(true);
+    await setTicketPriority({ ticketId: ticket.id, priority });
+    const d = await getTicketDetail(ticket.id);
+    setDetail(d);
+    setPriorityChanging(false);
+    onUpdated();
+  }
+
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
     sound.click();
@@ -180,6 +215,7 @@ function TicketRow({
         >
           <StatusBadge status={ticket.status} />
           <CategoryBadge category={ticket.category} />
+          <PriorityBadge priority={ticket.priority ?? "normal"} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-zinc-200">{ticket.subject}</p>
             <p className="text-[11px] text-zinc-500">
@@ -230,7 +266,7 @@ function TicketRow({
 
           {!loadingDetail && detail && (
             <div className="flex flex-col gap-0">
-              {/* Status controls */}
+              {/* Status + Priority controls */}
               <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
                 <span className="text-xs text-zinc-500">Status:</span>
                 {ALL_STATUSES.map((s) => (
@@ -248,6 +284,28 @@ function TicketRow({
                   </button>
                 ))}
                 {statusChanging && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />}
+                <span className="ml-3 text-xs text-zinc-500">Priorität:</span>
+                {ALL_PRIORITIES.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handlePriorityChange(p)}
+                    disabled={priorityChanging || (detail.priority ?? "normal") === p}
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold transition-colors ${
+                      (detail.priority ?? "normal") === p
+                        ? PRIORITY_STYLE[p]
+                        : "border-white/10 text-zinc-500 hover:border-white/30 hover:text-zinc-300"
+                    } disabled:opacity-50`}
+                  >
+                    {PRIORITY_LABEL[p]}
+                  </button>
+                ))}
+                {priorityChanging && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />}
+                {(detail.closedAt) && (
+                  <span className="ml-auto text-[10px] text-zinc-600">
+                    Geschlossen {new Date(detail.closedAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    {detail.closedByUsername ? ` von ${detail.closedByUsername}` : ""}
+                  </span>
+                )}
               </div>
 
               {/* Original description */}

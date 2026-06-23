@@ -17,7 +17,7 @@ export default async function ModPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, username")
+    .select("role, username, credits, streak_days")
     .eq("id", user.id)
     .single();
 
@@ -34,6 +34,8 @@ export default async function ModPage() {
   return (
     <ModShell
       modUsername={profile?.username ?? "Moderator"}
+      credits={profile?.credits ?? 0}
+      streakDays={profile?.streak_days ?? 0}
       permissions={permissions}
       users={users}
       tickets={tickets}

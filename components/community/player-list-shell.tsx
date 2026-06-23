@@ -30,6 +30,7 @@ interface PlayerListShellProps {
   streakDays: number;
   viewerId: string;
   isAdmin?: boolean;
+  isModerator?: boolean;
 }
 
 function totalItems(counts: Record<Rarity, number>): number {
@@ -61,7 +62,7 @@ function useOnlineUserIds(): Set<string> {
   return onlineIds;
 }
 
-export function PlayerListShell({ players: initialPlayers, credits: initialCredits, streakDays, viewerId, isAdmin = false }: PlayerListShellProps) {
+export function PlayerListShell({ players: initialPlayers, credits: initialCredits, streakDays, viewerId, isAdmin = false, isModerator = false }: PlayerListShellProps) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [credits, setCredits] = useState(initialCredits);
@@ -90,7 +91,7 @@ export function PlayerListShell({ players: initialPlayers, credits: initialCredi
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} />
+      <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} isModerator={isModerator} />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
         <Link

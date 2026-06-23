@@ -50,6 +50,7 @@ interface WardrobeShellProps {
    * enforces this server-side) — they need to freely flip between both
    * bodies to test the male/female Garderobe and World rendering. */
   isAdmin?: boolean;
+  isModerator?: boolean;
 }
 
 const ROW_HEIGHT = 76; // row height incl. gap, used by the virtualizer's size estimate
@@ -172,6 +173,7 @@ export function WardrobeShell({
   initialGender,
   genderLocked: initialGenderLocked,
   isAdmin = false,
+  isModerator = false,
 }: WardrobeShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -394,7 +396,7 @@ export function WardrobeShell({
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={credits} inventoryCount={inventoryCount} streakDays={streakDays} isAdmin={isAdmin} />
+      <TopBar credits={credits} inventoryCount={inventoryCount} streakDays={streakDays} isAdmin={isAdmin} isModerator={isModerator} />
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
         <Link

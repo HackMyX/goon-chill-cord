@@ -238,7 +238,7 @@ export function AdminShell({
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={credits} streakDays={streakDays} />
+      <TopBar credits={credits} streakDays={streakDays} isAdmin={true} />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
         <Link

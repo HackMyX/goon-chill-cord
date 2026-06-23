@@ -135,9 +135,7 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
           className="w-40 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60"
         />
         <span className="text-[11px] text-zinc-600">
-          Credits, die jeder neue Spieler beim ersten Login automatisch erhält. Erfordert einmalig{" "}
-          <code className="rounded bg-black/40 px-1 py-0.5 text-amber-400/80">node scripts/add-starting-credits.mjs</code>,
-          damit der DB-Trigger den Wert liest.
+          Credits, die jeder neue Spieler beim ersten Login automatisch erhält. Der DB-Trigger liest diesen Wert direkt — Änderungen gelten sofort für alle neuen Accounts.
         </span>
       </label>
 

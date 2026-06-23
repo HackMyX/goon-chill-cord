@@ -7,7 +7,7 @@ import { getKillStreakConfig } from "@/lib/actions/kill-streak";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import { getCharacterConfig } from "@/lib/actions/character-config";
 import { getWorldSpawnConfig } from "@/lib/actions/world-spawn";
-import { isAdmin } from "@/lib/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 export default async function WorldPage() {
@@ -97,6 +97,7 @@ export default async function WorldPage() {
       disconnectCountdownSec={worldSessionConfig.disconnectCountdownSec}
       pvpEnabled={worldSessionConfig.pvpEnabled}
       isAdmin={isAdmin(profile)}
+      isModerator={isModerator(profile)}
     />
   );
 }

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PlayerListShell, type PlayerCard } from "@/components/community/player-list-shell";
-import { isAdmin } from "@/lib/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
 import type { Rarity } from "@/lib/cases";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -85,6 +85,7 @@ export default async function CommunityPage() {
       streakDays={viewerProfile?.streak_days ?? 0}
       viewerId={user.id}
       isAdmin={isAdmin(viewerProfile)}
+      isModerator={isModerator(viewerProfile)}
     />
   );
 }

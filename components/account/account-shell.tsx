@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Coins, Package, Sparkles, ShieldCheck, Pencil, Check, X, Repeat, Eye, EyeOff, Loader2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
-import { isAdmin } from "@/lib/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
 import { updateUsername, updatePlayerSettings, type NotificationPrefs } from "@/lib/actions/account";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
@@ -96,7 +96,7 @@ export function AccountShell({
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={liveCredits} streakDays={streakDays} inventoryCount={inventoryCount} isAdmin={isAdmin({ role: liveRole })} />
+      <TopBar credits={liveCredits} streakDays={streakDays} inventoryCount={inventoryCount} isAdmin={isAdmin({ role: liveRole })} isModerator={isModerator({ role: liveRole })} />
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
         <Link

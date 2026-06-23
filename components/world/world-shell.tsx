@@ -61,6 +61,7 @@ interface WorldShellProps {
   /** Admin-configured monster spawn tuning (lib/world-spawn-config.ts). */
   spawnConfig: WorldSpawnConfig;
   isAdmin?: boolean;
+  isModerator?: boolean;
 }
 
 interface RewardPopup {
@@ -119,6 +120,7 @@ export function WorldShell({
   characterConfig,
   spawnConfig,
   isAdmin = false,
+  isModerator = false,
 }: WorldShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -466,6 +468,7 @@ export function WorldShell({
         inventoryCount={inventoryCount}
         onCreditsChange={setCredits}
         isAdmin={isAdmin}
+        isModerator={isModerator}
       />
 
       <div ref={canvasWrapRef} className="relative min-h-0 flex-1">

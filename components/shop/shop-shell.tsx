@@ -516,6 +516,7 @@ interface ShopShellProps {
   motd: string | null;
   categories: ShopCategoryMeta[];
   isAdmin?: boolean;
+  isModerator?: boolean;
 }
 
 export function ShopShell({
@@ -527,6 +528,7 @@ export function ShopShell({
   motd,
   categories,
   isAdmin = false,
+  isModerator = false,
 }: ShopShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => { if (typeof row.credits === "number") setCredits(row.credits); });
@@ -598,7 +600,7 @@ export function ShopShell({
 
   return (
     <div ref={shopRootRef} className="flex flex-1 flex-col">
-      <TopBar credits={credits} streakDays={streakDays} onCreditsChange={setCredits} isAdmin={isAdmin} />
+      <TopBar credits={credits} streakDays={streakDays} onCreditsChange={setCredits} isAdmin={isAdmin} isModerator={isModerator} />
 
       {/* Hero banner area */}
       <div className="relative overflow-hidden border-b border-white/5 bg-[#030305]">

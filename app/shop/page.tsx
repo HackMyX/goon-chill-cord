@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getTodayShop } from "@/lib/actions/shop";
 import { ShopShell } from "@/components/shop/shop-shell";
-import { isAdmin } from "@/lib/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
 
 export default async function ShopPage() {
   const supabase = await createClient();
@@ -29,6 +29,7 @@ export default async function ShopPage() {
       motd={motdEnabled ? (motd ?? null) : null}
       categories={categories}
       isAdmin={isAdmin(profile)}
+      isModerator={isModerator(profile)}
     />
   );
 }

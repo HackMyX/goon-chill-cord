@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { useSoundManager } from "@/lib/sound-manager";
+import { TopBar } from "@/components/layout/top-bar";
 import {
   modWarnUser, modAddNote, modTempBan, modLiftBan, modCloseTicket, modAddCredits,
 } from "@/lib/actions/mod";
@@ -480,6 +481,8 @@ type ModTab = "overview" | "users" | "tickets" | "actions";
 
 interface ModShellProps {
   modUsername: string;
+  credits: number;
+  streakDays: number;
   permissions: ModPermissions;
   users: ModUserSummary[];
   tickets: ModTicket[];
@@ -489,6 +492,8 @@ interface ModShellProps {
 
 export function ModShell({
   modUsername,
+  credits,
+  streakDays,
   permissions,
   users,
   tickets,
@@ -509,6 +514,8 @@ export function ModShell({
   function refresh() { router.refresh(); }
 
   return (
+    <div className="flex flex-1 flex-col">
+      <TopBar credits={credits} streakDays={streakDays} isModerator={true} />
     <div className="mx-auto w-full max-w-5xl px-4 py-8">
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -565,6 +572,7 @@ export function ModShell({
           <ActionLog actions={recentActions} />
         </div>
       )}
+    </div>
     </div>
   );
 }

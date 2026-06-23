@@ -47,6 +47,7 @@ interface AuctionsShellProps {
   myItems: OwnedItem[];
   auctions: AuctionListEntry[];
   isAdmin?: boolean;
+  isModerator?: boolean;
 }
 
 function fmt(n: number) {
@@ -402,6 +403,7 @@ export function AuctionsShell({
   myItems,
   auctions,
   isAdmin = false,
+  isModerator = false,
 }: AuctionsShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -423,7 +425,7 @@ export function AuctionsShell({
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} />
+      <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} isModerator={isModerator} />
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
         <Link

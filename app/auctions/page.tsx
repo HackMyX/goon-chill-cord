@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sweepExpiredAuctions } from "@/lib/actions/auctions";
-import { isAdmin } from "@/lib/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
 import {
   AuctionsShell,
   type AuctionListEntry,
@@ -97,6 +97,7 @@ export default async function AuctionsPage() {
       credits={profile?.credits ?? 0}
       streakDays={profile?.streak_days ?? 0}
       isAdmin={isAdmin(profile)}
+      isModerator={isModerator(profile)}
       viewerId={user.id}
       myItems={myItems}
       auctions={auctions}

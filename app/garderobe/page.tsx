@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { WardrobeShell, type InventoryRow } from "@/components/wardrobe/wardrobe-shell";
-import { isAdmin } from "@/lib/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
 
 export default async function GarderobePage() {
   const supabase = await createClient();
@@ -51,6 +51,7 @@ export default async function GarderobePage() {
       initialGender={(profile?.gender as "m" | "w") ?? "m"}
       genderLocked={(profile?.gender_locked ?? false) && !isAdmin(profile)}
       isAdmin={isAdmin(profile)}
+      isModerator={isModerator(profile)}
     />
   );
 }

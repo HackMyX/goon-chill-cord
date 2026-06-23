@@ -8,6 +8,7 @@ import { notifyUser, notifyStaff } from "@/lib/notifications-internal";
 
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 export type TicketCategory = "bug" | "suggestion";
+export type TicketPriority = "low" | "normal" | "high" | "urgent";
 
 export interface Ticket {
   id: string;
@@ -17,6 +18,9 @@ export interface Ticket {
   description: string;
   status: TicketStatus;
   category: TicketCategory;
+  priority: TicketPriority;
+  closedAt: string | null;
+  closedByUsername: string | null;
   createdAt: string;
   updatedAt: string;
   messageCount: number;
@@ -62,7 +66,7 @@ export async function createTicket(input: {
 
   const { data, error } = await admin
     .from("tickets")
-    .insert({ user_id: user.id, subject, description, status: "open", category })
+    .insert({ user_id: user.id, subject, description, status: "open", category, priority: "normal" })
     .select("id")
     .single();
 
@@ -93,7 +97,7 @@ export async function getUserTickets(): Promise<Ticket[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, created_at, updated_at, ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, ticket_messages(count)")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false })
     .limit(30);
@@ -114,7 +118,7 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
   // Users can only view their own tickets; staff can view all
   const query = admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, created_at, updated_at, ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, ticket_messages(count)")
     .eq("id", ticketId);
 
   if (!isModerator(profile)) {
@@ -233,7 +237,8 @@ export async function closeTicket(ticketId: string): Promise<{ success: boolean;
 
   if (!ticket || ticket.user_id !== user.id) return { success: false, error: "Kein Zugriff." };
 
-  await admin.from("tickets").update({ status: "closed", updated_at: new Date().toISOString() }).eq("id", ticketId);
+  const now = new Date().toISOString();
+  await admin.from("tickets").update({ status: "closed", updated_at: now, closed_at: now, closed_by: user.id }).eq("id", ticketId);
   revalidatePath("/admin");
   return { success: true };
 }
@@ -253,7 +258,7 @@ export async function getAdminTickets(): Promise<Ticket[]> {
 
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, created_at, updated_at, ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, ticket_messages(count)")
     .order("updated_at", { ascending: false })
     .limit(100);
 
@@ -277,9 +282,15 @@ export async function updateTicketStatus(input: {
   const { data: ticket } = await admin.from("tickets").select("user_id, subject").eq("id", input.ticketId).single();
   if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
 
+  const isClosing = input.status === "closed" || input.status === "resolved";
+  const now = new Date().toISOString();
   await admin
     .from("tickets")
-    .update({ status: input.status, updated_at: new Date().toISOString() })
+    .update({
+      status: input.status,
+      updated_at: now,
+      ...(isClosing ? { closed_at: now, closed_by: user.id } : {}),
+    })
     .eq("id", input.ticketId);
 
   const STATUS_LABELS: Record<TicketStatus, string> = {
@@ -317,6 +328,26 @@ export async function deleteTicket(ticketId: string): Promise<{ success: boolean
   const { error } = await admin.from("tickets").delete().eq("id", ticketId);
   if (error) return { success: false, error: "Löschen fehlgeschlagen." };
 
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function setTicketPriority(input: {
+  ticketId: string;
+  priority: TicketPriority;
+}): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
+
+  const validPriorities: TicketPriority[] = ["low", "normal", "high", "urgent"];
+  if (!validPriorities.includes(input.priority)) return { success: false, error: "Ungültige Priorität." };
+
+  await admin.from("tickets").update({ priority: input.priority, updated_at: new Date().toISOString() }).eq("id", input.ticketId);
   revalidatePath("/admin");
   return { success: true };
 }
@@ -386,13 +417,16 @@ async function fetchUsernames(admin: ReturnType<typeof createAdminClient>, userI
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function attachUsernames(admin: ReturnType<typeof createAdminClient>, rows: any[]): Promise<Ticket[]> {
-  const userIds = Array.from(new Set(rows.map((r) => r.user_id)));
-  const usernames = await fetchUsernames(admin, userIds);
-  return rows.map((row) => mapTicket(row, usernames.get(row.user_id)));
+  const allUserIds = Array.from(new Set([
+    ...rows.map((r) => r.user_id),
+    ...rows.filter((r) => r.closed_by).map((r) => r.closed_by),
+  ]));
+  const usernames = await fetchUsernames(admin, allUserIds);
+  return rows.map((row) => mapTicket(row, usernames.get(row.user_id), row.closed_by ? usernames.get(row.closed_by) : undefined));
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapTicket(row: any, username?: string): Ticket {
+function mapTicket(row: any, username?: string, closedByUsername?: string): Ticket {
   const msgCountRaw = Array.isArray(row.ticket_messages) ? row.ticket_messages[0]?.count : 0;
   return {
     id: row.id,
@@ -402,6 +436,9 @@ function mapTicket(row: any, username?: string): Ticket {
     description: row.description,
     status: row.status as TicketStatus,
     category: (row.category as TicketCategory) ?? "bug",
+    priority: (row.priority as TicketPriority) ?? "normal",
+    closedAt: row.closed_at ?? null,
+    closedByUsername: closedByUsername ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     messageCount: typeof msgCountRaw === "number" ? msgCountRaw : Number(msgCountRaw) || 0,
