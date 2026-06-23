@@ -216,11 +216,12 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
           </group>
         )}
 
-        {/* amulet — the neck-loop sits right at the collar (head bottom is
-            at y=1.775), pendant hangs down onto the chest from there, just
-            in front of the torso so it never gets swallowed inside it */}
+        {/* amulet — chain sits at collar height (Y=1.78, above torso top
+            at 1.75) centered on body axis so it forms a full loop around
+            the neck; the pendant Z-offset lives inside each AmuletVariant
+            so it hangs off the FRONT of the chain, not inside the torso */}
         {amulet && (
-          <group position={[0, 1.72, build.torsoDepth / 2 + 0.06]}>
+          <group position={[0, 1.78, 0]}>
             <AmuletVariant item={amulet} />
           </group>
         )}

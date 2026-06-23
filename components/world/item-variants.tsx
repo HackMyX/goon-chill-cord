@@ -134,11 +134,14 @@ function RarityFX({ rarity, children }: { rarity: Rarity; children: ReactNode })
 // --- Pets: 4 distinct low-poly silhouettes ------------------------------
 
 function DogPet({ color }: { color: string }) {
-  // Stocky body on four stubby legs, a snout that actually projects
-  // forward (not just a round head), floppy droop-eared (flattened boxes
-  // angled downward, not the same pointy cone shape cats get), and an
-  // upward-curled wagging tail — built to read as "dog" at a glance, not
-  // a reskinned generic quadruped.
+  const tailRef = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    if (tailRef.current) {
+      tailRef.current.rotation.z = 1.3 + Math.sin(clock.elapsedTime * 7) * 0.55;
+    }
+  });
+
   return (
     <group>
       <mesh position={[0, 0.22, 0]}>
@@ -160,8 +163,6 @@ function DogPet({ color }: { color: string }) {
         <sphereGeometry args={[0.13, 12, 12]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      {/* eyes — small dark dots on the head sphere, the one thing every
-          pet needs to actually read as "alive" rather than a tinted toy. */}
       {[0.085, -0.085].map((z) => (
         <mesh key={z} position={[0.34, 0.29, z]}>
           <sphereGeometry args={[0.022, 8, 8]} />
@@ -180,7 +181,7 @@ function DogPet({ color }: { color: string }) {
         <boxGeometry args={[0.09, 0.13, 0.025]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[-0.24, 0.32, 0]} rotation={[0, 0, 1.3]}>
+      <mesh ref={tailRef} position={[-0.24, 0.32, 0]}>
         <coneGeometry args={[0.04, 0.18, 8]} />
         <meshStandardMaterial color={color} />
       </mesh>
@@ -189,6 +190,20 @@ function DogPet({ color }: { color: string }) {
 }
 
 function DragonPet({ color }: { color: string }) {
+  const wingRefs = useRef<(THREE.Mesh | null)[]>([]);
+
+  useFrame(({ clock }) => {
+    const flap = Math.sin(clock.elapsedTime * 4.5) * 0.4;
+    if (wingRefs.current[0]) {
+      wingRefs.current[0].rotation.x = 1.1 + flap;
+      wingRefs.current[0].rotation.z = 0.3;
+    }
+    if (wingRefs.current[1]) {
+      wingRefs.current[1].rotation.x = -1.1 - flap;
+      wingRefs.current[1].rotation.z = 0.3;
+    }
+  });
+
   return (
     <group>
       <mesh position={[0, 0.2, 0]}>
@@ -199,19 +214,23 @@ function DragonPet({ color }: { color: string }) {
         <coneGeometry args={[0.05, 0.14, 6]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      {/* glowing reptile eyes — small emissive dots either side of the
-          horn, the head sphere otherwise has no face at all. */}
       {[0.085, -0.085].map((z) => (
         <mesh key={z} position={[0.18, 0.26, z]}>
           <sphereGeometry args={[0.025, 8, 8]} />
           <meshStandardMaterial color="#fde047" emissive="#facc15" emissiveIntensity={1.2} toneMapped={false} />
         </mesh>
       ))}
-      <mesh position={[0.12, 0.22, 0.22]} rotation={[1.1, 0, 0.3]}>
+      <mesh
+        ref={(el) => { wingRefs.current[0] = el; }}
+        position={[0.12, 0.22, 0.22]}
+      >
         <boxGeometry args={[0.02, 0.24, 0.16]} />
         <meshStandardMaterial color={color} transparent opacity={0.75} />
       </mesh>
-      <mesh position={[0.12, 0.22, -0.22]} rotation={[-1.1, 0, 0.3]}>
+      <mesh
+        ref={(el) => { wingRefs.current[1] = el; }}
+        position={[0.12, 0.22, -0.22]}
+      >
         <boxGeometry args={[0.02, 0.24, 0.16]} />
         <meshStandardMaterial color={color} transparent opacity={0.75} />
       </mesh>
@@ -227,6 +246,18 @@ function DragonPet({ color }: { color: string }) {
  * (components/world/character-model.tsx's PetCompanion) is the other half
  * of "a phoenix should be able to do what a phoenix does". */
 function PhoenixPet({ color }: { color: string }) {
+  const wingRefs = useRef<(THREE.Mesh | null)[]>([]);
+
+  useFrame(({ clock }) => {
+    const flap = Math.sin(clock.elapsedTime * 5.5) * 0.35;
+    wingRefs.current.forEach((m, i) => {
+      if (!m) return;
+      const side = i === 0 ? 1 : -1;
+      m.rotation.x = 0.2;
+      m.rotation.z = side * (0.9 + flap);
+    });
+  });
+
   return (
     <group>
       <mesh position={[0, 0.26, 0]} scale={[0.85, 1.15, 0.85]}>
@@ -241,15 +272,18 @@ function PhoenixPet({ color }: { color: string }) {
         <coneGeometry args={[0.025, 0.09, 6]} />
         <meshStandardMaterial color="#fde68a" emissive="#fbbf24" emissiveIntensity={0.6} toneMapped={false} />
       </mesh>
-      {/* small bright eyes either side of the beak. */}
       {[0.055, -0.055].map((x) => (
         <mesh key={x} position={[x, 0.41, 0.1]}>
           <sphereGeometry args={[0.018, 8, 8]} />
           <meshStandardMaterial color="#1c1917" emissive="#7c2d12" emissiveIntensity={0.3} />
         </mesh>
       ))}
-      {[1, -1].map((side) => (
-        <mesh key={side} position={[0.1 * side, 0.3, -0.02]} rotation={[0.2, 0, side * 0.9]}>
+      {[1, -1].map((side, i) => (
+        <mesh
+          key={side}
+          ref={(el) => { wingRefs.current[i] = el; }}
+          position={[0.1 * side, 0.3, -0.02]}
+        >
           <coneGeometry args={[0.05, 0.36, 4]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.7} toneMapped={false} />
         </mesh>
@@ -265,9 +299,18 @@ function PhoenixPet({ color }: { color: string }) {
 }
 
 function GhostPet({ color }: { color: string }) {
+  const bodyRef = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    if (bodyRef.current) {
+      (bodyRef.current.material as THREE.MeshBasicMaterial).opacity =
+        0.5 + Math.sin(clock.elapsedTime * 1.8) * 0.15;
+    }
+  });
+
   return (
     <group>
-      <mesh position={[0, 0.22, 0]}>
+      <mesh ref={bodyRef} position={[0, 0.22, 0]}>
         <sphereGeometry args={[0.18, 14, 14]} />
         <meshBasicMaterial color={color} transparent opacity={0.6} toneMapped={false} />
       </mesh>
@@ -275,9 +318,6 @@ function GhostPet({ color }: { color: string }) {
         <torusGeometry args={[0.26, 0.02, 8, 24]} />
         <meshBasicMaterial color={color} transparent opacity={0.5} toneMapped={false} />
       </mesh>
-      {/* two simple dark dots floating inside the translucent body — a
-          ghost's whole "face" is just enough to read as a face, deliberately
-          not a detailed one. */}
       {[0.07, -0.07].map((x) => (
         <mesh key={x} position={[x, 0.26, 0.13]}>
           <sphereGeometry args={[0.025, 8, 8]} />
@@ -289,11 +329,14 @@ function GhostPet({ color }: { color: string }) {
 }
 
 function CatPet({ color }: { color: string }) {
-  // Notably smaller/sleeker than the dog (thinner body, thinner legs), a
-  // small round head with ears sitting *on top* (not stuck to the front
-  // like a muzzle), and a long tail that curls upward at the tip instead
-  // of sticking out straight — the single most cat-specific silhouette
-  // cue versus every other quadruped pet.
+  const tailGroupRef = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    if (tailGroupRef.current) {
+      tailGroupRef.current.rotation.z = -0.5 + Math.sin(clock.elapsedTime * 2.2) * 0.45;
+    }
+  });
+
   return (
     <group>
       <mesh position={[0, 0.16, 0]}>
@@ -315,7 +358,6 @@ function CatPet({ color }: { color: string }) {
         <sphereGeometry args={[0.1, 12, 12]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      {/* almond-shaped green cat eyes either side of the head. */}
       {[0.05, -0.05].map((z) => (
         <mesh key={z} position={[0.26, 0.24, z]} scale={[1, 1.4, 0.6]}>
           <sphereGeometry args={[0.022, 8, 8]} />
@@ -330,7 +372,7 @@ function CatPet({ color }: { color: string }) {
         <coneGeometry args={[0.03, 0.09, 6]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <group position={[-0.16, 0.2, 0]} rotation={[0, 0, -0.5]}>
+      <group ref={tailGroupRef} position={[-0.16, 0.2, 0]}>
         <mesh>
           <cylinderGeometry args={[0.018, 0.024, 0.24, 6]} />
           <meshStandardMaterial color={color} />
@@ -1573,10 +1615,10 @@ function RoundGemRing({ color, emissive }: { color: string; emissive: string }) 
   return (
     <group>
       <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.07, 0.012, 8, 20]} />
-        <meshStandardMaterial color="#d4af37" />
+        <torusGeometry args={[0.165, 0.016, 10, 24]} />
+        <meshStandardMaterial color="#d4af37" metalness={0.6} roughness={0.3} />
       </mesh>
-      <mesh position={[0, 0.07, 0]}>
+      <mesh position={[0, 0, 0.19]}>
         <sphereGeometry args={[0.032, 10, 10]} />
         <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.7} />
       </mesh>
@@ -1588,11 +1630,11 @@ function SignetRing({ color, emissive }: { color: string; emissive: string }) {
   return (
     <group>
       <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.07, 0.014, 8, 20]} />
-        <meshStandardMaterial color="#8a8a92" />
+        <torusGeometry args={[0.165, 0.018, 10, 24]} />
+        <meshStandardMaterial color="#8a8a92" metalness={0.5} roughness={0.4} />
       </mesh>
-      <mesh position={[0, 0.07, 0]}>
-        <boxGeometry args={[0.06, 0.018, 0.06]} />
+      <mesh position={[0, 0, 0.19]}>
+        <boxGeometry args={[0.06, 0.06, 0.018]} />
         <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.55} />
       </mesh>
     </group>
@@ -1603,10 +1645,10 @@ function ShardRing({ color, emissive }: { color: string; emissive: string }) {
   return (
     <group>
       <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.068, 0.01, 8, 20]} />
-        <meshStandardMaterial color="#b9bdc7" />
+        <torusGeometry args={[0.165, 0.016, 10, 24]} />
+        <meshStandardMaterial color="#b9bdc7" metalness={0.5} roughness={0.35} />
       </mesh>
-      <mesh position={[0, 0.07, 0]} rotation={[0, 0, Math.PI / 4]}>
+      <mesh position={[0, 0, 0.19]} rotation={[0, 0, Math.PI / 4]}>
         <octahedronGeometry args={[0.04, 0]} />
         <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.65} />
       </mesh>
@@ -1638,8 +1680,8 @@ export function RingVariant({ item }: { item: EquippedItem }) {
 
 // --- Amulets: a chain + pendant on the chest — 3 distinct pendant shapes --
 
-const NECK_CHAIN_LINK_COUNT = 16;
-const NECK_CHAIN_RADIUS = 0.13;
+const NECK_CHAIN_LINK_COUNT = 32;
+const NECK_CHAIN_RADIUS = 0.34;
 
 /** A real multi-link chain loop, not one big solid torus — `linkCount`
  * small individual link-tori spaced evenly around the neck circle, each
@@ -1660,7 +1702,7 @@ function NeckChain({ color = "#7a7a82" }: { color?: string }) {
         const altRotation = i % 2 === 0 ? 0 : Math.PI / 2;
         return (
           <mesh key={i} position={[x, y, 0]} rotation={[0, 0, angle + Math.PI / 2 + altRotation]}>
-            <torusGeometry args={[0.024, 0.0065, 6, 10]} />
+            <torusGeometry args={[0.022, 0.009, 6, 10]} />
             <meshStandardMaterial color={color} metalness={0.65} roughness={0.3} />
           </mesh>
         );
@@ -1673,7 +1715,7 @@ function GemPendantAmulet({ color, emissive }: { color: string; emissive: string
   return (
     <group>
       <NeckChain />
-      <mesh position={[0, -0.16, 0]} rotation={[0, 0, Math.PI / 4]}>
+      <mesh position={[0, -0.14, 0.32]} rotation={[0, 0, Math.PI / 4]}>
         <boxGeometry args={[0.1, 0.1, 0.04]} />
         <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.7} />
       </mesh>
@@ -1685,7 +1727,7 @@ function CrossPendantAmulet({ color, emissive }: { color: string; emissive: stri
   return (
     <group>
       <NeckChain />
-      <group position={[0, -0.18, 0]}>
+      <group position={[0, -0.16, 0.32]}>
         <mesh>
           <boxGeometry args={[0.035, 0.16, 0.03]} />
           <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.6} />
@@ -1703,7 +1745,7 @@ function OrbPendantAmulet({ color, emissive }: { color: string; emissive: string
   return (
     <group>
       <NeckChain />
-      <mesh position={[0, -0.17, 0]}>
+      <mesh position={[0, -0.15, 0.32]}>
         <sphereGeometry args={[0.06, 14, 14]} />
         <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.8} transparent opacity={0.85} />
       </mesh>
