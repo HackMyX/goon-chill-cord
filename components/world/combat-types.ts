@@ -87,6 +87,11 @@ export function createCombatSharedState(init?: CombatSharedStateInit): CombatSha
 export interface MonsterHandle {
   id: string;
   typeId: string;
+  /** Undefined for local monsters; set to the owner's userId for remote
+   * monster proxies (RemoteMonster) — lets the attack scan in Player.tsx
+   * distinguish a remote-owned hit and broadcast the cross-player aggro
+   * alert to the correct owner. */
+  ownerId?: string;
   getPosition: () => THREE.Vector3;
   isAlive: () => boolean;
   /** Current health — read by MonstersField to include in monster_sync

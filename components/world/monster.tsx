@@ -22,6 +22,17 @@ export interface ThrowRequest {
   color: string;
 }
 
+/** Shared cross-player aggro target — when an attacker hits any one of this
+ * owner's monsters, MonstersField sets this ref so ALL monsters temporarily
+ * chase the attacker instead of the local player. Each monster reads it in
+ * useFrame; expiresAt is a millisecond timestamp. */
+export interface AggroTarget {
+  userId: string;
+  x: number;
+  z: number;
+  expiresAt: number;
+}
+
 interface MonsterProps {
   id: string;
   type: MonsterTypeConfig;
@@ -36,6 +47,13 @@ interface MonsterProps {
    * threaded through rather than a single bare number so a future field
    * needing the same treatment doesn't need its own prop added later. */
   characterConfig: CharacterConfig;
+  /** When set and not expired, all monsters chase this remote attacker
+   * instead of combatRef.playerPos, and melee damage is routed via
+   * onRemoteAttack instead of applyIncomingDamage on the local player. */
+  aggroTargetRef: React.RefObject<AggroTarget | null>;
+  /** Called when this monster lands a melee hit on the cross-player aggro
+   * target — MonstersField broadcasts it to the attacker's client. */
+  onRemoteAttack: (amount: number) => void;
 }
 
 let popupSeq = 0;
@@ -217,6 +235,8 @@ export function Monster({
   onDied,
   onThrow,
   characterConfig,
+  aggroTargetRef,
+  onRemoteAttack,
 }: MonsterProps) {
   const group = useRef<THREE.Group>(null);
   const upperBody = useRef<THREE.Group>(null);
@@ -379,16 +399,25 @@ export function Monster({
     // pointless hit.
     if (combatRef.current.dead) return;
 
-    const playerPos = combatRef.current.playerPos;
-    const dx = playerPos.x - g.position.x;
-    const dz = playerPos.z - g.position.z;
+    const localPlayerPos = combatRef.current.playerPos;
+
+    // Cross-player aggro: if an attacker hit one of our monsters recently and
+    // the aggro window hasn't expired, all monsters chase the attacker instead.
+    // Melee damage in this mode is routed via onRemoteAttack; throws are
+    // suppressed (ThrownProjectile checks hit against the local player's pos).
+    const aggroT = aggroTargetRef.current;
+    const useAggro = aggroT !== null && aggroT !== undefined && aggroT.expiresAt > Date.now();
+    const targetX = useAggro ? aggroT.x : localPlayerPos.x;
+    const targetZ = useAggro ? aggroT.z : localPlayerPos.z;
+
+    const dx = targetX - g.position.x;
+    const dz = targetZ - g.position.z;
     const dist = Math.hypot(dx, dz);
-    // `hasTarget` (the player anywhere within aggro range at all) is
-    // broader than `moving` (still actively closing the distance) — a
-    // monster that's already point-blank also has `hasTarget` true but
-    // `moving` false (it stops closing in to melee instead), which is
-    // exactly when wandering below must *not* kick in despite not moving.
-    const hasTarget = dist < type.aggroRange;
+    // `hasTarget` (target anywhere within aggro range) is broader than
+    // `moving` (still closing the distance). In cross-player aggro mode
+    // the monster always considers itself "on-target" once it has a chase
+    // objective — this prevents it falling back into wander mid-chase.
+    const hasTarget = dist < type.aggroRange || useAggro;
     const moving = hasTarget && dist > type.attackRange * 0.7;
 
     if (moving) {
@@ -399,17 +428,15 @@ export function Monster({
       g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, Math.atan2(dirX, dirZ), Math.min(1, delta * 6));
     } else if (!hasTarget) {
       // Idle wander with player-seeking bias — 65% of wander direction changes
-      // drift toward the player (±0.5 rad spread), 35% are fully random.
-      // This ensures monsters spawned far away naturally converge on the player
-      // over time instead of permanently circling in a distant corner.
+      // drift toward the local player (±0.5 rad spread), 35% fully random.
       wanderTimer.current -= delta;
       if (wanderTimer.current <= 0) {
         wanderTimer.current =
           WANDER_MIN_INTERVAL_SEC + Math.random() * (WANDER_MAX_INTERVAL_SEC - WANDER_MIN_INTERVAL_SEC);
         if (Math.random() < 0.65) {
-          // Seek player — angle toward them with a small random spread so it
-          // still looks organic rather than a beeline once they're close.
-          wanderAngle.current = Math.atan2(dx, dz) + (Math.random() - 0.5) * 1.0;
+          const lpDx = localPlayerPos.x - g.position.x;
+          const lpDz = localPlayerPos.z - g.position.z;
+          wanderAngle.current = Math.atan2(lpDx, lpDz) + (Math.random() - 0.5) * 1.0;
         } else {
           wanderAngle.current = Math.random() * Math.PI * 2;
         }
@@ -430,35 +457,29 @@ export function Monster({
     if (dist < type.attackRange && attackCooldownLeft.current <= 0) {
       attackCooldownLeft.current = type.attackCooldown;
       lunge.current = 1;
-      // applyIncomingDamage itself no-ops while invulnerable, and also
-      // handles armor reduction + shield absorption — see lib/combat.ts.
-      applyIncomingDamage(combatRef.current, type.attackDamage);
+      if (useAggro) {
+        // Cross-player aggro mode: route damage to the remote attacker via a
+        // broadcast instead of the local player's combatRef.
+        onRemoteAttack(type.attackDamage);
+      } else {
+        // applyIncomingDamage no-ops while invulnerable, handles armor +
+        // shield absorption — see lib/combat.ts.
+        applyIncomingDamage(combatRef.current, type.attackDamage);
+      }
     }
 
-    // Ranged throw — only for variants with `canThrow` (lib/monsters.ts),
-    // and only while the player is *between* melee reach and throwRange:
-    // too close and melee already handles it (attackCooldown above), too
-    // far and this variant hasn't even noticed them (`hasTarget` false).
-    // Without this, a player camping just outside `attackRange` forever
-    // was completely safe from anything that can't also reach them in
-    // melee — exactly the "stand around and nothing happens" complaint,
-    // just at melee range instead of aggro range.
-    //
-    // The actual projectile is owned by MonstersField, not rendered here —
-    // this group is positioned+scaled (`initialPosition`/`type.scale` on
-    // the root `<group>` below), so a child mesh given a *world-space*
-    // position (which `origin`/`target` are, read straight from
-    // `g.position`/`playerPos`) would get doubly transformed by this
-    // group's own offset and scale. `onThrow` just notifies upward; the
-    // sibling-level field (no transform of its own) renders it in real
-    // world space.
-    if (hasTarget && type.canThrow && type.throwDamage && type.throwCooldown && type.throwRange) {
+    // Ranged throw — suppressed during cross-player aggro since the target
+    // is a remote position that ThrownProjectile can't reach (it checks hit
+    // against combatRef.current.playerPos which is the local player).
+    // Only active for variants with canThrow, in normal mode (no aggro),
+    // while target is between melee range and throwRange.
+    if (!useAggro && hasTarget && type.canThrow && type.throwDamage && type.throwCooldown && type.throwRange) {
       throwCooldownLeft.current -= delta;
       if (dist > type.attackRange && dist < type.throwRange && throwCooldownLeft.current <= 0) {
         throwCooldownLeft.current = type.throwCooldown;
         onThrow({
           origin: [g.position.x, g.position.y + 1.1, g.position.z],
-          target: [playerPos.x, playerPos.y + 1, playerPos.z],
+          target: [localPlayerPos.x, localPlayerPos.y + 1, localPlayerPos.z],
           damage: type.throwDamage,
           color: throwColor,
         });

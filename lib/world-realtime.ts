@@ -104,6 +104,30 @@ export interface MonsterKillPayload {
   killerId: string;
 }
 
+/** Sent by an attacker the moment they land a hit on any one of an owner's
+ * monsters — the owner's MonstersField subscribes and temporarily switches
+ * ALL of their local monsters' chase target to the attacker's position for
+ * `crossPlayerAggroDurationSec` seconds (admin-configurable in world_config).
+ * Fire-and-forget; the owner enforces the actual duration client-side. */
+export interface MonsterAggroAlertPayload {
+  ownerId: string;
+  attackerId: string;
+  attackerX: number;
+  attackerZ: number;
+}
+
+/** Broadcast by a monster's owner when one of their cross-player-aggroed
+ * monsters lands a melee hit on the attacker — the attacker's Player.tsx
+ * applies the damage to their own combatRef (the only place their HP
+ * legitimately lives). This mirrors the PvP-damage pattern: the owner rolls
+ * nothing; the actual amount is the monster's own attackDamage which the
+ * attacker's client already shows running against their HP bar. */
+export interface MonsterCrossAttackPayload {
+  ownerId: string;
+  targetPlayerId: string;
+  amount: number;
+}
+
 let channel: RealtimeChannel | null = null;
 let subscribed = false;
 const transformListeners = new Set<(payload: WorldTransformPayload) => void>();
@@ -112,6 +136,8 @@ const pvpDamageListeners = new Set<(payload: PvpDamagePayload) => void>();
 const monsterSyncListeners = new Set<(payload: MonsterSyncPayload) => void>();
 const monsterHitListeners = new Set<(payload: MonsterHitPayload) => void>();
 const monsterKillListeners = new Set<(payload: MonsterKillPayload) => void>();
+const monsterAggroAlertListeners = new Set<(payload: MonsterAggroAlertPayload) => void>();
+const monsterCrossAttackListeners = new Set<(payload: MonsterCrossAttackPayload) => void>();
 
 function currentRoster(ch: RealtimeChannel): Set<string> {
   const state = ch.presenceState() as Record<string, { user_id?: string }[]>;
@@ -148,6 +174,12 @@ function ensureWorldChannel(): RealtimeChannel {
   });
   channel.on("broadcast", { event: "monster_kill" }, ({ payload }) => {
     for (const listener of monsterKillListeners) listener(payload as MonsterKillPayload);
+  });
+  channel.on("broadcast", { event: "monster_aggro_alert" }, ({ payload }) => {
+    for (const listener of monsterAggroAlertListeners) listener(payload as MonsterAggroAlertPayload);
+  });
+  channel.on("broadcast", { event: "monster_cross_attack" }, ({ payload }) => {
+    for (const listener of monsterCrossAttackListeners) listener(payload as MonsterCrossAttackPayload);
   });
   channel.on("presence", { event: "sync" }, () => {
     const ids = currentRoster(channel!);
@@ -290,4 +322,35 @@ export function subscribeToMonsterKill(fn: (payload: MonsterKillPayload) => void
   ensureWorldChannel();
   monsterKillListeners.add(fn);
   return () => monsterKillListeners.delete(fn);
+}
+
+/** Broadcast a cross-player aggro alert — call this the moment you land a
+ * hit on a remote monster so the owner's monster pool temporarily aggroes you.
+ * Fire-and-forget; the owner's client enforces the actual duration. */
+export function broadcastMonsterAggroAlert(payload: MonsterAggroAlertPayload): void {
+  if (!subscribed || !channel) return;
+  channel.httpSend("monster_aggro_alert", payload).catch(() => {});
+}
+
+/** Subscribe to incoming aggro alerts — check `payload.ownerId` against your
+ * own userId to switch your monster pool's target to the attacker. */
+export function subscribeToMonsterAggroAlert(fn: (payload: MonsterAggroAlertPayload) => void): () => void {
+  ensureWorldChannel();
+  monsterAggroAlertListeners.add(fn);
+  return () => monsterAggroAlertListeners.delete(fn);
+}
+
+/** Broadcast when one of your cross-player-aggroed monsters lands a melee
+ * hit on the attacker — the attacker's Player.tsx applies the damage. */
+export function broadcastMonsterCrossAttack(payload: MonsterCrossAttackPayload): void {
+  if (!subscribed || !channel) return;
+  channel.httpSend("monster_cross_attack", payload).catch(() => {});
+}
+
+/** Subscribe to incoming cross-player monster attacks — check
+ * `payload.targetPlayerId` against your own userId to take the damage. */
+export function subscribeToMonsterCrossAttack(fn: (payload: MonsterCrossAttackPayload) => void): () => void {
+  ensureWorldChannel();
+  monsterCrossAttackListeners.add(fn);
+  return () => monsterCrossAttackListeners.delete(fn);
 }

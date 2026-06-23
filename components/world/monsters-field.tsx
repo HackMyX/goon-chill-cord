@@ -24,10 +24,14 @@ import {
   subscribeToMonsterSync,
   subscribeToMonsterHit,
   subscribeToMonsterKill,
+  subscribeToMonsterAggroAlert,
+  subscribeToWorldTransforms,
   broadcastMonsterSync,
   broadcastMonsterKill,
+  broadcastMonsterCrossAttack,
   type MonsterSyncPayload,
 } from "@/lib/world-realtime";
+import type { AggroTarget } from "@/components/world/monster";
 
 interface MonsterSpawn {
   id: string;
@@ -101,18 +105,19 @@ export function MonstersField({
   // Live room population (lib/world-realtime.ts), always >= 1 (yourself) —
   // read in a ref, not React state, since useFrame below reads it every
   // tick and a roster sync re-rendering this whole field would be wasted
-  // work. See lib/monsters.ts' monstersAliveCapForPlayers/
-  // spawnIntervalScaleForPlayers doc comments for why a busier room means
-  // *this client's own* spawn pool grows, not a shared one.
+  // work.
   const playerCount = useRef(1);
-  // Ref mirror of spawns so the sync interval (a setInterval, not useFrame)
-  // can always read the live list without being in the dependency array and
-  // forcing a new interval on every spawn/despawn.
+  // Ref mirror of spawns so the sync interval can read the live list.
   const spawnsRef = useRef<MonsterSpawn[]>([]);
   // Tracks which remote attacker last hit a given own monster id — used to
-  // route kill-streak credit to the correct player when a remote hit is
-  // the killing blow.
+  // route kill-streak credit to the correct player on a cross-player kill.
   const lastRemoteHitterRef = useRef<Map<string, string>>(new Map());
+
+  // Cross-player aggro: when a remote attacker hits one of our monsters,
+  // all our monsters temporarily chase the attacker's last known position.
+  // Updated by subscribeToMonsterAggroAlert (set the window) and by
+  // subscribeToWorldTransforms (track attacker movement while window is open).
+  const aggroTargetRef = useRef<AggroTarget | null>(null);
 
   useEffect(() => {
     spawnsRef.current = spawns;
@@ -197,6 +202,32 @@ export function MonstersField({
     });
   }, [userId, onMonsterKilled]);
 
+  // Cross-player aggro: when someone hits one of our monsters, make all our
+  // monsters chase the attacker for crossPlayerAggroDurationSec seconds.
+  useEffect(() => {
+    if (spawnConfig.crossPlayerAggroDurationSec <= 0) return;
+    return subscribeToMonsterAggroAlert((payload) => {
+      if (payload.ownerId !== userId) return;
+      const expiresAt = Date.now() + spawnConfig.crossPlayerAggroDurationSec * 1000;
+      aggroTargetRef.current = {
+        userId: payload.attackerId,
+        x: payload.attackerX,
+        z: payload.attackerZ,
+        expiresAt,
+      };
+    });
+  }, [userId, spawnConfig.crossPlayerAggroDurationSec]);
+
+  // Track the aggro target's position as they move so monsters keep chasing.
+  useEffect(() => {
+    return subscribeToWorldTransforms((payload) => {
+      const t = aggroTargetRef.current;
+      if (t && t.userId === payload.id && t.expiresAt > Date.now()) {
+        aggroTargetRef.current = { ...t, x: payload.x, z: payload.z };
+      }
+    });
+  }, []);
+
   useFrame((_, delta) => {
     // Monsters/spawning are *not* paused or cleared while the player is
     // dead — the World keeps running normally in the background (an
@@ -246,6 +277,12 @@ export function MonstersField({
     });
   });
 
+  function handleRemoteAttack(amount: number) {
+    const t = aggroTargetRef.current;
+    if (!t || t.expiresAt <= Date.now()) return;
+    broadcastMonsterCrossAttack({ ownerId: userId, targetPlayerId: t.userId, amount });
+  }
+
   function handleDied(spawnId: string, typeId: string) {
     const remoteKillerId = lastRemoteHitterRef.current.get(spawnId) ?? null;
     lastRemoteHitterRef.current.delete(spawnId);
@@ -292,6 +329,8 @@ export function MonstersField({
           onDied={(typeId) => handleDied(s.id, typeId)}
           onThrow={handleThrow}
           characterConfig={characterConfig}
+          aggroTargetRef={aggroTargetRef}
+          onRemoteAttack={handleRemoteAttack}
         />
       ))}
       {projectiles.map((p) => (

@@ -14,6 +14,7 @@ interface WorldSpawnRow {
   alive_cap_per_extra_player: number | null;
   alive_cap_max: number | null;
   spawn_interval_floor: number | null;
+  cross_player_aggro_duration_sec: number | null;
 }
 
 function withDefault<T extends number>(val: T | null | undefined, fallback: T): T {
@@ -28,7 +29,7 @@ export async function getWorldSpawnConfig(): Promise<WorldSpawnConfig> {
   const { data, error } = await admin
     .from("world_config")
     .select(
-      "max_alive_monsters, spawn_interval_min_sec, spawn_interval_max_sec, spawn_safe_radius, alive_cap_per_extra_player, alive_cap_max, spawn_interval_floor"
+      "max_alive_monsters, spawn_interval_min_sec, spawn_interval_max_sec, spawn_safe_radius, alive_cap_per_extra_player, alive_cap_max, spawn_interval_floor, cross_player_aggro_duration_sec"
     )
     .eq("id", "default")
     .maybeSingle();
@@ -36,13 +37,14 @@ export async function getWorldSpawnConfig(): Promise<WorldSpawnConfig> {
   if (error || !data) return def;
   const row = data as WorldSpawnRow;
   return {
-    maxAliveMonsters:        withDefault(row.max_alive_monsters,         def.maxAliveMonsters),
-    spawnIntervalMinSec:     withDefault(row.spawn_interval_min_sec,     def.spawnIntervalMinSec),
-    spawnIntervalMaxSec:     withDefault(row.spawn_interval_max_sec,     def.spawnIntervalMaxSec),
-    spawnSafeRadius:         withDefault(row.spawn_safe_radius,          def.spawnSafeRadius),
-    aliveCapPerExtraPlayer:  withDefault(row.alive_cap_per_extra_player, def.aliveCapPerExtraPlayer),
-    aliveCapMax:             withDefault(row.alive_cap_max,              def.aliveCapMax),
-    spawnIntervalFloor:      withDefault(row.spawn_interval_floor,       def.spawnIntervalFloor),
+    maxAliveMonsters:             withDefault(row.max_alive_monsters,              def.maxAliveMonsters),
+    spawnIntervalMinSec:          withDefault(row.spawn_interval_min_sec,          def.spawnIntervalMinSec),
+    spawnIntervalMaxSec:          withDefault(row.spawn_interval_max_sec,          def.spawnIntervalMaxSec),
+    spawnSafeRadius:              withDefault(row.spawn_safe_radius,               def.spawnSafeRadius),
+    aliveCapPerExtraPlayer:       withDefault(row.alive_cap_per_extra_player,      def.aliveCapPerExtraPlayer),
+    aliveCapMax:                  withDefault(row.alive_cap_max,                   def.aliveCapMax),
+    spawnIntervalFloor:           withDefault(row.spawn_interval_floor,            def.spawnIntervalFloor),
+    crossPlayerAggroDurationSec:  withDefault(row.cross_player_aggro_duration_sec, def.crossPlayerAggroDurationSec),
   };
 }
 
@@ -79,17 +81,21 @@ export async function updateWorldSpawnConfig(input: WorldSpawnConfig): Promise<W
   if (!Number.isFinite(input.spawnIntervalFloor) || input.spawnIntervalFloor <= 0 || input.spawnIntervalFloor > 1) {
     return { success: false, error: "Spawn-Floor muss zwischen 0 und 1 liegen." };
   }
+  if (!Number.isFinite(input.crossPlayerAggroDurationSec) || input.crossPlayerAggroDurationSec < 0 || input.crossPlayerAggroDurationSec > 120) {
+    return { success: false, error: "Cross-Aggro-Dauer muss zwischen 0 und 120 Sekunden liegen." };
+  }
 
   const admin = createAdminClient();
   const { error } = await admin.from("world_config").upsert({
     id: "default",
-    max_alive_monsters:         Math.round(input.maxAliveMonsters),
-    spawn_interval_min_sec:     input.spawnIntervalMinSec,
-    spawn_interval_max_sec:     input.spawnIntervalMaxSec,
-    spawn_safe_radius:          input.spawnSafeRadius,
-    alive_cap_per_extra_player: Math.round(input.aliveCapPerExtraPlayer),
-    alive_cap_max:              Math.round(input.aliveCapMax),
-    spawn_interval_floor:       input.spawnIntervalFloor,
+    max_alive_monsters:              Math.round(input.maxAliveMonsters),
+    spawn_interval_min_sec:          input.spawnIntervalMinSec,
+    spawn_interval_max_sec:          input.spawnIntervalMaxSec,
+    spawn_safe_radius:               input.spawnSafeRadius,
+    alive_cap_per_extra_player:      Math.round(input.aliveCapPerExtraPlayer),
+    alive_cap_max:                   Math.round(input.aliveCapMax),
+    spawn_interval_floor:            input.spawnIntervalFloor,
+    cross_player_aggro_duration_sec: input.crossPlayerAggroDurationSec,
     updated_at: new Date().toISOString(),
   });
 

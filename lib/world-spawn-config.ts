@@ -23,6 +23,11 @@ export interface WorldSpawnConfig {
   aliveCapMax: number;
   /** Minimum spawn-interval scale — prevents degenerate instant-spawn. */
   spawnIntervalFloor: number;
+  /** Seconds all monsters of an owner aggro onto an attacker after that
+   * attacker hits any one of the owner's monsters. 0 = feature disabled.
+   * Admin-configurable; requires the cross_player_aggro_duration_sec column
+   * in world_config (scripts/add-cross-player-aggro.mjs). */
+  crossPlayerAggroDurationSec: number;
 }
 
 export const DEFAULT_WORLD_SPAWN_CONFIG: WorldSpawnConfig = {
@@ -33,4 +38,5 @@ export const DEFAULT_WORLD_SPAWN_CONFIG: WorldSpawnConfig = {
   aliveCapPerExtraPlayer: 5,
   aliveCapMax: 35,
   spawnIntervalFloor: 0.4,
+  crossPlayerAggroDurationSec: 8,
 };

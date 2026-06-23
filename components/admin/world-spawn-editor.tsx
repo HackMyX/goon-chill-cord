@@ -133,6 +133,16 @@ export function WorldSpawnConfigEditor({ config }: { config: WorldSpawnConfig })
         />
       </div>
 
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <NumField
+          label="Cross-Aggro-Dauer (Sekunden)"
+          hint="Wie lange ALLE Monster des angegriffenen Spielers auf den Angreifer losgehen, wenn ein Monster getroffen wird. 0 = Feature deaktiviert. Erfordert DB-Migration: scripts/add-cross-player-aggro.mjs"
+          value={form.crossPlayerAggroDurationSec}
+          min={0} max={120} step={1}
+          onChange={(v) => set("crossPlayerAggroDurationSec", v)}
+        />
+      </div>
+
       <div className="mt-5 flex items-center gap-3">
         <button
           onMouseEnter={sound.hover}

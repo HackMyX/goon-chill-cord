@@ -116,6 +116,7 @@ export function RemoteMonster({
     const handle: MonsterHandle = {
       id,
       typeId: type.id,
+      ownerId,
       getPosition: () => group.current?.position ?? new THREE.Vector3(x, y, z),
       isAlive: () => true,
       getHp: () => hpRef.current,

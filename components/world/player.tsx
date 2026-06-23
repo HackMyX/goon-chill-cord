@@ -14,7 +14,12 @@ import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/us
 import type { CombatSharedState, MonsterRegistry, RemotePlayerRegistry } from "@/components/world/combat-types";
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { debugLog, debugWarn } from "@/lib/debug";
-import { broadcastTransform, subscribeToWorldPvpDamage } from "@/lib/world-realtime";
+import {
+  broadcastTransform,
+  subscribeToWorldPvpDamage,
+  broadcastMonsterAggroAlert,
+  subscribeToMonsterCrossAttack,
+} from "@/lib/world-realtime";
 import { attemptPvpHit } from "@/lib/actions/pvp";
 import type { PetTypeConfig } from "@/lib/pets";
 
@@ -349,6 +354,15 @@ export function Player({
     });
   }, [userId, combatRef]);
 
+  // Cross-player monster damage: when our monsters aggroed a remote attacker
+  // and their owner broadcasts a cross-attack, apply that damage here.
+  useEffect(() => {
+    return subscribeToMonsterCrossAttack((payload) => {
+      if (payload.targetPlayerId !== userId) return;
+      applyIncomingDamage(combatRef.current, payload.amount);
+    });
+  }, [userId, combatRef]);
+
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 1 / 20);
     const g = group.current;
@@ -658,7 +672,7 @@ export function Player({
     // one target, never both.
     let anyInRange = false;
     let nearestDist = Infinity;
-    let nearestMonster: { takeDamage: (n: number) => number } | null = null;
+    let nearestMonster: import("@/components/world/combat-types").MonsterHandle | null = null;
     let nearestPlayerId: string | null = null;
     let nearestPlayerPos: THREE.Vector3 | null = null;
     for (const m of monsterRegistryRef.current) {
@@ -802,6 +816,16 @@ export function Player({
       if (nearestMonster) {
         nearestMonster.takeDamage(dmg);
         cameraShake.current = 1;
+        // If this was a remote-owned monster, alert the owner so their entire
+        // pool aggroes onto us for crossPlayerAggroDurationSec seconds.
+        if (nearestMonster.ownerId && nearestMonster.ownerId !== userId) {
+          broadcastMonsterAggroAlert({
+            ownerId: nearestMonster.ownerId,
+            attackerId: userId,
+            attackerX: g.position.x,
+            attackerZ: g.position.z,
+          });
+        }
       } else if (nearestPlayerId && nearestPlayerPos) {
         cameraShake.current = 1;
         // Fire-and-forget: the actual HP change only ever happens once the
