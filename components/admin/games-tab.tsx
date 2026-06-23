@@ -1,17 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Box, Joystick, Pickaxe, Trophy, Coins } from "lucide-react";
+import { Box, Joystick, Pickaxe, Trophy, Coins, Dices } from "lucide-react";
 import { WorldSessionConfigEditor } from "@/components/admin/world-session-config-editor";
 import { WorldSpawnConfigEditor } from "@/components/admin/world-spawn-editor";
 import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
 import { CharacterConfigEditor } from "@/components/admin/character-config-editor";
+import { DonConfigEditor } from "@/components/admin/don-config-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import type { ProfileRow } from "@/components/admin/admin-shell";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
 import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
+import type { DonConfig } from "@/lib/don-config";
 
 interface GameDef {
   id: string;
@@ -30,6 +32,7 @@ interface GameDef {
  * about this registry itself has to change. */
 const GAMES: GameDef[] = [
   { id: "world", name: "3D World", icon: Box, status: "live" },
+  { id: "don", name: "Double or Nothing", icon: Dices, status: "live" },
   { id: "snake", name: "Snake", icon: Joystick, status: "soon" },
   { id: "mine", name: "Mine", icon: Pickaxe, status: "soon" },
 ];
@@ -39,14 +42,8 @@ interface GamesTabProps {
   killStreakConfig: KillStreakConfig;
   characterConfig: CharacterConfig;
   worldSpawnConfig: WorldSpawnConfig;
-  /** Already sorted by credits descending (app/admin/page.tsx's query) —
-   * reused here as-is for the "Bestenliste" section instead of a second,
-   * game-specific scores table that doesn't exist: World rewards are
-   * exactly `profiles.credits`, so the top of that list *is* the World
-   * leaderboard. Editing a row here (UserRowEditor, the same component
-   * the User-Management tab uses) is the "Bestenliste bearbeiten"
-   * capability — there's deliberately no second, parallel credits editor. */
   topProfiles: ProfileRow[];
+  donConfig: DonConfig;
 }
 
 /**
@@ -56,8 +53,8 @@ interface GamesTabProps {
  * anything real behind it; Snake/Mine render as inert "Bald" placeholders
  * so the tab's shape doesn't have to change again once they exist.
  */
-export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig, worldSpawnConfig, topProfiles }: GamesTabProps) {
-  const [openGame, setOpenGame] = useState<string>("world");
+export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig, worldSpawnConfig, topProfiles, donConfig }: GamesTabProps) {
+  const [openGame, setOpenGame] = useState<string>("");
 
   return (
     <div className="flex flex-col gap-3">
@@ -97,6 +94,12 @@ export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig
               <div className="border-t border-white/10 px-5 py-6 text-sm text-zinc-500">
                 Dieses Spiel ist noch nicht implementiert — sobald es existiert, erscheinen hier
                 seine Einstellungen, Standardwerte und seine Bestenliste, genau wie bei 3D World.
+              </div>
+            )}
+
+            {isOpen && game.id === "don" && (
+              <div className="border-t border-white/10 px-5 py-5">
+                <DonConfigEditor config={donConfig} />
               </div>
             )}
 
