@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, RefreshCw, Loader2 } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ItemRowEditor } from "@/components/admin/item-row-editor";
 import { NewItemForm } from "@/components/admin/new-item-form";
 import { ALL_ITEM_TYPES, RARITY_ORDER, RARITY_LABELS, getTypeLabel } from "@/lib/cases";
 import { useSoundManager } from "@/lib/sound-manager";
+import { bulkRepriceItems } from "@/lib/actions/admin";
 import type { ItemRow } from "@/components/admin/admin-shell";
 
 // Only an *initial guess* before the real height is measured (see
@@ -23,8 +24,25 @@ export function ItemsTab({ items, setItems }: { items: ItemRow[]; setItems: (fn:
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [rarityFilter, setRarityFilter] = useState<string>("all");
+  const [repricing, setRepricing] = useState(false);
+  const [repriceMsg, setRepriceMsg] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sound = useSoundManager();
+
+  async function handleReprice() {
+    setRepricing(true);
+    sound.click();
+    const res = await bulkRepriceItems();
+    setRepricing(false);
+    if (res.success) {
+      sound.win();
+      setRepriceMsg(res.updated === 0 ? "Alle Preise bereits aktuell." : `${res.updated} Items neu bepreist.`);
+    } else {
+      sound.error();
+      setRepriceMsg(res.error ?? "Fehler.");
+    }
+    setTimeout(() => setRepriceMsg(null), 4000);
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -46,6 +64,21 @@ export function ItemsTab({ items, setItems }: { items: ItemRow[]; setItems: (fn:
   return (
     <div className="flex flex-col gap-3">
       <NewItemForm onCreated={(item) => setItems((prev) => [item, ...prev])} />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onMouseEnter={sound.hover}
+          onClick={handleReprice}
+          disabled={repricing}
+          title="Berechnet price_cr aller Items neu anhand von Seltenheit × Typ × Stats"
+          className="flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-1.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-500/20 disabled:opacity-60"
+        >
+          {repricing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Alle neu bepreisen
+        </button>
+        {repriceMsg && <span className="text-xs text-zinc-400">{repriceMsg}</span>}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5">

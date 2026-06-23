@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Save, Loader2, Palette, Coins, Swords, ShieldHalf } from "lucide-react";
+import { Save, Loader2, Palette, Coins, Swords, ShieldHalf, Sparkles, Zap } from "lucide-react";
 import { updateSiteConfig } from "@/lib/actions/site-config";
 import type { SiteConfig } from "@/lib/site-config";
 import { SITE_LOGO_ICONS, resolveSiteLogoIcon, type SiteLogoIconName } from "@/lib/site-logo-icons";
@@ -252,6 +252,97 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
           </div>
           <span className="text-[10px] text-zinc-700">
             → erscheint z.B. als „850 {form.currencyName || "—"} · ⚔ 32 {form.damageLabel || "—"} · 🛡 15 {form.armorLabel || "—"}"
+          </span>
+        </div>
+      </div>
+
+      {/* Rarity labels */}
+      <div className="mt-6 border-t border-white/10 pt-5">
+        <h4 className="mb-1 flex items-center gap-2 text-sm font-bold text-zinc-200">
+          <Sparkles className="h-4 w-4 text-purple-400" />
+          Seltenheits-Bezeichnungen
+        </h4>
+        <p className="mb-3 text-[11px] text-zinc-500">
+          Eigene Namen für die vier Seltenheitsstufen — werden überall angezeigt: Item-Badges,
+          Shop, Auktionen, Case-Öffnungen, Trading, Garderobe. Leer lassen = Standard.
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {(["normal", "selten", "mythisch", "ultra"] as const).map((r) => (
+            <label key={r} className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold text-zinc-400 capitalize">{r}</span>
+              <input
+                type="text"
+                maxLength={20}
+                value={form.rarityLabels[r]}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    rarityLabels: { ...f.rarityLabels, [r]: e.target.value },
+                  }))
+                }
+                className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+              />
+            </label>
+          ))}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(["normal", "selten", "mythisch", "ultra"] as const).map((r) => (
+            <span
+              key={r}
+              className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2.5 py-0.5 text-xs font-bold text-purple-200"
+            >
+              {form.rarityLabels[r] || `(${r})`}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Perk labels */}
+      <div className="mt-6 border-t border-white/10 pt-5">
+        <h4 className="mb-1 flex items-center gap-2 text-sm font-bold text-zinc-200">
+          <Zap className="h-4 w-4 text-amber-400" />
+          Perk-Bezeichnungen
+        </h4>
+        <p className="mb-3 text-[11px] text-zinc-500">
+          Anzeigenamen für die drei Perk-Typen (Amulett / Ring). Erscheinen in Item-Badges,
+          Tooltips und Hover-Beschreibungen im Shop und Inventar.
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          {(
+            [
+              { key: "speed", icon: "⚡", default: "Tempo" },
+              { key: "jump", icon: "↑", default: "Sprung" },
+              { key: "regen", icon: "♥", default: "Regen" },
+            ] as const
+          ).map(({ key, icon, default: def }) => (
+            <label key={key} className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold text-zinc-400">
+                {icon} {def}
+              </span>
+              <input
+                type="text"
+                maxLength={20}
+                value={form.perkLabels[key]}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    perkLabels: { ...f.perkLabels, [key]: e.target.value },
+                  }))
+                }
+                className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60"
+              />
+            </label>
+          ))}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <span className="rounded-md border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-300">
+            ⚡ +15% {form.perkLabels.speed || "—"}
+          </span>
+          <span className="rounded-md border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-300">
+            ↑ +15% {form.perkLabels.jump || "—"}
+          </span>
+          <span className="rounded-md border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-300">
+            ♥ +15% {form.perkLabels.regen || "—"}
           </span>
         </div>
       </div>

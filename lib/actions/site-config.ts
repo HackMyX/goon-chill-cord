@@ -19,6 +19,13 @@ interface SiteConfigRow {
   currency_name: string | null;
   damage_label: string | null;
   armor_label: string | null;
+  rarity_normal_label: string | null;
+  rarity_selten_label: string | null;
+  rarity_mythisch_label: string | null;
+  rarity_ultra_label: string | null;
+  perk_speed_label: string | null;
+  perk_jump_label: string | null;
+  perk_regen_label: string | null;
 }
 
 /** Falls back to the code defaults whenever the table doesn't exist yet or
@@ -30,20 +37,32 @@ export async function getSiteConfig(): Promise<SiteConfig> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("site_config")
-    .select("site_name, logo_url, logo_icon_name, starting_credits, currency_name, damage_label, armor_label")
+    .select("site_name, logo_url, logo_icon_name, starting_credits, currency_name, damage_label, armor_label, rarity_normal_label, rarity_selten_label, rarity_mythisch_label, rarity_ultra_label, perk_speed_label, perk_jump_label, perk_regen_label")
     .eq("id", "default")
     .maybeSingle();
 
   if (error || !data) return DEFAULT_SITE_CONFIG;
   const row = data as SiteConfigRow;
+  const def = DEFAULT_SITE_CONFIG;
   return {
     siteName: row.site_name,
     logoUrl: row.logo_url,
     logoIconName: VALID_ICON_NAMES.has(row.logo_icon_name) ? row.logo_icon_name : DEFAULT_ICON_NAME,
     startingCredits: typeof row.starting_credits === "number" ? row.starting_credits : 500,
-    currencyName: row.currency_name?.trim() || DEFAULT_SITE_CONFIG.currencyName,
-    damageLabel: row.damage_label?.trim() || DEFAULT_SITE_CONFIG.damageLabel,
-    armorLabel: row.armor_label?.trim() || DEFAULT_SITE_CONFIG.armorLabel,
+    currencyName: row.currency_name?.trim() || def.currencyName,
+    damageLabel: row.damage_label?.trim() || def.damageLabel,
+    armorLabel: row.armor_label?.trim() || def.armorLabel,
+    rarityLabels: {
+      normal:   row.rarity_normal_label?.trim()   || def.rarityLabels.normal,
+      selten:   row.rarity_selten_label?.trim()   || def.rarityLabels.selten,
+      mythisch: row.rarity_mythisch_label?.trim() || def.rarityLabels.mythisch,
+      ultra:    row.rarity_ultra_label?.trim()    || def.rarityLabels.ultra,
+    },
+    perkLabels: {
+      speed: row.perk_speed_label?.trim() || def.perkLabels.speed,
+      jump:  row.perk_jump_label?.trim()  || def.perkLabels.jump,
+      regen: row.perk_regen_label?.trim() || def.perkLabels.regen,
+    },
   };
 }
 
@@ -85,6 +104,14 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
   const armorLabel = input.armorLabel?.trim().slice(0, 12);
   if (!armorLabel) return { success: false, error: "Rüstungs-Label darf nicht leer sein." };
 
+  const rarityNormal   = (input.rarityLabels?.normal   ?? "").trim().slice(0, 20) || DEFAULT_SITE_CONFIG.rarityLabels.normal;
+  const raritySelten   = (input.rarityLabels?.selten   ?? "").trim().slice(0, 20) || DEFAULT_SITE_CONFIG.rarityLabels.selten;
+  const rarityMythisch = (input.rarityLabels?.mythisch ?? "").trim().slice(0, 20) || DEFAULT_SITE_CONFIG.rarityLabels.mythisch;
+  const rarityUltra    = (input.rarityLabels?.ultra    ?? "").trim().slice(0, 20) || DEFAULT_SITE_CONFIG.rarityLabels.ultra;
+  const perkSpeed = (input.perkLabels?.speed ?? "").trim().slice(0, 20) || DEFAULT_SITE_CONFIG.perkLabels.speed;
+  const perkJump  = (input.perkLabels?.jump  ?? "").trim().slice(0, 20) || DEFAULT_SITE_CONFIG.perkLabels.jump;
+  const perkRegen = (input.perkLabels?.regen ?? "").trim().slice(0, 20) || DEFAULT_SITE_CONFIG.perkLabels.regen;
+
   const admin = createAdminClient();
   const { error } = await admin.from("site_config").upsert({
     id: "default",
@@ -95,6 +122,13 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
     currency_name: currencyName,
     damage_label: damageLabel,
     armor_label: armorLabel,
+    rarity_normal_label: rarityNormal,
+    rarity_selten_label: raritySelten,
+    rarity_mythisch_label: rarityMythisch,
+    rarity_ultra_label: rarityUltra,
+    perk_speed_label: perkSpeed,
+    perk_jump_label: perkJump,
+    perk_regen_label: perkRegen,
     updated_at: new Date().toISOString(),
   });
 

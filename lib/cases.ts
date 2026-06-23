@@ -197,38 +197,34 @@ export const CASE_GROUPS: CaseGroup[] = [
     standard: {
       id: "cosmetics-standard",
       label: "CASE ÖFFNEN",
-      price: 100,
+      price: 1200,
       rarityWeights: { normal: 86.9, selten: 10, mythisch: 3, ultra: 0.1 },
     },
     premium: {
       id: "cosmetics-premium",
       label: "PREMIUM",
       sublabel: "NOCH MEHR CHANCE",
-      price: 500,
+      price: 6000,
       rarityWeights: { normal: 78, selten: 14, mythisch: 7.5, ultra: 0.5 },
     },
   },
   {
     id: "weapons",
     title: "Waffen Case",
-    subtitle: "Gewinne Waffen für den 3D-World-Kampf — ab 2.000 CR",
+    subtitle: "Gewinne Waffen für den 3D-World-Kampf — ab 8.000 CR",
     iconName: "swords",
     itemTypes: ["weapon_cosmetic"],
-    // Same "matches the original site's published odds exactly" note as
-    // the cosmetics group above (92/6/2/0.05 standard, 84.8/9/6/0.2
-    // premium, normal shaved by the rounding remainder so each tier sums
-    // to exactly 100).
     standard: {
       id: "weapons-standard",
       label: "WAFFEN CASE",
-      price: 2000,
+      price: 8000,
       rarityWeights: { normal: 91.95, selten: 6, mythisch: 2, ultra: 0.05 },
     },
     premium: {
       id: "weapons-premium",
       label: "PREMIUM WAFFE",
       sublabel: "ULTRA SELTENE WAFFEN",
-      price: 10000,
+      price: 40000,
       rarityWeights: { normal: 84.8, selten: 9, mythisch: 6, ultra: 0.2 },
     },
   },

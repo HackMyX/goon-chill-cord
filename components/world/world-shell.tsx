@@ -25,6 +25,7 @@ import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { PetTypeConfig } from "@/lib/pets";
 import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
+import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
@@ -57,6 +58,8 @@ interface WorldShellProps {
    * — drives both the HUD's max-HP/Stamina bars here and Player.tsx's
    * actual physics/combat math, so both always agree on the same numbers. */
   characterConfig: CharacterConfig;
+  /** Admin-configured monster spawn tuning (lib/world-spawn-config.ts). */
+  spawnConfig: WorldSpawnConfig;
   isAdmin?: boolean;
 }
 
@@ -114,6 +117,7 @@ export function WorldShell({
   killStreakConfig,
   disconnectCountdownSec = 10,
   characterConfig,
+  spawnConfig,
   isAdmin = false,
 }: WorldShellProps) {
   const [credits, setCredits] = useState(initialCredits);
@@ -748,6 +752,7 @@ export function WorldShell({
               petTypes={petTypes}
               killStreakConfig={killStreakConfig}
               characterConfig={characterConfig}
+              spawnConfig={spawnConfig}
               streakKillCount={streakKillCount}
               onAttack={handleAttack}
               onStatsChange={handleStatsChange}

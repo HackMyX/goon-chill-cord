@@ -5,10 +5,12 @@ import { GlobalErrorLogger } from "@/components/debug/global-error-logger";
 import { ThreeWarningsSuppressor } from "@/components/debug/three-warnings-suppressor";
 import { ConfirmDialogProvider } from "@/components/layout/confirm-dialog-provider";
 import { SiteConfigProvider } from "@/components/layout/site-config-provider";
+import { PetConfigProvider } from "@/lib/pet-config-context";
 import { PresenceHeartbeat } from "@/components/layout/presence-heartbeat";
 import { SupportButton } from "@/components/support/ticket-button";
 import { FpRegistrar } from "@/components/auth/fp-registrar";
 import { getSiteConfig } from "@/lib/actions/site-config";
+import { getPetConfigs } from "@/lib/actions/pets";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -43,7 +45,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const siteConfig = await getSiteConfig();
+  const [siteConfig, petConfigs] = await Promise.all([getSiteConfig(), getPetConfigs()]);
   return (
     <html
       lang="de"
@@ -56,7 +58,9 @@ export default async function RootLayout({
         <PresenceHeartbeat />
         <FpRegistrar />
         <SiteConfigProvider config={siteConfig}>
-          <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
+          <PetConfigProvider initialConfigs={petConfigs}>
+            <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
+          </PetConfigProvider>
         </SiteConfigProvider>
         <SupportButton />
       </body>

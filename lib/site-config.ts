@@ -38,6 +38,12 @@ export interface SiteConfig {
   /** Armor stat abbreviation shown the same places — e.g. "AP", "DEF",
    * "AD". */
   armorLabel: string;
+  /** Custom display names for the four rarity tiers. When set via the
+   * admin panel, every badge, tooltip and label sitewide switches to
+   * these names — useful for themes or alternative naming schemes. */
+  rarityLabels: { normal: string; selten: string; mythisch: string; ultra: string };
+  /** Display labels for the three perk types that items can have. */
+  perkLabels: { speed: string; jump: string; regen: string };
 }
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
@@ -48,4 +54,6 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   currencyName: "CR",
   damageLabel: "DMG",
   armorLabel: "AP",
+  rarityLabels: { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" },
+  perkLabels: { speed: "Tempo", jump: "Sprung", regen: "Regen" },
 };

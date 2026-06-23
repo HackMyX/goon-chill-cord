@@ -1,6 +1,7 @@
 "use client";
 
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { usePetConfigs } from "@/lib/pet-config-context";
 import { getPetStatsForDisplay } from "@/lib/pets";
 
 const PERK_ICONS: Record<string, string> = {
@@ -9,11 +10,15 @@ const PERK_ICONS: Record<string, string> = {
   hp_regen_boost: "♥",
 };
 
-const PERK_LABELS: Record<string, string> = {
-  speed_boost: "Tempo",
-  jump_boost: "Sprung",
-  hp_regen_boost: "Regen",
-};
+function getPerkLabel(
+  perkType: string,
+  labels: { speed: string; jump: string; regen: string }
+): string {
+  if (perkType === "speed_boost") return labels.speed;
+  if (perkType === "jump_boost") return labels.jump;
+  if (perkType === "hp_regen_boost") return labels.regen;
+  return perkType;
+}
 
 const PERK_TOOLTIPS: Record<string, (pct: number) => string> = {
   speed_boost: (pct) =>
@@ -89,8 +94,9 @@ export function ItemStatBadges({
     shield_regen_cooldown_sec !== null &&
     shield_regen_cooldown_sec !== undefined &&
     shield_regen_cooldown_sec > 0;
-  const { damageLabel, armorLabel } = useSiteConfig();
-  const petStats = itemType === "pet" && itemName ? getPetStatsForDisplay(itemName) : null;
+  const { damageLabel, armorLabel, perkLabels } = useSiteConfig();
+  const petConfigs = usePetConfigs();
+  const petStats = itemType === "pet" && itemName ? getPetStatsForDisplay(itemName, petConfigs) : null;
 
   if (!hasDmg && !hasArmor && !hasPerk && !hasShield && !petStats) return null;
 
@@ -117,9 +123,9 @@ export function ItemStatBadges({
       {hasPerk && (
         <StatBadge
           badgeClass="border-amber-400/30 bg-amber-500/10 text-amber-300"
-          tooltip={PERK_TOOLTIPS[perk_type!]?.(pct) ?? `+${pct}% ${PERK_LABELS[perk_type!]}`}
+          tooltip={PERK_TOOLTIPS[perk_type!]?.(pct) ?? `+${pct}% ${getPerkLabel(perk_type!, perkLabels)}`}
         >
-          {PERK_ICONS[perk_type!]} +{pct}% {PERK_LABELS[perk_type!]}
+          {PERK_ICONS[perk_type!]} +{pct}% {getPerkLabel(perk_type!, perkLabels)}
         </StatBadge>
       )}
       {hasShield && (

@@ -18,8 +18,8 @@ export interface ShopSettings {
 export const DEFAULT_SHOP_SETTINGS: ShopSettings = {
   autoGenerateEnabled: true,
   autoGenerateItemCount: 8,
-  autoGeneratePriceMultiplierMin: 3,
-  autoGeneratePriceMultiplierMax: 8,
+  autoGeneratePriceMultiplierMin: 1.5,
+  autoGeneratePriceMultiplierMax: 2.5,
   motd: null,
   motdEnabled: false,
   autoGenerateItemTypes: [

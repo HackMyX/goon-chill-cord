@@ -15,6 +15,7 @@ import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { PetTypeConfig } from "@/lib/pets";
 import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
+import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import type { CameraControls } from "@/components/world/use-camera-controls";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -29,6 +30,7 @@ interface SceneProps {
   petTypes: PetTypeConfig[];
   killStreakConfig: KillStreakConfig;
   characterConfig: CharacterConfig;
+  spawnConfig: WorldSpawnConfig;
   /** Current player's kill-streak count — scales locally-spawned
    * monsters' health/attackDamage slightly upward the longer it runs
    * (lib/kill-streak.ts' streakMobScale). Necessarily client-local: this
@@ -125,6 +127,7 @@ export function Scene({
   petTypes,
   killStreakConfig,
   characterConfig,
+  spawnConfig,
   streakKillCount,
   onAttack,
   onStatsChange,
@@ -228,6 +231,7 @@ export function Scene({
         killStreakConfig={killStreakConfig}
         streakKillCount={streakKillCount}
         characterConfig={characterConfig}
+        spawnConfig={spawnConfig}
         onMonsterKilled={(typeId) => onMonsterKilled?.(typeId)}
       />
     </>

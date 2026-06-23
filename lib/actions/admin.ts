@@ -8,6 +8,7 @@ import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { banDevicesForUser, unbanDevicesForUser } from "@/lib/actions/fingerprint";
 import type { Rarity } from "@/lib/cases";
+import { roundToNicePrice } from "@/lib/shop";
 
 export interface AdminActionResult {
   success: boolean;
@@ -811,6 +812,113 @@ export async function deleteUserCompletely(targetUserId: string): Promise<AdminA
  * cases_opened, streak_kill_count, and pending_streak_cr, then deletes all
  * inventory rows. The auth account itself is left intact.
  */
+// ---------------------------------------------------------------------------
+// Bulk item repricing
+// ---------------------------------------------------------------------------
+
+const RARITY_BASE_PRICE: Record<Rarity, number> = {
+  normal: 5_000,
+  selten: 32_000,
+  mythisch: 135_000,
+  ultra: 560_000,
+};
+
+const TYPE_PRICE_MULT: Record<string, number> = {
+  weapon_cosmetic: 1.55,
+  pet: 1.30,
+  shield_cosmetic: 1.20,
+  amulet: 1.10,
+  ring: 1.10,
+  jacket: 1.05,
+  hat: 1.00,
+  pants: 1.00,
+  shoes: 0.95,
+  face: 0.90,
+  hair: 0.85,
+  trail: 0.85,
+  aura: 0.90,
+};
+
+function computeItemPrice(item: {
+  rarity: Rarity;
+  type: string;
+  damage: number | null;
+  armor: number;
+  perk_magnitude: number;
+  shield_hp: number;
+}): number {
+  const base = RARITY_BASE_PRICE[item.rarity] ?? RARITY_BASE_PRICE.normal;
+  const typeMult = TYPE_PRICE_MULT[item.type] ?? 1.0;
+  const typedBase = base * typeMult;
+
+  // Stat bonuses — each capped so no single stat exceeds its own ceiling;
+  // combined bonus capped at 35% of typed base.
+  const dmg = item.damage ?? 0;
+  const dmgBonus   = dmg > 0 ? Math.min(0.25, (dmg / 50) * 0.25) : 0;
+  const armBonus   = item.armor       > 0 ? Math.min(0.20, (item.armor   / 30) * 0.20) : 0;
+  const perkBonus  = item.perk_magnitude > 0 ? Math.min(0.28, (item.perk_magnitude / 0.40) * 0.28) : 0;
+  const shieldBonus = item.shield_hp  > 0 ? Math.min(0.22, (item.shield_hp / 200) * 0.22) : 0;
+  const totalBonus = Math.min(0.35, dmgBonus + armBonus + perkBonus + shieldBonus);
+
+  return roundToNicePrice(typedBase * (1 + totalBonus));
+}
+
+export interface BulkRepriceResult {
+  success: boolean;
+  error?: string;
+  updated?: number;
+}
+
+/**
+ * Recomputes every item's `price_cr` using a rarity × type × stat formula —
+ * makes Ultra/Mythisch items meaningfully expensive compared to Normal items,
+ * and rewards items with high stats over purely cosmetic variants of the same
+ * rarity. Safe to re-run at any time; only writes when the computed price
+ * differs from what's already stored (avoids unnecessary DB writes).
+ */
+export async function bulkRepriceItems(): Promise<BulkRepriceResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { data: items, error } = await admin
+    .from("items")
+    .select("id, rarity, type, damage, armor, perk_magnitude, shield_hp, price_cr");
+
+  if (error || !items) return { success: false, error: "Items konnten nicht geladen werden." };
+
+  const updates: { id: string; price_cr: number }[] = [];
+  for (const item of items as Array<{
+    id: string; rarity: Rarity; type: string;
+    damage: number | null; armor: number; perk_magnitude: number; shield_hp: number; price_cr: number;
+  }>) {
+    const newPrice = computeItemPrice({
+      rarity: item.rarity,
+      type: item.type,
+      damage: item.damage,
+      armor: item.armor ?? 0,
+      perk_magnitude: item.perk_magnitude ?? 0,
+      shield_hp: item.shield_hp ?? 0,
+    });
+    if (newPrice !== item.price_cr) updates.push({ id: item.id, price_cr: newPrice });
+  }
+
+  if (updates.length === 0) return { success: true, updated: 0 };
+
+  const BATCH_SIZE = 500;
+  for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+    const batch = updates.slice(i, i + BATCH_SIZE);
+    for (const row of batch) {
+      await admin.from("items").update({ price_cr: row.price_cr }).eq("id", row.id);
+    }
+  }
+
+  await logAdminAction(user.id, "admin_bulk_reprice", { updated: updates.length });
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { success: true, updated: updates.length };
+}
+
 export async function resetUser(targetUserId: string): Promise<AdminActionResult> {
   const user = await requireAdmin();
   if (!user) return { success: false, error: "Kein Zugriff." };

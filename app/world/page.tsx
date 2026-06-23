@@ -6,6 +6,7 @@ import { getPetConfigs } from "@/lib/actions/pets";
 import { getKillStreakConfig } from "@/lib/actions/kill-streak";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import { getCharacterConfig } from "@/lib/actions/character-config";
+import { getWorldSpawnConfig } from "@/lib/actions/world-spawn";
 import { isAdmin } from "@/lib/admin";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -59,10 +60,13 @@ export default async function WorldPage() {
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id);
 
-  const monsterTypes = await getMonsterTypes();
-  const petTypes = await getPetConfigs();
-  const killStreakConfig = await getKillStreakConfig();
-  const characterConfig = await getCharacterConfig();
+  const [monsterTypes, petTypes, killStreakConfig, characterConfig, spawnConfig] = await Promise.all([
+    getMonsterTypes(),
+    getPetConfigs(),
+    getKillStreakConfig(),
+    getCharacterConfig(),
+    getWorldSpawnConfig(),
+  ]);
 
   const equippedByCategory: Record<string, EquippedItem> = {};
   let worldRingCount = 0;
@@ -89,6 +93,7 @@ export default async function WorldPage() {
       petTypes={petTypes}
       killStreakConfig={killStreakConfig}
       characterConfig={characterConfig}
+      spawnConfig={spawnConfig}
       disconnectCountdownSec={worldSessionConfig.disconnectCountdownSec}
       pvpEnabled={worldSessionConfig.pvpEnabled}
       isAdmin={isAdmin(profile)}

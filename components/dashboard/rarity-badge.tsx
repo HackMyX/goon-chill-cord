@@ -1,5 +1,8 @@
+"use client";
+
 import { Badge } from "@/components/ui/badge";
-import { RARITY_LABELS, RARITY_STYLES, type Rarity } from "@/lib/cases";
+import { RARITY_STYLES, type Rarity } from "@/lib/cases";
+import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { cn } from "@/lib/utils";
 
 interface RarityBadgeProps {
@@ -9,6 +12,8 @@ interface RarityBadgeProps {
 
 export function RarityBadge({ rarity, className }: RarityBadgeProps) {
   const style = RARITY_STYLES[rarity];
+  const { rarityLabels } = useSiteConfig();
+  const label = rarityLabels[rarity] ?? rarity;
 
   if (style.rainbow) {
     return (
@@ -20,7 +25,7 @@ export function RarityBadge({ rarity, className }: RarityBadgeProps) {
         )}
       >
         <span aria-hidden className="rainbow-border" />
-        <span className="rainbow-text">{RARITY_LABELS[rarity]}</span>
+        <span className="rainbow-text">{label}</span>
       </Badge>
     );
   }
@@ -37,7 +42,7 @@ export function RarityBadge({ rarity, className }: RarityBadgeProps) {
         className
       )}
     >
-      {RARITY_LABELS[rarity]}
+      {label}
     </Badge>
   );
 }

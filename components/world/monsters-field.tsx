@@ -13,13 +13,9 @@ import { RemoteMonster } from "@/components/world/remote-monster";
 import type { CombatSharedState, MonsterRegistry } from "@/components/world/combat-types";
 import {
   pickWeightedMonsterType,
-  monstersAliveCapForPlayers,
-  spawnIntervalScaleForPlayers,
-  SPAWN_INTERVAL_MIN_SEC,
-  SPAWN_INTERVAL_MAX_SEC,
-  SPAWN_SAFE_RADIUS,
   type MonsterTypeConfig,
 } from "@/lib/monsters";
+import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import { streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import { WORLD_RADIUS } from "@/lib/world-config";
@@ -57,13 +53,14 @@ interface MonstersFieldProps {
   streakKillCount: number;
   onMonsterKilled: (typeId: string) => void;
   characterConfig: CharacterConfig;
+  spawnConfig: WorldSpawnConfig;
 }
 
 let spawnSeq = 0;
 
-function randomSpawnPosition(): [number, number, number] {
+function randomSpawnPosition(spawnSafeRadius: number): [number, number, number] {
   const angle = Math.random() * Math.PI * 2;
-  const radius = SPAWN_SAFE_RADIUS + Math.random() * (WORLD_RADIUS - SPAWN_SAFE_RADIUS - 6);
+  const radius = spawnSafeRadius + Math.random() * (WORLD_RADIUS - spawnSafeRadius - 6);
   return [Math.cos(angle) * radius, 0, Math.sin(angle) * radius];
 }
 
@@ -88,6 +85,7 @@ export function MonstersField({
   streakKillCount,
   onMonsterKilled,
   characterConfig,
+  spawnConfig,
 }: MonstersFieldProps) {
   const [spawns, setSpawns] = useState<MonsterSpawn[]>([]);
   // Owned here, not by each Monster — see monster.tsx's onThrow doc
@@ -99,7 +97,7 @@ export function MonstersField({
   // every monster_sync broadcast from that player.
   const [remoteMonsters, setRemoteMonsters] = useState<Map<string, MonsterSyncPayload["monsters"]>>(new Map());
 
-  const spawnTimer = useRef(SPAWN_INTERVAL_MIN_SEC);
+  const spawnTimer = useRef(spawnConfig.spawnIntervalMinSec);
   // Live room population (lib/world-realtime.ts), always >= 1 (yourself) —
   // read in a ref, not React state, since useFrame below reads it every
   // tick and a roster sync re-rendering this whole field would be wasted
@@ -212,13 +210,22 @@ export function MonstersField({
     // already lives entirely in Monster.tsx.
     spawnTimer.current -= delta;
     if (spawnTimer.current > 0) return;
-    const intervalScale = spawnIntervalScaleForPlayers(playerCount.current);
+    const extra = Math.max(0, playerCount.current - 1);
+    const intervalScale = Math.max(
+      spawnConfig.spawnIntervalFloor,
+      Math.pow(0.85, extra)
+    );
     spawnTimer.current =
-      (SPAWN_INTERVAL_MIN_SEC + Math.random() * (SPAWN_INTERVAL_MAX_SEC - SPAWN_INTERVAL_MIN_SEC)) *
+      (spawnConfig.spawnIntervalMinSec +
+        Math.random() * (spawnConfig.spawnIntervalMaxSec - spawnConfig.spawnIntervalMinSec)) *
       intervalScale;
+    const aliveCap = Math.min(
+      spawnConfig.aliveCapMax,
+      spawnConfig.maxAliveMonsters + extra * spawnConfig.aliveCapPerExtraPlayer
+    );
 
     setSpawns((curr) => {
-      if (curr.length >= monstersAliveCapForPlayers(playerCount.current)) return curr;
+      if (curr.length >= aliveCap) return curr;
       const type = pickWeightedMonsterType(monsterTypes);
       if (!type) return curr;
       const scale = streakMobScale(streakKillCount, killStreakConfig);
@@ -235,7 +242,7 @@ export function MonstersField({
             };
       // Namespace the spawn id with the first 8 chars of userId to avoid id
       // collisions with remote monsters that also use sequential counters.
-      return [...curr, { id: `${userId.slice(0, 8)}_m${++spawnSeq}`, type: scaledType, position: randomSpawnPosition() }];
+      return [...curr, { id: `${userId.slice(0, 8)}_m${++spawnSeq}`, type: scaledType, position: randomSpawnPosition(spawnConfig.spawnSafeRadius) }];
     });
   });
 
