@@ -1,6 +1,7 @@
 "use client";
 
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { getPetStatsForDisplay } from "@/lib/pets";
 
 const PERK_ICONS: Record<string, string> = {
   speed_boost: "⚡",
@@ -53,6 +54,9 @@ export interface ItemStats {
   perk_magnitude?: number | null;
   shield_hp?: number | null;
   shield_regen_cooldown_sec?: number | null;
+  /** Pass item name + type to auto-resolve and show pet combat stats. */
+  itemName?: string | null;
+  itemType?: string | null;
 }
 
 /**
@@ -67,6 +71,8 @@ export function ItemStatBadges({
   perk_magnitude,
   shield_hp,
   shield_regen_cooldown_sec,
+  itemName,
+  itemType,
 }: ItemStats) {
   const hasDmg = damage !== null && damage !== undefined && damage > 0;
   const hasArmor = armor !== null && armor !== undefined && armor > 0;
@@ -84,8 +90,9 @@ export function ItemStatBadges({
     shield_regen_cooldown_sec !== undefined &&
     shield_regen_cooldown_sec > 0;
   const { damageLabel, armorLabel } = useSiteConfig();
+  const petStats = itemType === "pet" && itemName ? getPetStatsForDisplay(itemName) : null;
 
-  if (!hasDmg && !hasArmor && !hasPerk && !hasShield) return null;
+  if (!hasDmg && !hasArmor && !hasPerk && !hasShield && !petStats) return null;
 
   const pct = hasPerk ? Math.round((perk_magnitude as number) * 100) : 0;
 
@@ -130,6 +137,28 @@ export function ItemStatBadges({
         >
           ⏱ {shield_regen_cooldown_sec}s CD
         </StatBadge>
+      )}
+      {petStats && (
+        <>
+          <StatBadge
+            badgeClass="border-orange-400/30 bg-orange-500/10 text-orange-300"
+            tooltip={`Begleiter-Schaden: Greift Gegner in Reichweite mit ${petStats.damage} Schadenspunkten pro Treffer an. Der Begleiter kämpft automatisch für dich.`}
+          >
+            🐾 {petStats.damage} DMG
+          </StatBadge>
+          <StatBadge
+            badgeClass="border-yellow-400/30 bg-yellow-500/10 text-yellow-300"
+            tooltip={`Angriffsgeschwindigkeit: Greift alle ${petStats.attackSpeed}s an, sobald ein Gegner in Reichweite ist.`}
+          >
+            ⚡ {petStats.attackSpeed}s
+          </StatBadge>
+          <StatBadge
+            badgeClass="border-purple-400/30 bg-purple-500/10 text-purple-300"
+            tooltip={`Aggroreichweite: Erkennt und verfolgt Gegner innerhalb von ${petStats.aggroRadius} Einheiten um den Begleiter herum.`}
+          >
+            📡 {petStats.aggroRadius}u
+          </StatBadge>
+        </>
       )}
     </>
   );

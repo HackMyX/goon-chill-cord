@@ -66,6 +66,8 @@ function ItemRowComponent({ id, name, rarity, type, damage, armor, perk_type, pe
               perk_magnitude={perk_magnitude}
               shield_hp={shield_hp}
               shield_regen_cooldown_sec={shield_regen_cooldown_sec}
+              itemName={name}
+              itemType={type}
             />
           </div>
         </div>

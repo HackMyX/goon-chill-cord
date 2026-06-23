@@ -133,46 +133,72 @@ function RarityFX({ rarity, children }: { rarity: Rarity; children: ReactNode })
 
 // --- Pets: 4 distinct low-poly silhouettes ------------------------------
 
-function DogPet({ color }: { color: string }) {
+// Hip pivot positions for dog legs: [x, hipY, z]
+// hipY = body bottom (0.22 - 0.10 = 0.12); mesh hangs 0.08 below pivot.
+// Diagonal walking pairs: front-right(0)+rear-left(3) same phase, front-left(1)+rear-right(2) opposite.
+const DOG_LEG_HIPS: [number, number, number][] = [
+  [0.16, 0.12, 0.08],
+  [0.16, 0.12, -0.08],
+  [-0.16, 0.12, 0.08],
+  [-0.16, 0.12, -0.08],
+];
+
+function DogPet({ color, walkClockRef }: { color: string; walkClockRef?: React.RefObject<number> }) {
   const tailRef = useRef<THREE.Mesh>(null);
+  const legGroupRefs = useRef<(THREE.Group | null)[]>([]);
 
   useFrame(({ clock }) => {
     if (tailRef.current) {
       tailRef.current.rotation.z = 1.3 + Math.sin(clock.elapsedTime * 7) * 0.55;
     }
+    const t = walkClockRef?.current ?? 0;
+    for (let i = 0; i < legGroupRefs.current.length; i++) {
+      const g = legGroupRefs.current[i];
+      if (!g) continue;
+      // Diagonal gait: FR(0)+RL(3) together, FL(1)+RR(2) opposite
+      const phase = i === 0 || i === 3 ? t : t + Math.PI;
+      g.rotation.z = Math.sin(phase) * 0.48;
+    }
   });
 
   return (
     <group>
+      {/* Body */}
       <mesh position={[0, 0.22, 0]}>
         <boxGeometry args={[0.42, 0.2, 0.22]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      {[
-        [0.16, 0.04, 0.08],
-        [0.16, 0.04, -0.08],
-        [-0.16, 0.04, 0.08],
-        [-0.16, 0.04, -0.08],
-      ].map(([x, y, z], i) => (
-        <mesh key={i} position={[x, y, z]}>
-          <boxGeometry args={[0.05, 0.16, 0.05]} />
-          <meshStandardMaterial color={color} />
-        </mesh>
+      {/* Legs — each in a group pivoted at the hip so swing looks natural */}
+      {DOG_LEG_HIPS.map(([x, y, z], i) => (
+        <group
+          key={i}
+          ref={(el) => { legGroupRefs.current[i] = el; }}
+          position={[x, y, z]}
+        >
+          <mesh position={[0, -0.08, 0]}>
+            <boxGeometry args={[0.05, 0.16, 0.05]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+        </group>
       ))}
+      {/* Head */}
       <mesh position={[0.26, 0.26, 0]}>
         <sphereGeometry args={[0.13, 12, 12]} />
         <meshStandardMaterial color={color} />
       </mesh>
+      {/* Eyes */}
       {[0.085, -0.085].map((z) => (
         <mesh key={z} position={[0.34, 0.29, z]}>
           <sphereGeometry args={[0.022, 8, 8]} />
           <meshStandardMaterial color="#0a0a0a" />
         </mesh>
       ))}
+      {/* Snout */}
       <mesh position={[0.39, 0.23, 0]}>
         <boxGeometry args={[0.14, 0.09, 0.1]} />
         <meshStandardMaterial color={color} />
       </mesh>
+      {/* Ears */}
       <mesh position={[0.32, 0.34, 0.08]} rotation={[0.5, 0, -0.1]}>
         <boxGeometry args={[0.09, 0.13, 0.025]} />
         <meshStandardMaterial color={color} />
@@ -181,6 +207,7 @@ function DogPet({ color }: { color: string }) {
         <boxGeometry args={[0.09, 0.13, 0.025]} />
         <meshStandardMaterial color={color} />
       </mesh>
+      {/* Tail */}
       <mesh ref={tailRef} position={[-0.24, 0.32, 0]}>
         <coneGeometry args={[0.04, 0.18, 8]} />
         <meshStandardMaterial color={color} />
@@ -189,7 +216,7 @@ function DogPet({ color }: { color: string }) {
   );
 }
 
-function DragonPet({ color }: { color: string }) {
+function DragonPet({ color }: { color: string; walkClockRef?: React.RefObject<number> }) {
   const wingRefs = useRef<(THREE.Mesh | null)[]>([]);
 
   useFrame(({ clock }) => {
@@ -328,42 +355,66 @@ function GhostPet({ color }: { color: string }) {
   );
 }
 
-function CatPet({ color }: { color: string }) {
+// Hip pivot positions for cat legs: [x, hipY, z]
+// hipY = body bottom (0.16 - 0.07 = 0.09); mesh center 0.065 below pivot.
+// Same diagonal pairing as dog: front-right(0)+rear-left(3), front-left(1)+rear-right(2).
+const CAT_LEG_HIPS: [number, number, number][] = [
+  [0.11, 0.09, 0.05],
+  [0.11, 0.09, -0.05],
+  [-0.11, 0.09, 0.05],
+  [-0.11, 0.09, -0.05],
+];
+
+function CatPet({ color, walkClockRef }: { color: string; walkClockRef?: React.RefObject<number> }) {
   const tailGroupRef = useRef<THREE.Group>(null);
+  const legGroupRefs = useRef<(THREE.Group | null)[]>([]);
 
   useFrame(({ clock }) => {
     if (tailGroupRef.current) {
       tailGroupRef.current.rotation.z = -0.5 + Math.sin(clock.elapsedTime * 2.2) * 0.45;
     }
+    const t = walkClockRef?.current ?? 0;
+    for (let i = 0; i < legGroupRefs.current.length; i++) {
+      const g = legGroupRefs.current[i];
+      if (!g) continue;
+      const phase = i === 0 || i === 3 ? t : t + Math.PI;
+      g.rotation.z = Math.sin(phase) * 0.4;
+    }
   });
 
   return (
     <group>
+      {/* Body */}
       <mesh position={[0, 0.16, 0]}>
         <boxGeometry args={[0.32, 0.14, 0.13]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      {[
-        [0.11, 0.03, 0.05],
-        [0.11, 0.03, -0.05],
-        [-0.11, 0.03, 0.05],
-        [-0.11, 0.03, -0.05],
-      ].map(([x, y, z], i) => (
-        <mesh key={i} position={[x, y, z]}>
-          <boxGeometry args={[0.035, 0.13, 0.035]} />
-          <meshStandardMaterial color={color} />
-        </mesh>
+      {/* Legs — each in a group pivoted at the hip */}
+      {CAT_LEG_HIPS.map(([x, y, z], i) => (
+        <group
+          key={i}
+          ref={(el) => { legGroupRefs.current[i] = el; }}
+          position={[x, y, z]}
+        >
+          <mesh position={[0, -0.065, 0]}>
+            <boxGeometry args={[0.035, 0.13, 0.035]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+        </group>
       ))}
+      {/* Head */}
       <mesh position={[0.19, 0.22, 0]}>
         <sphereGeometry args={[0.1, 12, 12]} />
         <meshStandardMaterial color={color} />
       </mesh>
+      {/* Eyes */}
       {[0.05, -0.05].map((z) => (
         <mesh key={z} position={[0.26, 0.24, z]} scale={[1, 1.4, 0.6]}>
           <sphereGeometry args={[0.022, 8, 8]} />
           <meshStandardMaterial color="#84cc16" emissive="#65a30d" emissiveIntensity={0.5} />
         </mesh>
       ))}
+      {/* Ears */}
       <mesh position={[0.21, 0.32, 0.045]} rotation={[0, 0, -0.15]}>
         <coneGeometry args={[0.03, 0.09, 6]} />
         <meshStandardMaterial color={color} />
@@ -372,6 +423,7 @@ function CatPet({ color }: { color: string }) {
         <coneGeometry args={[0.03, 0.09, 6]} />
         <meshStandardMaterial color={color} />
       </mesh>
+      {/* Tail */}
       <group ref={tailGroupRef} position={[-0.16, 0.2, 0]}>
         <mesh>
           <cylinderGeometry args={[0.018, 0.024, 0.24, 6]} />

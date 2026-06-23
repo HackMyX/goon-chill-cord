@@ -55,3 +55,14 @@ export function getPetSpeciesId(name: string): string {
   if (/Schatten|Geist/.test(name)) return "ghost";
   return "generic";
 }
+
+/** Combat stats for display in the UI — resolves species from the item name
+ * so callers can show damage/aggroRadius/attackSpeed without needing the
+ * full DB-overridden config (uses code defaults, which are the same values
+ * shown in the admin panel before any override). */
+export function getPetStatsForDisplay(name: string): { damage: number; aggroRadius: number; attackSpeed: number } | null {
+  const id = getPetSpeciesId(name);
+  const config = DEFAULT_PET_TYPES.find((p) => p.id === id);
+  if (!config) return null;
+  return { damage: config.damage, aggroRadius: config.aggroRadius, attackSpeed: config.attackSpeed };
+}

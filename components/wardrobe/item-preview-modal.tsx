@@ -95,6 +95,8 @@ export function ItemPreviewModal({ item, gender, onClose }: ItemPreviewModalProp
               perk_magnitude={item.perk_magnitude}
               shield_hp={item.shield_hp}
               shield_regen_cooldown_sec={item.shield_regen_cooldown_sec}
+              itemName={item.name}
+              itemType={item.type}
             />
           </div>
 

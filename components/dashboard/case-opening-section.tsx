@@ -311,6 +311,8 @@ export function CaseOpeningSection({
                     perk_magnitude={wonItem.perk_magnitude}
                     shield_hp={wonItem.shield_hp}
                     shield_regen_cooldown_sec={wonItem.shield_regen_cooldown_sec}
+                    itemName={wonItem.name}
+                    itemType={wonItem.type}
                   />
                 </div>
               </motion.div>
