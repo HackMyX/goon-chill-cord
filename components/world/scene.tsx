@@ -45,21 +45,73 @@ interface SceneProps {
   respawnSignal: number;
 }
 
-/** A slow pulse on the world-border ring — purely decorative, but it's what
- * keeps the edge of the world from reading as a flat, dead line and ties it
- * visually to the glowing border crystals in environment.tsx. */
+/** Dual border rings + inner halo — keeps the world edge from reading as a
+ * dead flat line, ties visually to the glowing crystals in environment.tsx. */
 function BorderRing() {
-  const ref = useRef<THREE.Mesh>(null);
+  const outerRef = useRef<THREE.Mesh>(null);
+  const innerRef = useRef<THREE.Mesh>(null);
   useFrame((state) => {
-    const mat = ref.current?.material as THREE.MeshBasicMaterial | undefined;
-    if (mat) mat.opacity = 0.35 + Math.sin(state.clock.elapsedTime * 0.8) * 0.12;
+    const t = state.clock.elapsedTime;
+    if (outerRef.current) {
+      (outerRef.current.material as THREE.MeshBasicMaterial).opacity =
+        0.38 + Math.sin(t * 0.8) * 0.2;
+    }
+    if (innerRef.current) {
+      (innerRef.current.material as THREE.MeshBasicMaterial).opacity =
+        0.16 + Math.sin(t * 1.1 + 1.6) * 0.12;
+    }
   });
   return (
-    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-      <ringGeometry args={[WORLD_RADIUS - 0.6, WORLD_RADIUS, 96]} />
-      <meshBasicMaterial color="#a855f7" transparent opacity={0.4} toneMapped={false} side={THREE.DoubleSide} />
-    </mesh>
+    <>
+      <mesh ref={outerRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <ringGeometry args={[WORLD_RADIUS - 0.6, WORLD_RADIUS, 96]} />
+        <meshBasicMaterial color="#a855f7" transparent opacity={0.4} toneMapped={false} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh ref={innerRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
+        <ringGeometry args={[WORLD_RADIUS - 4, WORLD_RADIUS - 1.5, 80]} />
+        <meshBasicMaterial color="#7c3aed" transparent opacity={0.14} toneMapped={false} side={THREE.DoubleSide} />
+      </mesh>
+    </>
   );
+}
+
+/** Animated spawn-area glow pools — pulsing so the center of the world
+ * has visible ambient magic energy rather than just two static circles. */
+function SpawnGlow() {
+  const outerRef = useRef<THREE.Mesh>(null);
+  const innerRef = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    if (outerRef.current)
+      (outerRef.current.material as THREE.MeshBasicMaterial).opacity =
+        0.07 + Math.sin(t * 0.7) * 0.04;
+    if (innerRef.current)
+      (innerRef.current.material as THREE.MeshBasicMaterial).opacity =
+        0.12 + Math.sin(t * 1.1 + 0.9) * 0.07;
+  });
+  return (
+    <>
+      <mesh ref={outerRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.015, 0]}>
+        <circleGeometry args={[18, 72]} />
+        <meshBasicMaterial color="#6d28d9" transparent opacity={0.08} toneMapped={false} />
+      </mesh>
+      <mesh ref={innerRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
+        <circleGeometry args={[7, 52]} />
+        <meshBasicMaterial color="#a855f7" transparent opacity={0.12} toneMapped={false} />
+      </mesh>
+    </>
+  );
+}
+
+/** A slowly pulsing ambient light centered on the spawn — gives the center
+ * of the world a living, breathing magical heart feel. */
+function SpawnHeartLight() {
+  const lightRef = useRef<THREE.PointLight>(null);
+  useFrame(({ clock }) => {
+    if (lightRef.current)
+      lightRef.current.intensity = 6 + Math.sin(clock.elapsedTime * 0.6) * 3;
+  });
+  return <pointLight ref={lightRef} position={[0, 1.5, 0]} color="#7c3aed" intensity={6} distance={22} decay={2} />;
 }
 
 export function Scene({
@@ -105,43 +157,43 @@ export function Scene({
           believably in the darker upper half of that gradient. */}
       <Sky
         distance={450000}
-        sunPosition={[-40, 6, -60]}
-        turbidity={14}
-        rayleigh={1.4}
-        mieCoefficient={0.012}
-        mieDirectionalG={0.92}
+        sunPosition={[-40, 5, -65]}
+        turbidity={16}
+        rayleigh={1.6}
+        mieCoefficient={0.015}
+        mieDirectionalG={0.94}
       />
-      <fog attach="fog" args={["#170f2b", 18, WORLD_RADIUS + 18]} />
+      {/* Tighter fog start for more depth and atmosphere — world feels
+          moody and dense rather than a flat open clearing. */}
+      <fog attach="fog" args={["#120a22", 14, WORLD_RADIUS + 10]} />
 
-      <ambientLight intensity={0.6} color="#a78bfa" />
-      <directionalLight position={[-20, 25, -30]} intensity={1.2} color="#ffd9b3" castShadow />
-      <pointLight position={[-6, 3, -4]} intensity={18} color="#8b5cf6" />
-      <pointLight position={[6, 3, 6]} intensity={14} color="#3b82f6" />
+      <ambientLight intensity={0.5} color="#a78bfa" />
+      <directionalLight position={[-20, 25, -30]} intensity={1.1} color="#ffd9b3" castShadow />
+      {/* Main purple accent fill */}
+      <pointLight position={[-6, 3, -4]} intensity={22} color="#8b5cf6" distance={40} decay={2} />
+      {/* Cool blue rim from the opposite side for depth separation */}
+      <pointLight position={[6, 3, 6]} intensity={16} color="#3b82f6" distance={35} decay={2} />
+      {/* Danger-red rim light — adds warmth contrast and reads as "there are
+          threats out here" without being obvious */}
+      <pointLight position={[0, 5, -18]} intensity={10} color="#7f1d1d" distance={30} decay={2} />
+      {/* Pulsing spawn heart */}
+      <SpawnHeartLight />
 
-      <Stars radius={120} depth={50} count={2200} factor={2.4} fade speed={0.5} />
+      <Stars radius={120} depth={50} count={3200} factor={2.8} fade speed={0.4} />
 
       {/* grass ground, sized to the actual playable world radius — two
           overlapping tones instead of one flat fill so it doesn't read as
           a single dead-flat color from above */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]} receiveShadow>
         <circleGeometry args={[WORLD_RADIUS, 96]} />
-        <meshStandardMaterial color="#2c5530" />
+        <meshStandardMaterial color="#253d28" />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]}>
         <circleGeometry args={[WORLD_RADIUS * 0.62, 80]} />
-        <meshStandardMaterial color="#316438" transparent opacity={0.55} />
+        <meshStandardMaterial color="#2c5530" transparent opacity={0.6} />
       </mesh>
 
-      {/* soft purple "glow pool" under the spawn area, for depth/magic feel */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.015, 0]}>
-        <circleGeometry args={[14, 64]} />
-        <meshBasicMaterial color="#7c3aed" transparent opacity={0.08} toneMapped={false} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
-        <circleGeometry args={[6, 48]} />
-        <meshBasicMaterial color="#a855f7" transparent opacity={0.1} toneMapped={false} />
-      </mesh>
-
+      <SpawnGlow />
       <BorderRing />
 
       <Environment />

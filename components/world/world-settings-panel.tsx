@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings, X, MousePointer2, Zap, Volume2, RotateCcw } from "lucide-react";
+import { Settings, X, MousePointer2, Volume2, RotateCcw } from "lucide-react";
 import { type WorldSettings, SETTINGS_BOUNDS, DEFAULT_WORLD_SETTINGS } from "@/lib/world-settings";
 
 interface SliderProps {
@@ -96,15 +96,6 @@ export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSetting
             max={SETTINGS_BOUNDS.sensitivity.max}
             step={SETTINGS_BOUNDS.sensitivity.step}
             onChange={(v) => update("sensitivity", v)}
-          />
-          <Slider
-            label="Bewegungsgeschwindigkeit"
-            icon={<Zap className="h-4 w-4 text-emerald-400" />}
-            value={settings.moveSpeed}
-            min={SETTINGS_BOUNDS.moveSpeed.min}
-            max={SETTINGS_BOUNDS.moveSpeed.max}
-            step={SETTINGS_BOUNDS.moveSpeed.step}
-            onChange={(v) => update("moveSpeed", v)}
           />
           <Slider
             label="Lautstärke"

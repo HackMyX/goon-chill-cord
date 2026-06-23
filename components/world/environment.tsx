@@ -3,8 +3,9 @@
 import { useMemo } from "react";
 import { WORLD_RADIUS } from "@/lib/world-config";
 
-const TRUNK_COLOR = "#3b2a1d";
-const FOLIAGE_COLORS = ["#143d2b", "#1d4a35", "#225a3d"];
+const TRUNK_COLOR = "#2e2015";
+const FOLIAGE_COLORS = ["#0e3322", "#163d2a", "#1a4a32"];
+const FOLIAGE_EMISSIVES = ["#0a1f14", "#0e2a1c", "#102214"];
 
 function PineTree({ x, z, scale, hue }: { x: number; z: number; scale: number; hue: number }) {
   return (
@@ -15,15 +16,15 @@ function PineTree({ x, z, scale, hue }: { x: number; z: number; scale: number; h
       </mesh>
       <mesh position={[0, 1.6, 0]}>
         <coneGeometry args={[0.85, 1.4, 8]} />
-        <meshStandardMaterial color={FOLIAGE_COLORS[hue]} />
+        <meshStandardMaterial color={FOLIAGE_COLORS[hue]} emissive={FOLIAGE_EMISSIVES[hue]} emissiveIntensity={0.35} />
       </mesh>
       <mesh position={[0, 2.3, 0]}>
         <coneGeometry args={[0.6, 1.1, 8]} />
-        <meshStandardMaterial color={FOLIAGE_COLORS[hue]} />
+        <meshStandardMaterial color={FOLIAGE_COLORS[hue]} emissive={FOLIAGE_EMISSIVES[hue]} emissiveIntensity={0.35} />
       </mesh>
       <mesh position={[0, 2.9, 0]}>
         <coneGeometry args={[0.38, 0.85, 8]} />
-        <meshStandardMaterial color={FOLIAGE_COLORS[hue]} />
+        <meshStandardMaterial color={FOLIAGE_COLORS[hue]} emissive={FOLIAGE_EMISSIVES[hue]} emissiveIntensity={0.4} />
       </mesh>
     </group>
   );
@@ -49,13 +50,25 @@ function GrassTuft({ x, z }: { x: number; z: number }) {
 function BorderCrystal({ x, z, scale }: { x: number; z: number; scale: number }) {
   return (
     <group position={[x, 0, z]} scale={scale}>
+      {/* Main crystal spike */}
       <mesh position={[0, 0.9, 0]}>
         <coneGeometry args={[0.3, 1.8, 6]} />
-        <meshStandardMaterial color="#3b1e6d" emissive="#a855f7" emissiveIntensity={0.55} />
+        <meshStandardMaterial color="#3b1e6d" emissive="#a855f7" emissiveIntensity={1.3} />
       </mesh>
+      {/* Smaller secondary crystal beside it for silhouette interest */}
+      <mesh position={[0.25, 0.5, 0.1]} rotation={[0, 0.4, 0.3]}>
+        <coneGeometry args={[0.12, 0.95, 5]} />
+        <meshStandardMaterial color="#2a1350" emissive="#c084fc" emissiveIntensity={1.0} />
+      </mesh>
+      {/* Base plinth */}
       <mesh position={[0, 0.15, 0]}>
         <cylinderGeometry args={[0.4, 0.45, 0.3, 8]} />
-        <meshStandardMaterial color="#1c1330" />
+        <meshStandardMaterial color="#1c1330" emissive="#7c3aed" emissiveIntensity={0.3} />
+      </mesh>
+      {/* Glow orb at ground level — bleeds light onto nearby grass */}
+      <mesh position={[0, 0.08, 0]}>
+        <sphereGeometry args={[0.22, 8, 8]} />
+        <meshBasicMaterial color="#a855f7" transparent opacity={0.18} toneMapped={false} />
       </mesh>
     </group>
   );

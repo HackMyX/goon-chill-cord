@@ -274,6 +274,10 @@ export function Player({
   // Anti-spam timer, not a resource cost — see lib/combat.ts'
   // JUMP_COOLDOWN_SEC doc comment for why jumping no longer drains stamina.
   const jumpCooldown = useRef(0);
+  // Landing squash: 1→0 on touchdown, drives a brief y-scale compression.
+  // jumpStretch: 1→0 on jump, briefly elongates the character on launch.
+  const landingSquash = useRef(0);
+  const jumpStretch = useRef(0);
 
   // Attack swing: a one-shot 0→1→back progress driven by its own clock,
   // not the walk-cycle's — so a punch reads the same whether you're
@@ -365,6 +369,9 @@ export function Player({
       combatRef.current.shieldHpRemaining = combatRef.current.shieldMaxHp;
       combatRef.current.shieldRegenCooldown = 0;
       combatRef.current.dead = false;
+      landingSquash.current = 0;
+      jumpStretch.current = 0;
+      g.scale.y = 1;
     }
     if (respawnInvulnTimer.current > 0) {
       respawnInvulnTimer.current -= delta;
@@ -524,6 +531,7 @@ export function Player({
     if (locked && alive && jumpRequested && grounded.current && jumpCooldown.current <= 0) {
       verticalVelocity.current = JUMP_VELOCITY * jumpMultiplier;
       grounded.current = false;
+      jumpStretch.current = 1;
       // No cooldown set here — it is applied at touch-down (below) so that
       // the full jumpCooldownSec wait is always AFTER landing, not from the
       // moment of the jump itself. Starting it at jump-time meant a long
@@ -541,6 +549,7 @@ export function Player({
       if (!grounded.current) {
         // Just touched down — start the post-landing cooldown now.
         jumpCooldown.current = characterConfig.jumpCooldownSec;
+        landingSquash.current = 1;
       }
       grounded.current = true;
     }
@@ -810,25 +819,24 @@ export function Player({
       // Falling reads more dramatically than rising — the apex/launch of a
       // jump keeps a fairly contained pose, the actual descent is where the
       // limbs really splay out, the way a real fall reads.
+      // Falling reads more dramatically than rising — deep fall has maximum
+      // splay, the apex is contained. mapLinear: vel +3 (launch) → 0.35
+      // blend; vel -12 (peak fall speed) → 1.0 full splay.
       const fallBlend = THREE.MathUtils.clamp(
-        THREE.MathUtils.mapLinear(verticalVelocity.current, 2, -9, 0.45, 1),
-        0.45,
+        THREE.MathUtils.mapLinear(verticalVelocity.current, 3, -12, 0.35, 1),
+        0.35,
         1
       );
-      fallWobble.current += delta * 9;
+      fallWobble.current += delta * 10;
 
-      // Airborne pose: legs spread OUT TO THE SIDES (rotation.z swings the
-      // hip-pivoted leg group sideways, not forward/back like the walk
-      // cycle does on rotation.x) with a fast asymmetric wobble — a loose,
-      // off-balance flail instead of a stiff forward tuck. Arms mirror the
-      // same idea, spread outward and slightly raised, wobbling out of
-      // phase with the legs so all four limbs never swing in lockstep
-      // (which would read as a synchronized dance move, not a fall).
-      const legSpread = 0.5 * jp * fallBlend;
-      const armSpread = 0.55 * jp * fallBlend;
-      const wobble = 0.12 * jp * fallBlend;
-      const legTuckX = -0.18 * jp * fallBlend;
-      const armRaiseX = -0.35 * jp * fallBlend;
+      // Airborne pose: limbs splay outward more dramatically for a real
+      // "caught air" read. Wobble amplitude is higher so the character
+      // visibly fights to stay balanced during a fall.
+      const legSpread = 0.65 * jp * fallBlend;
+      const armSpread = 0.7 * jp * fallBlend;
+      const wobble = 0.2 * jp * fallBlend;
+      const legTuckX = -0.25 * jp * fallBlend;
+      const armRaiseX = -0.45 * jp * fallBlend;
 
       if (l.legL.current) {
         l.legL.current.rotation.x = THREE.MathUtils.lerp(swing, legTuckX, jp) + attackSwing * 0.06;
@@ -887,6 +895,12 @@ export function Player({
     // complaint can never recur: `g.position.y` is exactly `baseY` — real
     // jump/gravity physics only, nothing else ever touches it.
     g.position.y = baseY.current;
+
+    // Squash-and-stretch: y-scale briefly compresses on landing and elongates
+    // on jump launch, then springs back to 1 — reads as weight and impact.
+    landingSquash.current = Math.max(0, landingSquash.current - delta * 9);
+    jumpStretch.current   = Math.max(0, jumpStretch.current   - delta * 12);
+    g.scale.y = 1 - landingSquash.current * 0.22 + jumpStretch.current * 0.12;
 
     combatRef.current.playerPos.copy(g.position);
     combatRef.current.playerHeading = g.rotation.y;

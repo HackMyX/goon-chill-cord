@@ -374,7 +374,6 @@ export function WorldShell({
   function handleSettingsChange(s: WorldSettings) {
     setWorldSettings(s);
     cameraControls.state.current.sensitivityMult = s.sensitivity;
-    cameraControls.state.current.moveSpeedMult   = s.moveSpeed;
     sound.setVolume(s.volume);
     saveWorldSettings(s);
   }
@@ -382,7 +381,6 @@ export function WorldShell({
   // Apply saved settings on first mount.
   useEffect(() => {
     cameraControls.state.current.sensitivityMult = worldSettings.sensitivity;
-    cameraControls.state.current.moveSpeedMult   = worldSettings.moveSpeed;
     sound.setVolume(worldSettings.volume);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
