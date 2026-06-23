@@ -1,19 +1,23 @@
 export interface WorldSettings {
-  sensitivity: number;
+  sensitivityX: number;
+  sensitivityY: number;
   volume: number;
 }
 
 export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
-  sensitivity: 1,
+  sensitivityX: 1,
+  sensitivityY: 1,
   volume: 1,
 };
 
 export const SETTINGS_BOUNDS = {
-  sensitivity: { min: 0.25, max: 4,  step: 0.05 },
-  volume:      { min: 0,    max: 1,  step: 0.01  },
+  sensitivityX: { min: 0.25, max: 4, step: 0.05 },
+  sensitivityY: { min: 0.25, max: 4, step: 0.05 },
+  volume:       { min: 0,    max: 1, step: 0.01  },
 } as const;
 
-const KEY = "goon-world-v1";
+const KEY = "goon-world-v2";
+const LEGACY_KEY = "goon-world-v1";
 
 function clamp(v: unknown, min: number, max: number): number {
   const n = Number(v);
@@ -23,12 +27,18 @@ function clamp(v: unknown, min: number, max: number): number {
 export function loadWorldSettings(): WorldSettings {
   if (typeof window === "undefined") return { ...DEFAULT_WORLD_SETTINGS };
   try {
-    const raw = localStorage.getItem(KEY);
+    // Try new key first, fall back to legacy key (old saves only had `sensitivity`)
+    const raw = localStorage.getItem(KEY) ?? localStorage.getItem(LEGACY_KEY);
     if (!raw) return { ...DEFAULT_WORLD_SETTINGS };
     const p = JSON.parse(raw) as Record<string, unknown>;
+    // If old save: use `sensitivity` as fallback for both axes
+    const legacySens = p.sensitivity != null
+      ? clamp(p.sensitivity, SETTINGS_BOUNDS.sensitivityX.min, SETTINGS_BOUNDS.sensitivityX.max)
+      : DEFAULT_WORLD_SETTINGS.sensitivityX;
     return {
-      sensitivity: clamp(p.sensitivity, SETTINGS_BOUNDS.sensitivity.min, SETTINGS_BOUNDS.sensitivity.max),
-      volume:      clamp(p.volume,      SETTINGS_BOUNDS.volume.min,      SETTINGS_BOUNDS.volume.max),
+      sensitivityX: clamp(p.sensitivityX ?? legacySens, SETTINGS_BOUNDS.sensitivityX.min, SETTINGS_BOUNDS.sensitivityX.max),
+      sensitivityY: clamp(p.sensitivityY ?? legacySens, SETTINGS_BOUNDS.sensitivityY.min, SETTINGS_BOUNDS.sensitivityY.max),
+      volume:       clamp(p.volume,       SETTINGS_BOUNDS.volume.min,       SETTINGS_BOUNDS.volume.max),
     };
   } catch {
     return { ...DEFAULT_WORLD_SETTINGS };

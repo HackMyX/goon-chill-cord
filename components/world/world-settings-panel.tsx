@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings, X, MousePointer2, Volume2, RotateCcw } from "lucide-react";
+import { Settings, X, MousePointer2, Volume2, RotateCcw, ArrowLeftRight, ArrowUpDown } from "lucide-react";
 import { type WorldSettings, SETTINGS_BOUNDS, DEFAULT_WORLD_SETTINGS } from "@/lib/world-settings";
 
 interface SliderProps {
@@ -11,9 +11,11 @@ interface SliderProps {
   max: number;
   step: number;
   onChange: (v: number) => void;
+  /** Optional secondary label shown right of the icon (e.g. unit or axis) */
+  sublabel?: string;
 }
 
-function Slider({ label, icon, value, min, max, step, onChange }: SliderProps) {
+function Slider({ label, icon, value, min, max, step, onChange, sublabel }: SliderProps) {
   const pct = Math.round(((value - min) / (max - min)) * 100);
   const display = `${Math.round(value * 100)}%`;
   return (
@@ -21,14 +23,15 @@ function Slider({ label, icon, value, min, max, step, onChange }: SliderProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
           {icon}
-          {label}
+          <span>{label}</span>
+          {sublabel && <span className="text-xs font-normal text-zinc-500">{sublabel}</span>}
         </div>
         <span className="font-mono text-sm font-bold text-purple-300">{display}</span>
       </div>
       <div className="relative h-5 flex items-center">
         <div className="absolute inset-x-0 h-1.5 rounded-full bg-white/10">
           <div
-            className="h-full rounded-full bg-purple-500/60"
+            className="h-full rounded-full bg-purple-500/60 transition-[width] duration-75"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -88,15 +91,38 @@ export function WorldSettingsPanel({ settings, onChange, onClose }: WorldSetting
 
         {/* Sliders */}
         <div className="flex flex-col gap-6">
+          {/* Mouse section header */}
+          <div className="flex items-center gap-2">
+            <MousePointer2 className="h-4 w-4 text-cyan-400" />
+            <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Mausbewegung</span>
+            <div className="h-px flex-1 bg-white/[0.06]" />
+          </div>
+
           <Slider
-            label="Mausbewegung"
-            icon={<MousePointer2 className="h-4 w-4 text-cyan-400" />}
-            value={settings.sensitivity}
-            min={SETTINGS_BOUNDS.sensitivity.min}
-            max={SETTINGS_BOUNDS.sensitivity.max}
-            step={SETTINGS_BOUNDS.sensitivity.step}
-            onChange={(v) => update("sensitivity", v)}
+            label="Horizontal"
+            icon={<ArrowLeftRight className="h-4 w-4 text-cyan-400" />}
+            sublabel="Links / Rechts"
+            value={settings.sensitivityX}
+            min={SETTINGS_BOUNDS.sensitivityX.min}
+            max={SETTINGS_BOUNDS.sensitivityX.max}
+            step={SETTINGS_BOUNDS.sensitivityX.step}
+            onChange={(v) => update("sensitivityX", v)}
           />
+
+          <Slider
+            label="Vertikal"
+            icon={<ArrowUpDown className="h-4 w-4 text-cyan-400" />}
+            sublabel="Oben / Unten"
+            value={settings.sensitivityY}
+            min={SETTINGS_BOUNDS.sensitivityY.min}
+            max={SETTINGS_BOUNDS.sensitivityY.max}
+            step={SETTINGS_BOUNDS.sensitivityY.step}
+            onChange={(v) => update("sensitivityY", v)}
+          />
+
+          {/* Divider */}
+          <div className="h-px bg-white/[0.06]" />
+
           <Slider
             label="Lautstärke"
             icon={<Volume2 className="h-4 w-4 text-amber-400" />}

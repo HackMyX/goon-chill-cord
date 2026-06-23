@@ -25,10 +25,12 @@ export interface CameraControlState {
    * pointer-locked — Player.tsx reads this to decide whether to keep
    * easing `freeLookYaw`/`freeLookPitch` back toward 0. */
   freeLookActive: boolean;
-  /** World-settings camera sensitivity multiplier (0.25–4, default 1).
-   * Written by world-shell.tsx when settings change; multiplied into
-   * YAW/PITCH_SENSITIVITY in onMouseMove so it takes effect immediately. */
-  sensitivityMult: number;
+  /** Horizontal (yaw) sensitivity multiplier from world settings (0.25–4, default 1).
+   * Written by world-shell.tsx when settings change; takes effect immediately
+   * in the next mousemove event — no re-render needed. */
+  sensitivityXMult: number;
+  /** Vertical (pitch) sensitivity multiplier from world settings (0.25–4, default 1). */
+  sensitivityYMult: number;
   /** World-settings movement speed multiplier (0.5–2.5, default 1).
    * Written by world-shell.tsx when settings change; read by player.tsx
    * every frame to scale horizontal velocity. */
@@ -126,7 +128,8 @@ export function useCameraControls(
     freeLookYaw: 0,
     freeLookPitch: 0,
     freeLookActive: false,
-    sensitivityMult: 1,
+    sensitivityXMult: 1,
+    sensitivityYMult: 1,
     moveSpeedMult: 1,
   });
   const [locked, setLocked] = useState(false);
@@ -169,8 +172,8 @@ export function useCameraControls(
       // this should have flipped too, but didn't, which is exactly the
       // "drag mouse right, view goes left" regression that fix quietly
       // introduced.)
-      const ySens = YAW_SENSITIVITY   * state.current.sensitivityMult;
-      const pSens = PITCH_SENSITIVITY * state.current.sensitivityMult;
+      const ySens = YAW_SENSITIVITY   * state.current.sensitivityXMult;
+      const pSens = PITCH_SENSITIVITY * state.current.sensitivityYMult;
       if (state.current.freeLookActive) {
         // Right-mouse-held free-look: steers an *offset* on top of the
         // committed aim/movement yaw/pitch instead of the yaw/pitch

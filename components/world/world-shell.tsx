@@ -373,14 +373,16 @@ export function WorldShell({
 
   function handleSettingsChange(s: WorldSettings) {
     setWorldSettings(s);
-    cameraControls.state.current.sensitivityMult = s.sensitivity;
+    cameraControls.state.current.sensitivityXMult = s.sensitivityX;
+    cameraControls.state.current.sensitivityYMult = s.sensitivityY;
     sound.setVolume(s.volume);
     saveWorldSettings(s);
   }
 
   // Apply saved settings on first mount.
   useEffect(() => {
-    cameraControls.state.current.sensitivityMult = worldSettings.sensitivity;
+    cameraControls.state.current.sensitivityXMult = worldSettings.sensitivityX;
+    cameraControls.state.current.sensitivityYMult = worldSettings.sensitivityY;
     sound.setVolume(worldSettings.volume);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -465,9 +467,10 @@ export function WorldShell({
           <button
             onClick={() => setSettingsOpen(true)}
             title="Einstellungen (Tab)"
-            className="absolute top-4 right-4 z-20 rounded-lg border border-white/10 bg-black/50 p-2 text-zinc-400 backdrop-blur transition-colors hover:border-white/30 hover:text-zinc-100"
+            className="absolute top-4 right-4 z-20 flex items-center gap-2 rounded-xl border border-white/20 bg-black/70 px-4 py-2.5 text-sm font-semibold text-zinc-200 backdrop-blur transition-all hover:border-purple-400/50 hover:bg-black/80 hover:text-white hover:shadow-[0_0_16px_rgba(147,51,234,0.35)]"
           >
-            <Settings className="h-4 w-4" />
+            <Settings className="h-4 w-4 text-purple-400" />
+            Einstellungen
           </button>
         )}
 
