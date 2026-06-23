@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, Dices } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -20,6 +20,10 @@ import { DebugLogTab } from "@/components/admin/debug-log-tab";
 import { BackupTab } from "@/components/admin/backup-tab";
 import { SecurityTab } from "@/components/admin/security-tab";
 import { ModConfigEditor } from "@/components/admin/mod-config-editor";
+import { PatchNotesEditor } from "@/components/admin/patchnotes-editor";
+import { DonConfigEditor } from "@/components/admin/don-config-editor";
+import type { PatchNote } from "@/lib/patchnotes";
+import type { DonConfig } from "@/lib/don-config";
 import type { ModPermissions } from "@/lib/mod";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
@@ -102,9 +106,11 @@ interface AdminShellProps {
   worldSpawnConfig: WorldSpawnConfig;
   siteConfig: SiteConfig;
   modPermissions: ModPermissions;
+  patchNotes: PatchNote[];
+  donConfig: DonConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "debug" | "backup" | "security";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "debug" | "backup" | "security" | "patchnotes" | "don";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -122,6 +128,8 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "debug", label: "Debug Log", icon: Bug },
   { id: "backup", label: "Backup", icon: Database },
   { id: "security", label: "Sicherheit", icon: ShieldAlert },
+  { id: "patchnotes", label: "Patch Notes", icon: FileText },
+  { id: "don", label: "Double or Nothing", icon: Dices },
 ];
 
 export function AdminShell({
@@ -143,6 +151,8 @@ export function AdminShell({
   worldSpawnConfig,
   siteConfig,
   modPermissions,
+  patchNotes,
+  donConfig,
 }: AdminShellProps) {
   const [tab, setTab] = useState<Tab>("economy");
   const [items, setItems] = useState(initialItems);
@@ -381,6 +391,10 @@ export function AdminShell({
         {tab === "backup" && <BackupTab />}
 
         {tab === "security" && <SecurityTab />}
+
+        {tab === "patchnotes" && <PatchNotesEditor initialNotes={patchNotes} />}
+
+        {tab === "don" && <DonConfigEditor config={donConfig} />}
       </main>
     </div>
   );

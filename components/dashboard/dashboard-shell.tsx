@@ -14,6 +14,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { CaseGroup, Rarity } from "@/lib/cases";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import type { DonConfig } from "@/lib/don-config";
 
 /** Same Realtime presence roster the Community page uses (lib/presence-
  * client.ts) — just counting it instead of listing names, for the small
@@ -39,6 +40,8 @@ interface DashboardShellProps {
   caseGroupPreviews: CaseGroupPreview[];
   isAdmin?: boolean;
   isModerator?: boolean;
+  donConfig: DonConfig;
+  initialFlipsToday: number;
 }
 
 export function DashboardShell({
@@ -50,6 +53,8 @@ export function DashboardShell({
   caseGroupPreviews,
   isAdmin = false,
   isModerator = false,
+  donConfig,
+  initialFlipsToday,
 }: DashboardShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -166,7 +171,12 @@ export function DashboardShell({
           );
         })}
 
-        <DoubleOrNothing credits={credits} onCreditsChange={handleCreditsChange} />
+        <DoubleOrNothing
+          credits={credits}
+          onCreditsChange={handleCreditsChange}
+          donConfig={donConfig}
+          initialFlipsToday={initialFlipsToday}
+        />
       </main>
     </div>
   );

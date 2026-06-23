@@ -258,20 +258,16 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   const [activeTier, setActiveTier] = useState<CaseTier | null>(null);
   const [batchCount, setBatchCount] = useState(2);
   const [batchMode, setBatchMode] = useState(false);
+  // sofortQueued: true when SOFORT was clicked during pending — gives visual feedback
+  const [sofortQueued, setSofortQueued] = useState(false);
   const mounted = useRef(false);
   const fetchingRef = useRef(false);
-  const openCooldownUntil = useRef(0);
   const caseReelRef = useRef<CaseReelHandle>(null);
-  // When the user clicks "Sofort anzeigen" while the server is still in-flight
-  // (phase === "pending"), we can't call skipToResult() yet because the reel
-  // isn't spinning yet. Queue the intent here; a useEffect fires the actual
-  // skip the moment phase transitions to "spinning".
-  // Set to true when the user clicks SOFORT while the server is still in-flight.
-  // handleOpen checks this after await and jumps straight to result instead of
-  // starting the spin — no fragile 30ms timing needed.
+  // skipOnResultRef: set when SOFORT is clicked during "pending" phase.
+  // handleOpen checks it after await and jumps to result if true.
   const skipOnResultRef = useRef(false);
-  // Spam-guard: prevents double-fire of handleSkip (e.g. rapid-click during spin).
-  const sofortFiredRef  = useRef(false);
+  // sofortFiredRef: spam-guard for handleSkip during "spinning" phase.
+  const sofortFiredRef = useRef(false);
   const { currencyName } = useSiteConfig();
   const sound = useSoundManager();
 
@@ -296,7 +292,6 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
 
   async function handleOpen(tier: CaseTier) {
     if (fetchingRef.current || phase !== "idle") return;
-    if (Date.now() < openCooldownUntil.current) return;
     fetchingRef.current = true;
     setActiveTier(tier);
     setPhase("pending");   // → warmup kicks in immediately in CaseReel
@@ -320,8 +315,11 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
 
     // User clicked SOFORT while server was in-flight — skip spin entirely and
     // go straight to the result overlay. Charge the preview fee if applicable.
+    // NOTE: skipOnResultRef may also be cleared by the useEffect when spinning
+    // starts, so we read it here before any async gaps.
     if (skipOnResultRef.current) {
       skipOnResultRef.current = false;
+      setSofortQueued(false);
       const cost = tier.previewCost ?? 0;
       if (cost > 0) {
         const feeRes = await chargeSkipFee(tier.id);
@@ -345,7 +343,6 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
 
   async function handleBatchOpen(tier: CaseTier) {
     if (fetchingRef.current || phase !== "idle") return;
-    if (Date.now() < openCooldownUntil.current) return;
     fetchingRef.current = true;
     setActiveTier(tier);
     setPhase("batch_pending");
@@ -391,10 +388,23 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
     caseReelRef.current?.skipToResult();
   }
 
+  // When spinning starts and SOFORT was already clicked during pending,
+  // fire the skip immediately via a tiny delay to let the reel render first.
+  useEffect(() => {
+    if (phase !== "spinning" || !skipOnResultRef.current || !activeTier) return;
+    skipOnResultRef.current = false;
+    setSofortQueued(false);
+    const t = setTimeout(() => {
+      void handleSkip(activeTier);
+    }, 16); // one render frame
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
   function handleContinue() {
-    openCooldownUntil.current = Date.now() + 600;
     skipOnResultRef.current = false;
     sofortFiredRef.current  = false;
+    setSofortQueued(false);
     setReel(idleReelRef.current);
     setTargetIndex(Math.floor(PLACEHOLDER_COUNT / 2));
     setWonItem(null);
@@ -579,27 +589,38 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
             onMouseEnter={sound.hover}
             onClick={() => {
               if (isPending) {
-                skipOnResultRef.current = true;
+                if (!skipOnResultRef.current) {
+                  skipOnResultRef.current = true;
+                  setSofortQueued(true);
+                  sound.click();
+                }
                 return;
               }
-              if (isSpinning) { void handleSkip(group.standard); }
+              if (isSpinning) { sound.click(); void handleSkip(group.standard); }
               else if (batchMode) { void handleBatchOpen(group.standard); }
               else { void handleOpen(group.standard); }
             }}
             disabled={
               isBusy || phase === "result" || phase === "batch_result" ||
               (isIdle && credits < group.standard.price * (batchMode ? batchCount : 1)) ||
-              group.standard.enabled === false
+              group.standard.enabled === false ||
+              (isSpinning && sofortFiredRef.current)
             }
-            className="w-full rounded-xl border-2 border-[#3898ff] bg-[linear-gradient(135deg,#1e699e_0%,rgba(13,76,132,0.6)_100%)] px-8 py-3 text-base font-black uppercase tracking-widest text-white shadow-[inset_0_0_16px_rgba(56,152,255,0.45)] transition-transform hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100 sm:w-auto"
+            className={`w-full rounded-xl border-2 border-[#3898ff] px-8 py-3 text-base font-black uppercase tracking-widest text-white shadow-[inset_0_0_16px_rgba(56,152,255,0.45)] transition-all hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100 sm:w-auto ${
+              sofortQueued && isPending
+                ? "animate-pulse bg-[linear-gradient(135deg,#5b21b6_0%,rgba(76,29,149,0.8)_100%)] border-purple-400"
+                : "bg-[linear-gradient(135deg,#1e699e_0%,rgba(13,76,132,0.6)_100%)]"
+            }`}
           >
             {group.standard.enabled === false
               ? "DEAKTIVIERT"
-              : inFlight
-                ? `⚡ SOFORT${(group.standard.previewCost ?? 0) > 0 ? ` (${(group.standard.previewCost ?? 0).toLocaleString("de-DE")} ${currencyName})` : ""}`
-                : batchMode
-                  ? `${batchCount}× ${group.standard.label} — ${(group.standard.price * batchCount).toLocaleString("de-DE")} ${currencyName}`
-                  : `${group.standard.label} — ${group.standard.price.toLocaleString("de-DE")} ${currencyName}`}
+              : sofortQueued && isPending
+                ? "⚡ WIRD ÜBERSPRUNGEN…"
+                : inFlight
+                  ? `⚡ SOFORT${(group.standard.previewCost ?? 0) > 0 ? ` (${(group.standard.previewCost ?? 0).toLocaleString("de-DE")} ${currencyName})` : ""}`
+                  : batchMode
+                    ? `${batchCount}× ${group.standard.label} — ${(group.standard.price * batchCount).toLocaleString("de-DE")} ${currencyName}`
+                    : `${group.standard.label} — ${group.standard.price.toLocaleString("de-DE")} ${currencyName}`}
           </button>
         )}
 
@@ -608,17 +629,22 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
             onMouseEnter={sound.hover}
             onClick={() => {
               if (isPending) {
-                skipOnResultRef.current = true;
+                if (!skipOnResultRef.current) {
+                  skipOnResultRef.current = true;
+                  setSofortQueued(true);
+                  sound.click();
+                }
                 return;
               }
-              if (isSpinning) { void handleSkip(group.premium); }
+              if (isSpinning) { sound.click(); void handleSkip(group.premium); }
               else if (batchMode) { void handleBatchOpen(group.premium); }
               else { void handleOpen(group.premium); }
             }}
             disabled={
               isBusy || phase === "result" || phase === "batch_result" ||
               (isIdle && credits < group.premium.price * (batchMode ? batchCount : 1)) ||
-              group.premium.enabled === false
+              group.premium.enabled === false ||
+              (isSpinning && sofortFiredRef.current)
             }
             className="relative w-full rounded-xl bg-black/50 px-8 py-2.5 text-center transition-transform hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100 sm:w-auto"
           >
@@ -627,11 +653,13 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
               <Zap className="h-4 w-4 text-amber-300" />
               {group.premium.enabled === false
                 ? "DEAKTIVIERT"
-                : inFlight
-                  ? `⚡ SOFORT${(group.premium.previewCost ?? 0) > 0 ? ` (${(group.premium.previewCost ?? 0).toLocaleString("de-DE")} ${currencyName})` : ""}`
-                  : batchMode
-                    ? `${batchCount}× ${group.premium.label} — ${(group.premium.price * batchCount).toLocaleString("de-DE")} ${currencyName}`
-                    : `${group.premium.label} — ${group.premium.price.toLocaleString("de-DE")} ${currencyName}`}
+                : sofortQueued && isPending
+                  ? "⚡ WIRD ÜBERSPRUNGEN…"
+                  : inFlight
+                    ? `⚡ SOFORT${(group.premium.previewCost ?? 0) > 0 ? ` (${(group.premium.previewCost ?? 0).toLocaleString("de-DE")} ${currencyName})` : ""}`
+                    : batchMode
+                      ? `${batchCount}× ${group.premium.label} — ${(group.premium.price * batchCount).toLocaleString("de-DE")} ${currencyName}`
+                      : `${group.premium.label} — ${group.premium.price.toLocaleString("de-DE")} ${currencyName}`}
             </span>
             {group.premium.sublabel && group.premium.enabled !== false && !inFlight && !batchMode && (
               <span className="block text-[11px] font-semibold tracking-widest text-zinc-400">{group.premium.sublabel}</span>

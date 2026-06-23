@@ -8,6 +8,7 @@ import { type Rarity } from "@/lib/cases";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
+import { getDonConfig, getFlipsToday } from "@/lib/actions/don-config";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -56,7 +57,11 @@ export default async function Home() {
     .order("credits", { ascending: false })
     .limit(10);
 
-  const caseGroups = await getCaseConfig();
+  const [caseGroups, donConfig, initialFlipsToday] = await Promise.all([
+    getCaseConfig(),
+    getDonConfig(),
+    getFlipsToday(user.id),
+  ]);
 
   const caseGroupPreviews = await Promise.all(
     caseGroups.map(async (group) => {
@@ -113,6 +118,8 @@ export default async function Home() {
       caseGroupPreviews={caseGroupPreviews}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}
+      donConfig={donConfig}
+      initialFlipsToday={initialFlipsToday}
     />
   );
 }

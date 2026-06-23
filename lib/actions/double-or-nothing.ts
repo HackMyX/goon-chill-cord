@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
+import { getDonConfig } from "@/lib/actions/don-config";
 
 export interface FlipResult {
   success: boolean;
@@ -12,14 +13,11 @@ export interface FlipResult {
   won?: boolean;
   amount?: number;
   newCredits?: number;
-  /** Seconds remaining in the cooldown (only set when rejected for cooldown). */
+  /** Seconds remaining in the cooldown. */
   cooldownRemaining?: number;
+  /** How many flips remain today after this one. */
+  remainingFlips?: number;
 }
-
-// Minimum seconds between two flips (server-enforced via audit_logs).
-const COOLDOWN_SEC = 8;
-// Maximum flips per calendar day (UTC) per user.
-const DAILY_FLIP_LIMIT = 50;
 
 export async function flipDouble(amount: number): Promise<FlipResult> {
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -27,52 +25,46 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Du musst eingeloggt sein." };
 
-  if (!user) {
-    return { success: false, error: "Du musst eingeloggt sein." };
-  }
+  const [{ data: profile, error: profileError }, { currencyName }, config] = await Promise.all([
+    supabase.from("profiles").select("credits").eq("id", user.id).single(),
+    getSiteConfig(),
+    getDonConfig(),
+  ]);
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("credits")
-    .eq("id", user.id)
-    .single();
+  if (profileError || !profile) return { success: false, error: "Profil konnte nicht geladen werden." };
 
-  if (profileError || !profile) {
-    return { success: false, error: "Profil konnte nicht geladen werden." };
-  }
+  if (!config.enabled) return { success: false, error: "Double or Nothing ist derzeit deaktiviert." };
 
-  const { currencyName } = await getSiteConfig();
   const adminClient = createAdminClient();
 
-  // --- Anti-exploit: cooldown + daily flip limit (via audit_logs) ---
+  // --- Anti-exploit: cooldown + daily flip limit ---
   try {
-    // 1. Cooldown: reject if last flip was less than COOLDOWN_SEC seconds ago
-    const { data: lastFlip } = await adminClient
-      .from("audit_logs")
-      .select("created_at")
-      .eq("user_id", user.id)
-      .eq("action", "double_or_nothing")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    if (config.cooldownSec > 0) {
+      const { data: lastFlip } = await adminClient
+        .from("audit_logs")
+        .select("created_at")
+        .eq("user_id", user.id)
+        .eq("action", "double_or_nothing")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (lastFlip) {
-      const elapsedSec = (Date.now() - new Date(lastFlip.created_at).getTime()) / 1000;
-      if (elapsedSec < COOLDOWN_SEC) {
-        const remaining = Math.ceil(COOLDOWN_SEC - elapsedSec);
-        return {
-          success: false,
-          error: `Bitte warte noch ${remaining}s vor dem nächsten Flip.`,
-          cooldownRemaining: remaining,
-        };
+      if (lastFlip) {
+        const elapsedSec = (Date.now() - new Date(lastFlip.created_at).getTime()) / 1000;
+        if (elapsedSec < config.cooldownSec) {
+          const remaining = Math.ceil(config.cooldownSec - elapsedSec);
+          return {
+            success: false,
+            error: `Bitte warte noch ${remaining}s vor dem nächsten Flip.`,
+            cooldownRemaining: remaining,
+          };
+        }
       }
     }
 
-    // 2. Daily flip limit: reject if player has already flipped DAILY_FLIP_LIMIT times today
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
     const { count: todayFlips } = await adminClient
@@ -82,23 +74,26 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
       .eq("action", "double_or_nothing")
       .gte("created_at", todayStart.toISOString());
 
-    if ((todayFlips ?? 0) >= DAILY_FLIP_LIMIT) {
+    if ((todayFlips ?? 0) >= config.dailyFlipLimit) {
       return {
         success: false,
-        error: `Tageslimit von ${DAILY_FLIP_LIMIT} Flips erreicht. Komm morgen wieder!`,
+        error: `Tageslimit von ${config.dailyFlipLimit} Flips erreicht. Komm morgen wieder!`,
+        remainingFlips: 0,
       };
     }
   } catch {
-    // audit_logs unavailable — allow the flip but skip limits to avoid blocking users.
+    // audit_logs unavailable — skip limits.
   }
 
-  // --- Execute the flip ---
-  const stake = Math.min(Math.floor(amount), profile.credits);
-  if (stake <= 0) {
-    return { success: false, error: `Nicht genug ${currencyName}.` };
-  }
+  // --- Clamp stake to config limits ---
+  let stake = Math.floor(amount);
+  if (stake < config.minBet) stake = config.minBet;
+  if (config.maxBet !== null && stake > config.maxBet) stake = config.maxBet;
+  stake = Math.min(stake, profile.credits);
 
-  const won = Math.random() < 0.5;
+  if (stake <= 0) return { success: false, error: `Nicht genug ${currencyName}.` };
+
+  const won = Math.random() < config.winChance;
   const delta = won ? stake : -stake;
   const newCredits = profile.credits + delta;
 
@@ -113,14 +108,25 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
     return { success: false, error: `Nicht genug ${currencyName}.` };
   }
 
+  let remainingFlips: number | undefined;
   try {
+    const todayStart2 = new Date();
+    todayStart2.setUTCHours(0, 0, 0, 0);
+    const { count: usedAfter } = await adminClient
+      .from("audit_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("action", "double_or_nothing")
+      .gte("created_at", todayStart2.toISOString());
+
     await adminClient.from("audit_logs").insert({
       user_id: user.id,
       action: "double_or_nothing",
       payload: { stake, won, newCredits: updatedRows[0].credits },
     });
+    remainingFlips = Math.max(0, config.dailyFlipLimit - ((usedAfter ?? 0) + 1));
   } catch {
-    // audit_logs table may not exist yet — never let logging break the flow.
+    // logging failed — ignore
   }
 
   revalidatePath("/");
@@ -135,5 +141,5 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
     link: "/",
   });
 
-  return { success: true, won, amount: stake, newCredits: updatedRows[0].credits };
+  return { success: true, won, amount: stake, newCredits: updatedRows[0].credits, remainingFlips };
 }

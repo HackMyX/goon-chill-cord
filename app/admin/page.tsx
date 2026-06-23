@@ -12,6 +12,8 @@ import { getCharacterConfig } from "@/lib/actions/character-config";
 import { getWorldSpawnConfig } from "@/lib/actions/world-spawn";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getModPermissions } from "@/lib/actions/mod";
+import { getAllNotes } from "@/lib/actions/patchnotes";
+import { getDonConfig } from "@/lib/actions/don-config";
 import { CASE_GROUPS } from "@/lib/cases";
 import {
   AdminShell,
@@ -128,6 +130,8 @@ export default async function AdminPage() {
     siteConfig,
     modPermissions,
     worldSpawnConfig,
+    allPatchNotes,
+    adminDonConfig,
   ] = await Promise.all([
     admin
       .from("audit_logs")
@@ -153,6 +157,8 @@ export default async function AdminPage() {
     getSiteConfig(),
     getModPermissions(),
     getWorldSpawnConfig(),
+    getAllNotes(),
+    getDonConfig(),
   ]);
 
   // Keep case tiers in the same order as CASE_GROUPS (standard before premium,
@@ -188,6 +194,8 @@ export default async function AdminPage() {
       worldSpawnConfig={worldSpawnConfig}
       siteConfig={siteConfig}
       modPermissions={modPermissions}
+      patchNotes={allPatchNotes}
+      donConfig={adminDonConfig}
     />
   );
 }

@@ -50,7 +50,7 @@ export function TopBar({
 }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
-  const { siteName, logoUrl, logoIconName, currencyName, topbarRightSlots } = useSiteConfig();
+  const { siteName, logoUrl, logoIconName, currencyName, topbarRightSlots, siteVersion } = useSiteConfig();
   const LogoIcon = resolveSiteLogoIcon(logoIconName);
 
   // Realtime inventory count — starts from the server-fetched prop and stays
@@ -151,8 +151,17 @@ export function TopBar({
 
   return (
     <header className="sticky top-0 z-50 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-b border-white/5 bg-[#030305]/95 px-4 py-2 backdrop-blur">
-      {/* Left: logo + credits */}
+      {/* Left: version badge + logo + credits */}
       <div className="flex items-center gap-3 justify-self-start">
+        <Link
+          href="/patchnotes"
+          onMouseEnter={sound.hover}
+          onClick={sound.click}
+          title="Patch Notes"
+          className="hidden items-center rounded-md border border-purple-500/40 bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold tracking-widest text-purple-300 transition-colors hover:border-purple-400/70 hover:bg-purple-500/20 hover:text-purple-200 sm:flex"
+        >
+          {siteVersion}
+        </Link>
         <Link
           href="/"
           onMouseEnter={sound.hover}

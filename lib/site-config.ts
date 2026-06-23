@@ -50,6 +50,9 @@ export interface SiteConfig {
    *       'wardrobe' | 'notifications' | 'profile' | 'logout'
    * null/empty = use DEFAULT_TOPBAR_RIGHT_SLOTS. */
   topbarRightSlots: string[];
+  /** Current site version string shown as badge in the TopBar (e.g. "v1.2.0").
+   * Clicking it navigates to /patchnotes. Set manually via Admin → Branding. */
+  siteVersion: string;
 }
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
@@ -63,6 +66,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   rarityLabels: { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" },
   perkLabels: { speed: "Tempo", jump: "Sprung", regen: "Regen" },
   topbarRightSlots: ["games", "shop", "auctions", "trading", "community", "wardrobe", "notifications", "profile", "logout"],
+  siteVersion: "v1.0.0",
 };
 
 export const DEFAULT_TOPBAR_RIGHT_SLOTS = [

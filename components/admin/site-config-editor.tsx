@@ -48,19 +48,35 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
         Branding
       </h3>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-semibold text-zinc-400">Seitenname</span>
-        <input
-          type="text"
-          maxLength={60}
-          value={form.siteName}
-          onChange={(e) => setForm((f) => ({ ...f, siteName: e.target.value }))}
-          className="w-full max-w-sm rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
-        />
-        <span className="text-[11px] text-zinc-600">
-          Erscheint oben links in der Navigation, als Browser-Tab-Titel und auf der Login-Seite.
-        </span>
-      </label>
+      <div className="flex flex-wrap gap-4">
+        <label className="flex flex-1 flex-col gap-1">
+          <span className="text-xs font-semibold text-zinc-400">Seitenname</span>
+          <input
+            type="text"
+            maxLength={60}
+            value={form.siteName}
+            onChange={(e) => setForm((f) => ({ ...f, siteName: e.target.value }))}
+            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+          />
+          <span className="text-[11px] text-zinc-600">
+            Erscheint oben links in der Navigation, als Browser-Tab-Titel und auf der Login-Seite.
+          </span>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-semibold text-zinc-400">Versions-Badge (TopBar)</span>
+          <input
+            type="text"
+            maxLength={20}
+            placeholder="v1.0.0"
+            value={form.siteVersion ?? "v1.0.0"}
+            onChange={(e) => setForm((f) => ({ ...f, siteVersion: e.target.value }))}
+            className="w-40 rounded-lg border border-purple-500/30 bg-black/30 px-3 py-1.5 text-sm text-purple-200 outline-none focus:border-purple-400/60"
+          />
+          <span className="text-[11px] text-zinc-600">
+            Klickbarer Badge links neben dem Logo — führt zu /patchnotes.
+          </span>
+        </label>
+      </div>
 
       <div className="mt-5">
         <span className="text-xs font-semibold text-zinc-400">Logo-Icon</span>
