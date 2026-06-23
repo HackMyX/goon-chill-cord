@@ -5,21 +5,23 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Zap, Crown, Trophy, Medal, Star, Coins, Skull,
-  RotateCcw, ChevronDown, ShieldAlert, Sparkles, Gift,
+  RotateCcw, ChevronDown, ShieldAlert, Sparkles, Gift, Flame,
+  ChevronUp,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { useSoundManager } from "@/lib/sound-manager";
 import { submitSnakeScore } from "@/lib/actions/snake";
-import type { SnakeConfig } from "@/lib/snake-config";
+import type { SnakeConfig, SnakeMode, SnakeModeConfig, SnakeGrindConfig } from "@/lib/snake-config";
 import type { SnakeLeaderboardEntry } from "@/lib/actions/snake";
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 // Types
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 
 type Dir = "UP" | "DOWN" | "LEFT" | "RIGHT";
 type Phase = "idle" | "playing" | "dead";
 interface Pos { x: number; y: number }
+
 interface Particle {
   x: number; y: number; vx: number; vy: number;
   life: number; decay: number; r: number; color: string; glow?: boolean;
@@ -28,8 +30,10 @@ interface FloatingText {
   x: number; y: number; vy: number;
   text: string; life: number; decay: number; color: string; size: number;
 }
+
 interface GameState {
   snake: Pos[];
+  prevSnake: Pos[];
   apple: Pos;
   goldenApple: Pos | null;
   goldenAppleMovesLeft: number;
@@ -38,30 +42,108 @@ interface GameState {
   score: number;
   creditsEarned: number;
   phase: Phase;
-  speedMode: "x1" | "x2";
+  mode: SnakeMode;
   particles: Particle[];
   ambientParticles: Particle[];
   floatingTexts: FloatingText[];
   bonusFlashFrames: number;
-  bonusBannerText: string;
-  bonusBannerFrames: number;
   comboMultLeft: number;
   frameCount: number;
   deathFlashFrames: number;
-  scorePopFrame: number;
   lastMoveTime: number;
+  // Grind-only
+  shrinkCount: number;
+  applesUntilShrink: number;
+  shrinkFlashFrames: number;
+  speedTrails: { x: number; y: number; alpha: number }[];
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Visual themes
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ModeTheme {
+  bg: string;
+  gridColor: string;
+  snakeHead: string;
+  snakeTail: string;
+  snakeGlow: string;
+  appleColor: string;
+  appleGlow: string;
+  goldenColor: string;
+  ambientColors: string[];
+  particleColors: string[];
+  cornerGlow1: string;
+  cornerGlow2: string;
+  borderColor: string;
+}
+
+const THEMES: Record<SnakeMode, ModeTheme> = {
+  x1: {
+    bg: "#030a06",
+    gridColor: "rgba(16,185,129,0.045)",
+    snakeHead: "#34d399",
+    snakeTail: "#064e3b",
+    snakeGlow: "#10b981",
+    appleColor: "#ef4444",
+    appleGlow: "#ef4444",
+    goldenColor: "#fbbf24",
+    ambientColors: ["rgba(16,185,129,0.55)", "rgba(5,150,105,0.45)", "rgba(52,211,153,0.35)"],
+    particleColors: ["#34d399", "#6ee7b7", "#10b981", "#ffffff"],
+    cornerGlow1: "rgba(16,185,129,0.06)",
+    cornerGlow2: "rgba(6,182,212,0.04)",
+    borderColor: "#10b981",
+  },
+  x2: {
+    bg: "#020510",
+    gridColor: "rgba(6,182,212,0.055)",
+    snakeHead: "#22d3ee",
+    snakeTail: "#0c4a6e",
+    snakeGlow: "#06b6d4",
+    appleColor: "#eab308",
+    appleGlow: "#fbbf24",
+    goldenColor: "#f59e0b",
+    ambientColors: ["rgba(6,182,212,0.55)", "rgba(14,165,233,0.45)", "rgba(34,211,238,0.35)"],
+    particleColors: ["#22d3ee", "#67e8f9", "#06b6d4", "#ffffff", "#fbbf24"],
+    cornerGlow1: "rgba(6,182,212,0.08)",
+    cornerGlow2: "rgba(139,92,246,0.05)",
+    borderColor: "#06b6d4",
+  },
+  grind: {
+    bg: "#080503",
+    gridColor: "rgba(120,53,15,0.07)",
+    snakeHead: "#fbbf24",
+    snakeTail: "#92400e",
+    snakeGlow: "#f59e0b",
+    appleColor: "#c084fc",
+    appleGlow: "#a855f7",
+    goldenColor: "#f97316",
+    ambientColors: ["rgba(245,158,11,0.45)", "rgba(217,119,6,0.35)", "rgba(251,191,36,0.25)"],
+    particleColors: ["#fbbf24", "#f97316", "#ef4444", "#ffffff", "#c084fc"],
+    cornerGlow1: "rgba(245,158,11,0.07)",
+    cornerGlow2: "rgba(239,68,68,0.04)",
+    borderColor: "#f59e0b",
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helpers
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 
 function posEq(a: Pos, b: Pos) { return a.x === b.x && a.y === b.y; }
 
-function randomPos(size: number, exclude: Pos[]): Pos {
+function randomPos(boardSize: number, exclude: Pos[], minX = 0, maxX?: number, minY = 0, maxY?: number): Pos {
+  const mx = maxX ?? boardSize - 1;
+  const my = maxY ?? boardSize - 1;
   let pos: Pos;
-  do { pos = { x: Math.floor(Math.random() * size), y: Math.floor(Math.random() * size) }; }
-  while (exclude.some((e) => posEq(e, pos)));
+  let attempts = 0;
+  do {
+    pos = {
+      x: minX + Math.floor(Math.random() * (mx - minX + 1)),
+      y: minY + Math.floor(Math.random() * (my - minY + 1)),
+    };
+    attempts++;
+  } while (exclude.some((e) => posEq(e, pos)) && attempts < 500);
   return pos;
 }
 
@@ -71,50 +153,205 @@ const DIR_MAP: Record<string, Dir> = {
   ArrowLeft: "LEFT", KeyA: "LEFT", ArrowRight: "RIGHT", KeyD: "RIGHT",
 };
 
-function getSpeedMs(score: number, mode: "x1" | "x2", cfg: SnakeConfig): number {
-  const base = mode === "x2" ? cfg.x2InitialSpeedMs : cfg.initialSpeedMs;
-  return Math.max(cfg.minSpeedMs, base - score * cfg.speedIncreasePerApple);
+function getSpeedMs(score: number, modeCfg: SnakeModeConfig): number {
+  return Math.max(modeCfg.minSpeedMs, modeCfg.initialSpeedMs - score * modeCfg.speedIncreasePerApple);
 }
 
-// ---------------------------------------------------------------------------
-// Canvas draw
-// ---------------------------------------------------------------------------
+function lerpColor(c1: string, c2: string, t: number): string {
+  const h = (s: string) => ({ r: parseInt(s.slice(1, 3), 16), g: parseInt(s.slice(3, 5), 16), b: parseInt(s.slice(5, 7), 16) });
+  const a = h(c1), b = h(c2);
+  const r = Math.round(a.r + (b.r - a.r) * t);
+  const g = Math.round(a.g + (b.g - a.g) * t);
+  const bv = Math.round(a.b + (b.b - a.b) * t);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${bv.toString(16).padStart(2, "0")}`;
+}
 
-function drawFrame(canvas: HTMLCanvasElement, g: GameState, cfg: SnakeConfig) {
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// Catmull-Rom spline path
+function catmullRomPath(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
+  if (pts.length < 2) return;
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Canvas rendering
+// ─────────────────────────────────────────────────────────────────────────────
+
+function drawFrame(
+  canvas: HTMLCanvasElement,
+  g: GameState,
+  modeCfg: SnakeModeConfig,
+  now: number,
+) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   const W = canvas.width;
-  const BOARD = cfg.boardSize;
+  const BOARD = modeCfg.boardSize;
   const cell = W / BOARD;
   const t = g.frameCount;
+  const theme = THEMES[g.mode];
 
-  // === Background ===
-  ctx.fillStyle = "#05040e";
+  // Smooth movement progress (0→1 within current tick)
+  const speedMs = getSpeedMs(g.score, modeCfg);
+  const tickProgress = g.phase === "playing"
+    ? Math.min(1, (now - g.lastMoveTime) / speedMs)
+    : 1;
+
+  // Lerped snake positions in pixel space
+  const renderPx: { x: number; y: number }[] = g.snake.map((seg, i) => {
+    const prev = g.prevSnake[i];
+    if (!prev) return { x: (seg.x + 0.5) * cell, y: (seg.y + 0.5) * cell };
+    const dx = seg.x - prev.x;
+    const dy = seg.y - prev.y;
+    // Skip interpolation on wrap-around jumps
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+      return { x: (seg.x + 0.5) * cell, y: (seg.y + 0.5) * cell };
+    }
+    return {
+      x: (prev.x + dx * tickProgress + 0.5) * cell,
+      y: (prev.y + dy * tickProgress + 0.5) * cell,
+    };
+  });
+
+  // ── Background ─────────────────────────────────────────────────────────────
+  ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, W);
 
-  // Grid lines
-  ctx.strokeStyle = "rgba(139,92,246,0.06)";
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= BOARD; i++) {
-    ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, W); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(W, i * cell); ctx.stroke();
+  // ── Grind: dead zone cells ─────────────────────────────────────────────────
+  if (g.mode === "grind" && g.shrinkCount > 0) {
+    const sc = g.shrinkCount;
+    // Dead zone fill
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    // top strip
+    ctx.fillRect(0, 0, W, sc * cell);
+    // bottom strip
+    ctx.fillRect(0, (BOARD - sc) * cell, W, sc * cell);
+    // left strip
+    ctx.fillRect(0, sc * cell, sc * cell, (BOARD - 2 * sc) * cell);
+    // right strip
+    ctx.fillRect((BOARD - sc) * cell, sc * cell, sc * cell, (BOARD - 2 * sc) * cell);
+
+    // Stone crack texture in dead zone (simple random lines pre-drawn each few frames)
+    if (t % 4 === 0) {
+      ctx.strokeStyle = "rgba(120,53,15,0.3)";
+      ctx.lineWidth = 0.5;
+      for (let ci = 0; ci < BOARD; ci++) {
+        for (let cj = 0; cj < BOARD; cj++) {
+          const inDead = ci < sc || ci >= BOARD - sc || cj < sc || cj >= BOARD - sc;
+          if (!inDead) continue;
+          if ((ci * 7 + cj * 13) % 5 === 0) {
+            const bx = ci * cell, by = cj * cell;
+            ctx.beginPath();
+            ctx.moveTo(bx + cell * 0.2, by + cell * 0.5);
+            ctx.lineTo(bx + cell * 0.8, by + cell * 0.3);
+            ctx.stroke();
+          }
+        }
+      }
+    }
   }
 
-  // Corner ambient glows
-  const cornerGlow = (cx: number, cy: number, color: string) => {
-    const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.4);
-    gr.addColorStop(0, color);
+  // ── Grid lines ─────────────────────────────────────────────────────────────
+  ctx.strokeStyle = theme.gridColor;
+  ctx.lineWidth = 0.5;
+  if (g.mode === "x2") {
+    // Scanline effect: alternating rows slightly brighter
+    for (let i = 0; i <= BOARD; i++) {
+      ctx.globalAlpha = i % 2 === 0 ? 1 : 0.4;
+      ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(W, i * cell); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, W); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else {
+    for (let i = 0; i <= BOARD; i++) {
+      ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, W); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(W, i * cell); ctx.stroke();
+    }
+  }
+
+  // ── Corner glow ────────────────────────────────────────────────────────────
+  const pulse = 0.04 + Math.sin(t * 0.015) * 0.025;
+  const drawCornerGlow = (cx: number, cy: number, color: string) => {
+    const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.45);
+    gr.addColorStop(0, color.replace(")", `,${pulse})`).replace("rgba(", "rgba("));
     gr.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = gr;
     ctx.fillRect(0, 0, W, W);
   };
-  const pulse = 0.04 + Math.sin(t * 0.015) * 0.02;
-  cornerGlow(0, 0, `rgba(139,92,246,${pulse})`);
-  cornerGlow(W, W, `rgba(6,182,212,${pulse * 0.7})`);
+  drawCornerGlow(0, 0, theme.cornerGlow1.replace(/[\d.]+\)$/, `${pulse})`));
+  drawCornerGlow(W, W, theme.cornerGlow2.replace(/[\d.]+\)$/, `${pulse * 0.6})`));
 
-  // === Ambient particles ===
+  // ── Grind: danger zone border ───────────────────────────────────────────────
+  if (g.mode === "grind") {
+    const sc = g.shrinkCount;
+    const danger = g.applesUntilShrink <= 3 && (g.phase === "playing");
+    const grindCfg = modeCfg as SnakeGrindConfig;
+    const arenaMin = sc;
+    const arenaMax = BOARD - 1 - sc;
+
+    // Shrink flash overlay
+    if (g.shrinkFlashFrames > 0) {
+      const alpha = (g.shrinkFlashFrames / 45) * 0.5;
+      ctx.fillStyle = `rgba(239,68,68,${alpha})`;
+      ctx.fillRect(0, 0, W, W);
+    }
+
+    // Danger ring pulsing
+    if (danger || g.shrinkFlashFrames > 0) {
+      const pAlpha = danger ? 0.3 + Math.sin(t * 0.2) * 0.25 : (g.shrinkFlashFrames / 45) * 0.9;
+      const bx = arenaMin * cell;
+      const by = arenaMin * cell;
+      const bw = (arenaMax - arenaMin + 1) * cell;
+      const bh = bw;
+      ctx.strokeStyle = `rgba(239,68,68,${pAlpha})`;
+      ctx.lineWidth = cell * 0.4;
+      ctx.strokeRect(bx - cell * 0.2, by - cell * 0.2, bw + cell * 0.4, bh + cell * 0.4);
+    } else if (g.phase === "playing") {
+      // Normal amber arena border
+      const aPulse = 0.2 + Math.sin(t * 0.04) * 0.08;
+      ctx.strokeStyle = hexToRgba(theme.borderColor, aPulse);
+      ctx.lineWidth = cell * 0.25;
+      const bx = arenaMin * cell, by = arenaMin * cell;
+      const bw = (arenaMax - arenaMin + 1) * cell;
+      ctx.strokeRect(bx, by, bw, bw);
+    }
+
+    // Show "next shrink at" counter if close
+    if (danger && g.phase === "playing") {
+      const pulseT = 0.7 + Math.sin(t * 0.25) * 0.3;
+      ctx.globalAlpha = pulseT;
+      ctx.fillStyle = "#ef4444";
+      ctx.shadowColor = "#ef4444";
+      ctx.shadowBlur = 8;
+      ctx.font = `900 ${cell * 1.0}px "Geist Mono", monospace`;
+      ctx.textAlign = "center";
+      ctx.fillText(`⚠ SHRINK IN ${g.applesUntilShrink}`, W / 2, cell * (arenaMin - 0.5));
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "left";
+    }
+  }
+
+  // ── Ambient particles ──────────────────────────────────────────────────────
   for (const p of g.ambientParticles) {
-    ctx.globalAlpha = p.life * 0.4;
+    ctx.globalAlpha = p.life * 0.5;
     ctx.fillStyle = p.color;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
@@ -122,166 +359,222 @@ function drawFrame(canvas: HTMLCanvasElement, g: GameState, cfg: SnakeConfig) {
   }
   ctx.globalAlpha = 1;
 
-  // === Bonus flash overlay ===
+  // ── x2 speed trails ────────────────────────────────────────────────────────
+  if (g.mode === "x2" && g.speedTrails.length > 0) {
+    for (const tr of g.speedTrails) {
+      ctx.globalAlpha = tr.alpha * 0.4;
+      ctx.fillStyle = theme.snakeHead;
+      ctx.beginPath();
+      ctx.arc(tr.x, tr.y, cell * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Bonus flash ─────────────────────────────────────────────────────────────
   if (g.bonusFlashFrames > 0) {
     const alpha = (g.bonusFlashFrames / 40) * 0.35;
     ctx.fillStyle = `rgba(251,191,36,${alpha})`;
     ctx.fillRect(0, 0, W, W);
   }
 
-  // === Death flash overlay ===
+  // ── Death flash ─────────────────────────────────────────────────────────────
   if (g.deathFlashFrames > 0) {
-    const alpha = (g.deathFlashFrames / 30) * 0.5;
+    const alpha = (g.deathFlashFrames / 30) * 0.55;
     ctx.fillStyle = `rgba(239,68,68,${alpha})`;
     ctx.fillRect(0, 0, W, W);
   }
 
-  // === Golden apple ===
+  // ── Golden apple ────────────────────────────────────────────────────────────
   if (g.goldenApple) {
     const gx = g.goldenApple.x * cell + cell / 2;
     const gy = g.goldenApple.y * cell + cell / 2;
-    // Rotating sparkle dots
-    const sparkCount = 5;
-    const sparkR = cell * 0.7 + Math.sin(t * 0.08) * cell * 0.1;
+    const sparkCount = 6;
+    const sparkR = cell * 0.72 + Math.sin(t * 0.09) * cell * 0.12;
     for (let i = 0; i < sparkCount; i++) {
-      const angle = (i / sparkCount) * Math.PI * 2 + t * 0.05;
-      const sx = gx + Math.cos(angle) * sparkR;
-      const sy = gy + Math.sin(angle) * sparkR;
-      ctx.globalAlpha = 0.8;
-      ctx.fillStyle = "#fbbf24";
+      const angle = (i / sparkCount) * Math.PI * 2 + t * 0.06;
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = theme.goldenColor;
+      ctx.shadowColor = theme.goldenColor;
+      ctx.shadowBlur = 4;
       ctx.beginPath();
-      ctx.arc(sx, sy, cell * 0.06, 0, Math.PI * 2);
+      ctx.arc(gx + Math.cos(angle) * sparkR, gy + Math.sin(angle) * sparkR, cell * 0.065, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.globalAlpha = 1;
-    // Outer glow
-    const gg = ctx.createRadialGradient(gx, gy, 0, gx, gy, cell * 1.4);
-    gg.addColorStop(0, "rgba(251,191,36,0.5)");
-    gg.addColorStop(1, "rgba(251,191,36,0)");
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    const gg = ctx.createRadialGradient(gx, gy, 0, gx, gy, cell * 1.5);
+    gg.addColorStop(0, hexToRgba(theme.goldenColor, 0.5));
+    gg.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = gg;
     ctx.fillRect(g.goldenApple.x * cell - cell, g.goldenApple.y * cell - cell, cell * 3, cell * 3);
-    // Body
-    const glScale = 1 + Math.sin(t * 0.1) * 0.08;
+    const glScale = 1 + Math.sin(t * 0.1) * 0.1;
     ctx.save();
-    ctx.translate(gx, gy);
-    ctx.scale(glScale, glScale);
-    ctx.fillStyle = "#f59e0b";
-    ctx.shadowColor = "#fbbf24";
-    ctx.shadowBlur = 12;
+    ctx.translate(gx, gy); ctx.scale(glScale, glScale);
+    ctx.fillStyle = theme.goldenColor;
+    ctx.shadowColor = theme.goldenColor; ctx.shadowBlur = 14;
     ctx.beginPath();
-    const gr2 = cell * 0.38;
-    ctx.roundRect(-cell * 0.38, -cell * 0.38, cell * 0.76, cell * 0.76, gr2);
+    ctx.arc(0, 0, cell * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.beginPath();
+    ctx.ellipse(-cell * 0.1, -cell * 0.12, cell * 0.12, cell * 0.07, -0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Regular apple ───────────────────────────────────────────────────────────
+  {
+    const ax = g.apple.x * cell + cell / 2;
+    const ay = g.apple.y * cell + cell / 2;
+    const pulseR = cell * (0.5 + Math.sin(t * 0.07) * 0.06);
+    const gr = ctx.createRadialGradient(ax, ay, 0, ax, ay, pulseR * 2.8);
+    gr.addColorStop(0, hexToRgba(theme.appleColor, 0.4));
+    gr.addColorStop(0.5, hexToRgba(theme.appleColor, 0.1));
+    gr.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = gr;
+    ctx.fillRect(g.apple.x * cell - cell, g.apple.y * cell - cell, cell * 3, cell * 3);
+    ctx.shadowColor = theme.appleGlow;
+    ctx.shadowBlur = 10 + Math.sin(t * 0.07) * 5;
+    ctx.fillStyle = theme.appleColor;
+    ctx.beginPath();
+    ctx.arc(ax, ay, cell * 0.38, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
     // Shine
     ctx.fillStyle = "rgba(255,255,255,0.45)";
     ctx.beginPath();
-    ctx.ellipse(-cell * 0.1, -cell * 0.12, cell * 0.11, cell * 0.07, -0.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // === Regular apple ===
-  {
-    const ax = g.apple.x * cell + cell / 2;
-    const ay = g.apple.y * cell + cell / 2;
-    const pulseR = cell * (0.5 + Math.sin(t * 0.07) * 0.06);
-    // Outer glow ring (pulsing)
-    const gr = ctx.createRadialGradient(ax, ay, 0, ax, ay, pulseR * 2.5);
-    gr.addColorStop(0, "rgba(239,68,68,0.35)");
-    gr.addColorStop(0.5, "rgba(239,68,68,0.1)");
-    gr.addColorStop(1, "rgba(239,68,68,0)");
-    ctx.fillStyle = gr;
-    ctx.fillRect(g.apple.x * cell - cell, g.apple.y * cell - cell, cell * 3, cell * 3);
-    // Body
-    ctx.shadowColor = "#ef4444";
-    ctx.shadowBlur = 8 + Math.sin(t * 0.07) * 4;
-    ctx.fillStyle = "#ef4444";
-    ctx.beginPath();
-    ctx.roundRect(g.apple.x * cell + cell * 0.12, g.apple.y * cell + cell * 0.12, cell * 0.76, cell * 0.76, cell * 0.36);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    // Shine
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
-    ctx.beginPath();
     ctx.ellipse(ax - cell * 0.12, ay - cell * 0.16, cell * 0.11, cell * 0.07, -0.5, 0, Math.PI * 2);
     ctx.fill();
-  }
-
-  // === Snake ===
-  if (g.snake.length > 0) {
-    // Draw tail to head (so head is on top)
-    for (let i = g.snake.length - 1; i >= 0; i--) {
-      const seg = g.snake[i];
-      const isHead = i === 0;
-      const tRatio = 1 - i / g.snake.length;
-
-      if (isHead) {
-        // Head glow
-        const hx = seg.x * cell + cell / 2;
-        const hy = seg.y * cell + cell / 2;
-        const hGlow = ctx.createRadialGradient(hx, hy, 0, hx, hy, cell * 1.2);
-        hGlow.addColorStop(0, "rgba(52,211,153,0.45)");
-        hGlow.addColorStop(1, "rgba(52,211,153,0)");
-        ctx.fillStyle = hGlow;
-        ctx.fillRect(seg.x * cell - cell * 0.5, seg.y * cell - cell * 0.5, cell * 2, cell * 2);
-
-        ctx.shadowColor = "#34d399";
-        ctx.shadowBlur = 12;
-      }
-
-      // Body color: bright cyan head → dark green tail
-      const r = Math.round(34 + (20 - 34) * (1 - tRatio));
-      const g2 = Math.round(211 - 120 * (1 - tRatio));
-      const b = Math.round(153 - 80 * (1 - tRatio));
-      const alpha = isHead ? 1 : 0.65 + 0.35 * tRatio;
-      ctx.fillStyle = `rgba(${r},${g2},${b},${alpha})`;
-
-      const pad = isHead ? 0.05 : 0.1 + 0.05 * (1 - tRatio);
-      const segR = cell * (isHead ? 0.38 : 0.3);
+    // Stem
+    if (cell > 10) {
+      ctx.strokeStyle = hexToRgba(theme.appleColor, 0.6);
+      ctx.lineWidth = Math.max(1, cell * 0.06);
       ctx.beginPath();
-      ctx.roundRect(
-        seg.x * cell + cell * pad, seg.y * cell + cell * pad,
-        cell * (1 - 2 * pad), cell * (1 - 2 * pad), segR
-      );
-      ctx.fill();
-      ctx.shadowBlur = 0;
-
-      // Inner highlight on each segment
-      if (tRatio > 0.3) {
-        ctx.fillStyle = `rgba(255,255,255,${0.07 * tRatio})`;
-        ctx.beginPath();
-        ctx.roundRect(
-          seg.x * cell + cell * (pad + 0.05), seg.y * cell + cell * pad,
-          cell * (0.4 - pad * 0.5), cell * (0.3 - pad * 0.5),
-          segR * 0.5
-        );
-        ctx.fill();
-      }
-
-      // Eyes on head
-      if (isHead) {
-        const dir = g.dir;
-        let ex1: number, ey1: number, ex2: number, ey2: number;
-        const hc = cell / 2;
-        const eo = cell * 0.2;
-        const ed = cell * 0.25;
-        if (dir === "RIGHT")  { ex1 = seg.x*cell+hc+ed; ey1 = seg.y*cell+hc-eo; ex2 = seg.x*cell+hc+ed; ey2 = seg.y*cell+hc+eo; }
-        else if (dir === "LEFT")  { ex1 = seg.x*cell+hc-ed; ey1 = seg.y*cell+hc-eo; ex2 = seg.x*cell+hc-ed; ey2 = seg.y*cell+hc+eo; }
-        else if (dir === "DOWN")  { ex1 = seg.x*cell+hc-eo; ey1 = seg.y*cell+hc+ed; ex2 = seg.x*cell+hc+eo; ey2 = seg.y*cell+hc+ed; }
-        else                      { ex1 = seg.x*cell+hc-eo; ey1 = seg.y*cell+hc-ed; ex2 = seg.x*cell+hc+eo; ey2 = seg.y*cell+hc-ed; }
-        ctx.fillStyle = "#030305";
-        ctx.beginPath(); ctx.arc(ex1, ey1, cell * 0.07, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(ex2, ey2, cell * 0.07, 0, Math.PI * 2); ctx.fill();
-        // Eye shine
-        ctx.fillStyle = "rgba(255,255,255,0.7)";
-        ctx.beginPath(); ctx.arc(ex1 + 0.5, ey1 - 0.5, cell * 0.03, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(ex2 + 0.5, ey2 - 0.5, cell * 0.03, 0, Math.PI * 2); ctx.fill();
-      }
+      ctx.moveTo(ax, ay - cell * 0.36);
+      ctx.quadraticCurveTo(ax + cell * 0.12, ay - cell * 0.52, ax + cell * 0.08, ay - cell * 0.48);
+      ctx.stroke();
     }
   }
 
-  // === Game particles ===
+  // ── Snake ───────────────────────────────────────────────────────────────────
+  if (renderPx.length >= 2) {
+    const N = renderPx.length;
+
+    // Pass 1: Glow aura (wide blur)
+    ctx.save();
+    ctx.shadowColor = theme.snakeGlow;
+    ctx.shadowBlur = cell * 0.9;
+    ctx.strokeStyle = hexToRgba(theme.snakeHead, 0.3);
+    ctx.lineWidth = cell * 0.62;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    catmullRomPath(ctx, renderPx);
+    ctx.stroke();
+    ctx.restore();
+
+    // Pass 2: Body segments (tail to head, gradient)
+    for (let i = N - 1; i >= 0; i--) {
+      const tRatio = 1 - i / (N - 1);
+      const segColor = lerpColor(theme.snakeTail, theme.snakeHead, tRatio * tRatio);
+      const segAlpha = 0.45 + 0.55 * tRatio;
+      const segW = cell * (0.2 + 0.42 * tRatio);
+      const p = renderPx[i];
+      ctx.globalAlpha = segAlpha;
+      ctx.fillStyle = segColor;
+      if (i === 0) { ctx.shadowColor = theme.snakeGlow; ctx.shadowBlur = cell * 0.6; }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, segW / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+
+    // Pass 3: Scale texture (rings on body segments)
+    if (cell > 9) {
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = Math.max(0.5, cell * 0.06);
+      for (let i = N - 1; i >= 1; i--) {
+        const tRatio = 1 - i / (N - 1);
+        if (tRatio < 0.25) continue;
+        const p = renderPx[i];
+        const segW = cell * (0.2 + 0.42 * tRatio);
+        ctx.globalAlpha = 0.12 * tRatio;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, segW * 0.4, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Pass 4: Head (special shape + eyes)
+    const headPx = renderPx[0];
+    const headColor = theme.snakeHead;
+    const headR = cell * 0.44;
+
+    ctx.save();
+    ctx.shadowColor = theme.snakeGlow;
+    ctx.shadowBlur = cell * 0.8;
+    ctx.fillStyle = headColor;
+    ctx.beginPath();
+    ctx.arc(headPx.x, headPx.y, headR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Head highlight
+    ctx.fillStyle = hexToRgba("#ffffff", 0.3);
+    ctx.beginPath();
+    ctx.ellipse(headPx.x - headR * 0.25, headPx.y - headR * 0.28, headR * 0.28, headR * 0.18, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes
+    const dir = g.dir;
+    const eo = cell * 0.2;
+    const ed = cell * 0.22;
+    let ex1: number, ey1: number, ex2: number, ey2: number;
+    if (dir === "RIGHT")  { ex1 = headPx.x + ed; ey1 = headPx.y - eo; ex2 = headPx.x + ed; ey2 = headPx.y + eo; }
+    else if (dir === "LEFT")  { ex1 = headPx.x - ed; ey1 = headPx.y - eo; ex2 = headPx.x - ed; ey2 = headPx.y + eo; }
+    else if (dir === "DOWN")  { ex1 = headPx.x - eo; ey1 = headPx.y + ed; ex2 = headPx.x + eo; ey2 = headPx.y + ed; }
+    else                      { ex1 = headPx.x - eo; ey1 = headPx.y - ed; ex2 = headPx.x + eo; ey2 = headPx.y - ed; }
+    const eyeR = Math.max(1.5, cell * 0.085);
+    ctx.fillStyle = "#050a08";
+    ctx.beginPath(); ctx.arc(ex1, ey1, eyeR, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex2, ey2, eyeR, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.beginPath(); ctx.arc(ex1 + eyeR * 0.35, ey1 - eyeR * 0.35, eyeR * 0.38, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex2 + eyeR * 0.35, ey2 - eyeR * 0.35, eyeR * 0.38, 0, Math.PI * 2); ctx.fill();
+
+    // Forked tongue (flickering)
+    if (t % 40 < 16) {
+      const tongueDir = (dir === "RIGHT" ? 1 : dir === "LEFT" ? -1 : 0);
+      const tongueDirY = (dir === "DOWN" ? 1 : dir === "UP" ? -1 : 0);
+      const tx1 = headPx.x + tongueDir * headR;
+      const ty1 = headPx.y + tongueDirY * headR;
+      const tlen = cell * 0.35;
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = Math.max(0.8, cell * 0.055);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(tx1, ty1);
+      ctx.lineTo(tx1 + tongueDir * tlen * 0.6 + tongueDirY * tlen * 0.5, ty1 + tongueDirY * tlen * 0.6 - tongueDir * tlen * 0.4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(tx1, ty1);
+      ctx.lineTo(tx1 + tongueDir * tlen * 0.6 - tongueDirY * tlen * 0.5, ty1 + tongueDirY * tlen * 0.6 + tongueDir * tlen * 0.4);
+      ctx.stroke();
+    }
+    ctx.restore();
+  } else if (renderPx.length === 1) {
+    // Tiny snake (length 1) — just draw the head
+    const p = renderPx[0];
+    ctx.fillStyle = theme.snakeHead;
+    ctx.shadowColor = theme.snakeGlow; ctx.shadowBlur = cell * 0.6;
+    ctx.beginPath(); ctx.arc(p.x, p.y, cell * 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // ── Game particles ──────────────────────────────────────────────────────────
   for (const p of g.particles) {
     ctx.globalAlpha = p.life;
     if (p.glow) { ctx.shadowColor = p.color; ctx.shadowBlur = 6; }
@@ -293,38 +586,33 @@ function drawFrame(canvas: HTMLCanvasElement, g: GameState, cfg: SnakeConfig) {
   }
   ctx.globalAlpha = 1;
 
-  // === Floating texts ===
+  // ── Floating texts ───────────────────────────────────────────────────────────
   for (const ft of g.floatingTexts) {
     ctx.globalAlpha = ft.life;
     ctx.fillStyle = ft.color;
-    ctx.shadowColor = ft.color;
-    ctx.shadowBlur = 6;
+    ctx.shadowColor = ft.color; ctx.shadowBlur = 6;
     ctx.font = `900 ${ft.size}px "Geist Mono", monospace`;
     ctx.textAlign = "center";
     ctx.fillText(ft.text, ft.x, ft.y);
     ctx.shadowBlur = 0;
   }
-  ctx.globalAlpha = 1;
-  ctx.textAlign = "left";
+  ctx.globalAlpha = 1; ctx.textAlign = "left";
 
-  // === Combo multiplier banner (canvas) ===
+  // ── Combo banner strip ───────────────────────────────────────────────────────
   if (g.comboMultLeft > 0) {
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.fillRect(0, 0, W, cell * 0.9);
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(0, 0, W, cell * 0.95);
     ctx.fillStyle = "#fbbf24";
-    ctx.shadowColor = "#fbbf24";
-    ctx.shadowBlur = 10;
-    ctx.font = `700 ${cell * 0.5}px "Geist Sans", sans-serif`;
+    ctx.shadowColor = "#fbbf24"; ctx.shadowBlur = 10;
+    ctx.font = `700 ${Math.max(10, cell * 0.5)}px "Geist Sans", sans-serif`;
     ctx.textAlign = "center";
-    ctx.fillText(`⚡ 2× COMBO — ${g.comboMultLeft} Äpfel`, W / 2, cell * 0.62);
-    ctx.shadowBlur = 0;
-    ctx.textAlign = "left";
+    ctx.fillText(`⚡ 2× COMBO — ${g.comboMultLeft} Äpfel`, W / 2, cell * 0.63);
+    ctx.shadowBlur = 0; ctx.textAlign = "left";
   }
 
-  // === Phase: idle demo snake animation ===
+  // ── Idle vignette ────────────────────────────────────────────────────────────
   if (g.phase === "idle") {
-    // Vignette
-    const vig = ctx.createRadialGradient(W/2, W/2, W*0.2, W/2, W/2, W*0.85);
+    const vig = ctx.createRadialGradient(W / 2, W / 2, W * 0.2, W / 2, W / 2, W * 0.85);
     vig.addColorStop(0, "rgba(0,0,0,0)");
     vig.addColorStop(1, "rgba(0,0,0,0.7)");
     ctx.fillStyle = vig;
@@ -332,60 +620,77 @@ function drawFrame(canvas: HTMLCanvasElement, g: GameState, cfg: SnakeConfig) {
   }
 }
 
-// Particle burst on apple eat
-function spawnAppleBurst(g: GameState, cx: number, cy: number, isGolden: boolean) {
-  const count = isGolden ? 20 : 10;
-  const colors = isGolden
-    ? ["#fbbf24", "#f59e0b", "#fcd34d", "#ffffff"]
-    : ["#ef4444", "#f87171", "#fca5a5", "#34d399"];
+// ─────────────────────────────────────────────────────────────────────────────
+// Particle helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function spawnAppleBurst(g: GameState, cx: number, cy: number, isGolden: boolean, theme: ModeTheme) {
+  const count = isGolden ? 20 : 12;
+  const colors = isGolden ? [theme.goldenColor, "#ffffff", theme.appleColor] : theme.particleColors;
   for (let i = 0; i < count; i++) {
-    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
-    const speed = (isGolden ? 3 : 2) + Math.random() * (isGolden ? 3 : 2);
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+    const speed = (isGolden ? 3.5 : 2.5) + Math.random() * (isGolden ? 3 : 2);
     g.particles.push({
       x: cx, y: cy,
       vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
       life: 1, decay: 0.025 + Math.random() * 0.02,
-      r: (isGolden ? 3 : 2) + Math.random() * 2,
+      r: (isGolden ? 3.5 : 2.5) + Math.random() * 2,
       color: colors[Math.floor(Math.random() * colors.length)],
       glow: isGolden,
     });
   }
 }
 
-function spawnBonusBurst(g: GameState, cx: number, cy: number) {
-  const colors = ["#fbbf24", "#a78bfa", "#34d399", "#f472b6", "#60a5fa"];
-  for (let i = 0; i < 30; i++) {
+function spawnBonusBurst(g: GameState, cx: number, cy: number, theme: ModeTheme) {
+  const colors = [...theme.particleColors, "#ffffff"];
+  for (let i = 0; i < 35; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 3 + Math.random() * 5;
+    const speed = 3 + Math.random() * 6;
     g.particles.push({
       x: cx, y: cy,
       vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-      life: 1, decay: 0.015 + Math.random() * 0.015,
-      r: 2 + Math.random() * 4,
-      color: colors[Math.floor(Math.random() * colors.length)],
+      life: 1, decay: 0.013 + Math.random() * 0.015,
+      r: 2 + Math.random() * 4, color: colors[Math.floor(Math.random() * colors.length)],
       glow: true,
     });
   }
 }
 
-function initAmbientParticles(W: number): Particle[] {
+function spawnShrinkBurst(g: GameState, W: number, theme: ModeTheme) {
+  for (let i = 0; i < 50; i++) {
+    const edge = Math.floor(Math.random() * 4);
+    const pos = Math.random() * W;
+    const x = edge === 0 ? pos : edge === 1 ? pos : edge === 2 ? 0 : W;
+    const y = edge === 0 ? 0 : edge === 1 ? W : pos;
+    const angle = Math.atan2(W / 2 - y, W / 2 - x);
+    g.particles.push({
+      x, y, vx: Math.cos(angle) * (2 + Math.random() * 4), vy: Math.sin(angle) * (2 + Math.random() * 4),
+      life: 1, decay: 0.018 + Math.random() * 0.02,
+      r: 2 + Math.random() * 3, color: "#ef4444", glow: true,
+    });
+  }
+}
+
+function initAmbientParticles(W: number, mode: SnakeMode): Particle[] {
+  const theme = THEMES[mode];
   const result: Particle[] = [];
-  const colors = ["rgba(139,92,246,0.6)", "rgba(6,182,212,0.5)", "rgba(52,211,153,0.4)"];
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 28; i++) {
+    const color = theme.ambientColors[Math.floor(Math.random() * theme.ambientColors.length)];
     result.push({
       x: Math.random() * W, y: Math.random() * W,
-      vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3,
+      vx: (Math.random() - 0.5) * (mode === "x2" ? 0.6 : 0.25),
+      vy: mode === "grind" ? -(0.1 + Math.random() * 0.3) : (Math.random() - 0.5) * 0.3,
       life: Math.random(), decay: 0,
-      r: 1 + Math.random() * 1.5,
-      color: colors[Math.floor(Math.random() * colors.length)],
+      r: 1 + Math.random() * 1.8,
+      color,
     });
   }
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// Leaderboard
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Leaderboard component
+// ─────────────────────────────────────────────────────────────────────────────
 
 function RankIcon({ rank }: { rank: number }) {
   if (rank === 1) return <Crown className="h-4 w-4 text-amber-400" />;
@@ -394,18 +699,20 @@ function RankIcon({ rank }: { rank: number }) {
   return <span className="w-4 text-center text-xs font-bold text-zinc-500">#{rank}</span>;
 }
 
-function Leaderboard({ entries, myBest, userId, speedMode }: {
-  entries: SnakeLeaderboardEntry[]; myBest: number; userId: string; speedMode: "x1" | "x2";
+function Leaderboard({ entries, myBest, userId, mode }: {
+  entries: SnakeLeaderboardEntry[]; myBest: number; userId: string; mode: SnakeMode;
 }) {
   const myRank = entries.findIndex((e) => e.userId === userId) + 1;
+  const modeColor = mode === "x2" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-300"
+    : mode === "grind" ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+    : "border-emerald-400/30 bg-emerald-500/10 text-emerald-300";
+  const modeLabel = mode === "grind" ? "🔥 Grind" : mode === "x2" ? "⚡ x2" : "🌿 Classic";
   return (
     <div className="flex flex-col overflow-hidden rounded-2xl border border-white/8 bg-[#080712]">
       <div className="flex items-center gap-2 border-b border-white/8 px-4 py-3">
         <Crown className="h-4 w-4 text-amber-400" />
         <span className="text-sm font-bold text-zinc-100">Highscores</span>
-        <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-          speedMode === "x2" ? "border border-amber-400/30 bg-amber-500/10 text-amber-300" : "border border-purple-400/30 bg-purple-500/10 text-purple-300"
-        }`}>{speedMode === "x2" ? "⚡ x2" : "x1"}</span>
+        <span className={`ml-auto rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${modeColor}`}>{modeLabel}</span>
       </div>
       <div className="flex flex-col">
         {entries.length === 0 ? (
@@ -440,57 +747,138 @@ function Leaderboard({ entries, myBest, userId, speedMode }: {
   );
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Mode selector card
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ModeCard({
+  mode, selected, disabled, onClick, modeCfg,
+}: {
+  mode: SnakeMode;
+  selected: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  modeCfg: SnakeModeConfig | SnakeGrindConfig;
+}) {
+  const meta: Record<SnakeMode, { label: string; emoji: string; desc: string; gradient: string; ring: string; badge: string }> = {
+    x1: {
+      label: "Classic", emoji: "🌿",
+      desc: `${modeCfg.boardSize}×${modeCfg.boardSize} Feld · ${modeCfg.creditsPerApple} CR/Apfel · ${modeCfg.wallWrap ? "Wand = Wrap" : "Wand = Tod"}`,
+      gradient: "from-emerald-900/60 to-emerald-950/80",
+      ring: "ring-emerald-500/40",
+      badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+    },
+    x2: {
+      label: "Turbo", emoji: "⚡",
+      desc: `${modeCfg.boardSize}×${modeCfg.boardSize} Feld · ${modeCfg.creditsPerApple} CR/Apfel · Schneller`,
+      gradient: "from-cyan-900/60 to-cyan-950/80",
+      ring: "ring-cyan-500/40",
+      badge: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
+    },
+    grind: {
+      label: "Grind", emoji: "🔥",
+      desc: `${modeCfg.boardSize}×${modeCfg.boardSize} Colosseum · Wände schließen sich · ${(modeCfg as SnakeGrindConfig).shrinkEveryN} Äpfel/Shrink`,
+      gradient: "from-amber-900/60 to-amber-950/80",
+      ring: "ring-amber-500/40",
+      badge: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+    },
+  };
+  const m = meta[mode];
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`relative flex flex-col gap-2 overflow-hidden rounded-2xl border p-4 text-left transition-all duration-200 active:scale-95 ${
+        selected
+          ? `border-white/20 bg-gradient-to-br ${m.gradient} ring-2 ${m.ring}`
+          : "border-white/8 bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]"
+      } ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+    >
+      {selected && (
+        <div className="absolute inset-0 -translate-x-full animate-[mine-shimmer_3s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+      )}
+      <div className="flex items-center gap-2">
+        <span className="text-2xl">{m.emoji}</span>
+        <span className="text-base font-extrabold text-zinc-50">{m.label}</span>
+        <span className={`ml-auto rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${m.badge}`}>
+          {mode.toUpperCase()}
+        </span>
+      </div>
+      <p className="text-[11px] leading-snug text-zinc-500">{m.desc}</p>
+      {mode === "grind" && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2 py-1">
+          <Flame className="h-3 w-3 text-amber-400" />
+          <span className="text-[10px] font-bold text-amber-300">Wände schließen sich mit jedem Apfel!</span>
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main component
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface SnakeShellProps {
   userId: string; credits: number; streakDays: number; username: string;
   isAdmin: boolean; isModerator: boolean; config: SnakeConfig;
-  leaderboardX1: SnakeLeaderboardEntry[]; leaderboardX2: SnakeLeaderboardEntry[];
-  myBestX1: number; myBestX2: number; dailyCrEarned: number;
+  leaderboardX1: SnakeLeaderboardEntry[];
+  leaderboardX2: SnakeLeaderboardEntry[];
+  leaderboardGrind: SnakeLeaderboardEntry[];
+  myBestX1: number; myBestX2: number; myBestGrind: number;
+  dailyCrEarned: number;
 }
 
 export function SnakeShell({
   userId, credits: initialCredits, streakDays, isAdmin, isModerator,
-  config, leaderboardX1, leaderboardX2, myBestX1, myBestX2, dailyCrEarned: initDaily,
+  config, leaderboardX1, leaderboardX2, leaderboardGrind,
+  myBestX1, myBestX2, myBestGrind, dailyCrEarned: initDaily,
 }: SnakeShellProps) {
   const [credits, setCredits] = useState(initialCredits);
-  const [speedMode, setSpeedMode] = useState<"x1" | "x2">("x1");
+  const [activeMode, setActiveMode] = useState<SnakeMode>("x1");
   const [phase, setPhase] = useState<Phase>("idle");
   const [score, setScore] = useState(0);
   const [creditsEarned, setCreditsEarned] = useState(0);
-  const [lbTab, setLbTab] = useState<"x1" | "x2">("x1");
+  const [lbTab, setLbTab] = useState<SnakeMode>("x1");
   const [submitting, setSubmitting] = useState(false);
-  const [lastResult, setLastResult] = useState<{creditsAwarded:number;isNewRecord:boolean;previousBest:number}|null>(null);
+  const [lastResult, setLastResult] = useState<{ creditsAwarded: number; isNewRecord: boolean; previousBest: number } | null>(null);
   const [dailyCr, setDailyCr] = useState(initDaily);
   const [bonusBannerText, setBonusBannerText] = useState<string | null>(null);
   const [scorePopKey, setScorePopKey] = useState(0);
   const [comboActive, setComboActive] = useState(false);
+  const [shrinkWarning, setShrinkWarning] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameState>({
-    snake: [], apple: { x: 5, y: 5 }, goldenApple: null, goldenAppleMovesLeft: 0,
+    snake: [], prevSnake: [], apple: { x: 5, y: 5 }, goldenApple: null, goldenAppleMovesLeft: 0,
     dir: "RIGHT", nextDir: "RIGHT", score: 0, creditsEarned: 0,
-    phase: "idle", speedMode: "x1",
+    phase: "idle", mode: "x1",
     particles: [], ambientParticles: [], floatingTexts: [],
-    bonusFlashFrames: 0, bonusBannerText: "", bonusBannerFrames: 0,
-    comboMultLeft: 0, frameCount: 0, deathFlashFrames: 0, scorePopFrame: 0,
-    lastMoveTime: 0,
+    bonusFlashFrames: 0, comboMultLeft: 0, frameCount: 0,
+    deathFlashFrames: 0, lastMoveTime: 0,
+    shrinkCount: 0, applesUntilShrink: 10, shrinkFlashFrames: 0,
+    speedTrails: [],
   });
-  const speedModeRef = useRef<"x1" | "x2">("x1");
+  const activeModeRef = useRef<SnakeMode>("x1");
   const rafRef = useRef<number>(0);
   const router = useRouter();
   const sound = useSoundManager();
 
-  const BOARD = config.boardSize;
+  // Canvas size depends on mode
+  const CANVAS_SIZE = activeMode === "grind" ? 640 : 560;
 
-  // Init ambient particles once
+  function getModeCfg(mode: SnakeMode = activeMode): SnakeModeConfig | SnakeGrindConfig {
+    if (mode === "grind") return config.grind;
+    if (mode === "x2") return config.x2;
+    return config.x1;
+  }
+
+  // Init ambient particles when mode changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    gameRef.current.ambientParticles = initAmbientParticles(canvas.width);
-  }, []);
+    gameRef.current.ambientParticles = initAmbientParticles(canvas.width, activeMode);
+  }, [activeMode]);
 
   // RAF game loop
   useEffect(() => {
@@ -499,44 +887,59 @@ export function SnakeShell({
 
     const loop = (now: number) => {
       const g = gameRef.current;
+      const modeCfg = getModeCfg(g.mode);
       const W = canvas.width;
+      const BOARD = modeCfg.boardSize;
       const cell = W / BOARD;
 
-      // Update ambient particles (wander + twinkle)
+      // Ambient particle update
       for (const p of g.ambientParticles) {
         p.x += p.vx; p.y += p.vy;
-        p.life = 0.4 + 0.6 * Math.abs(Math.sin(g.frameCount * 0.02 + p.r * 10));
+        p.life = 0.3 + 0.7 * Math.abs(Math.sin(g.frameCount * 0.018 + p.r * 10));
         if (p.x < 0 || p.x > W) p.vx *= -1;
-        if (p.y < 0 || p.y > W) p.vy *= -1;
+        if (p.y < 0) { p.y = W; }
+        else if (p.y > W) { p.y = 0; }
       }
 
-      // Update game particles
+      // Game particles
       g.particles = g.particles.filter((p) => {
         p.x += p.vx; p.y += p.vy;
-        p.vy += 0.08; // gravity
+        p.vy += 0.07;
         p.life -= p.decay;
         return p.life > 0;
       });
 
-      // Update floating texts
+      // Floating texts
       g.floatingTexts = g.floatingTexts.filter((ft) => {
         ft.y += ft.vy; ft.life -= ft.decay; return ft.life > 0;
       });
 
-      // Countdown frame-based timers
+      // x2 speed trails
+      if (g.mode === "x2" && g.phase === "playing") {
+        const head = g.snake[0];
+        if (head) {
+          g.speedTrails.push({ x: (head.x + 0.5) * cell, y: (head.y + 0.5) * cell, alpha: 0.6 });
+        }
+        g.speedTrails = g.speedTrails
+          .map((tr) => ({ ...tr, alpha: tr.alpha - 0.06 }))
+          .filter((tr) => tr.alpha > 0)
+          .slice(-12);
+      }
+
+      // Frame timers
       if (g.bonusFlashFrames > 0) g.bonusFlashFrames--;
       if (g.deathFlashFrames > 0) g.deathFlashFrames--;
+      if (g.shrinkFlashFrames > 0) g.shrinkFlashFrames--;
 
-      // Snake game tick
+      // Game tick
       if (g.phase === "playing") {
-        const speedMs = getSpeedMs(g.score, g.speedMode, config);
+        const speedMs = getSpeedMs(g.score, modeCfg);
         if (now - g.lastMoveTime >= speedMs) {
-          g.lastMoveTime = now;
-          tick(g, canvas, W, cell);
+          tick(g, canvas, W, cell, modeCfg, now);
         }
       }
 
-      drawFrame(canvas, g, config);
+      drawFrame(canvas, g, modeCfg, now);
       g.frameCount++;
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -544,16 +947,35 @@ export function SnakeShell({
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [BOARD, config]);
+  }, [activeMode, config]);
 
-  // Snake tick (mutates gameRef.current)
-  const tick = useCallback((g: GameState, canvas: HTMLCanvasElement, W: number, cell: number) => {
+  const tick = useCallback((
+    g: GameState,
+    canvas: HTMLCanvasElement,
+    W: number,
+    cell: number,
+    modeCfg: SnakeModeConfig | SnakeGrindConfig,
+    now: number,
+  ) => {
+    const BOARD = modeCfg.boardSize;
+    const theme = THEMES[g.mode];
+
+    // Save prev positions for smooth interpolation
+    g.prevSnake = g.snake.map((s) => ({ ...s }));
+
     g.dir = g.nextDir;
     const head = g.snake[0];
     let nx = head.x + (g.dir === "RIGHT" ? 1 : g.dir === "LEFT" ? -1 : 0);
     let ny = head.y + (g.dir === "DOWN" ? 1 : g.dir === "UP" ? -1 : 0);
 
-    if (config.wallWrap) {
+    // Grind: check against current arena bounds
+    if (g.mode === "grind") {
+      const arenaMin = g.shrinkCount;
+      const arenaMax = BOARD - 1 - g.shrinkCount;
+      if (nx < arenaMin || nx > arenaMax || ny < arenaMin || ny > arenaMax) {
+        doEndGame(g, canvas); return;
+      }
+    } else if (modeCfg.wallWrap) {
       nx = ((nx % BOARD) + BOARD) % BOARD;
       ny = ((ny % BOARD) + BOARD) % BOARD;
     } else if (nx < 0 || nx >= BOARD || ny < 0 || ny >= BOARD) {
@@ -571,16 +993,11 @@ export function SnakeShell({
     if (ateApple || ateGolden) {
       g.score++;
 
-      // Base CR
-      let crBase = g.speedMode === "x2" && g.score >= config.x2AppleThreshold
-        ? config.creditsPerAppleX2 : config.creditsPerAppleX1;
-
+      let crBase = modeCfg.creditsPerApple;
       if (ateGolden) {
-        crBase = Math.round(crBase * config.goldenAppleCrMultiplier);
+        crBase = Math.round(crBase * modeCfg.goldenAppleCrMultiplier);
         g.goldenApple = null;
       }
-
-      // Combo multiplier
       if (g.comboMultLeft > 0) {
         crBase *= 2;
         g.comboMultLeft--;
@@ -590,52 +1007,96 @@ export function SnakeShell({
       g.creditsEarned += crBase;
 
       // Particles + floating text
-      const px = (ateGolden ? g.goldenApple?.x ?? newHead.x : g.apple.x) * cell + cell / 2;
-      const py = (ateGolden ? g.goldenApple?.y ?? newHead.y : g.apple.y) * cell + cell / 2;
-      if (config.particlesEnabled) spawnAppleBurst(g, px, py, ateGolden);
+      const eatX = ateGolden && g.goldenApple ? g.goldenApple.x : g.apple.x;
+      const eatY = ateGolden && g.goldenApple ? g.goldenApple.y : g.apple.y;
+      const px = (eatX + 0.5) * cell;
+      const py = (eatY + 0.5) * cell;
+      if (modeCfg.particlesEnabled) spawnAppleBurst(g, px, py, ateGolden, theme);
       g.floatingTexts.push({
-        x: px, y: py - cell * 0.3,
-        vy: -1.2, text: `+${crBase} CR`,
+        x: px, y: py - cell * 0.3, vy: -1.2,
+        text: `+${crBase} CR`,
         life: 1, decay: 0.022,
-        color: ateGolden ? "#fbbf24" : "#34d399",
-        size: Math.max(10, cell * 0.45),
+        color: ateGolden ? theme.goldenColor : "#34d399",
+        size: Math.max(9, cell * 0.45),
       });
 
       // Bonus milestone
-      if (config.bonusEveryN > 0 && g.score % config.bonusEveryN === 0) {
-        g.creditsEarned += config.bonusCrFlat;
+      if (modeCfg.bonusEveryN > 0 && g.score % modeCfg.bonusEveryN === 0) {
+        g.creditsEarned += modeCfg.bonusCrFlat;
         g.bonusFlashFrames = 40;
-        const bannerText = `🎉 BONUS! +${config.bonusCrFlat} CR${config.bonusMultiplierApples > 0 ? ` + 2× für ${config.bonusMultiplierApples} Äpfel` : ""}`;
-        g.bonusBannerText = bannerText;
-        g.bonusBannerFrames = 120;
-        if (config.bonusMultiplierApples > 0) {
-          g.comboMultLeft = config.bonusMultiplierApples;
+        if (modeCfg.bonusMultiplierApples > 0) {
+          g.comboMultLeft = modeCfg.bonusMultiplierApples;
           setComboActive(true);
         }
-        // Big burst in center
-        if (config.particlesEnabled) spawnBonusBurst(g, W / 2, W / 2);
+        if (modeCfg.particlesEnabled) spawnBonusBurst(g, W / 2, W / 2, theme);
+        const bannerText = `🎉 BONUS! +${modeCfg.bonusCrFlat} CR${modeCfg.bonusMultiplierApples > 0 ? ` + 2× für ${modeCfg.bonusMultiplierApples} Äpfel` : ""}`;
         g.floatingTexts.push({
-          x: W / 2, y: W * 0.35,
-          vy: -0.6, text: `BONUS! +${config.bonusCrFlat}`,
-          life: 1, decay: 0.012,
-          color: "#fbbf24", size: Math.max(14, cell * 0.65),
+          x: W / 2, y: W * 0.35, vy: -0.5,
+          text: `BONUS! +${modeCfg.bonusCrFlat}`,
+          life: 1, decay: 0.011, color: "#fbbf24", size: Math.max(12, cell * 0.65),
         });
         setBonusBannerText(bannerText);
         setTimeout(() => setBonusBannerText(null), 2800);
       }
 
-      // Golden apple spawn (every bonusEveryN/2 apples that aren't already the bonus)
-      if (config.goldenAppleEnabled && g.score % Math.max(1, Math.floor(config.bonusEveryN / 2)) === 0
-          && g.score % config.bonusEveryN !== 0 && !g.goldenApple) {
-        const excluded = [...g.snake, g.apple];
-        g.goldenApple = randomPos(BOARD, excluded);
-        g.goldenAppleMovesLeft = config.goldenAppleLifeApples;
+      // Grind: shrink countdown
+      if (g.mode === "grind") {
+        const grindCfg = modeCfg as SnakeGrindConfig;
+        g.applesUntilShrink--;
+        setShrinkWarning(g.applesUntilShrink <= 3 && g.applesUntilShrink > 0);
+
+        if (g.applesUntilShrink <= 0) {
+          const newArenaMin = g.shrinkCount + 1;
+          const newArenaMax = BOARD - 2 - g.shrinkCount;
+          if (newArenaMin >= newArenaMax || (newArenaMax - newArenaMin + 1) < grindCfg.minBoardSize) {
+            // Board too small → game over
+            doEndGame(g, canvas); return;
+          }
+          g.shrinkCount++;
+          g.applesUntilShrink = grindCfg.shrinkEveryN;
+          g.shrinkFlashFrames = 45;
+          g.creditsEarned += grindCfg.bonusCrPerShrink;
+          setShrinkWarning(false);
+          if (modeCfg.particlesEnabled) spawnShrinkBurst(g, W, theme);
+          g.floatingTexts.push({
+            x: W / 2, y: W / 2 - cell * 2, vy: -0.7,
+            text: `⚠ SHRINK! +${grindCfg.bonusCrPerShrink} CR`,
+            life: 1, decay: 0.010, color: "#ef4444", size: Math.max(12, cell * 0.7),
+          });
+          // Kill snake if now in dead zone
+          const arenaMin = g.shrinkCount;
+          const arenaMax = BOARD - 1 - g.shrinkCount;
+          if (g.snake.some((s) => s.x < arenaMin || s.x > arenaMax || s.y < arenaMin || s.y > arenaMax)) {
+            doEndGame(g, canvas); return;
+          }
+        }
+
+        // Keep apple inside arena
+        const arenaMin = g.shrinkCount;
+        const arenaMax = BOARD - 1 - g.shrinkCount;
+        if (g.apple.x < arenaMin || g.apple.x > arenaMax || g.apple.y < arenaMin || g.apple.y > arenaMax) {
+          g.apple = randomPos(BOARD, [newHead, ...g.snake], arenaMin, arenaMax, arenaMin, arenaMax);
+        }
       }
 
-      // Move snake (grow)
+      // Golden apple spawn
+      if (modeCfg.goldenAppleEnabled
+        && g.score % Math.max(1, Math.floor(modeCfg.bonusEveryN / 2)) === 0
+        && g.score % modeCfg.bonusEveryN !== 0
+        && !g.goldenApple) {
+        const arenaMin = g.mode === "grind" ? g.shrinkCount : 0;
+        const arenaMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
+        const excluded = [...g.snake, g.apple];
+        g.goldenApple = randomPos(BOARD, excluded, arenaMin, arenaMax, arenaMin, arenaMax);
+        g.goldenAppleMovesLeft = modeCfg.goldenAppleLifeApples;
+      }
+
+      // Grow snake
       g.snake = [newHead, ...g.snake];
-      // Spawn new regular apple
-      g.apple = randomPos(BOARD, [newHead, ...g.snake, ...(g.goldenApple ? [g.goldenApple] : [])]);
+      // Spawn new apple
+      const arenaMin = g.mode === "grind" ? g.shrinkCount : 0;
+      const arenaMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
+      g.apple = randomPos(BOARD, [newHead, ...g.snake, ...(g.goldenApple ? [g.goldenApple] : [])], arenaMin, arenaMax, arenaMin, arenaMax);
 
       setScore(g.score);
       setCreditsEarned(g.creditsEarned);
@@ -643,23 +1104,26 @@ export function SnakeShell({
     } else {
       // Normal move
       g.snake = [newHead, ...g.snake.slice(0, -1)];
-
-      // Golden apple life countdown
       if (g.goldenApple) {
         g.goldenAppleMovesLeft--;
         if (g.goldenAppleMovesLeft <= 0) g.goldenApple = null;
       }
     }
-  }, [config, BOARD, setScore, setCreditsEarned, setScorePopKey, setComboActive, setBonusBannerText]);
+
+    g.lastMoveTime = now;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config]);
 
   function doEndGame(g: GameState, canvas: HTMLCanvasElement) {
+    void canvas;
     g.phase = "dead";
     g.deathFlashFrames = 30;
     setPhase("dead");
+    setShrinkWarning(false);
 
     const finalScore = g.score;
     const finalCredits = g.creditsEarned;
-    const mode = g.speedMode;
+    const mode = g.mode;
 
     if (finalScore === 0) return;
     setSubmitting(true);
@@ -687,45 +1151,79 @@ export function SnakeShell({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Touch swipe support
+  useEffect(() => {
+    let touchStartX = 0, touchStartY = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (gameRef.current.phase !== "playing") return;
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      let d: Dir;
+      if (Math.abs(dx) > Math.abs(dy)) d = dx > 0 ? "RIGHT" : "LEFT";
+      else d = dy > 0 ? "DOWN" : "UP";
+      if (d !== OPP[gameRef.current.dir]) gameRef.current.nextDir = d;
+    };
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
+
   function startGame() {
-    const mode = speedModeRef.current;
+    const mode = activeModeRef.current;
+    const modeCfg = getModeCfg(mode);
+    const BOARD = modeCfg.boardSize;
     const startX = Math.floor(BOARD / 2);
     const startY = Math.floor(BOARD / 2);
-    const initSnake: Pos[] = Array.from({ length: config.startLength }, (_, i) => ({ x: startX - i, y: startY }));
+
+    // For grind, start inside the arena (no shrink yet)
+    const initSnake: Pos[] = Array.from({ length: modeCfg.startLength }, (_, i) => ({ x: startX - i, y: startY }));
     const initApple = randomPos(BOARD, initSnake);
 
     const g = gameRef.current;
     g.snake = initSnake;
+    g.prevSnake = [...initSnake];
     g.apple = initApple;
     g.goldenApple = null;
     g.goldenAppleMovesLeft = 0;
-    g.dir = "RIGHT";
-    g.nextDir = "RIGHT";
-    g.score = 0;
-    g.creditsEarned = 0;
-    g.phase = "playing";
-    g.speedMode = mode;
-    g.particles = [];
-    g.floatingTexts = [];
-    g.bonusFlashFrames = 0;
-    g.comboMultLeft = 0;
-    g.deathFlashFrames = 0;
-    g.scorePopFrame = 0;
-    g.lastMoveTime = performance.now();
+    g.dir = "RIGHT"; g.nextDir = "RIGHT";
+    g.score = 0; g.creditsEarned = 0;
+    g.phase = "playing"; g.mode = mode;
+    g.particles = []; g.floatingTexts = [];
+    g.bonusFlashFrames = 0; g.comboMultLeft = 0;
+    g.deathFlashFrames = 0; g.lastMoveTime = performance.now();
+    g.shrinkCount = 0;
+    g.applesUntilShrink = (modeCfg as SnakeGrindConfig).shrinkEveryN ?? 10;
+    g.shrinkFlashFrames = 0;
+    g.speedTrails = [];
+    g.ambientParticles = initAmbientParticles(canvasRef.current?.width ?? 560, mode);
 
-    setScore(0);
-    setCreditsEarned(0);
-    setPhase("playing");
-    setLastResult(null);
-    setBonusBannerText(null);
-    setComboActive(false);
+    setScore(0); setCreditsEarned(0); setPhase("playing");
+    setLastResult(null); setBonusBannerText(null); setComboActive(false); setShrinkWarning(false);
     sound.click();
   }
 
-  const dailyLimitReached = config.dailyCrLimit !== null && dailyCr >= config.dailyCrLimit;
-  const dailyRemaining = config.dailyCrLimit !== null ? Math.max(0, config.dailyCrLimit - dailyCr) : null;
+  const modeCfg = getModeCfg();
+  const dailyLimitReached = modeCfg.dailyCrLimit !== null && dailyCr >= modeCfg.dailyCrLimit;
+  const dailyRemaining = modeCfg.dailyCrLimit !== null ? Math.max(0, modeCfg.dailyCrLimit - dailyCr) : null;
 
-  const CANVAS_SIZE = 560;
+  const lbEntries = lbTab === "grind" ? leaderboardGrind : lbTab === "x2" ? leaderboardX2 : leaderboardX1;
+  const myBest = lbTab === "grind" ? myBestGrind : lbTab === "x2" ? myBestX2 : myBestX1;
+
+  const modeRingColor = activeMode === "grind" ? "shadow-[0_0_40px_rgba(245,158,11,0.12)]"
+    : activeMode === "x2" ? "shadow-[0_0_40px_rgba(6,182,212,0.12)]"
+    : "shadow-[0_0_40px_rgba(16,185,129,0.1)]";
+
+  const modeBorderColor = activeMode === "grind" ? "border-amber-500/25"
+    : activeMode === "x2" ? "border-cyan-500/25"
+    : "border-emerald-500/20";
 
   return (
     <div className="flex min-h-screen flex-col bg-[#030305]">
@@ -742,39 +1240,14 @@ export function SnakeShell({
             <div className="h-5 w-px bg-white/10" />
             <div className="flex items-center gap-2">
               <span className="text-2xl" style={{ filter: "drop-shadow(0 0 8px rgba(52,211,153,0.6))" }}>🐍</span>
-              <span className="text-lg font-extrabold tracking-tight text-zinc-50">Snake</span>
+              <span className="text-lg font-extrabold tracking-tight text-zinc-50">{config.sectionTitle}</span>
             </div>
           </div>
-
           <div className="flex items-center gap-3">
-            {/* Speed selector */}
-            <div className="flex items-center gap-2 text-sm text-zinc-400">
-              <span className="hidden text-xs sm:block">Geschwindigkeit</span>
-              <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
-                {(["x1", "x2"] as const).map((m) => (
-                  <button key={m}
-                    onClick={() => { setSpeedMode(m); speedModeRef.current = m; setLbTab(m); sound.click(); }}
-                    disabled={phase === "playing"}
-                    className={`flex items-center gap-1 rounded px-3 py-1 text-xs font-bold transition-all ${
-                      speedMode === m
-                        ? m === "x2" ? "bg-amber-500/30 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.4)]"
-                                      : "bg-purple-500/30 text-purple-200 shadow-[0_0_8px_rgba(168,85,247,0.4)]"
-                        : "text-zinc-500 hover:text-zinc-300"
-                    }`}>
-                    {m === "x2" && <Zap className="h-3 w-3" />}{m}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* CR info */}
             <div className="hidden items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 sm:flex">
               <Coins className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-xs font-bold text-emerald-300">
-                {speedMode === "x2" ? `${config.creditsPerAppleX1}–${config.creditsPerAppleX2} CR / Apfel` : `${config.creditsPerAppleX1} CR / Apfel`}
-              </span>
+              <span className="text-xs font-bold text-emerald-300">{modeCfg.creditsPerApple} CR / Apfel</span>
             </div>
-
             {isAdmin && (
               <Link href="/admin"
                 className="hidden items-center gap-1 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-400/10 sm:flex">
@@ -784,6 +1257,14 @@ export function SnakeShell({
           </div>
         </div>
       </div>
+
+      {/* Shrink warning banner */}
+      {shrinkWarning && phase === "playing" && (
+        <div className="relative overflow-hidden border-b border-red-500/30 bg-red-500/10 py-1.5 text-center text-xs font-extrabold text-red-400"
+          style={{ animation: "snake-banner-in 0.3s ease forwards" }}>
+          ⚠ ACHTUNG — Wände schließen sich in {gameRef.current.applesUntilShrink} Apfel{gameRef.current.applesUntilShrink !== 1 ? "n" : ""}!
+        </div>
+      )}
 
       {/* Bonus banner */}
       {bonusBannerText && (
@@ -799,8 +1280,29 @@ export function SnakeShell({
       <main className="mx-auto flex w-full max-w-5xl flex-1 gap-4 px-4 py-5">
         {/* Game area */}
         <div className="flex flex-1 flex-col gap-3">
+          {/* Mode selector (only when idle/dead) */}
+          {phase !== "playing" && (
+            <div className="grid grid-cols-3 gap-2">
+              {(["x1", "x2", "grind"] as SnakeMode[]).map((m) => (
+                <ModeCard
+                  key={m}
+                  mode={m}
+                  selected={activeMode === m}
+                  disabled={false}
+                  modeCfg={getModeCfg(m)}
+                  onClick={() => {
+                    setActiveMode(m);
+                    activeModeRef.current = m;
+                    setLbTab(m);
+                    sound.click();
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
           {/* HUD */}
-          <div className="flex items-stretch gap-3 rounded-xl border border-white/8 bg-[#080712] px-4 py-3">
+          <div className={`flex items-stretch gap-3 rounded-xl border ${modeBorderColor} bg-[#080712] px-4 py-3`}>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Score</p>
               <p className="text-2xl font-extrabold text-zinc-50"
@@ -816,15 +1318,26 @@ export function SnakeShell({
                 +{creditsEarned.toLocaleString("de-DE")} <Coins className="h-4 w-4" />
               </p>
             </div>
-            {config.bonusEveryN > 0 && (
+            {modeCfg.bonusEveryN > 0 && phase === "playing" && (
               <>
                 <div className="w-px bg-white/8" />
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Nächster Bonus</p>
                   <p className="text-sm font-bold text-amber-400">
-                    {score === 0 ? `Apfel ${config.bonusEveryN}` :
-                      score % config.bonusEveryN === 0 ? "JETZT!" :
-                      `Apfel ${Math.ceil(score / config.bonusEveryN) * config.bonusEveryN}`}
+                    {score === 0 ? `Apfel ${modeCfg.bonusEveryN}` :
+                      score % modeCfg.bonusEveryN === 0 ? "JETZT!" :
+                      `Apfel ${Math.ceil(score / modeCfg.bonusEveryN) * modeCfg.bonusEveryN}`}
+                  </p>
+                </div>
+              </>
+            )}
+            {activeMode === "grind" && phase === "playing" && (
+              <>
+                <div className="w-px bg-white/8" />
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Shrink in</p>
+                  <p className={`text-sm font-bold ${gameRef.current.applesUntilShrink <= 3 ? "text-red-400 animate-pulse" : "text-amber-400"}`}>
+                    {gameRef.current.applesUntilShrink} Äpfel
                   </p>
                 </div>
               </>
@@ -846,8 +1359,13 @@ export function SnakeShell({
           </div>
 
           {/* Canvas */}
-          <div className="relative overflow-hidden rounded-2xl border border-white/8 shadow-[0_0_40px_rgba(139,92,246,0.1)]">
-            <canvas ref={canvasRef} width={CANVAS_SIZE} height={CANVAS_SIZE} className="block w-full aspect-square" />
+          <div className={`relative overflow-hidden rounded-2xl border ${modeBorderColor} ${modeRingColor}`}>
+            <canvas
+              ref={canvasRef}
+              width={CANVAS_SIZE}
+              height={CANVAS_SIZE}
+              className="block aspect-square w-full"
+            />
 
             {/* Idle overlay */}
             {phase === "idle" && (
@@ -857,42 +1375,40 @@ export function SnakeShell({
                   <h2 className="text-3xl font-extrabold text-zinc-50">{config.sectionTitle}</h2>
                   <p className="mt-1 text-sm text-zinc-400">{config.sectionSubtitle}</p>
                 </div>
-
-                {/* Info chips */}
                 <div className="flex flex-wrap justify-center gap-2 text-xs">
                   <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 font-bold text-emerald-300">
-                    <Coins className="h-3 w-3" />{config.creditsPerAppleX1} CR/Apfel
+                    <Coins className="h-3 w-3" />{modeCfg.creditsPerApple} CR/Apfel
                   </span>
-                  {config.bonusEveryN > 0 && (
+                  {modeCfg.bonusEveryN > 0 && (
                     <span className="flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 font-bold text-amber-300">
-                      <Gift className="h-3 w-3" />Bonus alle {config.bonusEveryN} Äpfel
+                      <Gift className="h-3 w-3" />Bonus alle {modeCfg.bonusEveryN} Äpfel
                     </span>
                   )}
-                  {config.goldenAppleEnabled && (
+                  {modeCfg.goldenAppleEnabled && (
                     <span className="flex items-center gap-1 rounded-full border border-yellow-400/30 bg-yellow-500/10 px-3 py-1 font-bold text-yellow-300">
-                      <Star className="h-3 w-3" />Goldener Apfel ×{config.goldenAppleCrMultiplier}
+                      <Star className="h-3 w-3" />Goldener Apfel ×{modeCfg.goldenAppleCrMultiplier}
                     </span>
                   )}
-                  {speedMode === "x2" && (
-                    <span className="flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 font-bold text-amber-300">
-                      <Zap className="h-3 w-3" />ab Apfel {config.x2AppleThreshold}: ×2 CR
+                  {activeMode === "grind" && (
+                    <span className="flex items-center gap-1 rounded-full border border-red-400/30 bg-red-500/10 px-3 py-1 font-bold text-red-300">
+                      <Flame className="h-3 w-3" />Shrink alle {(modeCfg as SnakeGrindConfig).shrinkEveryN} Äpfel
                     </span>
                   )}
                 </div>
-
-                <p className="text-xs text-zinc-600">← → ↑ ↓ oder WASD steuern</p>
-
+                <p className="text-xs text-zinc-600">← → ↑ ↓ oder WASD · Swipe auf Handy</p>
                 {dailyLimitReached ? (
                   <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-3 text-sm font-bold text-red-400">Tageslimit erreicht</div>
                 ) : (
                   <button onClick={startGame} onMouseEnter={sound.hover}
                     className={`group relative overflow-hidden rounded-2xl px-12 py-4 text-xl font-extrabold shadow-lg transition-all active:scale-95 ${
-                      speedMode === "x2"
-                        ? "bg-amber-500 text-black shadow-amber-500/30 hover:bg-amber-400 hover:shadow-amber-400/60"
-                        : "bg-purple-600 text-white shadow-purple-500/30 hover:bg-purple-500 hover:shadow-purple-400/60"
+                      activeMode === "grind" ? "bg-amber-500 text-black shadow-amber-500/30 hover:bg-amber-400 hover:shadow-amber-400/60"
+                      : activeMode === "x2" ? "bg-cyan-500 text-black shadow-cyan-500/30 hover:bg-cyan-400 hover:shadow-cyan-400/60"
+                      : "bg-emerald-600 text-white shadow-emerald-500/30 hover:bg-emerald-500 hover:shadow-emerald-400/60"
                     }`}>
                     <div className="absolute inset-0 -translate-x-full animate-[mine-shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
-                    {speedMode === "x2" ? <span className="flex items-center gap-2"><Zap className="h-6 w-6" />Spielen (x2)</span> : "Spielen"}
+                    {activeMode === "grind" ? <span className="flex items-center gap-2"><Flame className="h-6 w-6" />Grind starten</span>
+                     : activeMode === "x2" ? <span className="flex items-center gap-2"><Zap className="h-6 w-6" />Turbo starten</span>
+                     : "Spielen"}
                   </button>
                 )}
               </div>
@@ -905,8 +1421,11 @@ export function SnakeShell({
                 <div className="text-center">
                   <h2 className="text-3xl font-extrabold text-zinc-50">Game Over</h2>
                   <p className="mt-1 text-zinc-400">
-                    {score} Äpfel · {creditsEarned.toLocaleString("de-DE")} CR verdient
+                    {score} Äpfel · {creditsEarned.toLocaleString("de-DE")} CR
                   </p>
+                  {activeMode === "grind" && gameRef.current.shrinkCount > 0 && (
+                    <p className="mt-0.5 text-sm text-amber-400">{gameRef.current.shrinkCount}× Shrink überlebt!</p>
+                  )}
                 </div>
                 {submitting ? (
                   <div className="flex items-center gap-2 text-sm text-zinc-500">
@@ -920,7 +1439,7 @@ export function SnakeShell({
                       </div>
                     )}
                     <div className="flex items-center gap-1.5 text-lg font-bold text-emerald-400">
-                      <Coins className="h-5 w-5" />+{lastResult.creditsAwarded.toLocaleString("de-DE")} CR auf dein Konto
+                      <Coins className="h-5 w-5" />+{lastResult.creditsAwarded.toLocaleString("de-DE")} CR
                     </div>
                   </div>
                 )}
@@ -942,9 +1461,12 @@ export function SnakeShell({
           <div className="flex items-center justify-between text-[11px] text-zinc-600">
             <span>← → ↑ ↓ oder WASD</span>
             <span>
-              {speedMode === "x2" ? `⚡ x2: ab Apfel ${config.x2AppleThreshold} doppelte CR · ` : ""}
-              {config.wallWrap ? "Wand = kein Tod" : "Wand = Tod"}
-              {config.bonusEveryN > 0 ? ` · Bonus alle ${config.bonusEveryN} Äpfel` : ""}
+              {activeMode === "grind"
+                ? `🔥 Grind: Wände schließen sich alle ${(modeCfg as SnakeGrindConfig).shrinkEveryN} Äpfel`
+                : activeMode === "x2"
+                ? `⚡ Turbo: ${modeCfg.wallWrap ? "Wrap" : "Wand = Tod"}`
+                : `🌿 Classic: ${modeCfg.wallWrap ? "Wand = Wrap" : "Wand = Tod"}`}
+              {modeCfg.bonusEveryN > 0 ? ` · Bonus alle ${modeCfg.bonusEveryN} Äpfel` : ""}
             </span>
           </div>
         </div>
@@ -952,17 +1474,20 @@ export function SnakeShell({
         {/* Leaderboard sidebar */}
         <div className="hidden w-52 flex-col gap-3 lg:flex">
           <div className="flex rounded-xl border border-white/8 bg-[#080712] p-1">
-            {(["x1", "x2"] as const).map((m) => (
+            {(["x1", "x2", "grind"] as SnakeMode[]).map((m) => (
               <button key={m} onClick={() => { setLbTab(m); sound.click(); }} onMouseEnter={sound.hover}
-                className={`flex flex-1 items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-bold transition-colors ${
-                  lbTab === m ? m === "x2" ? "bg-amber-500/20 text-amber-300" : "bg-purple-500/20 text-purple-200" : "text-zinc-500 hover:text-zinc-300"
+                className={`flex flex-1 items-center justify-center rounded-lg py-1.5 text-[10px] font-bold transition-colors ${
+                  lbTab === m
+                    ? m === "grind" ? "bg-amber-500/20 text-amber-300"
+                    : m === "x2" ? "bg-cyan-500/20 text-cyan-300"
+                    : "bg-emerald-500/20 text-emerald-300"
+                    : "text-zinc-500 hover:text-zinc-300"
                 }`}>
-                {m === "x2" && <Zap className="h-3 w-3" />}{m}
+                {m === "grind" ? "🔥" : m === "x2" ? "⚡" : "🌿"}{m}
               </button>
             ))}
           </div>
-          <Leaderboard entries={lbTab === "x1" ? leaderboardX1 : leaderboardX2}
-            myBest={lbTab === "x1" ? myBestX1 : myBestX2} userId={userId} speedMode={lbTab} />
+          <Leaderboard entries={lbEntries} myBest={myBest} userId={userId} mode={lbTab} />
         </div>
       </main>
 
@@ -974,14 +1499,15 @@ export function SnakeShell({
             <span className="text-sm font-bold text-zinc-200">Highscores</span>
             <ChevronDown className="ml-auto h-4 w-4 text-zinc-500" />
           </summary>
-          <div className="flex gap-2 border-t border-white/8 p-3">
-            {(["x1", "x2"] as const).map((m) => (
+          <div className="flex gap-1 border-t border-white/8 p-2">
+            {(["x1", "x2", "grind"] as SnakeMode[]).map((m) => (
               <button key={m} onClick={() => setLbTab(m)}
-                className={`flex-1 rounded-lg py-1.5 text-xs font-bold ${lbTab === m ? "bg-purple-500/20 text-purple-200" : "text-zinc-500"}`}>{m}</button>
+                className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold ${lbTab === m ? "bg-purple-500/20 text-purple-200" : "text-zinc-500"}`}>
+                {m === "grind" ? "🔥 Grind" : m === "x2" ? "⚡ x2" : "🌿 x1"}
+              </button>
             ))}
           </div>
-          <Leaderboard entries={lbTab === "x1" ? leaderboardX1 : leaderboardX2}
-            myBest={lbTab === "x1" ? myBestX1 : myBestX2} userId={userId} speedMode={lbTab} />
+          <Leaderboard entries={lbEntries} myBest={myBest} userId={userId} mode={lbTab} />
         </details>
       </div>
     </div>

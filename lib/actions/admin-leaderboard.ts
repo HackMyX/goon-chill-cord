@@ -25,7 +25,7 @@ async function requireAdmin() {
 export interface AdminSnakeScoreRow {
   userId: string;
   username: string;
-  speedMode: "x1" | "x2";
+  speedMode: "x1" | "x2" | "grind";
   bestScore: number;
   totalCrEarned: number;
   gamesPlayed: number;
@@ -35,13 +35,13 @@ export interface AdminSnakeScoreRow {
 export interface AdminSnakeSnapshot {
   id: string;
   name: string;
-  speedMode: "x1" | "x2";
+  speedMode: "x1" | "x2" | "grind";
   createdAt: string;
   entryCount: number;
 }
 
 export async function adminGetSnakeLeaderboard(
-  speedMode: "x1" | "x2"
+  speedMode: "x1" | "x2" | "grind"
 ): Promise<AdminSnakeScoreRow[]> {
   try {
     const { admin } = await requireAdmin();
@@ -75,7 +75,7 @@ export async function adminGetSnakeLeaderboard(
 
 export async function adminUpdateSnakeScore(
   userId: string,
-  speedMode: "x1" | "x2",
+  speedMode: "x1" | "x2" | "grind",
   bestScore: number,
   totalCrEarned: number,
   gamesPlayed: number
@@ -111,7 +111,7 @@ export async function adminUpdateSnakeScore(
 
 export async function adminDeleteSnakeScore(
   userId: string,
-  speedMode: "x1" | "x2"
+  speedMode: "x1" | "x2" | "grind"
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { user, admin } = await requireAdmin();
@@ -134,7 +134,7 @@ export async function adminDeleteSnakeScore(
 }
 
 export async function adminCreateSnakeSnapshot(
-  speedMode: "x1" | "x2",
+  speedMode: "x1" | "x2" | "grind",
   name: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -164,7 +164,7 @@ export async function adminCreateSnakeSnapshot(
 }
 
 export async function adminGetSnakeSnapshots(
-  speedMode: "x1" | "x2"
+  speedMode: "x1" | "x2" | "grind"
 ): Promise<AdminSnakeSnapshot[]> {
   try {
     const { admin } = await requireAdmin();
@@ -192,7 +192,7 @@ export async function adminGetSnakeSnapshots(
 
 export async function adminRestoreSnakeSnapshot(
   snapshotId: string,
-  speedMode: "x1" | "x2"
+  speedMode: "x1" | "x2" | "grind"
 ): Promise<{ success: boolean; error?: string; restored?: number }> {
   try {
     const { user, admin } = await requireAdmin();

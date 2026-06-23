@@ -11,7 +11,7 @@ import {
   type AdminSnakeScoreRow, type AdminSnakeSnapshot,
 } from "@/lib/actions/admin-leaderboard";
 
-type SpeedMode = "x1" | "x2";
+type SpeedMode = "x1" | "x2" | "grind";
 
 interface EditState { bestScore: string; totalCrEarned: string; gamesPlayed: string }
 
@@ -150,14 +150,16 @@ export function SnakeLeaderboardEditor() {
 
       {/* Speed mode tabs */}
       <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
-        {(["x1", "x2"] as const).map((m) => (
+        {(["x1", "x2", "grind"] as const).map((m) => (
           <button key={m} onClick={() => setTab(m)}
             className={`flex flex-1 items-center justify-center gap-1 rounded-md py-1.5 text-xs font-bold transition-colors ${
               tab === m
-                ? m === "x2" ? "bg-amber-500/20 text-amber-300" : "bg-purple-500/20 text-purple-200"
+                ? m === "grind" ? "bg-amber-500/20 text-amber-300"
+                : m === "x2" ? "bg-cyan-500/20 text-cyan-300"
+                : "bg-emerald-500/20 text-emerald-300"
                 : "text-zinc-500 hover:text-zinc-300"
             }`}>
-            {m === "x2" && <Zap className="h-3 w-3" />}{m}
+            {m === "grind" ? "🔥 " : m === "x2" ? <Zap className="h-3 w-3 mr-0.5" /> : "🌿 "}{m}
           </button>
         ))}
       </div>
@@ -255,7 +257,7 @@ export function SnakeLeaderboardEditor() {
         </p>
         <div className="flex gap-2">
           <input
-            type="text" maxLength={50} placeholder={`z. B. "vor Season 2" (${tab})`}
+            type="text" maxLength={50} placeholder={`z. B. "vor Season 2" (${tab === "grind" ? "Grind" : tab})`}
             value={snapshotName}
             onChange={(e) => setSnapshotName(e.target.value)}
             className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-cyan-400/60"
@@ -284,7 +286,7 @@ export function SnakeLeaderboardEditor() {
         {snapshotsOpen && (
           <div className="border-t border-white/8">
             {snapshots.length === 0 ? (
-              <p className="px-4 py-4 text-xs text-zinc-600">Noch keine Snapshots für {tab}</p>
+              <p className="px-4 py-4 text-xs text-zinc-600">Noch keine Snapshots für {tab === "grind" ? "Grind" : tab}</p>
             ) : (
               <div className="flex flex-col divide-y divide-white/[0.04]">
                 {snapshots.map((snap) => (
