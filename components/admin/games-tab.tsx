@@ -9,6 +9,8 @@ import { CharacterConfigEditor } from "@/components/admin/character-config-edito
 import { DonConfigEditor } from "@/components/admin/don-config-editor";
 import { SnakeConfigEditor } from "@/components/admin/snake-config-editor";
 import { MineConfigEditor } from "@/components/admin/mine-config-editor";
+import { SnakeLeaderboardEditor } from "@/components/admin/snake-leaderboard-editor";
+import { MineLeaderboardEditor } from "@/components/admin/mine-leaderboard-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import type { ProfileRow } from "@/components/admin/admin-shell";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
@@ -110,14 +112,20 @@ export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig
             )}
 
             {isOpen && game.id === "snake" && (
-              <div className="border-t border-white/10 px-5 py-5">
+              <div className="flex flex-col gap-6 border-t border-white/10 px-5 py-5">
                 <SnakeConfigEditor config={snakeConfig} />
+                <div className="border-t border-white/8 pt-4">
+                  <SnakeLeaderboardEditor />
+                </div>
               </div>
             )}
 
             {isOpen && game.id === "mine" && (
-              <div className="border-t border-white/10 px-5 py-5">
+              <div className="flex flex-col gap-6 border-t border-white/10 px-5 py-5">
                 <MineConfigEditor config={mineConfig} />
+                <div className="border-t border-white/8 pt-4">
+                  <MineLeaderboardEditor />
+                </div>
               </div>
             )}
 
