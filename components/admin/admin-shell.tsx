@@ -380,7 +380,7 @@ export function AdminShell({
 
         {tab === "backup" && <BackupTab />}
 
-        {tab === "security" && <SecurityTab profiles={profiles} />}
+        {tab === "security" && <SecurityTab />}
       </main>
     </div>
   );
