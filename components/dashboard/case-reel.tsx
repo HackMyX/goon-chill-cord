@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { motion, useMotionValue, animate } from "framer-motion";
 import { RARITY_STYLES, type Rarity } from "@/lib/cases";
 import { ItemRenderer } from "@/components/items/item-renderer";
@@ -21,6 +21,11 @@ export interface ReelEntry {
   name?: string;
 }
 
+export interface CaseReelHandle {
+  /** Skip the running spin animation and snap immediately to the result. */
+  skipToResult: () => void;
+}
+
 interface CaseReelProps {
   items: ReelEntry[];
   targetIndex: number;
@@ -31,18 +36,20 @@ interface CaseReelProps {
   onSpinComplete?: () => void;
 }
 
-export function CaseReel({
-  items,
-  targetIndex,
-  spinning,
-  spinToken = 0,
-  onTick,
-  onSpinComplete,
-}: CaseReelProps) {
+export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseReel(
+  { items, targetIndex, spinning, spinToken = 0, onTick, onSpinComplete },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(700);
   const x = useMotionValue(0);
   const [justLanded, setJustLanded] = useState(false);
+
+  // Refs for stable access from useImperativeHandle (avoids stale closures).
+  const activeControlsRef = useRef<ReturnType<typeof animate> | null>(null);
+  const translateXRef = useRef(0);
+  const onSpinCompleteRef = useRef(onSpinComplete);
+  onSpinCompleteRef.current = onSpinComplete;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -59,6 +66,22 @@ export function CaseReel({
   const displayItems = spinning ? items : [...items, ...items];
 
   const translateX = -(targetIndex * STEP) + (containerWidth / 2 - ITEM_WIDTH / 2);
+  // Keep ref current so skipToResult always snaps to the right position.
+  translateXRef.current = translateX;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      skipToResult: () => {
+        activeControlsRef.current?.stop();
+        x.set(translateXRef.current);
+        setJustLanded(true);
+        onSpinCompleteRef.current?.();
+        setTimeout(() => setJustLanded(false), 520);
+      },
+    }),
+    [x],
+  );
 
   useEffect(() => {
     if (!spinning) {
@@ -105,7 +128,6 @@ export function CaseReel({
     });
 
     let lastTickIndex = Math.round(x.get() / -STEP);
-    let activeControls: ReturnType<typeof animate> | null = null;
 
     const trackTicks = (latest: number) => {
       const idx = Math.round(latest / -STEP);
@@ -121,13 +143,13 @@ export function CaseReel({
     const SNAP_DISTANCE = STEP * 0.12;
     const bulkTarget = translateX + SNAP_DISTANCE;
 
-    activeControls = animate(x, bulkTarget, {
+    activeControlsRef.current = animate(x, bulkTarget, {
       duration: 4.2,
       ease: [0.16, 1, 0.3, 1],
       onUpdate: trackTicks,
       onComplete: () => {
         // Stage 2: spring snap — crisp landing, faint tactile "give", zero bounce.
-        activeControls = animate(x, translateX, {
+        activeControlsRef.current = animate(x, translateX, {
           type: "spring",
           stiffness: 260,
           damping: 30,
@@ -148,7 +170,9 @@ export function CaseReel({
       },
     });
 
-    return () => activeControls?.stop();
+    return () => {
+      activeControlsRef.current?.stop();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- spinToken bump re-triggers on each new spin; items.length dep not needed (spinning flag change is what matters)
   }, [spinning, spinToken]);
 
@@ -213,4 +237,4 @@ export function CaseReel({
       </motion.div>
     </div>
   );
-}
+});

@@ -3,8 +3,8 @@
 import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Coins, Zap, X as CloseIcon } from "lucide-react";
-import { CaseReel, type ReelEntry } from "@/components/dashboard/case-reel";
+import { Coins, Zap } from "lucide-react";
+import { CaseReel, type CaseReelHandle, type ReelEntry } from "@/components/dashboard/case-reel";
 import { ChanceBar } from "@/components/dashboard/chance-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { ItemRenderer } from "@/components/items/item-renderer";
@@ -143,6 +143,7 @@ export function CaseOpeningSection({
   const [spinToken, setSpinToken] = useState(0);
   const mounted = useRef(false);
   const fetchingRef = useRef(false);
+  const caseReelRef = useRef<CaseReelHandle>(null);
   const { currencyName } = useSiteConfig();
   const sound = useSoundManager();
 
@@ -226,6 +227,15 @@ export function CaseOpeningSection({
     setPhase("idle");
   }
 
+  // Auto-dismiss the result overlay after 3 s so the player can spin again
+  // without having to click anything. They can also tap the overlay to skip.
+  useEffect(() => {
+    if (phase !== "result") return;
+    const t = setTimeout(handleContinue, 3000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
 
   return (
     <section className="mx-auto w-full max-w-4xl px-4 py-10">
@@ -245,6 +255,7 @@ export function CaseOpeningSection({
 
       <div className="relative mt-4">
         <CaseReel
+          ref={caseReelRef}
           items={reel}
           targetIndex={targetIndex}
           spinning={phase === "spinning"}
@@ -280,12 +291,6 @@ export function CaseOpeningSection({
                   background: `radial-gradient(circle, ${RARITY_HEX[wonItem.rarity as Rarity]} 0%, transparent 65%)`,
                 }}
               />
-              <button
-                onClick={handleContinue}
-                className="absolute top-2 right-2 z-10 rounded-full bg-white/5 p-1.5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
-              >
-                <CloseIcon className="h-4 w-4" />
-              </button>
               <motion.div
                 initial={{ scale: 0.7, y: 10 }}
                 animate={{ scale: 1, y: 0 }}
@@ -321,25 +326,41 @@ export function CaseOpeningSection({
       <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
         <button
           onMouseEnter={sound.hover}
-          onClick={() => handleOpen(group.standard)}
+          onClick={() => {
+            if (phase === "spinning") {
+              caseReelRef.current?.skipToResult();
+            } else {
+              handleOpen(group.standard);
+            }
+          }}
           disabled={
-            phase !== "idle" ||
-            credits < group.standard.price ||
+            phase === "pending" ||
+            phase === "result" ||
+            (phase === "idle" && credits < group.standard.price) ||
             group.standard.enabled === false
           }
           className="w-full rounded-xl border-2 border-[#3898ff] bg-[linear-gradient(135deg,#1e699e_0%,rgba(13,76,132,0.6)_100%)] px-8 py-3 text-base font-black uppercase tracking-widest text-white shadow-[inset_0_0_16px_rgba(56,152,255,0.45)] transition-transform hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100 sm:w-auto"
         >
           {group.standard.enabled === false
             ? "DEAKTIVIERT"
-            : `${group.standard.label} — ${group.standard.price.toLocaleString("de-DE")} ${currencyName}`}
+            : phase === "spinning"
+              ? "⚡ SOFORT ZEIGEN"
+              : `${group.standard.label} — ${group.standard.price.toLocaleString("de-DE")} ${currencyName}`}
         </button>
 
         <button
           onMouseEnter={sound.hover}
-          onClick={() => handleOpen(group.premium)}
+          onClick={() => {
+            if (phase === "spinning") {
+              caseReelRef.current?.skipToResult();
+            } else {
+              handleOpen(group.premium);
+            }
+          }}
           disabled={
-            phase !== "idle" ||
-            credits < group.premium.price ||
+            phase === "pending" ||
+            phase === "result" ||
+            (phase === "idle" && credits < group.premium.price) ||
             group.premium.enabled === false
           }
           className="relative w-full rounded-xl bg-black/50 px-8 py-2.5 text-center transition-transform hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100 sm:w-auto"
@@ -349,9 +370,11 @@ export function CaseOpeningSection({
             <Zap className="h-4 w-4 text-amber-300" />
             {group.premium.enabled === false
               ? "DEAKTIVIERT"
-              : `${group.premium.label} — ${group.premium.price.toLocaleString("de-DE")} ${currencyName}`}
+              : phase === "spinning"
+                ? "⚡ SOFORT ZEIGEN"
+                : `${group.premium.label} — ${group.premium.price.toLocaleString("de-DE")} ${currencyName}`}
           </span>
-          {group.premium.sublabel && group.premium.enabled !== false && (
+          {group.premium.sublabel && group.premium.enabled !== false && phase !== "spinning" && (
             <span className="block text-[11px] font-semibold tracking-widest text-zinc-400">
               {group.premium.sublabel}
             </span>
