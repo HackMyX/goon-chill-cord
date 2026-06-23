@@ -14,8 +14,10 @@ import {
   ShieldAlert,
   ExternalLink,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { TopBar } from "@/components/layout/top-bar";
 import { useSoundManager } from "@/lib/sound-manager";
+import { createClient } from "@/lib/supabase/client";
 import type { PatchNote, PatchNoteType, SectionType } from "@/lib/patchnotes";
 import { NOTE_TYPE_META, SECTION_TYPE_META } from "@/lib/patchnotes";
 
@@ -165,13 +167,30 @@ interface PatchNotesShellProps {
   isModerator: boolean;
 }
 
-export function PatchNotesShell({ notes, credits, streakDays, isAdmin, isModerator }: PatchNotesShellProps) {
+export function PatchNotesShell({ notes: initialNotes, credits, streakDays, isAdmin, isModerator }: PatchNotesShellProps) {
+  const [notes, setNotes] = useState<PatchNote[]>(initialNotes);
   const [search, setSearch] = useState("");
   const [activeType, setActiveType] = useState<PatchNoteType | "all">("all");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
-    const pinned = notes.find((n) => n.isPinned);
+    const pinned = initialNotes.find((n) => n.isPinned);
     return pinned ? new Set([pinned.id]) : new Set();
   });
+  const router = useRouter();
+
+  // Live-update: when admin publishes/edits a patch note, page refreshes automatically
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("patchnotes-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "patch_notes" }, () => {
+        router.refresh();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [router]);
+
+  // Keep local notes in sync when server re-renders (after router.refresh)
+  useEffect(() => { setNotes(initialNotes); }, [initialNotes]);
   const sound = useSoundManager();
 
   function toggleExpand(id: string) {
