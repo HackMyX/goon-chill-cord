@@ -3,14 +3,43 @@
  * perks, shield values, and shop categories to a coherent, well-designed state.
  *
  * Safe to re-run: all operations are upserts / idempotent.
+ *
+ * Usage (from project root):
+ *   node scripts/balance-overhaul.js
+ *
+ * Reads NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY from .env.local
+ * automatically. Never commit credentials into this file.
  */
 const { createClient } = require("@supabase/supabase-js");
+const fs = require("fs");
+const path = require("path");
 
-const admin = createClient(
-  "https://dkgcovxypnwpwlfxmknw.supabase.co",
-  "sb_secret_GjF0z2CSx0Q7XXPZy5qPNw_Nw5zO22q",
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+// Load .env.local unless vars are already set
+const envFile = path.join(__dirname, "..", ".env.local");
+if (fs.existsSync(envFile)) {
+  fs.readFileSync(envFile, "utf8")
+    .split("\n")
+    .forEach((line) => {
+      const eq = line.indexOf("=");
+      if (eq > 0 && !line.startsWith("#")) {
+        const k = line.slice(0, eq).trim();
+        const v = line.slice(eq + 1).trim();
+        if (k && !process.env[k]) process.env[k] = v;
+      }
+    });
+}
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SUPABASE_URL || !SERVICE_KEY) {
+  console.error("Missing env vars. Run from project root so .env.local is found.");
+  process.exit(1);
+}
+
+const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
 
 // ─── Deterministic hash → float in [0,1) per item+seed ────────────────────
 function hash(str) {
