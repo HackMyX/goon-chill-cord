@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -8,10 +8,12 @@ import {
   Star, Zap, Package, TrendingUp, Eye, X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Canvas } from "@react-three/fiber";
+import { View } from "@react-three/drei";
 import { TopBar } from "@/components/layout/top-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
-import { ItemRenderer } from "@/components/items/item-renderer";
+import { ShopCharacterView, type ItemForPreview } from "@/components/shop/shop-character-view";
 import { useSoundManager } from "@/lib/sound-manager";
 import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { purchaseShopItem, type ShopListingEntry, type ShopCategoryMeta } from "@/lib/actions/shop";
@@ -53,6 +55,25 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function listingToPreview(l: ShopListingEntry): ItemForPreview {
+  return {
+    id: l.itemId,
+    name: l.itemName,
+    rarity: l.itemRarity,
+    type: l.itemType,
+    damage: l.itemDamage,
+    armor: l.itemArmor,
+    perk_type: l.itemPerkType,
+    perk_magnitude: l.itemPerkMagnitude,
+    shield_hp: l.itemShieldHp,
+    shield_regen_cooldown_sec: l.itemShieldCooldown,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Hooks
 // ---------------------------------------------------------------------------
 
@@ -75,16 +96,17 @@ function useCountdown(targetIso: string): { h: number; m: number; s: number; urg
 function fmt(n: number) { return new Intl.NumberFormat("de-DE").format(n); }
 
 // ---------------------------------------------------------------------------
-// Shop card
+// Shop card — 3D character preview embedded in the thumbnail area
 // ---------------------------------------------------------------------------
 
 function ShopCard({
-  listing, credits, gender, index, onPreview, onPurchased,
+  listing, credits, gender, index, viewIndex, onPreview, onPurchased,
 }: {
   listing: ShopListingEntry;
   credits: number;
   gender: "m" | "w";
   index: number;
+  viewIndex: number;
   onPreview: (listing: ShopListingEntry) => void;
   onPurchased: (newCredits: number) => void;
 }) {
@@ -159,37 +181,20 @@ function ShopCard({
         {soldOut && <span className="ml-auto rounded-full bg-zinc-700 px-2 py-0.5 text-[10px] font-bold text-zinc-400">Gekauft</span>}
       </div>
 
-      {/* 2D item preview — one WebGL context per card was hitting the browser
-          limit (~16) for items past the 16th, making those cards render white.
-          A styled 2D preview fixes this; the full 3D model is still available
-          via the preview modal (which uses a single shared Canvas). */}
-      <div className="relative">
-        <button
-          onClick={() => { sound.click(); onPreview(listing); }}
-          className="group/thumb relative flex h-36 w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-white/5 transition-all hover:border-white/15"
-          style={{
-            background:
-              rarity === "ultra"    ? "radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.18) 0%, #060610 65%)"
-            : rarity === "mythisch" ? "radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.18) 0%, #060610 65%)"
-            : rarity === "selten"   ? "radial-gradient(ellipse at 50% 30%, rgba(168,85,247,0.14) 0%, #060610 65%)"
-            : "radial-gradient(ellipse at 50% 30%, rgba(59,130,246,0.12) 0%, #060610 65%)",
-          }}
-          title="3D Vorschau anzeigen"
-        >
-          {/* Floating item icon */}
-          <motion.div
-            animate={{ y: [0, -5, 0] }}
-            transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <ItemRenderer type={listing.itemType} rarity={rarity} size="xl" />
-          </motion.div>
-          {/* Hover overlay label */}
-          <div className="absolute inset-0 flex items-end justify-center pb-2 opacity-0 transition-opacity group-hover/thumb:opacity-100">
-            <span className="flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[10px] font-bold text-zinc-300">
-              <Eye className="h-3 w-3" /> 3D Vorschau
-            </span>
-          </div>
-        </button>
+      {/* 3D character preview — tap to open full-screen modal */}
+      <div
+        className="group/thumb relative h-48 cursor-pointer overflow-hidden rounded-xl border border-white/8 transition-all hover:border-white/20"
+        onClick={() => { sound.click(); onPreview(listing); }}
+      >
+        <ShopCharacterView
+          item={listingToPreview(listing)}
+          gender={gender}
+          viewIndex={viewIndex}
+        />
+        {/* "Full view" hint on hover */}
+        <div className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-zinc-300 opacity-0 transition-opacity group-hover/thumb:opacity-100">
+          <Eye className="h-3 w-3" /> Vollansicht
+        </div>
       </div>
 
       {/* Name */}
@@ -254,15 +259,16 @@ function ShopCard({
 }
 
 // ---------------------------------------------------------------------------
-// Featured Hero Banner
+// Featured Hero Banner — large 3D character on the left
 // ---------------------------------------------------------------------------
 
 function FeaturedHero({
-  listings, credits, gender, onPreview, onPurchased,
+  listings, credits, gender, viewIndexOf, onPreview, onPurchased,
 }: {
   listings: ShopListingEntry[];
   credits: number;
   gender: "m" | "w";
+  viewIndexOf: Map<string, number>;
   onPreview: (listing: ShopListingEntry) => void;
   onPurchased: (newCredits: number) => void;
 }) {
@@ -335,36 +341,26 @@ function FeaturedHero({
       </div>
 
       <div className="relative z-10 flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:gap-8 lg:p-8">
-        {/* Thumbnail — 2D styled preview (same reason as ShopCard: WebGL context limit) */}
-        <div className="flex flex-shrink-0 items-center justify-center sm:w-48">
-          <motion.button
-            key={listing.id}
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.4 }}
+
+        {/* 3D character preview — all hero items mounted, only the active one visible */}
+        <div className="flex flex-shrink-0 items-stretch justify-center sm:w-52">
+          <div
+            className="group/fhero relative h-56 w-full cursor-pointer overflow-hidden rounded-2xl border border-white/10 transition-all hover:border-white/24 sm:h-64"
             onClick={() => { sound.click(); onPreview(listing); }}
-            className="group/fhero relative flex h-40 w-40 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-white/8 transition-all hover:border-white/20"
-            style={{
-              background:
-                rarity === "ultra"    ? "radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.22) 0%, #060610 65%)"
-              : rarity === "mythisch" ? "radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.22) 0%, #060610 65%)"
-              : rarity === "selten"   ? "radial-gradient(ellipse at 50% 30%, rgba(168,85,247,0.18) 0%, #060610 65%)"
-              : "radial-gradient(ellipse at 50% 30%, rgba(59,130,246,0.16) 0%, #060610 65%)",
-            }}
-            title="3D Vorschau"
           >
-            <motion.div
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <ItemRenderer type={listing.itemType} rarity={listing.itemRarity} size="xl" />
-            </motion.div>
-            <div className="absolute inset-0 flex items-end justify-center pb-2 opacity-0 transition-opacity group-hover/fhero:opacity-100">
-              <span className="flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[10px] font-bold text-zinc-300">
-                <Eye className="h-3 w-3" /> 3D Vorschau
-              </span>
+            {listings.map((l, i) => (
+              <ShopCharacterView
+                key={l.id}
+                item={listingToPreview(l)}
+                gender={gender}
+                viewIndex={viewIndexOf.get(l.id) ?? i}
+                visible={i === active}
+              />
+            ))}
+            <div className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-zinc-300 opacity-0 transition-opacity group-hover/fhero:opacity-100">
+              <Eye className="h-3 w-3" /> Vollansicht
             </div>
-          </motion.button>
+          </div>
         </div>
 
         {/* Info */}
@@ -424,7 +420,7 @@ function FeaturedHero({
         </div>
       </div>
 
-      {/* Tab selectors if multiple featured */}
+      {/* Tab selectors for carousel */}
       {listings.length > 1 && (
         <div className="relative z-10 flex justify-center gap-2 pb-4">
           {listings.map((l, i) => (
@@ -541,6 +537,17 @@ export function ShopShell({
   const router = useRouter();
   const { currencyName } = useSiteConfig();
 
+  // Root ref for the shared Canvas's eventSource — required so OrbitControls
+  // in each View receives pointer events from the correct DOM region.
+  const shopRootRef = useRef<HTMLDivElement>(null);
+
+  // Stable 0-based view index per listing — each listing gets exactly one
+  // View slot in the shared Canvas. Must never change between renders.
+  const viewIndexOf = useMemo(
+    () => new Map(listings.map((l, i) => [l.id, i])),
+    [listings]
+  );
+
   // Split featured hero items (mythisch/ultra + featured)
   const heroItems = useMemo(
     () => listings.filter((l) => l.featured && (l.itemRarity === "mythisch" || l.itemRarity === "ultra")).slice(0, 3),
@@ -590,7 +597,7 @@ export function ShopShell({
   const totalListings = listings.length;
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div ref={shopRootRef} className="flex flex-1 flex-col">
       <TopBar credits={credits} streakDays={streakDays} onCreditsChange={setCredits} isAdmin={isAdmin} />
 
       {/* Hero banner area */}
@@ -668,6 +675,7 @@ export function ShopShell({
                   listings={heroItems}
                   credits={credits}
                   gender={gender}
+                  viewIndexOf={viewIndexOf}
                   onPreview={setPreviewListing}
                   onPurchased={handlePurchased}
                 />
@@ -740,6 +748,7 @@ export function ShopShell({
                         credits={credits}
                         gender={gender}
                         index={i}
+                        viewIndex={viewIndexOf.get(listing.id) ?? i}
                         onPreview={setPreviewListing}
                         onPurchased={handlePurchased}
                       />
@@ -752,7 +761,28 @@ export function ShopShell({
         )}
       </main>
 
-      {/* Preview modal */}
+      {/* Shared Canvas — one WebGL context for ALL ShopCharacterViews.
+          position:fixed + alpha:true means it's transparent everywhere except
+          where a View renders its scene. pointer-events:none so HTML buttons
+          and links remain fully interactive. z-[10] puts it above cards but
+          below the preview modal (z-[200]) and the TopBar. */}
+      <Canvas
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          pointerEvents: "none",
+          zIndex: 10,
+        }}
+        gl={{ alpha: true, antialias: true }}
+        eventSource={shopRootRef as React.RefObject<HTMLElement>}
+      >
+        <View.Port />
+      </Canvas>
+
+      {/* Preview modal — z-[200], above the shared Canvas */}
       <AnimatePresence>
         {previewListing && (
           <ItemPreviewModal
