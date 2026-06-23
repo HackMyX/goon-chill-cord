@@ -400,6 +400,9 @@ export interface UserDetail {
   logs: { id: string; action: string; payload: unknown; created_at: string }[];
   banned: boolean;
   gender: "m" | "w";
+  warningCount: number;
+  noteCount: number;
+  modActions: { id: string; actionType: string; reason: string | null; modUsername: string | null; createdAt: string }[];
 }
 
 export interface GetUserDetailResult extends AdminActionResult {
@@ -422,6 +425,7 @@ export async function getUserDetail(targetUserId: string): Promise<GetUserDetail
     { data: logsTarget },
     { data: authUser },
     { data: profile },
+    { data: modActionRows },
   ] = await Promise.all([
     admin
       .from("inventory")
@@ -442,6 +446,12 @@ export async function getUserDetail(targetUserId: string): Promise<GetUserDetail
       .limit(50),
     admin.auth.admin.getUserById(targetUserId),
     admin.from("profiles").select("gender").eq("id", targetUserId).single(),
+    admin
+      .from("mod_actions")
+      .select("id, mod_id, action_type, reason, created_at")
+      .eq("target_user_id", targetUserId)
+      .order("created_at", { ascending: false })
+      .limit(30),
   ]);
 
   // Merge own + targeted logs, deduplicate, and sort newest-first
@@ -454,6 +464,23 @@ export async function getUserDetail(targetUserId: string): Promise<GetUserDetail
   const bannedUntil = authUser?.user?.banned_until;
   const banned = !!bannedUntil && new Date(bannedUntil).getTime() > Date.now();
 
+  // Resolve mod usernames for the mod actions
+  const modIds = [...new Set((modActionRows ?? []).map((r) => r.mod_id).filter(Boolean))];
+  const { data: modProfiles } = modIds.length
+    ? await admin.from("profiles").select("id, username").in("id", modIds)
+    : { data: [] };
+  const modById = new Map((modProfiles ?? []).map((p) => [p.id, p.username as string]));
+
+  const warningCount = (modActionRows ?? []).filter((r) => r.action_type === "warning").length;
+  const noteCount = (modActionRows ?? []).filter((r) => r.action_type === "note").length;
+  const modActions = (modActionRows ?? []).map((r) => ({
+    id: r.id,
+    actionType: r.action_type as string,
+    reason: r.reason as string | null,
+    modUsername: modById.get(r.mod_id) ?? null,
+    createdAt: r.created_at as string,
+  }));
+
   return {
     success: true,
     detail: {
@@ -461,6 +488,9 @@ export async function getUserDetail(targetUserId: string): Promise<GetUserDetail
       logs: logs ?? [],
       banned,
       gender: (profile?.gender as "m" | "w") ?? "m",
+      warningCount,
+      noteCount,
+      modActions,
     },
   };
 }

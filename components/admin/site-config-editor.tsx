@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Save, Loader2, Palette, Coins, Swords, ShieldHalf, Sparkles, Zap } from "lucide-react";
+import { Save, Loader2, Palette, Coins, Swords, ShieldHalf, Sparkles, Zap, Layout, ChevronUp, ChevronDown, Eye, EyeOff } from "lucide-react";
 import { updateSiteConfig } from "@/lib/actions/site-config";
 import type { SiteConfig } from "@/lib/site-config";
+import { DEFAULT_TOPBAR_RIGHT_SLOTS } from "@/lib/site-config";
 import { SITE_LOGO_ICONS, resolveSiteLogoIcon, type SiteLogoIconName } from "@/lib/site-logo-icons";
 import { useSoundManager } from "@/lib/sound-manager";
 
@@ -349,6 +350,147 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
         <button
           onMouseEnter={sound.hover}
           onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Speichern
+        </button>
+        {message && <span className="text-sm text-zinc-400">{message}</span>}
+      </div>
+
+      {/* TopBar layout editor */}
+      <TopBarLayoutEditor
+        slots={form.topbarRightSlots ?? [...DEFAULT_TOPBAR_RIGHT_SLOTS]}
+        onChange={(slots) => setForm((f) => ({ ...f, topbarRightSlots: slots }))}
+        onSave={handleSave}
+        saving={saving}
+        message={message}
+        sound={sound}
+      />
+    </div>
+  );
+}
+
+const SLOT_LABELS: Record<string, string> = {
+  games: "Spiele-Menü",
+  shop: "Shop",
+  auctions: "Auktionshaus",
+  trading: "Trading",
+  community: "Community",
+  wardrobe: "Garderobe",
+  notifications: "Benachrichtigungen",
+  profile: "Profil",
+  logout: "Abmelden",
+};
+
+function TopBarLayoutEditor({
+  slots,
+  onChange,
+  onSave,
+  saving,
+  message,
+  sound,
+}: {
+  slots: string[];
+  onChange: (slots: string[]) => void;
+  onSave: () => void;
+  saving: boolean;
+  message: string | null;
+  sound: { hover: () => void; click: () => void };
+}) {
+  const allSlots = [...DEFAULT_TOPBAR_RIGHT_SLOTS];
+
+  function moveUp(i: number) {
+    if (i === 0) return;
+    const next = [...slots];
+    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+    onChange(next);
+  }
+
+  function moveDown(i: number) {
+    if (i === slots.length - 1) return;
+    const next = [...slots];
+    [next[i], next[i + 1]] = [next[i + 1], next[i]];
+    onChange(next);
+  }
+
+  function toggle(slot: string) {
+    if (slots.includes(slot)) {
+      onChange(slots.filter((s) => s !== slot));
+    } else {
+      onChange([...slots, slot]);
+    }
+  }
+
+  return (
+    <div className="mt-6 border-t border-white/10 pt-5">
+      <h4 className="mb-1 flex items-center gap-2 text-sm font-bold text-zinc-200">
+        <Layout className="h-4 w-4 text-purple-400" />
+        TopBar-Layout (rechte Seite)
+      </h4>
+      <p className="mb-4 text-[11px] text-zinc-500">
+        Aktiviere Buttons und lege ihre Reihenfolge fest. Die linke Seite (Logo, Credits, Admin/Mod-Button) und die Mitte (Claim-Button) sind immer sichtbar.
+      </p>
+
+      {/* Active slots (ordered) */}
+      <div className="mb-3 flex flex-col gap-1.5">
+        {slots.map((slot, i) => (
+          <div key={slot} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+            <span className="w-4 text-center text-xs font-bold text-zinc-600">{i + 1}</span>
+            <span className="flex-1 text-xs font-semibold text-zinc-200">{SLOT_LABELS[slot] ?? slot}</span>
+            <button
+              onMouseEnter={sound.hover}
+              onClick={() => { sound.click(); moveUp(i); }}
+              disabled={i === 0}
+              className="rounded p-0.5 text-zinc-500 hover:text-zinc-200 disabled:opacity-20"
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onMouseEnter={sound.hover}
+              onClick={() => { sound.click(); moveDown(i); }}
+              disabled={i === slots.length - 1}
+              className="rounded p-0.5 text-zinc-500 hover:text-zinc-200 disabled:opacity-20"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onMouseEnter={sound.hover}
+              onClick={() => { sound.click(); toggle(slot); }}
+              className="rounded p-0.5 text-emerald-400 hover:text-emerald-300"
+              title="Ausblenden"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Hidden slots */}
+      {allSlots.filter((s) => !slots.includes(s)).length > 0 && (
+        <div className="mb-3 flex flex-col gap-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Ausgeblendet</p>
+          {allSlots.filter((s) => !slots.includes(s)).map((slot) => (
+            <div key={slot} className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.01] px-3 py-2 opacity-50">
+              <span className="flex-1 text-xs font-semibold text-zinc-500">{SLOT_LABELS[slot] ?? slot}</span>
+              <button
+                onMouseEnter={sound.hover}
+                onClick={() => { sound.click(); toggle(slot); }}
+                className="rounded p-0.5 text-zinc-600 hover:text-zinc-300"
+                title="Einblenden"
+              >
+                <EyeOff className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          onMouseEnter={sound.hover}
+          onClick={onSave}
           disabled={saving}
           className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
         >

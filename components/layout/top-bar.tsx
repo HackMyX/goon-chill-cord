@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Link2,
   ShoppingBag,
@@ -20,6 +21,8 @@ import { LogoutButton } from "@/components/auth/logout-button";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
 import { useSoundManager } from "@/lib/sound-manager";
+import { createClient } from "@/lib/supabase/client";
+import { DEFAULT_TOPBAR_RIGHT_SLOTS } from "@/lib/site-config";
 
 interface TopBarProps {
   credits: number;
@@ -27,16 +30,12 @@ interface TopBarProps {
   streakDays?: number;
   /** Forwarded to LiveClock — see its own docs for why this is optional. */
   onCreditsChange?: (newCredits: number) => void;
-  /** Shows the small Admin-panel shortcut next to the CR display below —
-   * every page rendering TopBar computes this server-side itself (`lib/
-   * admin.ts`'s `isAdmin(profile)`, same check the homepage's own big
-   * "Admin" button already gates on) and passes the plain boolean down, so
-   * a non-admin's TopBar never even receives the `/admin` href, let alone
-   * renders a button pointing at it. Defaults to `false` so every existing
-   * call site that hasn't been updated yet simply keeps not showing it,
-   * rather than erroring. */
   isAdmin?: boolean;
   isModerator?: boolean;
+  /** Passed to enable realtime inventory-badge updates. */
+  userId?: string;
+  /** Pending incoming/active trades — shown as badge on Trading button. */
+  pendingTradesCount?: number;
 }
 
 export function TopBar({
@@ -46,19 +45,111 @@ export function TopBar({
   onCreditsChange,
   isAdmin = false,
   isModerator = false,
+  userId,
+  pendingTradesCount = 0,
 }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
-  const { siteName, logoUrl, logoIconName, currencyName } = useSiteConfig();
+  const { siteName, logoUrl, logoIconName, currencyName, topbarRightSlots } = useSiteConfig();
   const LogoIcon = resolveSiteLogoIcon(logoIconName);
 
+  // Realtime inventory count — starts from the server-fetched prop and stays
+  // in sync without a full page reload via a lightweight Supabase channel.
+  const [liveInventoryCount, setLiveInventoryCount] = useState(inventoryCount);
+  const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
+  useEffect(() => { setLiveInventoryCount(inventoryCount); }, [inventoryCount]);
+
+  // Self-resolve userId when not provided — avoids threading it through
+  // every page/shell prop just to keep the inventory badge realtime.
+  useEffect(() => {
+    if (userId) { setResolvedUserId(userId); return; }
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setResolvedUserId(data.user.id);
+    });
+  }, [userId]);
+
+  useEffect(() => {
+    if (!resolvedUserId) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`topbar-inventory-${resolvedUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "inventory", filter: `user_id=eq.${resolvedUserId}` },
+        () => setLiveInventoryCount((n) => n + 1)
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "inventory", filter: `user_id=eq.${resolvedUserId}` },
+        () => setLiveInventoryCount((n) => Math.max(0, n - 1))
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [resolvedUserId]);
+
+  // Active slots — fall back to defaults if config is empty or null
+  const slots: string[] =
+    Array.isArray(topbarRightSlots) && topbarRightSlots.length > 0
+      ? topbarRightSlots
+      : [...DEFAULT_TOPBAR_RIGHT_SLOTS];
+
+  // Separate "wide-only" slots (hidden on small screens) from "always" slots
+  const wideOnlySlots = new Set(["shop", "auctions", "trading", "community"]);
+
+  function renderSlot(slot: string) {
+    switch (slot) {
+      case "games":
+        return (
+          <div key="games" className="hidden md:block">
+            <GamesMenu />
+          </div>
+        );
+      case "shop":
+        return <IconButton key="shop" icon={ShoppingBag} label="Shop" href="/shop" className="hidden lg:flex" />;
+      case "auctions":
+        return <IconButton key="auctions" icon={Gavel} label="Auktionshaus" href="/auctions" className="hidden lg:flex" />;
+      case "trading":
+        return (
+          <IconButton
+            key="trading"
+            icon={Repeat}
+            label="Trading"
+            href="/trading"
+            badge={pendingTradesCount > 0 ? pendingTradesCount : undefined}
+            className="hidden lg:flex"
+          />
+        );
+      case "community":
+        return <IconButton key="community" icon={Users} label="Community" href="/community" className="hidden lg:flex" />;
+      case "wardrobe":
+        return (
+          <IconButton
+            key="wardrobe"
+            icon={Shirt}
+            label="Garderobe"
+            href="/garderobe"
+            badge={liveInventoryCount > 0 ? liveInventoryCount : undefined}
+          />
+        );
+      case "notifications":
+        return <NotificationsBell key="notifications" />;
+      case "profile":
+        return <IconButton key="profile" icon={UserRound} label="Profil" href="/account" />;
+      case "logout":
+        return <LogoutButton key="logout" />;
+      default:
+        return null;
+    }
+  }
+
+  // Wide-only slots that aren't "games" get grouped so they share the
+  // `hidden lg:flex` wrapper and the gap between them stays consistent.
+  // We render them individually now (each slot has its own hidden class),
+  // so grouping is handled per slot above.
+  void wideOnlySlots; // referenced in renderSlot
+
   return (
-    // `minmax(0,1fr)` (not bare `1fr`) on both side columns forces them to
-    // *true* equal width regardless of how much content either side holds
-    // — content that doesn't fit wraps/overflows inside its own column
-    // instead of stretching that column wider, which is what let the
-    // Streak clock and the Games dropdown collide before. The center
-    // column is `auto`, so the clock always gets exactly its own space.
     <header className="sticky top-0 z-50 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-b border-white/5 bg-[#030305]/95 px-4 py-2 backdrop-blur">
       {/* Left: logo + credits */}
       <div className="flex items-center gap-3 justify-self-start">
@@ -71,9 +162,6 @@ export function TopBar({
           <span className="relative flex items-center justify-center">
             <span aria-hidden className="logo-icon-glow" />
             {logoUrl ? (
-              // Admin-provided arbitrary external URL, not a local/
-              // optimizable asset — next/image would need it allow-listed
-              // per-domain, which an admin-editable URL can't satisfy.
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={logoUrl}
@@ -90,10 +178,6 @@ export function TopBar({
           <span>{creditsLabel} {currencyName}</span>
           <Link2 className="h-3.5 w-3.5 opacity-80" />
         </div>
-        {/* Admin-only shortcut to /admin — previously only reachable from
-            the homepage's big "Admin" button, which meant leaving the
-            homepage (e.g. into the World to tune a fight live) meant
-            clicking all the way back just to reach the panel again. */}
         {isAdmin && (
           <IconButton
             icon={ShieldAlert}
@@ -117,29 +201,9 @@ export function TopBar({
         <LiveClock streakDays={streakDays} onClaimed={onCreditsChange} />
       </div>
 
-      {/* Right: games (widest control, sits outermost-left of this group) +
-          non-game features (hidden on small screens) + core nav.
-          No `overflow-hidden` here on purpose — it used to clip the top
-          sliver of the Garderobe badge (IconButton positions it at
-          `-top-1 -right-1`, just outside the button's own box, and a tight
-          `overflow-hidden` wrapper cut that off). The responsive `hidden
-          md:block` / `hidden lg:flex` groups above already keep this row
-          from ever actually overflowing its grid column on narrow screens,
-          so there's nothing left for `overflow-hidden` to protect against. */}
+      {/* Right: configurable slot order */}
       <div className="flex items-center gap-1.5 justify-self-end">
-        <div className="hidden md:block">
-          <GamesMenu />
-        </div>
-        <div className="hidden items-center gap-1.5 lg:flex">
-          <IconButton icon={ShoppingBag} label="Shop" href="/shop" />
-          <IconButton icon={Gavel} label="Auktionshaus" href="/auctions" />
-          <IconButton icon={Repeat} label="Trading" href="/trading" />
-          <IconButton icon={Users} label="Community" href="/community" />
-        </div>
-        <IconButton icon={Shirt} label="Garderobe" href="/garderobe" badge={inventoryCount} />
-        <NotificationsBell />
-        <IconButton icon={UserRound} label="Profil" href="/account" />
-        <LogoutButton />
+        {slots.map((slot) => renderSlot(slot))}
       </div>
     </header>
   );

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
-import { DEFAULT_SITE_CONFIG, type SiteConfig } from "@/lib/site-config";
+import { DEFAULT_SITE_CONFIG, DEFAULT_TOPBAR_RIGHT_SLOTS, type SiteConfig } from "@/lib/site-config";
 // Import only server-safe name validation — NOT lib/site-logo-icons.ts, which
 // imports lucide-react "use client" components. When Next.js bundles this server
 // action into the /icon metadata route, that "use client" import triggers a hard
@@ -26,6 +26,7 @@ interface SiteConfigRow {
   perk_speed_label: string | null;
   perk_jump_label: string | null;
   perk_regen_label: string | null;
+  topbar_right_slots: string[] | null;
 }
 
 /** Falls back to the code defaults whenever the table doesn't exist yet or
@@ -37,7 +38,7 @@ export async function getSiteConfig(): Promise<SiteConfig> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("site_config")
-    .select("site_name, logo_url, logo_icon_name, starting_credits, currency_name, damage_label, armor_label, rarity_normal_label, rarity_selten_label, rarity_mythisch_label, rarity_ultra_label, perk_speed_label, perk_jump_label, perk_regen_label")
+    .select("site_name, logo_url, logo_icon_name, starting_credits, currency_name, damage_label, armor_label, rarity_normal_label, rarity_selten_label, rarity_mythisch_label, rarity_ultra_label, perk_speed_label, perk_jump_label, perk_regen_label, topbar_right_slots")
     .eq("id", "default")
     .maybeSingle();
 
@@ -63,6 +64,9 @@ export async function getSiteConfig(): Promise<SiteConfig> {
       jump:  row.perk_jump_label?.trim()  || def.perkLabels.jump,
       regen: row.perk_regen_label?.trim() || def.perkLabels.regen,
     },
+    topbarRightSlots: Array.isArray(row.topbar_right_slots) && row.topbar_right_slots.length > 0
+      ? row.topbar_right_slots
+      : [...DEFAULT_TOPBAR_RIGHT_SLOTS],
   };
 }
 
@@ -129,6 +133,9 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
     perk_speed_label: perkSpeed,
     perk_jump_label: perkJump,
     perk_regen_label: perkRegen,
+    topbar_right_slots: Array.isArray(input.topbarRightSlots) && input.topbarRightSlots.length > 0
+      ? input.topbarRightSlots
+      : null,
     updated_at: new Date().toISOString(),
   });
 

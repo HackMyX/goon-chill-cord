@@ -44,6 +44,12 @@ export interface SiteConfig {
   rarityLabels: { normal: string; selten: string; mythisch: string; ultra: string };
   /** Display labels for the three perk types that items can have. */
   perkLabels: { speed: string; jump: string; regen: string };
+  /** Ordered list of right-side TopBar slot keys. Controls which buttons
+   * appear on the right side of the TopBar and in what order.
+   * Keys: 'games' | 'shop' | 'auctions' | 'trading' | 'community' |
+   *       'wardrobe' | 'notifications' | 'profile' | 'logout'
+   * null/empty = use DEFAULT_TOPBAR_RIGHT_SLOTS. */
+  topbarRightSlots: string[];
 }
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
@@ -56,4 +62,11 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   armorLabel: "AP",
   rarityLabels: { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" },
   perkLabels: { speed: "Tempo", jump: "Sprung", regen: "Regen" },
+  topbarRightSlots: ["games", "shop", "auctions", "trading", "community", "wardrobe", "notifications", "profile", "logout"],
 };
+
+export const DEFAULT_TOPBAR_RIGHT_SLOTS = [
+  "games", "shop", "auctions", "trading", "community", "wardrobe", "notifications", "profile", "logout",
+] as const;
+
+export type TopbarSlotKey = typeof DEFAULT_TOPBAR_RIGHT_SLOTS[number];

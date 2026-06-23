@@ -106,18 +106,28 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
     }
   }
 
+  const showCountdown = streakConfig.showCountdown;
+  const showStreakCounter = streakConfig.showStreakCounter;
+  const showBox = showCountdown || showStreakCounter;
+
   return (
     <div className="flex items-center gap-2">
-      <div className="flex flex-col items-center rounded-2xl bg-white/5 px-6 py-2">
-        <span className="font-mono text-sm tabular-nums text-zinc-200">{time}</span>
-        <span className="flex items-center gap-1 text-xs text-orange-400">
-          <Flame className="h-3 w-3" />
-          Streak: {streakDays} Tage
-          {hydrated && (
-            <StreakInfoPopover streakDays={streakDays} bestStreakDays={bestStreakDays} config={streakConfig} />
+      {showBox && (
+        <div className="flex flex-col items-center rounded-2xl bg-white/5 px-6 py-2">
+          {showCountdown && (
+            <span className="font-mono text-sm tabular-nums text-zinc-200">{time}</span>
           )}
-        </span>
-      </div>
+          {showStreakCounter && (
+            <span className="flex items-center gap-1 text-xs text-orange-400">
+              <Flame className="h-3 w-3" />
+              Streak: {streakDays} Tage
+              {hydrated && (
+                <StreakInfoPopover streakDays={streakDays} bestStreakDays={bestStreakDays} config={streakConfig} />
+              )}
+            </span>
+          )}
+        </div>
+      )}
 
       {hydrated && canClaim && (
         <button

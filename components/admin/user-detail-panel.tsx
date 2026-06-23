@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trash2, Plus, Loader2, LogOut, Ban, ShieldOff, Eraser, PackagePlus, UserX } from "lucide-react";
+import { Trash2, Plus, Loader2, LogOut, Ban, ShieldOff, Eraser, PackagePlus, UserX, AlertTriangle, StickyNote, Clock } from "lucide-react";
 import {
   getUserDetail,
   searchItems,
@@ -297,6 +297,58 @@ export function UserDetailPanel({ userId }: { userId: string }) {
         )}
         {modMessage && <span className="text-xs text-zinc-400">{modMessage}</span>}
       </div>
+
+      {/* Mod history — only shown when there are actions on record */}
+      {(detail.warningCount > 0 || detail.noteCount > 0 || detail.modActions.length > 0) && (
+        <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold tracking-wide text-amber-300">MOD-VERLAUF</span>
+            {detail.warningCount > 0 && (
+              <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                <AlertTriangle className="h-2.5 w-2.5" />
+                {detail.warningCount} Verwarnung{detail.warningCount !== 1 ? "en" : ""}
+              </span>
+            )}
+            {detail.noteCount > 0 && (
+              <span className="flex items-center gap-1 rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold text-sky-300">
+                <StickyNote className="h-2.5 w-2.5" />
+                {detail.noteCount} Notiz{detail.noteCount !== 1 ? "en" : ""}
+              </span>
+            )}
+          </div>
+          <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-1">
+            {detail.modActions.map((a) => {
+              const colorMap: Record<string, string> = {
+                warning: "bg-amber-500/15 text-amber-300",
+                note: "bg-sky-500/15 text-sky-300",
+                temp_ban: "bg-red-500/15 text-red-300",
+                ticket_close: "bg-purple-500/15 text-purple-300",
+                credits_add: "bg-emerald-500/15 text-emerald-300",
+              };
+              const labelMap: Record<string, string> = {
+                warning: "Verwarnung",
+                note: "Notiz",
+                temp_ban: "Temp-Ban",
+                ticket_close: "Ticket",
+                credits_add: "Credits",
+              };
+              return (
+                <div key={a.id} className="flex items-start gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs">
+                  <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${colorMap[a.actionType] ?? "bg-zinc-700 text-zinc-300"}`}>
+                    {labelMap[a.actionType] ?? a.actionType}
+                  </span>
+                  {a.modUsername && <span className="flex-shrink-0 text-zinc-500">von <strong className="text-zinc-300">{a.modUsername}</strong></span>}
+                  {a.reason && <span className="flex-1 truncate text-zinc-500">· {a.reason}</span>}
+                  <span className="flex-shrink-0 text-zinc-600 flex items-center gap-0.5">
+                    <Clock className="h-2.5 w-2.5" />
+                    {new Date(a.createdAt).toLocaleDateString("de-DE")}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>

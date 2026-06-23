@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Flame, Save, Loader2, Zap, Calendar, TrendingUp, Star } from "lucide-react";
+import { Flame, Save, Loader2, Zap, Calendar, TrendingUp, Star, Eye, EyeOff } from "lucide-react";
 import { updateStreakConfig } from "@/lib/actions/streak";
 import { computeStreakReward, type StreakConfig } from "@/lib/streak";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -119,6 +119,55 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
         </div>
 
         <div className="mt-5 flex items-center gap-3">
+          <button
+            onMouseEnter={sound.hover}
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Speichern
+          </button>
+          {message && <span className="text-sm text-zinc-400">{message}</span>}
+        </div>
+      </div>
+
+      {/* Display settings card */}
+      <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
+          <Eye className="h-5 w-5 text-purple-400" />
+          Anzeige-Einstellungen (TopBar)
+        </h3>
+        <p className="mb-4 text-[11px] text-zinc-500">
+          Steuert, was im mittleren Bereich der TopBar dauerhaft sichtbar ist. Die Claim-Schaltfläche erscheint immer, wenn eine Belohnung verfügbar ist.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => setField("showCountdown", !form.showCountdown)}
+            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-colors ${
+              form.showCountdown
+                ? "border-purple-400/40 bg-purple-500/15 text-purple-200"
+                : "border-white/10 bg-white/[0.03] text-zinc-500 hover:border-white/20"
+            }`}
+          >
+            {form.showCountdown ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            Countdown-Uhr (HH:MM:SS)
+          </button>
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => setField("showStreakCounter", !form.showStreakCounter)}
+            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-colors ${
+              form.showStreakCounter
+                ? "border-orange-400/40 bg-orange-500/15 text-orange-200"
+                : "border-white/10 bg-white/[0.03] text-zinc-500 hover:border-white/20"
+            }`}
+          >
+            {form.showStreakCounter ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            Streak-Anzeige (🔥 X Tage)
+          </button>
+        </div>
+        <div className="mt-4 flex items-center gap-3">
           <button
             onMouseEnter={sound.hover}
             onClick={handleSave}

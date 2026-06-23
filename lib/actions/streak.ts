@@ -28,6 +28,8 @@ interface StreakConfigRow {
   special_event_enabled: boolean | null;
   special_event_multiplier: number | null;
   special_event_label: string | null;
+  show_countdown: boolean | null;
+  show_streak_counter: boolean | null;
 }
 
 function rowToConfig(row: StreakConfigRow): StreakConfig {
@@ -44,6 +46,8 @@ function rowToConfig(row: StreakConfigRow): StreakConfig {
     specialEventEnabled: row.special_event_enabled ?? false,
     specialEventMultiplier: row.special_event_multiplier ?? DEFAULT_STREAK_CONFIG.specialEventMultiplier,
     specialEventLabel: row.special_event_label ?? DEFAULT_STREAK_CONFIG.specialEventLabel,
+    showCountdown: row.show_countdown ?? DEFAULT_STREAK_CONFIG.showCountdown,
+    showStreakCounter: row.show_streak_counter ?? DEFAULT_STREAK_CONFIG.showStreakCounter,
   };
 }
 
@@ -68,18 +72,24 @@ export async function getStreakConfig(): Promise<StreakConfig> {
   // just because one newer column isn't migrated yet.
   let { data, error } = await admin
     .from("streak_config")
-    .select(`${baseColumns}, weekend_multiplier, special_event_enabled, special_event_multiplier, special_event_label`)
+    .select(`${baseColumns}, weekend_multiplier, special_event_enabled, special_event_multiplier, special_event_label, show_countdown, show_streak_counter`)
     .eq("id", "default")
     .single();
   if (error) {
-    const withWeekend = await admin.from("streak_config").select(`${baseColumns}, weekend_multiplier`).eq("id", "default").single();
+    const withWeekend = await admin.from("streak_config").select(`${baseColumns}, weekend_multiplier, special_event_enabled, special_event_multiplier, special_event_label`).eq("id", "default").single();
     if (!withWeekend.error) {
-      data = withWeekend.data ? { ...withWeekend.data, special_event_enabled: null, special_event_multiplier: null, special_event_label: null } : null;
+      data = withWeekend.data ? { ...withWeekend.data, show_countdown: null, show_streak_counter: null } : null;
       error = withWeekend.error;
     } else {
-      const retry = await admin.from("streak_config").select(baseColumns).eq("id", "default").single();
-      data = retry.data ? { ...retry.data, weekend_multiplier: null, special_event_enabled: null, special_event_multiplier: null, special_event_label: null } : null;
-      error = retry.error;
+      const withOldWeekend = await admin.from("streak_config").select(`${baseColumns}, weekend_multiplier`).eq("id", "default").single();
+      if (!withOldWeekend.error) {
+        data = withOldWeekend.data ? { ...withOldWeekend.data, special_event_enabled: null, special_event_multiplier: null, special_event_label: null, show_countdown: null, show_streak_counter: null } : null;
+        error = withOldWeekend.error;
+      } else {
+        const retry = await admin.from("streak_config").select(baseColumns).eq("id", "default").single();
+        data = retry.data ? { ...retry.data, weekend_multiplier: null, special_event_enabled: null, special_event_multiplier: null, special_event_label: null, show_countdown: null, show_streak_counter: null } : null;
+        error = retry.error;
+      }
     }
   }
 
@@ -351,13 +361,25 @@ export async function updateStreakConfig(input: StreakConfig): Promise<{ success
     special_event_enabled: input.specialEventEnabled,
     special_event_multiplier: input.specialEventMultiplier,
     special_event_label: input.specialEventLabel,
+    show_countdown: input.showCountdown,
+    show_streak_counter: input.showStreakCounter,
   });
   if (error) {
-    const withWeekend = await admin.from("streak_config").upsert({ ...baseRow, weekend_multiplier: input.weekendMultiplier });
-    error = withWeekend.error;
+    const withEvent = await admin.from("streak_config").upsert({
+      ...baseRow,
+      weekend_multiplier: input.weekendMultiplier,
+      special_event_enabled: input.specialEventEnabled,
+      special_event_multiplier: input.specialEventMultiplier,
+      special_event_label: input.specialEventLabel,
+    });
+    error = withEvent.error;
     if (error) {
-      const retry = await admin.from("streak_config").upsert(baseRow);
-      error = retry.error;
+      const withWeekend = await admin.from("streak_config").upsert({ ...baseRow, weekend_multiplier: input.weekendMultiplier });
+      error = withWeekend.error;
+      if (error) {
+        const retry = await admin.from("streak_config").upsert(baseRow);
+        error = retry.error;
+      }
     }
   }
 

@@ -37,6 +37,12 @@ export interface StreakConfig {
   /** Short label shown in the streak UI when the special event is active
    * — e.g. "Doppelte Credits 🎉" */
   specialEventLabel: string;
+  /** Whether to show the HH:MM:SS midnight countdown in the TopBar center.
+   * Defaults to false — hides the clock; admin can re-enable. */
+  showCountdown: boolean;
+  /** Whether to show the "Streak: X Tage 🔥" line in the TopBar center.
+   * Defaults to true; admin can hide it. */
+  showStreakCounter: boolean;
 }
 
 export const DEFAULT_STREAK_CONFIG: StreakConfig = {
@@ -52,6 +58,8 @@ export const DEFAULT_STREAK_CONFIG: StreakConfig = {
   specialEventEnabled: false,
   specialEventMultiplier: 2.0,
   specialEventLabel: "Sonder-Event",
+  showCountdown: false,
+  showStreakCounter: true,
 };
 
 export interface StreakRewardResult {
