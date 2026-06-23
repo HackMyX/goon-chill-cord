@@ -284,9 +284,9 @@ export const MONSTER_TYPE_IDS = DEFAULT_MONSTER_TYPES.map((m) => m.id);
  * once, for a single player alone in the World — see
  * `monstersAliveCapForPlayers` below for how this scales up once others
  * join the same room. */
-export const MAX_ALIVE_MONSTERS = 8;
-export const SPAWN_INTERVAL_MIN_SEC = 3;
-export const SPAWN_INTERVAL_MAX_SEC = 6;
+export const MAX_ALIVE_MONSTERS = 14;
+export const SPAWN_INTERVAL_MIN_SEC = 1.5;
+export const SPAWN_INTERVAL_MAX_SEC = 3.5;
 /** No spawns within this radius of the world origin — matches the
  * decorative spawn-area glow circles in scene.tsx, so monsters never pop
  * in right on top of where the player actually starts. */
@@ -300,11 +300,11 @@ export const SPAWN_SAFE_RADIUS = 12;
  * their own independent monster pool — so "the World feels busier with more
  * people in it" has to mean "everyone's own pool gets bigger", not "there's
  * one shared pool everyone draws from". */
-const ALIVE_CAP_PER_EXTRA_PLAYER = 3;
+const ALIVE_CAP_PER_EXTRA_PLAYER = 5;
 /** Hard ceiling regardless of how many players are in the room — without
  * this, a packed room would eventually spawn enough concurrent monsters to
  * tank everyone's own framerate for no further gameplay benefit. */
-const ALIVE_CAP_MAX = 26;
+const ALIVE_CAP_MAX = 35;
 /** Multiplicative spawn-interval shrink per additional player, compounding
  * (0.85² for 2 extra players, not 2×0.85) — a busier room doesn't just
  * allow more monsters at once, it actually fills that higher ceiling

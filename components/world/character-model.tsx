@@ -418,6 +418,7 @@ function PetCompanion({
     null
   );
   const attackCooldown = useRef(0);
+  const attackLungeRef = useRef(0);
   const worldPos = useRef(new THREE.Vector3());
 
   function pickNewTarget() {
@@ -482,6 +483,7 @@ function PetCompanion({
         if (attackCooldown.current <= 0) {
           attackCooldown.current = petConfig.attackSpeed;
           combatTarget.current.takeDamage(petConfig.damage);
+          attackLungeRef.current = 1;
         }
       }
       paused.current = false;
@@ -512,6 +514,9 @@ function PetCompanion({
       walkClockRef.current += delta * 7;
     }
 
+    // Decay attack lunge — fires to 1 on every hit, fades to 0 in ~0.2 s.
+    attackLungeRef.current = Math.max(0, attackLungeRef.current - delta * 5.5);
+
     // Ground hop: a quick symmetric arc, purely cosmetic (doesn't affect
     // `pos.current.y`, which ground pets always keep at 0 — the bob below
     // layers on top of that).
@@ -529,21 +534,28 @@ function PetCompanion({
         ? Math.sin(flapClock.current * 0.5) * 0.015
         : Math.abs(Math.sin(flapClock.current)) * 0.05;
 
-    g.position.set(pos.current.x, pos.current.y + hopY + bob, pos.current.z);
+    // Lunge the pet forward along its facing direction on each attack hit.
+    const lunge = attackLungeRef.current;
+    const lungeX = lunge > 0 ? Math.sin(facing.current) * lunge * 0.38 : 0;
+    const lungeZ = lunge > 0 ? Math.cos(facing.current) * lunge * 0.38 : 0;
+    g.position.set(pos.current.x + lungeX, pos.current.y + hopY + bob, pos.current.z + lungeZ);
     g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, facing.current, Math.min(1, delta * 6));
 
     if (bodyRef.current) {
       if (flying) {
-        // Banking into turns + nose-down cruise tilt — reads as
-        // "flying under its own control", not "floating sprite".
+        // Banking into turns + nose-down cruise tilt.
         const turn = THREE.MathUtils.lerp(g.rotation.y, facing.current, 1) - g.rotation.y;
         bodyRef.current.rotation.z = THREE.MathUtils.lerp(bodyRef.current.rotation.z, -turn * 5, 0.12);
-        // Steeper nose-down while actively flying
-        bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, inCombat ? -0.25 : -0.18, 0.06);
+        // Snap into a steep dive on attack, return to cruise pitch afterward.
+        bodyRef.current.rotation.x = THREE.MathUtils.lerp(
+          bodyRef.current.rotation.x,
+          inCombat ? -0.25 - lunge * 1.1 : -0.18,
+          0.06 + lunge * 0.28,
+        );
       } else {
-        // Lean forward while running, snap back when still
-        const targetTiltX = hopY > 0.01 ? -hopY * 0.6 : petIsMoving ? -0.1 : 0;
-        bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, targetTiltX, 0.1);
+        // Lunge nose-down sharply on attack, lean forward while moving otherwise.
+        const targetTiltX = lunge > 0.08 ? -lunge * 1.6 : hopY > 0.01 ? -hopY * 0.6 : petIsMoving ? -0.1 : 0;
+        bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, targetTiltX, lunge > 0.08 ? 0.32 : 0.1);
       }
     }
   });
@@ -551,7 +563,7 @@ function PetCompanion({
   return (
     <group ref={groupRef}>
       <group ref={bodyRef}>
-        <PetVariant item={item} walkClockRef={walkClockRef} />
+        <PetVariant item={item} walkClockRef={walkClockRef} attackPhaseRef={attackLungeRef} />
       </group>
     </group>
   );

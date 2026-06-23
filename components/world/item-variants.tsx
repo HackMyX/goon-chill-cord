@@ -143,7 +143,7 @@ const DOG_LEG_HIPS: [number, number, number][] = [
   [-0.16, 0.12, -0.08],
 ];
 
-function DogPet({ color, walkClockRef }: { color: string; walkClockRef?: { current: number } }) {
+function DogPet({ color, walkClockRef, attackPhaseRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
   const tailRef = useRef<THREE.Mesh>(null);
   const legGroupRefs = useRef<(THREE.Group | null)[]>([]);
   const bodyGroupRef = useRef<THREE.Group>(null);
@@ -151,14 +151,17 @@ function DogPet({ color, walkClockRef }: { color: string; walkClockRef?: { curre
   useFrame(({ clock }) => {
     const t = walkClockRef?.current ?? 0;
     const isMoving = t > 0.01;
-    // Wagging tail — speeds up when dog is excited/moving
+    const attack = attackPhaseRef?.current ?? 0;
+    // Tail goes wild on attack; fast wag while moving
     if (tailRef.current) {
-      const wagSpeed = isMoving ? 10 : 5.5;
+      const wagSpeed = attack > 0.1 ? 22 : isMoving ? 10 : 5.5;
       tailRef.current.rotation.z = 1.1 + Math.sin(clock.elapsedTime * wagSpeed) * 0.72;
     }
-    // Subtle body bob in sync with stride — gives a satisfying trotting weight
+    // Subtle body bob in sync with stride; quick scale squash on bite
     if (bodyGroupRef.current) {
       bodyGroupRef.current.position.y = isMoving ? Math.abs(Math.sin(t * 0.5)) * 0.055 : 0;
+      const s = attack > 0 ? 1 + attack * 0.18 : 1;
+      bodyGroupRef.current.scale.set(s, s, s);
     }
     for (let i = 0; i < legGroupRefs.current.length; i++) {
       const g = legGroupRefs.current[i];
@@ -235,34 +238,36 @@ function DogPet({ color, walkClockRef }: { color: string; walkClockRef?: { curre
   );
 }
 
-function DragonPet({ color }: { color: string; walkClockRef?: { current: number } }) {
+function DragonPet({ color, attackPhaseRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
   const wingRefs = useRef<(THREE.Mesh | null)[]>([]);
   const wingTipRefs = useRef<(THREE.Mesh | null)[]>([]);
   const bodyRef = useRef<THREE.Mesh>(null);
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
+    const attack = attackPhaseRef?.current ?? 0;
     const flap = Math.sin(t * 5.2) * 0.62;
-    // Main wing panels
+    // Wings flare fully open on attack strike
+    const flapBoost = attack * 0.55;
     if (wingRefs.current[0]) {
-      wingRefs.current[0].rotation.x = 1.05 + flap;
+      wingRefs.current[0].rotation.x = 1.05 + flap + flapBoost;
       wingRefs.current[0].rotation.z = 0.28;
     }
     if (wingRefs.current[1]) {
-      wingRefs.current[1].rotation.x = -1.05 - flap;
+      wingRefs.current[1].rotation.x = -1.05 - flap - flapBoost;
       wingRefs.current[1].rotation.z = 0.28;
     }
     // Wingtip membranes follow main wing with slight lag
     if (wingTipRefs.current[0]) {
-      wingTipRefs.current[0].rotation.x = 1.05 + flap * 1.2;
+      wingTipRefs.current[0].rotation.x = 1.05 + flap * 1.2 + flapBoost;
     }
     if (wingTipRefs.current[1]) {
-      wingTipRefs.current[1].rotation.x = -1.05 - flap * 1.2;
+      wingTipRefs.current[1].rotation.x = -1.05 - flap * 1.2 - flapBoost;
     }
-    // Subtle body glow pulse
+    // Glow flares bright on attack (fire-breath flash)
     if (bodyRef.current) {
       (bodyRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
-        0.18 + Math.sin(t * 2.1) * 0.1;
+        0.18 + Math.sin(t * 2.1) * 0.1 + attack * 1.4;
     }
   });
 
@@ -343,32 +348,34 @@ function DragonPet({ color }: { color: string; walkClockRef?: { current: number 
 /** Fire bird — upright flame-body, large swept wings that flap dramatically,
  * glowing ember eyes, and a fanned fire-feather tail. Flies in PetCompanion
  * (isFlyingPet → true) and banks into turns with a whole-body lean. */
-function PhoenixPet({ color }: { color: string; walkClockRef?: { current: number } }) {
+function PhoenixPet({ color, attackPhaseRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
   const wingRefs = useRef<(THREE.Mesh | null)[]>([]);
   const wingTipRefs = useRef<(THREE.Mesh | null)[]>([]);
   const bodyRef = useRef<THREE.Mesh>(null);
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    // Fast, dramatic flap — wide arc for a large bird
+    const attack = attackPhaseRef?.current ?? 0;
+    // Fast, dramatic flap — wings spread to max on attack strike
     const flap = Math.sin(t * 6.2) * 0.65;
+    const attackSpread = attack * 0.6;
     wingRefs.current.forEach((m, i) => {
       if (!m) return;
       const side = i === 0 ? 1 : -1;
       m.rotation.x = 0.18;
-      m.rotation.z = side * (1.0 + flap);
+      m.rotation.z = side * (1.0 + flap + attackSpread);
     });
     // Wingtip follows with lag and more amplitude
     wingTipRefs.current.forEach((m, i) => {
       if (!m) return;
       const side = i === 0 ? 1 : -1;
       m.rotation.x = 0.1;
-      m.rotation.z = side * (1.3 + flap * 1.35);
+      m.rotation.z = side * (1.3 + flap * 1.35 + attackSpread * 1.2);
     });
-    // Body glow pulses with the flap cycle
+    // Body blazes white-hot on attack
     if (bodyRef.current) {
       (bodyRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
-        0.55 + Math.abs(Math.sin(t * 6.2)) * 0.35;
+        0.55 + Math.abs(Math.sin(t * 6.2)) * 0.35 + attack * 1.2;
     }
   });
 
@@ -449,7 +456,7 @@ function PhoenixPet({ color }: { color: string; walkClockRef?: { current: number
   );
 }
 
-function GhostPet({ color }: { color: string; walkClockRef?: { current: number } }) {
+function GhostPet({ color, attackPhaseRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
   const bodyRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const orbitRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -457,27 +464,29 @@ function GhostPet({ color }: { color: string; walkClockRef?: { current: number }
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    // Main body pulse — dramatic opacity swing
+    const attack = attackPhaseRef?.current ?? 0;
+    // Main body — flashes fully opaque on attack strike
     if (bodyRef.current) {
       (bodyRef.current.material as THREE.MeshBasicMaterial).opacity =
-        0.38 + Math.sin(t * 2.2) * 0.22;
+        Math.min(1, 0.38 + Math.sin(t * 2.2) * 0.22 + attack * 0.55);
     }
-    // Outer glow pulsing (slightly offset phase)
+    // Outer glow surges on attack
     if (glowRef.current) {
       (glowRef.current.material as THREE.MeshBasicMaterial).opacity =
-        0.14 + Math.sin(t * 2.2 + 0.8) * 0.1;
+        Math.min(0.8, 0.14 + Math.sin(t * 2.2 + 0.8) * 0.1 + attack * 0.45);
     }
-    // Ring slowly rotates
+    // Ring spins fast during attack
     if (ringRef.current) {
-      ringRef.current.rotation.z = t * 0.6;
+      ringRef.current.rotation.z = t * (0.6 + attack * 8);
       (ringRef.current.material as THREE.MeshBasicMaterial).opacity =
-        0.3 + Math.sin(t * 1.5) * 0.15;
+        Math.min(0.85, 0.3 + Math.sin(t * 1.5) * 0.15 + attack * 0.45);
     }
-    // Orbiting soul-orbs drift around the body
+    // Soul-orbs orbit faster and flare during attack
+    const orbitSpeed = 1.4 + attack * 5.5;
     for (let i = 0; i < orbitRefs.current.length; i++) {
       const m = orbitRefs.current[i];
       if (!m) continue;
-      const angle = t * 1.4 + (i / 3) * Math.PI * 2;
+      const angle = t * orbitSpeed + (i / 3) * Math.PI * 2;
       const radius = 0.28 + Math.sin(t * 0.7 + i) * 0.04;
       m.position.set(
         Math.cos(angle) * radius,
@@ -485,7 +494,7 @@ function GhostPet({ color }: { color: string; walkClockRef?: { current: number }
         Math.sin(angle) * radius
       );
       (m.material as THREE.MeshBasicMaterial).opacity =
-        0.5 + Math.sin(t * 2.4 + i) * 0.3;
+        Math.min(1, 0.5 + Math.sin(t * 2.4 + i) * 0.3 + attack * 0.5);
     }
   });
 
@@ -544,7 +553,7 @@ const CAT_LEG_HIPS: [number, number, number][] = [
   [-0.11, 0.09, -0.05],
 ];
 
-function CatPet({ color, walkClockRef }: { color: string; walkClockRef?: { current: number } }) {
+function CatPet({ color, walkClockRef, attackPhaseRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
   const tailGroupRef = useRef<THREE.Group>(null);
   const legGroupRefs = useRef<(THREE.Group | null)[]>([]);
   const bodyGroupRef = useRef<THREE.Group>(null);
@@ -552,14 +561,18 @@ function CatPet({ color, walkClockRef }: { color: string; walkClockRef?: { curre
   useFrame(({ clock }) => {
     const t = walkClockRef?.current ?? 0;
     const isMoving = t > 0.01;
-    // Tail curls and sways gracefully — more animated when still
+    const attack = attackPhaseRef?.current ?? 0;
+    // Tail lashes hard during attack swipe
     if (tailGroupRef.current) {
-      const swayAmp = isMoving ? 0.35 : 0.55;
-      tailGroupRef.current.rotation.z = -0.4 + Math.sin(clock.elapsedTime * (isMoving ? 3.5 : 2.0)) * swayAmp;
+      const swayAmp = attack > 0.1 ? 0.95 : isMoving ? 0.35 : 0.55;
+      const swaySpeed = attack > 0.1 ? 14 : isMoving ? 3.5 : 2.0;
+      tailGroupRef.current.rotation.z = -0.4 + Math.sin(clock.elapsedTime * swaySpeed) * swayAmp;
     }
-    // Subtle body bob while prowling
+    // Subtle body bob while prowling; scale pop on attack strike
     if (bodyGroupRef.current) {
       bodyGroupRef.current.position.y = isMoving ? Math.abs(Math.sin(t * 0.5)) * 0.04 : 0;
+      const s = attack > 0 ? 1 + attack * 0.15 : 1;
+      bodyGroupRef.current.scale.set(s, s, s);
     }
     for (let i = 0; i < legGroupRefs.current.length; i++) {
       const g = legGroupRefs.current[i];
@@ -651,7 +664,7 @@ export function isFlyingPet(name: string): boolean {
   return /Phönix|Drache/.test(name);
 }
 
-export function PetVariant({ item, walkClockRef }: { item: EquippedItem; walkClockRef?: { current: number } }) {
+export function PetVariant({ item, walkClockRef, attackPhaseRef }: { item: EquippedItem; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
   const color = rarityColorFor(item, "#a855f7");
   // The pet's *noun* always wins over the hash fallback — equip something
   // named "... Hund" and it must look like a dog, not whatever shape the
@@ -678,7 +691,7 @@ export function PetVariant({ item, walkClockRef }: { item: EquippedItem; walkClo
             : PET_VARIANTS[variantIndex(item.name, PET_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
-      <Variant color={color} walkClockRef={walkClockRef} />
+      <Variant color={color} walkClockRef={walkClockRef} attackPhaseRef={attackPhaseRef} />
     </RarityFX>
   );
 }
