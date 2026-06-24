@@ -3,10 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Zap, Shirt, Users, ShieldAlert, Shield, ClipboardList } from "lucide-react";
+import { Zap, Shirt, Users, ShieldAlert, Shield, ClipboardList, Coins } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseOpeningSection } from "@/components/dashboard/case-opening-section";
-import { DoubleOrNothing } from "@/components/dashboard/double-or-nothing";
 import { Leaderboard, type LeaderboardEntry } from "@/components/dashboard/leaderboard";
 import { subscribeToPresence } from "@/lib/presence-client";
 import { createClient } from "@/lib/supabase/client";
@@ -14,7 +13,6 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { CaseGroup, Rarity } from "@/lib/cases";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
-import type { DonConfig } from "@/lib/don-config";
 
 /** Same Realtime presence roster the Community page uses (lib/presence-
  * client.ts) — just counting it instead of listing names, for the small
@@ -40,8 +38,6 @@ interface DashboardShellProps {
   caseGroupPreviews: CaseGroupPreview[];
   isAdmin?: boolean;
   isModerator?: boolean;
-  donConfig: DonConfig;
-  initialFlipsToday: number;
 }
 
 export function DashboardShell({
@@ -53,8 +49,6 @@ export function DashboardShell({
   caseGroupPreviews,
   isAdmin = false,
   isModerator = false,
-  donConfig,
-  initialFlipsToday,
 }: DashboardShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -125,6 +119,15 @@ export function DashboardShell({
               Umfragen
             </Link>
             <Link
+              href="/don"
+              onMouseEnter={sound.hover}
+              onClick={sound.click}
+              className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-5 py-2.5 text-sm font-semibold text-amber-300 transition-colors hover:border-amber-400/50 hover:bg-amber-500/15"
+            >
+              <Coins className="h-4 w-4" />
+              Double or Nothing
+            </Link>
+            <Link
               href="/community"
               onMouseEnter={sound.hover}
               onClick={sound.click}
@@ -180,12 +183,6 @@ export function DashboardShell({
           );
         })}
 
-        <DoubleOrNothing
-          credits={credits}
-          onCreditsChange={handleCreditsChange}
-          donConfig={donConfig}
-          initialFlipsToday={initialFlipsToday}
-        />
       </main>
     </div>
   );

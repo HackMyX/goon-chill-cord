@@ -54,7 +54,7 @@ export function ShopCharacterView({
     <View
       index={viewIndex + 1}
       visible={visible}
-      style={{ width: "100%", height: "100%" }}
+      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
     >
       <PerspectiveCamera makeDefault position={CAM_POS} fov={CAM_FOV} />
 
