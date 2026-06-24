@@ -995,6 +995,79 @@ function CatPet({ color, walkClockRef, attackPhaseRef, isMovingRef: _im }: { col
 
 const PET_VARIANTS = [DogPet, DragonPet, GhostPet, CatPet];
 
+/** Floating ring + orbiting crystals/particles around a pet, scaled to the
+ * pet's ~0.35-unit body radius. selten = ring only, mythisch = ring + 3
+ * crystals, ultra = ring + 8 RGB particles. Always no-op for normal. */
+function PetRarityAura({ rarity, color }: { rarity: Rarity; color: string }) {
+  const ringRef = useRef<THREE.Mesh>(null);
+  const pRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const pCount = rarity === "ultra" ? 8 : rarity === "mythisch" ? 3 : 0;
+  const seeds = useMemo(
+    () =>
+      Array.from({ length: pCount }, (_, i) => ({
+        angle: (i / (pCount || 1)) * Math.PI * 2,
+        phase: i * 0.78,
+      })),
+    // pCount is derived from rarity which is static per item instance
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    const r = ringRef.current;
+    if (r) {
+      r.rotation.y = t * (rarity === "ultra" ? 2.0 : 1.0);
+      if (rarity === "ultra") (r.material as THREE.MeshBasicMaterial).color.setHSL((t * 0.2) % 1, 0.9, 0.6);
+    }
+    for (let i = 0; i < pRefs.current.length; i++) {
+      const m = pRefs.current[i];
+      if (!m) continue;
+      const s = seeds[i];
+      m.position.set(
+        Math.cos(t * 0.9 + s.angle) * 0.36,
+        0.28 + Math.sin(t * 1.3 + s.phase) * 0.1,
+        Math.sin(t * 0.9 + s.angle) * 0.36
+      );
+      if (rarity === "ultra")
+        (m.material as THREE.MeshBasicMaterial).color.setHSL(((t * 0.2) + i / pCount) % 1, 1.0, 0.65);
+    }
+  });
+
+  if (rarity === "normal") return null;
+
+  return (
+    <group>
+      <mesh ref={ringRef} position={[0, 0.22, 0]}>
+        <torusGeometry args={[0.34, 0.013, 6, 32]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={rarity === "ultra" ? 0.85 : rarity === "mythisch" ? 0.7 : 0.55}
+          toneMapped={false}
+          depthWrite={false}
+        />
+      </mesh>
+      {seeds.map((_, i) => (
+        <mesh key={i} ref={(el) => { pRefs.current[i] = el; }} position={[0, 0.28, 0]}>
+          {rarity === "mythisch" ? (
+            <octahedronGeometry args={[0.04, 0]} />
+          ) : (
+            <sphereGeometry args={[0.028, 6, 6]} />
+          )}
+          <meshBasicMaterial
+            color={color}
+            transparent
+            opacity={rarity === "ultra" ? 0.85 : 0.75}
+            toneMapped={false}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 /** True for any pet whose name says it flies — see character-model.tsx's
  * PetCompanion for the actual flight-vs-ground-wander behavior this
  * gates. Only ever called with a pet's own name (never a jacket's), so no
@@ -1005,18 +1078,7 @@ export function isFlyingPet(name: string): boolean {
 
 export function PetVariant({ item, walkClockRef, attackPhaseRef, isMovingRef }: { item: EquippedItem; walkClockRef?: { current: number }; attackPhaseRef?: { current: number }; isMovingRef?: { current: boolean } }) {
   const color = rarityColorFor(item, "#a855f7");
-  // The pet's *noun* always wins over the hash fallback — equip something
-  // named "... Hund" and it must look like a dog, not whatever shape the
-  // hash happened to land on. Only names with no recognized noun (shouldn't
-  // happen given the current catalogue, but a future admin-added pet might)
-  // fall back to the old hash-based pick. Written as a plain ternary chain
-  // (not a helper function returning a component) so the React Compiler can
-  // statically see this only ever selects among the fixed components above.
-  // Phönix checked *before* Drache/Schatten — "Mini-Phönix" used to match
-  // the same /Drache|Phönix/ branch as "Schatten-Drache" and render as an
-  // identical DragonPet, which was the "two different items look the
-  // same" bug; it now gets its own bird-shaped PhoenixPet instead of
-  // reusing either Dragon or Ghost.
+  const rarity = item.rarity as Rarity;
   const Variant = /Hund/.test(item.name)
     ? DogPet
     : /Katze/.test(item.name)
@@ -1029,8 +1091,9 @@ export function PetVariant({ item, walkClockRef, attackPhaseRef, isMovingRef }: 
             ? GhostPet
             : PET_VARIANTS[variantIndex(item.name, PET_VARIANTS.length, item.rarity)];
   return (
-    <RarityFX rarity={item.rarity}>
+    <RarityFX rarity={rarity}>
       <Variant color={color} walkClockRef={walkClockRef} attackPhaseRef={attackPhaseRef} isMovingRef={isMovingRef} />
+      <PetRarityAura rarity={rarity} color={color} />
     </RarityFX>
   );
 }
@@ -2177,37 +2240,21 @@ const EXACT_SHIELD_SHAPE: Record<string, typeof KiteShield> = {
   "Drachenschild": KiteShield,
 };
 
-const SHIELD_AURA_SMOKE_COUNT = 8;
-
 // CharacterModel's body spans roughly feet-at-y=0 up to the hat anchor at
 // y=2.42 — but the *tallest* hat shape, TopHat (its cylinder top sits 0.38
 // above its own group origin), actually reaches 2.42 + 0.38 = 2.80, taller
-// than the anchor point alone suggests. The previous version of this
-// bubble (center 1.25, radius 0.78 × scale (1, 1.75, 1) → top at 2.615)
-// still clipped that hat (and most others with any real height) right
-// through the crown — exactly the "every helmet should fit inside without
-// poking out" guarantee this is supposed to give, not just the bare head.
-// Retuned so the top clears 2.80 with real margin (now ~2.90) while the
-// bottom still clears the feet, and the horizontal radius leaves room for
-// the widest hat brims (CapHat's, ~0.25 half-width) sitting on the
-// shoulders — still reads as a body-hugging bubble, just one no equipped
-// hat can ever clip through.
+// than the anchor point alone suggests.
 const SHIELD_BUBBLE_CENTER_Y = 1.38;
 const SHIELD_BUBBLE_RADIUS = 0.8;
 const SHIELD_BUBBLE_SCALE = new THREE.Vector3(1.08, 1.9, 1.08);
 
 /**
- * Full-body energy bubble + drifting smoke puffs for a *functioning*
- * shield (item.shield_hp > 0 — lib/combat.ts) — wraps the whole character,
- * not just the arm-mounted `ShieldVariant` prop mesh, since "you have an
- * active damage-absorbing shield" is a whole-body state, not a held item.
- * `stateRef` (Player.tsx's own `combatRef`, structurally compatible —
- * extra fields on it are simply ignored) lets the bubble/smoke fade out
- * as the shield depletes and snap back once it recharges
- * (lib/combat.ts' `applyIncomingDamage`/Player.tsx's regen tick mutate the
- * same ref this reads every frame); omitted entirely for remote
- * avatars/previews, which fall back to a constant full-strength look since
- * there's no live shield state to follow there.
+ * Full-body energy bubble for a functioning shield (shield_hp > 0).
+ * Visual design is rarity-specific — not just a color swap:
+ *   normal   → simple smooth sphere, 4 slow drift puffs
+ *   selten   → faceted crystal cage (icosahedron), 6 bright sparkles
+ *   mythisch → smooth sphere + 2 orbiting rings + 10 gem crystals
+ *   ultra    → sphere + 3 atom-style counter-rotating rings + 16 RGB particles
  */
 export function ShieldAura({
   item,
@@ -2217,15 +2264,26 @@ export function ShieldAura({
   stateRef?: React.RefObject<{ shieldHpRemaining: number; shieldMaxHp: number }>;
 }) {
   const color = rarityColorFor(item, "#22d3ee");
+  const rarity = item.rarity as Rarity;
+
   const bubbleRef = useRef<THREE.Mesh>(null);
-  const smokeRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const ring1Ref = useRef<THREE.Mesh>(null);
+  const ring2Ref = useRef<THREE.Mesh>(null);
+  const ring3Ref = useRef<THREE.Mesh>(null);
+  const pRefs = useRef<(THREE.Mesh | null)[]>([]);
+
+  const pCount = rarity === "ultra" ? 16 : rarity === "mythisch" ? 10 : rarity === "selten" ? 6 : 4;
+
   const seeds = useMemo(
     () =>
-      Array.from({ length: SHIELD_AURA_SMOKE_COUNT }, (_, i) => ({
-        angle: (i / SHIELD_AURA_SMOKE_COUNT) * Math.PI * 2,
-        phase: i * 0.7,
-        heightSeed: (i % 3) * 0.3,
+      Array.from({ length: pCount }, (_, i) => ({
+        angle: (i / pCount) * Math.PI * 2,
+        phase: i * 0.61,
+        ySeed: ((i % 5) * 0.55) - 1.1,
+        spd: 0.28 + (i % 4) * 0.12,
       })),
+    // pCount is derived from rarity which is static per item instance
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
@@ -2234,45 +2292,106 @@ export function ShieldAura({
     const s = stateRef?.current;
     const frac = s ? (s.shieldMaxHp > 0 ? s.shieldHpRemaining / s.shieldMaxHp : 0) : 1;
 
-    if (bubbleRef.current) {
-      bubbleRef.current.visible = frac > 0;
-      // Pulse multiplies the ellipsoid's baked-in non-uniform shape rather
-      // than replacing it with `setScalar` — a uniform setScalar here would
-      // collapse the deliberate vertical stretch back into a sphere every
-      // frame.
-      const pulse = 1 + Math.sin(t * 1.5) * 0.015;
-      bubbleRef.current.scale.set(
-        SHIELD_BUBBLE_SCALE.x * pulse,
-        SHIELD_BUBBLE_SCALE.y * pulse,
-        SHIELD_BUBBLE_SCALE.z * pulse
-      );
-      const mat = bubbleRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.12 * frac + Math.sin(t * 2) * 0.02 * frac;
-      mat.color.set(color);
+    // ── Main bubble ────────────────────────────────────────────────────────────
+    const b = bubbleRef.current;
+    if (b) {
+      b.visible = frac > 0;
+      const pulseSpd = rarity === "ultra" ? 9 : rarity === "mythisch" ? 3.5 : 1.5;
+      const pulseAmp = rarity === "ultra" ? 0.03 : 0.015;
+      const pulse = 1 + Math.sin(t * pulseSpd) * pulseAmp;
+      b.scale.set(SHIELD_BUBBLE_SCALE.x * pulse, SHIELD_BUBBLE_SCALE.y * pulse, SHIELD_BUBBLE_SCALE.z * pulse);
+      const mat = b.material as THREE.MeshBasicMaterial;
+      const baseOp = rarity === "ultra" ? 0.18 : rarity === "mythisch" ? 0.15 : rarity === "selten" ? 0.13 : 0.11;
+      mat.opacity = (baseOp + Math.sin(t * 2) * 0.025) * frac;
+      if (rarity === "ultra") {
+        mat.color.setHSL((t * 0.15) % 1, 0.9, 0.6);
+      } else {
+        mat.color.set(color);
+      }
     }
-    for (let i = 0; i < smokeRefs.current.length; i++) {
-      const mesh = smokeRefs.current[i];
+
+    // ── Ring 1 — horizontal, rotates around Y (mythisch + ultra) ───────────────
+    const r1 = ring1Ref.current;
+    if (r1) {
+      r1.rotation.y = t * (rarity === "ultra" ? 1.1 : 0.5);
+      const mat = r1.material as THREE.MeshBasicMaterial;
+      mat.opacity = (0.55 + Math.sin(t * 2.5) * 0.12) * frac;
+      if (rarity === "ultra") mat.color.setHSL(((t * 0.15) + 0.33) % 1, 0.9, 0.6);
+      else mat.color.set(color);
+    }
+
+    // ── Ring 2 — tilted, counter-rotates (mythisch + ultra) ────────────────────
+    const r2 = ring2Ref.current;
+    if (r2) {
+      r2.rotation.x = Math.PI / 3 + t * (rarity === "ultra" ? -0.9 : 0.35);
+      r2.rotation.y = t * 0.2;
+      const mat = r2.material as THREE.MeshBasicMaterial;
+      mat.opacity = (0.45 + Math.sin(t * 1.8 + 1) * 0.12) * frac;
+      if (rarity === "ultra") mat.color.setHSL(((t * 0.15) + 0.66) % 1, 0.9, 0.6);
+      else mat.color.set(color);
+    }
+
+    // ── Ring 3 — third axis, ultra only ────────────────────────────────────────
+    const r3 = ring3Ref.current;
+    if (r3) {
+      r3.rotation.z = Math.PI / 4 + t * 0.7;
+      r3.rotation.x = t * 0.35;
+      const mat = r3.material as THREE.MeshBasicMaterial;
+      mat.opacity = (0.5 + Math.sin(t * 3 + 2) * 0.12) * frac;
+      mat.color.setHSL((t * 0.15) % 1, 0.9, 0.6);
+    }
+
+    // ── Particles ──────────────────────────────────────────────────────────────
+    for (let i = 0; i < pRefs.current.length; i++) {
+      const mesh = pRefs.current[i];
       if (!mesh) continue;
-      const seed = seeds[i];
-      // Orbit radius/height range widened to match the taller, equally-wide
-      // bubble shape above — drifting across its full height (roughly
-      // -1.3..1.3 around the group's own origin) instead of only the
-      // lower-middle band the old shorter sphere had room for.
-      mesh.position.set(
-        Math.cos(t * 0.5 + seed.angle) * SHIELD_BUBBLE_RADIUS * 0.85,
-        Math.sin(t * 0.8 + seed.phase) * 1.05 + seed.heightSeed,
-        Math.sin(t * 0.5 + seed.angle) * SHIELD_BUBBLE_RADIUS * 0.85
-      );
-      const mat = mesh.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.25 * frac;
-      mat.color.set(color);
+      const sd = seeds[i];
+      if (rarity === "ultra") {
+        const tilt = (i / pCount) * Math.PI;
+        mesh.position.set(
+          Math.cos(t * sd.spd + sd.angle) * Math.cos(tilt) * SHIELD_BUBBLE_RADIUS * 0.88,
+          Math.sin(t * sd.spd + sd.angle) * 1.05 + sd.ySeed,
+          Math.cos(t * sd.spd + sd.angle) * Math.sin(tilt) * SHIELD_BUBBLE_RADIUS * 0.88
+        );
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        mat.opacity = 0.75 * frac;
+        mat.color.setHSL(((t * 0.15) + i / pCount) % 1, 1.0, 0.65);
+      } else if (rarity === "mythisch") {
+        mesh.position.set(
+          Math.cos(t * sd.spd + sd.angle) * SHIELD_BUBBLE_RADIUS * 0.9,
+          Math.sin(t * 0.6 + sd.phase) * 1.0 + sd.ySeed,
+          Math.sin(t * sd.spd + sd.angle) * SHIELD_BUBBLE_RADIUS * 0.9
+        );
+        mesh.rotation.y = t * 1.5;
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        mat.opacity = (0.7 + Math.sin(t * 2 + sd.phase) * 0.15) * frac;
+        mat.color.set(color);
+      } else {
+        // normal / selten: slow drift puffs
+        mesh.position.set(
+          Math.cos(t * sd.spd * 0.6 + sd.angle) * SHIELD_BUBBLE_RADIUS * 0.85,
+          Math.sin(t * 0.5 + sd.phase) * (rarity === "selten" ? 1.1 : 0.8) + sd.ySeed,
+          Math.sin(t * sd.spd * 0.6 + sd.angle) * SHIELD_BUBBLE_RADIUS * 0.85
+        );
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        mat.opacity = (rarity === "selten" ? 0.45 : 0.22) * frac;
+        mat.color.set(color);
+      }
     }
   });
 
+  const RING_R = SHIELD_BUBBLE_RADIUS * 1.2;
+  const RING_TUBE = 0.022;
+
   return (
     <group position={[0, SHIELD_BUBBLE_CENTER_Y, 0]}>
+      {/* Bubble — icosahedron (crystal cage) for selten, smooth sphere for others */}
       <mesh ref={bubbleRef} scale={SHIELD_BUBBLE_SCALE}>
-        <sphereGeometry args={[SHIELD_BUBBLE_RADIUS, 24, 18]} />
+        {rarity === "selten" ? (
+          <icosahedronGeometry args={[SHIELD_BUBBLE_RADIUS, 0]} />
+        ) : (
+          <sphereGeometry args={[SHIELD_BUBBLE_RADIUS, 24, 18]} />
+        )}
         <meshBasicMaterial
           color={color}
           transparent
@@ -2282,15 +2401,42 @@ export function ShieldAura({
           depthWrite={false}
         />
       </mesh>
+
+      {/* Rings — 2 for mythisch, 3 for ultra (atom-model style) */}
+      {(rarity === "mythisch" || rarity === "ultra") && (
+        <>
+          <mesh ref={ring1Ref}>
+            <torusGeometry args={[RING_R, RING_TUBE, 8, 64]} />
+            <meshBasicMaterial color={color} transparent opacity={0.55} toneMapped={false} depthWrite={false} />
+          </mesh>
+          <mesh ref={ring2Ref}>
+            <torusGeometry args={[RING_R * 1.06, RING_TUBE, 8, 64]} />
+            <meshBasicMaterial color={color} transparent opacity={0.45} toneMapped={false} depthWrite={false} />
+          </mesh>
+        </>
+      )}
+      {rarity === "ultra" && (
+        <mesh ref={ring3Ref}>
+          <torusGeometry args={[RING_R * 1.12, RING_TUBE, 8, 64]} />
+          <meshBasicMaterial color={color} transparent opacity={0.5} toneMapped={false} depthWrite={false} />
+        </mesh>
+      )}
+
+      {/* Particles: gems (octahedron) for mythisch, spheres otherwise */}
       {seeds.map((_, i) => (
-        <mesh
-          key={i}
-          ref={(el) => {
-            smokeRefs.current[i] = el;
-          }}
-        >
-          <sphereGeometry args={[0.12, 8, 8]} />
-          <meshBasicMaterial color={color} transparent opacity={0.25} toneMapped={false} depthWrite={false} />
+        <mesh key={i} ref={(el) => { pRefs.current[i] = el; }}>
+          {rarity === "mythisch" ? (
+            <octahedronGeometry args={[0.055, 0]} />
+          ) : (
+            <sphereGeometry args={[rarity === "ultra" ? 0.05 : 0.11, 8, 8]} />
+          )}
+          <meshBasicMaterial
+            color={color}
+            transparent
+            opacity={rarity === "ultra" ? 0.65 : rarity === "selten" ? 0.4 : 0.22}
+            toneMapped={false}
+            depthWrite={false}
+          />
         </mesh>
       ))}
     </group>
@@ -2458,12 +2604,70 @@ function OrbPendantAmulet({ color, emissive }: { color: string; emissive: string
   );
 }
 
-const AMULET_VARIANTS = [GemPendantAmulet, CrossPendantAmulet, OrbPendantAmulet];
+/** Flat stone tablet with glowing rune engravings — rectangular face with
+ * three bright horizontal marks that glow in the item's rarity color. */
+function RuneAmulet({ color, emissive: _e }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <NeckChain />
+      <group position={[0, -0.16, 0.32]}>
+        {/* Stone face */}
+        <mesh>
+          <boxGeometry args={[0.12, 0.14, 0.025]} />
+          <meshStandardMaterial color={color} roughness={0.7} metalness={0.1} />
+        </mesh>
+        {/* Glowing rune marks — always in item color for visibility */}
+        <mesh position={[0, 0.035, 0.015]}>
+          <boxGeometry args={[0.06, 0.011, 0.006]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} />
+        </mesh>
+        <mesh position={[0.008, 0.005, 0.015]}>
+          <boxGeometry args={[0.011, 0.038, 0.006]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} />
+        </mesh>
+        <mesh position={[0, -0.032, 0.015]}>
+          <boxGeometry args={[0.06, 0.011, 0.006]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.85} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+/** Curved claw/tooth pendant in three segments — tapers to a pointed tip. */
+function ClawAmulet({ color, emissive }: { color: string; emissive: string }) {
+  return (
+    <group>
+      <NeckChain />
+      <group position={[0, -0.13, 0.32]}>
+        {/* Upper shaft */}
+        <mesh>
+          <boxGeometry args={[0.026, 0.09, 0.022]} />
+          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.55} />
+        </mesh>
+        {/* Mid curve — slightly forward-tilted */}
+        <mesh position={[0.01, -0.055, 0.007]} rotation={[0, 0, -0.28]}>
+          <boxGeometry args={[0.019, 0.052, 0.017]} />
+          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.55} />
+        </mesh>
+        {/* Pointed tip */}
+        <mesh position={[0.022, -0.105, 0.012]} rotation={[0.1, 0, -0.75]}>
+          <coneGeometry args={[0.011, 0.038, 6]} />
+          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.7} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+const AMULET_VARIANTS = [GemPendantAmulet, CrossPendantAmulet, OrbPendantAmulet, RuneAmulet, ClawAmulet];
 
 const EXACT_AMULET_SHAPE: Record<string, typeof GemPendantAmulet> = {
   "Amulett der Götter": CrossPendantAmulet,
   "Void-Amulett": OrbPendantAmulet,
   "Sternenamulett": GemPendantAmulet,
+  "Runenamulett": RuneAmulet,
+  "Klauenamulett": ClawAmulet,
 };
 
 /** Worn around the neck, sitting on top of the chest/jacket — placed in

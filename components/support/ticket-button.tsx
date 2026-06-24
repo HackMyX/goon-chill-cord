@@ -294,24 +294,26 @@ function SupportButtonInner() {
   return (
     <>
       {!open && (
-        <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-1.5 sm:bottom-6 sm:right-6">
-          {/* Reward teaser chip — rotates between support and reward message */}
-          <div className="flex flex-col items-end gap-1">
-            <span className="rounded-xl bg-purple-600 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_0_14px_rgba(147,51,234,0.75),0_2px_8px_rgba(0,0,0,0.4)]">
-              Hilfe & Chat
-            </span>
-            <span className="rounded-xl border border-amber-400/40 bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.25)]">
-              🏆 Gute Reports = Credits!
-            </span>
+        <div className="fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6">
+          <div className="relative flex flex-col items-center">
+            {/* Pills centered above the button via absolute positioning */}
+            <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex -translate-x-1/2 flex-col items-center gap-1 whitespace-nowrap">
+              <span className="rounded-xl bg-purple-600 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_0_14px_rgba(147,51,234,0.75),0_2px_8px_rgba(0,0,0,0.4)]">
+                Hilfe & Chat
+              </span>
+              <span className="rounded-xl border border-amber-400/40 bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.25)]">
+                🏆 Gute Reports = Credits!
+              </span>
+            </div>
+            <button
+              onClick={handleOpen}
+              title="Support, KI-Assistent & Global Chat"
+              className="relative flex h-14 w-14 items-center justify-center rounded-full bg-purple-600 text-white shadow-[0_4px_20px_rgba(147,51,234,0.55)] transition-all hover:scale-110 hover:bg-purple-500 hover:shadow-[0_4px_30px_rgba(147,51,234,0.8)]"
+            >
+              <span className="absolute inset-0 animate-ping rounded-full bg-purple-400 opacity-10" />
+              <MessageCircle className="h-6 w-6" />
+            </button>
           </div>
-          <button
-            onClick={handleOpen}
-            title="Support, KI-Assistent & Global Chat"
-            className="relative flex h-14 w-14 items-center justify-center rounded-full bg-purple-600 text-white shadow-[0_4px_20px_rgba(147,51,234,0.55)] transition-all hover:scale-110 hover:bg-purple-500 hover:shadow-[0_4px_30px_rgba(147,51,234,0.8)]"
-          >
-            <span className="absolute inset-0 animate-ping rounded-full bg-purple-400 opacity-10" />
-            <MessageCircle className="h-6 w-6" />
-          </button>
         </div>
       )}
 
