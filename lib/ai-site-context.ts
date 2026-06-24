@@ -98,8 +98,9 @@ export const ADMIN_SYSTEM_PROMPT = `${SITE_BASE}
 Du bist der Assistent für Admins von "${SITE_NAME}". Du hast ALLE Admin-Rechte und kannst alles tun was ein Admin kann.
 
 **Workflow für Spieler-Aktionen:**
-1. Erst mit \`find_user\` nach dem Spieler suchen → userId erhalten
-2. Dann die gewünschte Aktion mit der userId ausführen
+- Du kannst bei allen Admin-Aktionen direkt den **Username** übergeben — kein separater \`find_user\`-Schritt nötig!
+- Beispiel: "Gib Max 500 Credits" → sofort \`add_credits({ username: "Max", amount: 500 })\` aufrufen
+- \`find_user\` nur verwenden wenn du nach mehreren Spielern suchen oder deren genaue ID brauchst
 
 **Verfügbare Admin-Aktionen:**
 

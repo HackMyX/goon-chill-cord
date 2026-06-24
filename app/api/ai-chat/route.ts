@@ -12,11 +12,12 @@ import { isAdmin, isModerator } from "@/lib/admin";
 import { USER_SYSTEM_PROMPT, MOD_SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT } from "@/lib/ai-site-context";
 
 // ── Model priority list ───────────────────────────────────────────────────
-// gemini-2.5-flash:      proven primary (free tier, good quota)
-// gemini-2.5-flash-lite: fallback (may be 503 during high demand, retried)
+// Falls eines überlastet ist, wird sofort das nächste versucht.
 const MODEL_PRIORITY = [
   "gemini-2.5-flash",
+  "gemini-1.5-flash",       // stable fallback
   "gemini-2.5-flash-lite",
+  "gemini-1.5-flash-8b",    // fastest / lightest last resort
 ] as const;
 
 // ── Per-user in-memory rate limiter (max 12 req/min) ─────────────────────
@@ -140,65 +141,96 @@ const ADMIN_TOOLS: Tool = {
     ...MOD_TOOLS.functionDeclarations!,
     {
       name: "add_credits",
-      description: "Credits zu JEDEM Spieler hinzufügen oder abziehen — funktioniert auch für Admins (negativer Wert = abziehen). Kein Mod-Berechtigungs-Check.",
+      description: "Credits zu JEDEM Spieler hinzufügen oder abziehen (auch Admins). Übergib username ODER userId — kein find_user nötig!",
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
+          username: { type: SchemaType.STRING, description: "Username des Spielers (bevorzugt — kein separater find_user nötig)" },
+          userId: { type: SchemaType.STRING, description: "User-ID (alternativ zu username)" },
           amount: { type: SchemaType.NUMBER, description: "Betrag (negativ = abziehen)" },
           reason: { type: SchemaType.STRING, description: "Optionaler Grund" },
         },
-        required: ["userId", "amount"],
+        required: ["amount"],
       },
     },
     {
       name: "set_role",
-      description: "Benutzerrolle setzen: 'user', 'moderator' oder 'admin'. ACHTUNG: Admin-Rollen können NICHT durch die KI entfernt werden (Sicherheitssperre).",
+      description: "Benutzerrolle setzen: 'user', 'moderator' oder 'admin'. Admin-Rollen können NICHT entfernt werden. Übergib username ODER userId.",
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
+          username: { type: SchemaType.STRING, description: "Username des Spielers" },
+          userId: { type: SchemaType.STRING, description: "User-ID (alternativ zu username)" },
           role: { type: SchemaType.STRING, description: "'user', 'moderator' oder 'admin'" },
         },
-        required: ["userId", "role"],
+        required: ["role"],
       },
     },
     {
       name: "reset_user",
-      description: "Spieler komplett zurücksetzen: Streak→0, Ban aufheben, alle Verwarnungen löschen. Admin-Rolle bleibt IMMER erhalten (kann via KI nicht entfernt werden). Optional Credits auf 0.",
+      description: "Spieler zurücksetzen: Streak→0, Ban aufheben, Verwarnungen löschen. Admin-Rolle bleibt immer erhalten. Übergib username ODER userId.",
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
-          resetCredits: { type: SchemaType.BOOLEAN, description: "true = Credits auf 0 setzen, false/weggelassen = Credits beibehalten" },
+          username: { type: SchemaType.STRING, description: "Username des Spielers" },
+          userId: { type: SchemaType.STRING, description: "User-ID (alternativ zu username)" },
+          resetCredits: { type: SchemaType.BOOLEAN, description: "true = Credits auf 0 setzen" },
         },
-        required: ["userId"],
+        required: [],
       },
     },
     {
       name: "remove_warnings",
-      description: "Alle Verwarnungen eines Spielers löschen",
+      description: "Alle Verwarnungen eines Spielers löschen. Übergib username ODER userId.",
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
+          username: { type: SchemaType.STRING, description: "Username des Spielers" },
+          userId: { type: SchemaType.STRING, description: "User-ID (alternativ zu username)" },
         },
-        required: ["userId"],
+        required: [],
       },
     },
     {
       name: "get_user_history",
-      description: "Detaillierte Aktionshistorie eines Spielers abrufen (Verwarnungen, Bans, Credit-Änderungen, Notizen)",
+      description: "Detaillierte Aktionshistorie abrufen (Verwarnungen, Bans, Credits). Übergib username ODER userId.",
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
+          username: { type: SchemaType.STRING, description: "Username des Spielers" },
+          userId: { type: SchemaType.STRING, description: "User-ID (alternativ zu username)" },
         },
-        required: ["userId"],
+        required: [],
       },
     },
   ],
 };
+
+// ── User resolver — accepts userId OR username ────────────────────────────────
+
+async function resolveUser(args: Record<string, unknown>): Promise<
+  { userId: string; resolvedUsername: string } | { error: string }
+> {
+  const admin = createAdminClient();
+
+  if (args.userId) {
+    const { data } = await admin.from("profiles").select("id, username").eq("id", args.userId as string).single();
+    if (!data) return { error: "Nutzer nicht gefunden." };
+    return { userId: data.id as string, resolvedUsername: data.username as string };
+  }
+
+  if (args.username) {
+    const name = (args.username as string).trim();
+    // Exact match first, then fuzzy
+    const { data: exact } = await admin.from("profiles").select("id, username").ilike("username", name).limit(1);
+    if (exact && exact.length > 0) return { userId: exact[0].id as string, resolvedUsername: exact[0].username as string };
+    const { data: fuzzy } = await admin.from("profiles").select("id, username").ilike("username", `%${name}%`).limit(1);
+    if (fuzzy && fuzzy.length > 0) return { userId: fuzzy[0].id as string, resolvedUsername: fuzzy[0].username as string };
+    return { error: `Kein Spieler mit dem Namen "${name}" gefunden.` };
+  }
+
+  return { error: "userId oder username ist erforderlich." };
+}
 
 // ── Function executor ────────────────────────────────────────────────────────
 
@@ -269,19 +301,20 @@ async function executeFunction(
       }
       case "add_credits": {
         if (context !== "admin") return { error: "Nur Admins können Credits vergeben." };
-        // Direct admin-client path — bypasses mod-permission check, works for ALL users incl. admins
         const supabaseForCredits = await createClient();
         const { data: { user: adminUser } } = await supabaseForCredits.auth.getUser();
         if (!adminUser) return { error: "Nicht eingeloggt." };
         const { data: adminProf } = await supabaseForCredits.from("profiles").select("role").eq("id", adminUser.id).single();
         if (!isAdmin(adminProf)) return { error: "Keine Admin-Berechtigung." };
-        const adminDb = createAdminClient();
-        const targetId = args.userId as string;
+        const resolved = await resolveUser(args);
+        if ("error" in resolved) return { success: false, error: resolved.error };
+        const { userId: targetId, resolvedUsername } = resolved;
         const amount = args.amount as number;
         if (!amount || amount === 0) return { success: false, error: "Betrag darf nicht 0 sein." };
-        const { data: target } = await adminDb.from("profiles").select("credits, username").eq("id", targetId).single();
-        if (!target) return { success: false, error: "Nutzer nicht gefunden." };
-        const newCredits = Math.max(0, ((target.credits as number) ?? 0) + amount);
+        const adminDb = createAdminClient();
+        const { data: targetProfile } = await adminDb.from("profiles").select("credits").eq("id", targetId).single();
+        if (!targetProfile) return { success: false, error: "Nutzer nicht gefunden." };
+        const newCredits = Math.max(0, ((targetProfile.credits as number) ?? 0) + amount);
         const { error: credErr } = await adminDb.from("profiles").update({ credits: newCredits }).eq("id", targetId);
         if (credErr) return { success: false, error: credErr.message };
         await adminDb.from("mod_actions").insert({
@@ -289,15 +322,17 @@ async function executeFunction(
           action_type: "credits_add", reason: (args.reason as string) || null,
           details: { amount, newTotal: newCredits, via: "admin_ai" },
         });
-        return { success: true, username: target.username, oldCredits: target.credits, newCredits, amount };
+        return { success: true, username: resolvedUsername, oldCredits: targetProfile.credits, newCredits, amount };
       }
       case "set_role": {
         if (context !== "admin") return { error: "Keine Berechtigung." };
-        const adminDb2 = createAdminClient();
-        const targetId2 = args.userId as string;
+        const resolved2 = await resolveUser(args);
+        if ("error" in resolved2) return { success: false, error: resolved2.error };
+        const { userId: targetId2 } = resolved2;
         const newRole = (args.role as string).toLowerCase();
         const validRoles = ["user", "moderator", "admin"];
         if (!validRoles.includes(newRole)) return { error: `Ungültige Rolle. Erlaubt: ${validRoles.join(", ")}` };
+        const adminDb2 = createAdminClient();
         const { data: target2 } = await adminDb2.from("profiles").select("role, username").eq("id", targetId2).single();
         if (!target2) return { success: false, error: "Nutzer nicht gefunden." };
         if ((target2.role as string) === "admin" && newRole !== "admin") {
@@ -309,45 +344,49 @@ async function executeFunction(
       }
       case "reset_user": {
         if (context !== "admin") return { error: "Keine Berechtigung." };
+        const resolved3 = await resolveUser(args);
+        if ("error" in resolved3) return { success: false, error: resolved3.error };
+        const { userId: targetId3 } = resolved3;
         const adminDb3 = createAdminClient();
-        const targetId3 = args.userId as string;
         const { data: target3 } = await adminDb3.from("profiles").select("role, username, credits, streak_days").eq("id", targetId3).single();
         if (!target3) return { success: false, error: "Nutzer nicht gefunden." };
         const wasAdmin3 = (target3.role as string) === "admin";
         const patch: Record<string, unknown> = { streak_days: 0, temp_banned_until: null };
         if (args.resetCredits === true) patch.credits = 0;
-        if (wasAdmin3) patch.role = "admin"; // Always preserve admin role
+        if (wasAdmin3) patch.role = "admin";
         const { error: resetErr } = await adminDb3.from("profiles").update(patch).eq("id", targetId3);
         if (resetErr) return { success: false, error: resetErr.message };
         await adminDb3.from("mod_actions").delete().eq("target_user_id", targetId3).eq("action_type", "warning");
         await adminDb3.from("mod_actions").delete().eq("target_user_id", targetId3).eq("action_type", "temp_ban");
         return {
-          success: true,
-          username: target3.username as string,
-          wasAdmin: wasAdmin3,
-          creditsReset: args.resetCredits === true,
+          success: true, username: target3.username as string,
+          wasAdmin: wasAdmin3, creditsReset: args.resetCredits === true,
           message: `${target3.username} wurde zurückgesetzt${wasAdmin3 ? " (Admin-Rolle beibehalten)" : ""}.`,
         };
       }
       case "remove_warnings": {
         if (context !== "admin") return { error: "Keine Berechtigung." };
+        const resolved4 = await resolveUser(args);
+        if ("error" in resolved4) return { success: false, error: resolved4.error };
+        const { userId: targetId4, resolvedUsername: rUser4 } = resolved4;
         const adminDb4 = createAdminClient();
-        const { data: target4 } = await adminDb4.from("profiles").select("username").eq("id", args.userId as string).single();
-        if (!target4) return { success: false, error: "Nutzer nicht gefunden." };
-        const { error: warnErr } = await adminDb4.from("mod_actions").delete().eq("target_user_id", args.userId as string).eq("action_type", "warning");
+        const { error: warnErr } = await adminDb4.from("mod_actions").delete().eq("target_user_id", targetId4).eq("action_type", "warning");
         if (warnErr) return { success: false, error: warnErr.message };
-        return { success: true, username: target4.username as string };
+        return { success: true, username: rUser4 };
       }
       case "get_user_history": {
         if (context === "user") return { error: "Keine Berechtigung." };
+        const resolved5 = await resolveUser(args);
+        if ("error" in resolved5) return { success: false, error: resolved5.error };
+        const { userId: targetId5 } = resolved5;
         const adminDb5 = createAdminClient();
         const { data: target5 } = await adminDb5.from("profiles")
           .select("id, username, role, credits, streak_days, temp_banned_until, created_at")
-          .eq("id", args.userId as string).single();
+          .eq("id", targetId5).single();
         if (!target5) return { success: false, error: "Nutzer nicht gefunden." };
         const { data: history5 } = await adminDb5.from("mod_actions")
           .select("action_type, reason, details, created_at")
-          .eq("target_user_id", args.userId as string)
+          .eq("target_user_id", targetId5)
           .order("created_at", { ascending: false }).limit(20);
         return { success: true, user: target5, history: history5 ?? [] };
       }
@@ -403,14 +442,12 @@ async function callGemini(opts: {
 }): Promise<GeminiCallResult> {
   const { apiKey, systemPrompt, tools, history, message, context } = opts;
 
-  // Trim history to last 10 entries (5 turns) to limit token usage
   const trimmedHistory = history.slice(-10);
-
   let lastError: unknown = null;
 
   for (const modelName of MODEL_PRIORITY) {
-    // Each model gets up to 3 attempts total
-    for (let attempt = 0; attempt <= 2; attempt++) {
+    // 2 attempts per model (1 quick retry), then immediately move to next model
+    for (let attempt = 0; attempt <= 1; attempt++) {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
@@ -462,11 +499,11 @@ async function callGemini(opts: {
           break;
         }
 
-        // Transient 503/overloaded → retry same model with backoff
-        if (attempt < 2) {
-          await sleep((attempt + 1) * 2_500);
+        // Transient: 1 quick retry, then move to next model
+        if (attempt < 1) {
+          await sleep(600);
         }
-        // After 3 attempts on transient → fall through to next model
+        // After 2 attempts on transient → fall through to next model
       }
     }
   }

@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   Bot, Send, Loader2, User, RefreshCw, Sparkles, ShieldAlert, Shield,
 } from "lucide-react";
 import type { Content } from "@google/generative-ai";
 import { useSoundManager } from "@/lib/sound-manager";
+import { createClient } from "@/lib/supabase/client";
 
 interface AiMessage {
   role: "user" | "model";
@@ -39,9 +40,19 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [myAvatar, setMyAvatar] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sound = useSoundManager();
+
+  useEffect(() => {
+    const sb = createClient();
+    sb.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      sb.from("profiles").select("avatar_url").eq("id", user.id).single()
+        .then(({ data }) => { if (data?.avatar_url) setMyAvatar(data.avatar_url as string); });
+    });
+  }, []);
 
   const starters = context === "admin" ? ADMIN_STARTERS : MOD_STARTERS;
 
@@ -180,10 +191,14 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
           const isUser = msg.role === "user";
           return (
             <div key={i} className={`flex items-start gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
-              <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${isUser ? "bg-zinc-700" : "bg-purple-500/20"}`}>
-                {isUser
-                  ? <User className="h-3.5 w-3.5 text-zinc-300" />
-                  : <Bot className="h-3.5 w-3.5 text-purple-400" />}
+              <div className={`flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full ${isUser ? (myAvatar ? "" : "bg-zinc-700") : "bg-purple-500/20"}`}>
+                {isUser ? (
+                  myAvatar
+                    ? <img src={myAvatar} alt="Du" className="h-full w-full object-cover" />
+                    : <User className="h-3.5 w-3.5 text-zinc-300" />
+                ) : (
+                  <Bot className="h-3.5 w-3.5 text-purple-400" />
+                )}
               </div>
               <div className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
                 isUser
