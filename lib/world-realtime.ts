@@ -249,6 +249,17 @@ export function subscribeToWorldTransforms(
   };
 }
 
+/** Broadcasts a confirmed PvP damage event to all other players in the room.
+ * Called by the attacker's client immediately after `attemptPvpHit` returns
+ * `{ hit: true }` — the server has already validated the hit and computed the
+ * damage number; the client only relays it via WebSocket (`httpSend`) so it
+ * reaches every other tab reliably. Same fire-and-forget pattern as every
+ * other broadcast in this file. */
+export function broadcastPvpDamage(payload: PvpDamagePayload): void {
+  if (!subscribed || !channel) return;
+  channel.httpSend("pvp_damage", payload).catch(() => {});
+}
+
 /** Subscribes to every server-broadcast PvP damage event in the room — the
  * caller filters by `payload.targetUserId`/`attackerId` itself, same
  * fan-out-and-filter shape as `subscribeToWorldTransforms`. */

@@ -2,8 +2,6 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { broadcastToWorldRoom } from "@/lib/realtime-server";
-import { WORLD_CHANNEL_NAME } from "@/lib/world-realtime";
 import { getEquippedDamage, isWeaponType, computePvpDamage, capsuleHitTest } from "@/lib/combat";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import { getCharacterConfig } from "@/lib/actions/character-config";
@@ -127,11 +125,9 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
     // best-effort — the hit still lands below either way.
   }
 
-  await broadcastToWorldRoom(WORLD_CHANNEL_NAME, "pvp_damage", {
-    targetUserId: input.targetUserId,
-    attackerId: user.id,
-    amount: damage,
-  });
-
+  // Broadcast is now done client-side via broadcastPvpDamage (world-realtime.ts)
+  // using the same httpSend path as every other game event — the REST broadcast
+  // endpoint (lib/realtime-server.ts) was silently dropping these messages.
+  // The damage is returned here so the attacker's client can relay it.
   return { success: true, hit: true, damage };
 }

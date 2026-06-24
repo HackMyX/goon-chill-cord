@@ -126,7 +126,15 @@ function RemotePlayerAvatar({
   // "where the attacker visually sees them standing" value the PvP server
   // action validates against.
   useEffect(() => {
-    const handle = { id: userId, getPosition: () => group.current?.position ?? new THREE.Vector3() };
+    const handle = {
+      id: userId,
+      getPosition: () => group.current?.position ?? new THREE.Vector3(),
+      triggerBloodBurst: () => {
+        const id = ++pvpBloodBurstSeq;
+        setBloodBursts((curr) => [...curr, { id }]);
+        setTimeout(() => setBloodBursts((curr) => curr.filter((b) => b.id !== id)), BLOOD_BURST_LIFETIME_MS);
+      },
+    };
     // Read/write `registryRef.current` directly on both ends, never via a
     // local variable captured once at mount — see components/world/
     // monster.tsx's matching comment (same registry pattern) for the

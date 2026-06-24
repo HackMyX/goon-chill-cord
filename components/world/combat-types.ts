@@ -129,6 +129,11 @@ export type MonsterRegistry = React.RefObject<MonsterHandle[]>;
 export interface RemotePlayerHandle {
   id: string;
   getPosition: () => THREE.Vector3;
+  /** Triggers a blood-burst particle effect on this avatar's screen-space
+   * position — called by Player.tsx after a confirmed PvP hit so the
+   * attacker sees visual feedback even though `broadcast: { self: false }`
+   * prevents their own `pvp_damage` broadcast from echoing back to them. */
+  triggerBloodBurst: () => void;
 }
 
 export type RemotePlayerRegistry = React.RefObject<RemotePlayerHandle[]>;

@@ -17,8 +17,8 @@ function hashString(s: string): number {
   return h;
 }
 
-function variantIndex(name: string, count: number): number {
-  return hashString(name) % count;
+function variantIndex(name: string, count: number, rarity: string = ""): number {
+  return hashString(rarity ? name + "|" + rarity : name) % count;
 }
 
 // --- Rarity FX: universal per-rarity glow/pulse/RGB-cycle wrapper --------
@@ -106,6 +106,186 @@ function UltraSparkles() {
         </mesh>
       ))}
     </group>
+  );
+}
+
+/** Floating crystal/orb accent above an item — grows in size and
+ * elaborateness with rarity so Normal/Selten/Mythisch/Ultra items look
+ * structurally different in addition to the per-mesh color/glow from
+ * RarityFX. Uses MeshStandardMaterial so RarityFX's per-frame RGB cycle
+ * (Ultra) and emissive pulse (Mythisch) apply to it automatically. */
+function RarityGemAccent({
+  rarity,
+  position = [0, 0.44, 0],
+}: {
+  rarity: Rarity;
+  position?: [number, number, number];
+}) {
+  const spinRef = useRef<THREE.Group>(null);
+  const ringRef = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    if (!spinRef.current) return;
+    if (rarity === "mythisch") {
+      spinRef.current.rotation.y = t * 1.4;
+    } else if (rarity === "ultra") {
+      spinRef.current.rotation.y = t * 2.8;
+      if (ringRef.current) {
+        ringRef.current.rotation.x = t * 1.9;
+        ringRef.current.rotation.z = t * 1.2;
+      }
+    }
+  });
+
+  if (rarity === "normal") return null;
+
+  if (rarity === "selten") {
+    return (
+      <mesh position={position}>
+        <octahedronGeometry args={[0.07, 0]} />
+        <meshStandardMaterial color={RARITY_HEX.selten} emissive={RARITY_HEX.selten} emissiveIntensity={0.55} />
+      </mesh>
+    );
+  }
+
+  if (rarity === "mythisch") {
+    return (
+      <group ref={spinRef} position={position}>
+        <mesh>
+          <octahedronGeometry args={[0.1, 0]} />
+          <meshStandardMaterial color={RARITY_HEX.mythisch} emissive={RARITY_HEX.mythisch} emissiveIntensity={0.85} />
+        </mesh>
+        <mesh position={[0.19, 0, 0]}>
+          <octahedronGeometry args={[0.05, 0]} />
+          <meshStandardMaterial color={RARITY_HEX.mythisch} emissive={RARITY_HEX.mythisch} emissiveIntensity={0.7} />
+        </mesh>
+        <mesh position={[-0.19, 0, 0]}>
+          <octahedronGeometry args={[0.05, 0]} />
+          <meshStandardMaterial color={RARITY_HEX.mythisch} emissive={RARITY_HEX.mythisch} emissiveIntensity={0.7} />
+        </mesh>
+      </group>
+    );
+  }
+
+  // ultra — full RGB orb + two orbiting rings, all colored by RarityFX
+  return (
+    <group ref={spinRef} position={position}>
+      <mesh>
+        <sphereGeometry args={[0.13, 14, 14]} />
+        <meshStandardMaterial
+          color={RARITY_HEX.ultra}
+          emissive={RARITY_HEX.ultra}
+          emissiveIntensity={1.1}
+          transparent
+          opacity={0.88}
+        />
+      </mesh>
+      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.22, 0.013, 8, 36]} />
+        <meshStandardMaterial color={RARITY_HEX.ultra} emissive={RARITY_HEX.ultra} emissiveIntensity={0.9} />
+      </mesh>
+      <mesh rotation={[0, 0, Math.PI / 2]}>
+        <torusGeometry args={[0.22, 0.009, 8, 36]} />
+        <meshStandardMaterial color={RARITY_HEX.ultra} emissive={RARITY_HEX.ultra} emissiveIntensity={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Small animated tech LED panel with three sequentially blinking dots —
+ * mounted on Mythisch and Ultra weapons only, returns null for Normal and
+ * Selten. Uses meshBasicMaterial for the LEDs so they keep their own
+ * indicator colors independent of RarityFX's material pass (which only
+ * modifies MeshStandardMaterial). */
+function AnimatedSwitchPanel({ rarity, color }: { rarity: Rarity; color: string }) {
+  const led1Ref = useRef<THREE.Mesh>(null);
+  const led2Ref = useRef<THREE.Mesh>(null);
+  const led3Ref = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    if (led1Ref.current)
+      (led1Ref.current.material as THREE.MeshBasicMaterial).opacity = 0.5 + Math.sin(t * 4.0) * 0.5;
+    if (led2Ref.current)
+      (led2Ref.current.material as THREE.MeshBasicMaterial).opacity = 0.5 + Math.sin(t * 4.0 + Math.PI * 0.67) * 0.5;
+    if (led3Ref.current)
+      (led3Ref.current.material as THREE.MeshBasicMaterial).opacity = 0.5 + Math.sin(t * 4.0 + Math.PI * 1.33) * 0.5;
+  });
+
+  if (rarity === "normal" || rarity === "selten") return null;
+  const led2Color = rarity === "ultra" ? "#22d3ee" : "#a855f7";
+  const led3Color = rarity === "ultra" ? "#f472b6" : "#6366f1";
+
+  return (
+    <group position={[0, 0.06, 0.038]}>
+      <mesh>
+        <boxGeometry args={[0.11, 0.038, 0.012]} />
+        <meshStandardMaterial color="#08080f" metalness={0.7} roughness={0.25} />
+      </mesh>
+      <mesh position={[0, 0, 0.007]}>
+        <boxGeometry args={[0.085, 0.022, 0.004]} />
+        <meshStandardMaterial color="#030308" />
+      </mesh>
+      <mesh ref={led1Ref} position={[-0.028, 0, 0.013]}>
+        <sphereGeometry args={[0.007, 6, 6]} />
+        <meshBasicMaterial color={color} transparent opacity={1} />
+      </mesh>
+      <mesh ref={led2Ref} position={[0, 0, 0.013]}>
+        <sphereGeometry args={[0.007, 6, 6]} />
+        <meshBasicMaterial color={led2Color} transparent opacity={0.8} />
+      </mesh>
+      <mesh ref={led3Ref} position={[0.028, 0, 0.013]}>
+        <sphereGeometry args={[0.007, 6, 6]} />
+        <meshBasicMaterial color={led3Color} transparent opacity={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Glowing rarity-colored trim strips on the front/back of a jacket at
+ * chest height — Mythisch and Ultra only, invisible for Normal/Selten.
+ * All in jacket local space; depth/2 puts it just outside the jacket mesh. */
+function JacketRarityTrim({ rarity, width, depth }: { rarity: Rarity; width: number; depth: number }) {
+  if (rarity === "normal" || rarity === "selten") return null;
+  const intensity = rarity === "mythisch" ? 0.85 : 1.1;
+  const c = RARITY_HEX[rarity];
+  return (
+    <>
+      <mesh position={[0, 0.22, depth / 2 + 0.004]}>
+        <boxGeometry args={[width * 0.82, 0.022, 0.009]} />
+        <meshStandardMaterial color={c} emissive={c} emissiveIntensity={intensity} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0.22, -(depth / 2 + 0.004)]}>
+        <boxGeometry args={[width * 0.82, 0.022, 0.009]} />
+        <meshStandardMaterial color={c} emissive={c} emissiveIntensity={intensity * 0.85} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0.02, depth / 2 + 0.004]}>
+        <boxGeometry args={[width * 0.58, 0.015, 0.009]} />
+        <meshStandardMaterial color={c} emissive={c} emissiveIntensity={intensity * 0.75} toneMapped={false} />
+      </mesh>
+    </>
+  );
+}
+
+/** Glowing rarity sole under a shoe — visible for Mythisch and Ultra only.
+ * In shoe local space the sole is at y≈0 / z≈+0.08, so this strip sits
+ * right below the foot, giving a visible "powered footwear" look. */
+function ShoeRarityGlow({ rarity }: { rarity: Rarity }) {
+  if (rarity === "normal" || rarity === "selten") return null;
+  const c = RARITY_HEX[rarity];
+  return (
+    <mesh position={[0, 0.005, 0.08]}>
+      <boxGeometry args={[0.28, 0.018, 0.36]} />
+      <meshStandardMaterial
+        color={c}
+        emissive={c}
+        emissiveIntensity={rarity === "mythisch" ? 0.7 : 1.05}
+        toneMapped={false}
+        transparent
+        opacity={rarity === "mythisch" ? 0.6 : 0.8}
+      />
+    </mesh>
   );
 }
 
@@ -847,7 +1027,7 @@ export function PetVariant({ item, walkClockRef, attackPhaseRef, isMovingRef }: 
           ? DragonPet
           : /Schatten|Geist/.test(item.name)
             ? GhostPet
-            : PET_VARIANTS[variantIndex(item.name, PET_VARIANTS.length)];
+            : PET_VARIANTS[variantIndex(item.name, PET_VARIANTS.length, item.rarity)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} walkClockRef={walkClockRef} attackPhaseRef={attackPhaseRef} isMovingRef={isMovingRef} />
@@ -1009,8 +1189,9 @@ const CATALOG_HELM_VARIANTS = [CombatHelm, SpartanHelm, TechHelm];
 export function HatVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#6d28d9");
   // Keyword-first routing: named special shapes take priority, then the
-  // catalogue-plain-helm pool (which now uses 3 real helmet shapes instead
-  // of a beanie sphere), then fall back to BeanieHat for generic beanies.
+  // catalogue-plain-helm pool (rarity-seeded so Normal/Selten/Mythisch/Ultra
+  // catalogue helms of the same name each get a different shape), then fall
+  // back to BeanieHat for generic beanies.
   const isPlainCatalogHelm = /\sHelm$/.test(item.name);
   const Variant = /Kronen?/.test(item.name)
     ? CrownHat
@@ -1021,11 +1202,12 @@ export function HatVariant({ item }: { item: EquippedItem }) {
         : !isPlainCatalogHelm && /helm/i.test(item.name)
           ? HelmetHat
           : isPlainCatalogHelm
-            ? CATALOG_HELM_VARIANTS[variantIndex(item.name, CATALOG_HELM_VARIANTS.length)]
+            ? CATALOG_HELM_VARIANTS[variantIndex(item.name, CATALOG_HELM_VARIANTS.length, item.rarity)]
             : BeanieHat;
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
+      <RarityGemAccent rarity={item.rarity} position={[0, 0.48, 0]} />
     </RarityFX>
   );
 }
@@ -1221,7 +1403,7 @@ const EXACT_FACE_SHAPE: Record<string, typeof VisorFace> = {
 export function FaceVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
   const Variant =
-    EXACT_FACE_SHAPE[item.name] ?? FACE_VARIANTS[variantIndex(item.name, FACE_VARIANTS.length)];
+    EXACT_FACE_SHAPE[item.name] ?? FACE_VARIANTS[variantIndex(item.name, FACE_VARIANTS.length, item.rarity)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
@@ -1622,10 +1804,12 @@ export function WeaponVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#e5e7eb");
   const emissive = rarityColorFor(item, "#000000");
   const Variant =
-    EXACT_WEAPON_SHAPE[item.name] ?? WEAPON_VARIANTS[variantIndex(item.name, WEAPON_VARIANTS.length)];
+    EXACT_WEAPON_SHAPE[item.name] ?? WEAPON_VARIANTS[variantIndex(item.name, WEAPON_VARIANTS.length, item.rarity)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} emissive={emissive} />
+      <AnimatedSwitchPanel rarity={item.rarity} color={color} />
+      <RarityGemAccent rarity={item.rarity} position={[0, 0.52, 0]} />
     </RarityFX>
   );
 }
@@ -1740,11 +1924,12 @@ export function JacketVariant({
 }) {
   const color = rarityColorFor(item, "#0e7490");
   const Variant =
-    EXACT_JACKET_SHAPE[item.name] ?? JACKET_VARIANTS[variantIndex(item.name, JACKET_VARIANTS.length)];
+    EXACT_JACKET_SHAPE[item.name] ?? JACKET_VARIANTS[variantIndex(item.name, JACKET_VARIANTS.length, item.rarity)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} width={width} depth={depth} />
       {gender === "w" && <ChestShape depth={depth} color={color} />}
+      <JacketRarityTrim rarity={item.rarity} width={width} depth={depth} />
     </RarityFX>
   );
 }
@@ -1821,7 +2006,7 @@ export function PantsVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#1e3a8a");
   const isExplicitlyShorts = /\b(Short|Kurz)\b/i.test(item.name);
   let Variant =
-    EXACT_PANTS_SHAPE[item.name] ?? PANTS_VARIANTS[variantIndex(item.name, PANTS_VARIANTS.length)];
+    EXACT_PANTS_SHAPE[item.name] ?? PANTS_VARIANTS[variantIndex(item.name, PANTS_VARIANTS.length, item.rarity)];
   // Guard: anything called "Hose" (full-length trousers) must never land on
   // ShortsPants via the hash — use BaggyPants as the safe fallback instead.
   if (Variant === ShortsPants && !isExplicitlyShorts) Variant = BaggyPants;
@@ -1938,10 +2123,11 @@ const EXACT_SHOE_SHAPE: Record<string, typeof SneakerShoe> = {
 export function ShoeVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#1e293b");
   const Variant =
-    EXACT_SHOE_SHAPE[item.name] ?? SHOE_VARIANTS[variantIndex(item.name, SHOE_VARIANTS.length)];
+    EXACT_SHOE_SHAPE[item.name] ?? SHOE_VARIANTS[variantIndex(item.name, SHOE_VARIANTS.length, item.rarity)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
+      <ShoeRarityGlow rarity={item.rarity} />
     </RarityFX>
   );
 }
@@ -2115,10 +2301,11 @@ export function ShieldVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#52525b");
   const emissive = rarityColorFor(item, "#000000");
   const Variant =
-    EXACT_SHIELD_SHAPE[item.name] ?? SHIELD_VARIANTS[variantIndex(item.name, SHIELD_VARIANTS.length)];
+    EXACT_SHIELD_SHAPE[item.name] ?? SHIELD_VARIANTS[variantIndex(item.name, SHIELD_VARIANTS.length, item.rarity)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} emissive={emissive} />
+      <RarityGemAccent rarity={item.rarity} position={[-0.15, -0.18, 0.14]} />
     </RarityFX>
   );
 }
@@ -2188,7 +2375,7 @@ export function RingVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
   const emissive = rarityColorFor(item, "#000000");
   const Variant =
-    EXACT_RING_SHAPE[item.name] ?? RING_VARIANTS[variantIndex(item.name, RING_VARIANTS.length)];
+    EXACT_RING_SHAPE[item.name] ?? RING_VARIANTS[variantIndex(item.name, RING_VARIANTS.length, item.rarity)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} emissive={emissive} />
@@ -2286,7 +2473,7 @@ export function AmuletVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#a855f7");
   const emissive = rarityColorFor(item, "#000000");
   const Variant =
-    EXACT_AMULET_SHAPE[item.name] ?? AMULET_VARIANTS[variantIndex(item.name, AMULET_VARIANTS.length)];
+    EXACT_AMULET_SHAPE[item.name] ?? AMULET_VARIANTS[variantIndex(item.name, AMULET_VARIANTS.length, item.rarity)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} emissive={emissive} />
@@ -2463,7 +2650,7 @@ const EXACT_HAIR_SHAPE: Record<string, typeof ShortHair> = {
 export function HairVariant({ item, gender }: { item: EquippedItem; gender: "m" | "w" }) {
   const color = rarityColorFor(item, "#404040");
   const Variant =
-    EXACT_HAIR_SHAPE[item.name] ?? HAIR_VARIANTS[variantIndex(item.name, HAIR_VARIANTS.length)];
+    EXACT_HAIR_SHAPE[item.name] ?? HAIR_VARIANTS[variantIndex(item.name, HAIR_VARIANTS.length, item.rarity)];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} gender={gender} />
@@ -2747,7 +2934,7 @@ const EXACT_AURA_SHAPE: Record<string, typeof OrbitAura> = {
 };
 
 export function AuraVariant({ item }: { item: EquippedItem }) {
-  const Variant = EXACT_AURA_SHAPE[item.name] ?? AURA_VARIANTS[variantIndex(item.name, AURA_VARIANTS.length)];
+  const Variant = EXACT_AURA_SHAPE[item.name] ?? AURA_VARIANTS[variantIndex(item.name, AURA_VARIANTS.length, item.rarity)];
   return <Variant rarity={item.rarity} />;
 }
 
@@ -2923,6 +3110,6 @@ const EXACT_TRAIL_SHAPE: Record<string, typeof GlowCirclesTrail> = {
 
 export function TrailVariant({ item }: { item: EquippedItem }) {
   const Variant =
-    EXACT_TRAIL_SHAPE[item.name] ?? TRAIL_VARIANTS[variantIndex(item.name, TRAIL_VARIANTS.length)];
+    EXACT_TRAIL_SHAPE[item.name] ?? TRAIL_VARIANTS[variantIndex(item.name, TRAIL_VARIANTS.length, item.rarity)];
   return <Variant rarity={item.rarity} />;
 }

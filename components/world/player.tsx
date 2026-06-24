@@ -18,6 +18,7 @@ import {
   broadcastTransform,
   subscribeToWorldPvpDamage,
   broadcastMonsterAggroAlert,
+  broadcastPvpDamage,
   subscribeToMonsterCrossAttack,
 } from "@/lib/world-realtime";
 import { attemptPvpHit } from "@/lib/actions/pvp";
@@ -828,23 +829,30 @@ export function Player({
         }
       } else if (nearestPlayerId && nearestPlayerPos) {
         cameraShake.current = 1;
-        // Fire-and-forget: the actual HP change only ever happens once the
-        // server rolls its own damage number and broadcasts it back (see
-        // the subscribeToWorldPvpDamage effect above) — this client never
-        // touches another player's HP directly.
+        // Server validates the hit and computes the damage number from the
+        // attacker's actually-equipped weapon. On success, the attacker's
+        // client broadcasts pvp_damage via WebSocket (same httpSend path as
+        // every other game event) so all tabs receive it reliably — the old
+        // approach of broadcasting from a Server Action via the Supabase REST
+        // endpoint was silently dropping messages.
+        const capturedTargetId = nearestPlayerId;
         attemptPvpHit({
-          targetUserId: nearestPlayerId,
+          targetUserId: capturedTargetId,
           attackerX: g.position.x,
           attackerZ: g.position.z,
-          // cc.yaw (the weapon's actual facing) — same reasoning as the
-          // local capsuleHitTest calls above, so the server-side PvP hit
-          // check agrees with what the client just used to pick this
-          // target.
           attackerHeading: cc.yaw,
           targetX: nearestPlayerPos.x,
           targetZ: nearestPlayerPos.z,
           sprinting,
           airborne,
+        }).then((result) => {
+          if (!result.hit || result.damage === undefined) return;
+          // Relay the server-computed damage to all peers via WebSocket.
+          broadcastPvpDamage({ targetUserId: capturedTargetId, attackerId: userId, amount: result.damage });
+          // Show blood burst on the target avatar on the attacker's own screen
+          // (self: false prevents the attacker from receiving their own broadcast).
+          const targetHandle = remotePlayerRegistryRef.current.find((h) => h.id === capturedTargetId);
+          targetHandle?.triggerBloodBurst();
         }).catch((err) => debugWarn("World", "attemptPvpHit failed", err));
       }
       debugLog("World", "attack", {
