@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isModerator } from "@/lib/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
 import { ModShell } from "@/components/mod/mod-shell";
 import {
   getModPermissions,
@@ -21,7 +21,7 @@ export default async function ModPage() {
     .eq("id", user.id)
     .single();
 
-  if (!isModerator(profile)) redirect("/");
+  if (!isModerator(profile) && !isAdmin(profile)) redirect("/");
 
   const [permissions, users, tickets, recentActions, myActions] = await Promise.all([
     getModPermissions(),
@@ -41,6 +41,7 @@ export default async function ModPage() {
       tickets={tickets}
       recentActions={recentActions}
       myActions={myActions}
+      isAdminUser={isAdmin(profile)}
     />
   );
 }

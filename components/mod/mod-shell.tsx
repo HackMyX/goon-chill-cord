@@ -488,18 +488,34 @@ interface ModShellProps {
   tickets: ModTicket[];
   recentActions: ModActionRow[];
   myActions: ModActionRow[];
+  isAdminUser?: boolean;
 }
+
+// Full permissions override used when an admin views the mod panel
+const ADMIN_PERMS: ModPermissions = {
+  canViewTickets: true,
+  canCloseTickets: true,
+  canWarnUsers: true,
+  canTempBanUsers: true,
+  canViewUserDetails: true,
+  canViewAuditLog: true,
+  canAddCredits: true,
+  warnRequiresReason: false,
+  maxTempBanHours: 8760, // 1 year
+};
 
 export function ModShell({
   modUsername,
   credits,
   streakDays,
-  permissions,
+  permissions: rawPerms,
   users,
   tickets,
   recentActions,
   myActions,
+  isAdminUser = false,
 }: ModShellProps) {
+  const permissions = isAdminUser ? ADMIN_PERMS : rawPerms;
   const [activeTab, setActiveTab] = useState<ModTab>("overview");
   const router = useRouter();
   const sound = useSoundManager();
@@ -515,7 +531,7 @@ export function ModShell({
 
   return (
     <div className="flex flex-1 flex-col">
-      <TopBar credits={credits} streakDays={streakDays} isModerator={true} />
+      <TopBar credits={credits} streakDays={streakDays} isModerator={!isAdminUser} isAdmin={isAdminUser} />
     <div className="mx-auto w-full max-w-5xl px-4 py-8">
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   MessageCircle,
   X,
@@ -78,9 +78,13 @@ const CATEGORY_META: Record<TicketCategory, { label: string; caption: string; ic
 
 export function SupportButton() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [visible, setVisible] = useState(false);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>("list");
+  const [pendingOpenTicketId, setPendingOpenTicketId] = useState<string | null>(
+    () => searchParams.get("openTicket")
+  );
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [detail, setDetail] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -114,7 +118,23 @@ export function SupportButton() {
     const result = await getUserTickets();
     setTickets(result);
     setLoading(false);
+    return result;
   }, []);
+
+  // Auto-open to a specific ticket when navigated here via notification link
+  useEffect(() => {
+    if (!pendingOpenTicketId || !visible) return;
+    const ticketId = pendingOpenTicketId;
+    setPendingOpenTicketId(null);
+    setOpen(true);
+    setLoading(true);
+    getTicketDetail(ticketId).then((d) => {
+      if (d) { setDetail(d); setView("detail"); }
+      else { setView("list"); loadTickets(); }
+      setLoading(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpenTicketId, visible]);
 
   function handleOpen() {
     setOpen(true);

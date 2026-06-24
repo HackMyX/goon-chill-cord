@@ -122,13 +122,25 @@ function TicketRow({
   onUpdated,
   selected,
   onSelect,
+  autoExpand = false,
+  onAutoExpanded,
 }: {
   ticket: Ticket;
   onUpdated: () => void;
   selected: boolean;
   onSelect: (id: string, value: boolean) => void;
+  autoExpand?: boolean;
+  onAutoExpanded?: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(autoExpand);
+
+  useEffect(() => {
+    if (autoExpand && !expanded) {
+      setExpanded(true);
+      onAutoExpanded?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoExpand]);
   const [detail, setDetail] = useState<TicketDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [reply, setReply] = useState("");
@@ -376,7 +388,13 @@ function TicketRow({
 type FilterStatus = TicketStatus | "all";
 type FilterCategory = TicketCategory | "all";
 
-export function TicketsTab() {
+export function TicketsTab({
+  openTicketId,
+  onTicketOpened,
+}: {
+  openTicketId?: string | null;
+  onTicketOpened?: () => void;
+}) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -389,6 +407,8 @@ export function TicketsTab() {
   const [dateBefore, setDateBefore] = useState("");
   const [dateStatuses, setDateStatuses] = useState<TicketStatus[]>([]);
   const [dateDeleteConfirm, setDateDeleteConfirm] = useState(false);
+  // auto-open a specific ticket from deep-link
+  const [autoOpenId, setAutoOpenId] = useState<string | null>(openTicketId ?? null);
   const sound = useSoundManager();
 
   const load = useCallback(async () => {
@@ -405,6 +425,17 @@ export function TicketsTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // When a deep-link ticket loads, switch filter to "all" so it's visible
+  useEffect(() => {
+    if (autoOpenId && tickets.length > 0) {
+      const target = tickets.find((t) => t.id === autoOpenId);
+      if (target) {
+        setFilter("all");
+        onTicketOpened?.();
+      }
+    }
+  }, [autoOpenId, tickets, onTicketOpened]);
 
   const byCategory = categoryFilter === "all" ? tickets : tickets.filter((t) => t.category === categoryFilter);
   const displayed = filter === "all" ? byCategory : byCategory.filter((t) => t.status === filter);
@@ -693,6 +724,8 @@ export function TicketsTab() {
               onUpdated={load}
               selected={selected.has(ticket.id)}
               onSelect={toggleSelect}
+              autoExpand={ticket.id === autoOpenId}
+              onAutoExpanded={() => setAutoOpenId(null)}
             />
           ))}
         </div>

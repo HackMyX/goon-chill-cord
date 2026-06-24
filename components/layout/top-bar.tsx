@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
-  Link2,
   ShoppingBag,
   Gavel,
   Repeat,
@@ -185,7 +184,6 @@ export function TopBar({
         </Link>
         <div className="flex items-center gap-1 rounded-full bg-purple-600/90 px-3 py-1 text-sm font-semibold text-white">
           <span>{creditsLabel} {currencyName}</span>
-          <Link2 className="h-3.5 w-3.5 opacity-80" />
         </div>
         {isAdmin && (
           <IconButton

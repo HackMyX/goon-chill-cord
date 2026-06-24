@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Store, Clock, Sparkles, ShoppingCart, Check, Megaphone,
-  Star, Zap, Package, TrendingUp, Eye, X,
+  Star, Zap, Package, TrendingUp, Eye, X, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Canvas } from "@react-three/fiber";
@@ -420,16 +420,45 @@ function FeaturedHero({
         </div>
       </div>
 
-      {/* Tab selectors for carousel */}
+      {/* Carousel navigation — prev/next arrows + dot indicators */}
       {listings.length > 1 && (
-        <div className="relative z-10 flex justify-center gap-2 pb-4">
-          {listings.map((l, i) => (
-            <button
-              key={l.id}
-              onClick={() => { sound.click(); setActive(i); setJustBought(false); setError(null); }}
-              className={`h-2 rounded-full transition-all duration-300 ${i === active ? "w-8 bg-purple-400" : "w-2 bg-zinc-700 hover:bg-zinc-500"}`}
-            />
-          ))}
+        <div className="relative z-10 flex items-center justify-center gap-4 pb-5 pt-1">
+          {/* Prev */}
+          <button
+            onClick={() => { sound.click(); setActive((i) => (i - 1 + listings.length) % listings.length); setJustBought(false); setError(null); }}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/40 text-zinc-300 backdrop-blur-sm transition-all hover:border-purple-400/50 hover:bg-purple-500/20 hover:text-purple-200 active:scale-90"
+            aria-label="Vorheriges Highlight"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+
+          {/* Dots + counter */}
+          <div className="flex items-center gap-2">
+            {listings.map((l, i) => (
+              <button
+                key={l.id}
+                onClick={() => { sound.click(); setActive(i); setJustBought(false); setError(null); }}
+                aria-label={`Highlight ${i + 1}`}
+                className={`h-2.5 rounded-full transition-all duration-300 ${
+                  i === active ? "w-10 bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.7)]" : "w-2.5 bg-zinc-600 hover:bg-zinc-400"
+                }`}
+              />
+            ))}
+          </div>
+
+          {/* Next */}
+          <button
+            onClick={() => { sound.click(); setActive((i) => (i + 1) % listings.length); setJustBought(false); setError(null); }}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/40 text-zinc-300 backdrop-blur-sm transition-all hover:border-purple-400/50 hover:bg-purple-500/20 hover:text-purple-200 active:scale-90"
+            aria-label="Nächstes Highlight"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+
+          {/* Counter badge */}
+          <span className="absolute right-5 bottom-5 rounded-full border border-white/10 bg-black/50 px-2 py-0.5 text-[10px] font-bold text-zinc-400 backdrop-blur-sm">
+            {active + 1} / {listings.length}
+          </span>
         </div>
       )}
     </motion.div>

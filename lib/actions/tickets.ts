@@ -80,7 +80,7 @@ export async function createTicket(input: {
     type: "ticket_new",
     title: category === "suggestion" ? "Neuer Verbesserungsvorschlag" : "Neues Support-Ticket",
     message: `${username}: ${subject}`,
-    link: "/admin?tab=tickets",
+    link: `/admin?tab=tickets&open=${data.id}`,
   });
 
   revalidatePath("/admin");
@@ -199,21 +199,21 @@ export async function addTicketMessage(input: {
   const username = profile?.username ?? "Support";
 
   if (isStaff) {
-    // Notify the ticket owner
+    // Notify the ticket owner — link opens the support widget at this ticket
     await notifyUser({
       userId: ticket.user_id,
       type: "ticket_reply",
       title: "Antwort auf dein Ticket",
       message: `${username} hat auf dein Ticket „${ticket.subject}" geantwortet.`,
-      link: `/support`,
+      link: `/?openTicket=${input.ticketId}`,
     });
   } else {
-    // Notify staff of user reply
+    // Notify staff of user reply — deep-link to the specific ticket in admin panel
     await notifyStaff({
       type: "ticket_reply",
       title: "User-Antwort auf Ticket",
       message: `${username}: ${message.slice(0, 80)}`,
-      link: "/admin?tab=tickets",
+      link: `/admin?tab=tickets&open=${input.ticketId}`,
     });
   }
 
@@ -305,7 +305,7 @@ export async function updateTicketStatus(input: {
     type: "ticket_status",
     title: "Ticket-Status geändert",
     message: `Dein Ticket „${ticket.subject}" ist jetzt: ${STATUS_LABELS[input.status]}`,
-    link: `/support`,
+    link: `/?openTicket=${input.ticketId}`,
   });
 
   revalidatePath("/admin");

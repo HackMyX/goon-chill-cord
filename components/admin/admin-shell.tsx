@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
@@ -158,7 +159,12 @@ export function AdminShell({
   snakeConfig,
   mineConfig,
 }: AdminShellProps) {
-  const [tab, setTab] = useState<Tab>("economy");
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => {
+    const qTab = searchParams.get("tab");
+    return (qTab && TABS.some((t) => t.id === qTab) ? qTab : "economy") as Tab;
+  });
+  const [openTicketId, setOpenTicketId] = useState<string | null>(() => searchParams.get("open"));
   const [items, setItems] = useState(initialItems);
   const [credits, setCredits] = useState(initialCredits);
   const [profiles, setProfiles] = useState(initialProfiles);
@@ -255,15 +261,26 @@ export function AdminShell({
       <TopBar credits={credits} streakDays={streakDays} isAdmin={true} />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-        <Link
-          href="/"
-          onMouseEnter={sound.hover}
-          onClick={sound.click}
-          className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Zurück
-        </Link>
+        <div className="mb-4 flex items-center gap-4">
+          <Link
+            href="/"
+            onMouseEnter={sound.hover}
+            onClick={sound.click}
+            className="inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Zurück
+          </Link>
+          <Link
+            href="/mod"
+            onMouseEnter={sound.hover}
+            onClick={sound.click}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300 hover:bg-sky-500/20"
+          >
+            <Shield className="h-3.5 w-3.5" />
+            Mod-Panel
+          </Link>
+        </div>
         <h1 className="glow-text mb-6 text-2xl font-extrabold text-zinc-50">Admin-Panel</h1>
 
         <div className="mb-6 flex flex-wrap gap-2">
@@ -389,7 +406,12 @@ export function AdminShell({
         )}
 
 
-        {tab === "tickets" && <TicketsTab />}
+        {tab === "tickets" && (
+          <TicketsTab
+            openTicketId={openTicketId}
+            onTicketOpened={() => setOpenTicketId(null)}
+          />
+        )}
 
         {tab === "moderators" && <ModConfigEditor permissions={modPermissions} />}
 

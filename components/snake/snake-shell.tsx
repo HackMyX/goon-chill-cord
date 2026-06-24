@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -248,22 +248,20 @@ function drawFrame(
     // right strip
     ctx.fillRect((BOARD - sc) * cell, sc * cell, sc * cell, (BOARD - 2 * sc) * cell);
 
-    // Stone crack texture in dead zone (simple random lines pre-drawn each few frames)
-    if (t % 4 === 0) {
-      ctx.strokeStyle = "rgba(120,53,15,0.3)";
-      ctx.lineWidth = 0.5;
-      for (let ci = 0; ci < BOARD; ci++) {
-        for (let cj = 0; cj < BOARD; cj++) {
-          const inDead = ci < sc || ci >= BOARD - sc || cj < sc || cj >= BOARD - sc;
-          if (!inDead) continue;
-          if ((ci * 7 + cj * 13) % 5 === 0) {
-            const bx = ci * cell, by = cj * cell;
-            ctx.beginPath();
-            ctx.moveTo(bx + cell * 0.2, by + cell * 0.5);
-            ctx.lineTo(bx + cell * 0.8, by + cell * 0.3);
-            ctx.stroke();
-          }
-        }
+    // Stone crack texture in dead zone — seeded hash, O(32) not O(N²)
+    ctx.strokeStyle = "rgba(120,53,15,0.28)";
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < 32; i++) {
+      const sx = Math.abs(Math.sin((i * 6271 + sc * 3141) * 0.00017)) ;
+      const sy = Math.abs(Math.sin((i * 3917 + sc * 2718) * 0.00023));
+      const lx = Math.sin((i * 1571 + sc * 1414) * 0.00031) * 0.12;
+      const ly = Math.sin((i * 2239 + sc * 1618) * 0.00019) * 0.09;
+      const ci = Math.floor(sx * BOARD), cj = Math.floor(sy * BOARD);
+      if (ci < sc || ci >= BOARD - sc || cj < sc || cj >= BOARD - sc) {
+        ctx.beginPath();
+        ctx.moveTo(sx * W, sy * W);
+        ctx.lineTo(sx * W + lx * W, sy * W + ly * W);
+        ctx.stroke();
       }
     }
   }
@@ -288,15 +286,15 @@ function drawFrame(
 
   // ── Corner glow ────────────────────────────────────────────────────────────
   const pulse = 0.04 + Math.sin(t * 0.015) * 0.025;
-  const drawCornerGlow = (cx: number, cy: number, color: string) => {
+  const drawCornerGlow = (cx: number, cy: number, baseColor: string, alpha: number) => {
     const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.45);
-    gr.addColorStop(0, color.replace(")", `,${pulse})`).replace("rgba(", "rgba("));
+    gr.addColorStop(0, baseColor.replace(/[\d.]+\)$/, `${alpha})`));
     gr.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = gr;
     ctx.fillRect(0, 0, W, W);
   };
-  drawCornerGlow(0, 0, theme.cornerGlow1.replace(/[\d.]+\)$/, `${pulse})`));
-  drawCornerGlow(W, W, theme.cornerGlow2.replace(/[\d.]+\)$/, `${pulse * 0.6})`));
+  drawCornerGlow(0, 0, theme.cornerGlow1, pulse);
+  drawCornerGlow(W, W, theme.cornerGlow2, pulse * 0.6);
 
   // ── Grind: danger zone border ───────────────────────────────────────────────
   if (g.mode === "grind") {
@@ -861,81 +859,180 @@ export function SnakeShell({
   });
   const activeModeRef = useRef<SnakeMode>("x1");
   const rafRef = useRef<number>(0);
+  const configRef = useRef(config);
   const router = useRouter();
   const sound = useSoundManager();
+
+  // Keep configRef current so the RAF loop always sees the latest config
+  configRef.current = config;
 
   // Canvas size depends on mode
   const CANVAS_SIZE = activeMode === "grind" ? 640 : 560;
 
-  function getModeCfg(mode: SnakeMode = activeMode): SnakeModeConfig | SnakeGrindConfig {
-    if (mode === "grind") return config.grind;
-    if (mode === "x2") return config.x2;
-    return config.x1;
-  }
-
-  // Init ambient particles when mode changes
+  // Re-init ambient particles whenever mode changes (idle screen atmosphere)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     gameRef.current.ambientParticles = initAmbientParticles(canvas.width, activeMode);
   }, [activeMode]);
 
-  // RAF game loop
+  // RAF game loop — mount-only, reads configRef/gameRef to avoid stale closures
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    function getModeCfgLocal(mode: SnakeMode): SnakeModeConfig | SnakeGrindConfig {
+      const cfg = configRef.current;
+      return mode === "grind" ? cfg.grind : mode === "x2" ? cfg.x2 : cfg.x1;
+    }
+
+    function doEndGame(g: GameState) {
+      g.phase = "dead";
+      g.deathFlashFrames = 30;
+      setPhase("dead");
+      setShrinkWarning(false);
+      const finalScore = g.score;
+      const finalCredits = g.creditsEarned;
+      const finalMode = g.mode;
+      if (finalScore === 0) return;
+      setSubmitting(true);
+      submitSnakeScore(finalScore, finalCredits, finalMode).then((res) => {
+        setSubmitting(false);
+        if (res.success) {
+          setCredits((prev) => res.newCredits ?? prev);
+          setDailyCr((prev) => prev + (res.creditsAwarded ?? 0));
+          setLastResult({ creditsAwarded: res.creditsAwarded ?? 0, isNewRecord: res.isNewRecord ?? false, previousBest: res.previousBest ?? 0 });
+          router.refresh();
+        }
+      });
+    }
+
+    function doTick(g: GameState, modeCfg: SnakeModeConfig | SnakeGrindConfig, W: number, cell: number, theme: ModeTheme, now: number) {
+      const BOARD = modeCfg.boardSize;
+      g.prevSnake = g.snake.map((s) => ({ ...s }));
+      g.dir = g.nextDir;
+      const head = g.snake[0];
+      let nx = head.x + (g.dir === "RIGHT" ? 1 : g.dir === "LEFT" ? -1 : 0);
+      let ny = head.y + (g.dir === "DOWN" ? 1 : g.dir === "UP" ? -1 : 0);
+
+      if (g.mode === "grind") {
+        const arenaMin = g.shrinkCount, arenaMax = BOARD - 1 - g.shrinkCount;
+        if (nx < arenaMin || nx > arenaMax || ny < arenaMin || ny > arenaMax) { doEndGame(g); return; }
+      } else if (modeCfg.wallWrap) {
+        nx = ((nx % BOARD) + BOARD) % BOARD;
+        ny = ((ny % BOARD) + BOARD) % BOARD;
+      } else if (nx < 0 || nx >= BOARD || ny < 0 || ny >= BOARD) {
+        doEndGame(g); return;
+      }
+
+      const newHead: Pos = { x: nx, y: ny };
+      if (g.snake.slice(0, -1).some((s) => posEq(s, newHead))) { doEndGame(g); return; }
+
+      const ateApple = posEq(newHead, g.apple);
+      const ateGolden = g.goldenApple !== null && posEq(newHead, g.goldenApple);
+
+      if (ateApple || ateGolden) {
+        g.score++;
+        let crBase = modeCfg.creditsPerApple;
+        const goldenPos = g.goldenApple ? { ...g.goldenApple } : null;
+        if (ateGolden) { crBase = Math.round(crBase * modeCfg.goldenAppleCrMultiplier); g.goldenApple = null; }
+        if (g.comboMultLeft > 0) { crBase *= 2; g.comboMultLeft--; if (g.comboMultLeft === 0) setComboActive(false); }
+        g.creditsEarned += crBase;
+
+        const eatPos = ateGolden && goldenPos ? goldenPos : g.apple;
+        const px = (eatPos.x + 0.5) * cell, py = (eatPos.y + 0.5) * cell;
+        if (modeCfg.particlesEnabled) spawnAppleBurst(g, px, py, ateGolden, theme);
+        g.floatingTexts.push({ x: px, y: py - cell * 0.3, vy: -1.2, text: `+${crBase} CR`, life: 1, decay: 0.022, color: ateGolden ? theme.goldenColor : "#34d399", size: Math.max(9, cell * 0.45) });
+
+        if (modeCfg.bonusEveryN > 0 && g.score % modeCfg.bonusEveryN === 0) {
+          g.creditsEarned += modeCfg.bonusCrFlat;
+          g.bonusFlashFrames = 40;
+          if (modeCfg.bonusMultiplierApples > 0) { g.comboMultLeft = modeCfg.bonusMultiplierApples; setComboActive(true); }
+          if (modeCfg.particlesEnabled) spawnBonusBurst(g, W / 2, W / 2, theme);
+          g.floatingTexts.push({ x: W / 2, y: W * 0.35, vy: -0.5, text: `BONUS! +${modeCfg.bonusCrFlat}`, life: 1, decay: 0.011, color: "#fbbf24", size: Math.max(12, cell * 0.65) });
+          setBonusBannerText(`🎉 BONUS! +${modeCfg.bonusCrFlat} CR${modeCfg.bonusMultiplierApples > 0 ? ` + 2× für ${modeCfg.bonusMultiplierApples} Äpfel` : ""}`);
+          setTimeout(() => setBonusBannerText(null), 2800);
+        }
+
+        if (g.mode === "grind") {
+          const grindCfg = modeCfg as unknown as SnakeGrindConfig;
+          g.applesUntilShrink--;
+          setShrinkWarning(g.applesUntilShrink <= 3 && g.applesUntilShrink > 0);
+          if (g.applesUntilShrink <= 0) {
+            const nMin = g.shrinkCount + 1, nMax = BOARD - 2 - g.shrinkCount;
+            if (nMin >= nMax || (nMax - nMin + 1) < grindCfg.minBoardSize) { doEndGame(g); return; }
+            g.shrinkCount++;
+            g.applesUntilShrink = grindCfg.shrinkEveryN;
+            g.shrinkFlashFrames = 45;
+            g.creditsEarned += grindCfg.bonusCrPerShrink;
+            setShrinkWarning(false);
+            if (modeCfg.particlesEnabled) spawnShrinkBurst(g, W, theme);
+            g.floatingTexts.push({ x: W / 2, y: W / 2 - cell * 2, vy: -0.7, text: `⚠ SHRINK! +${grindCfg.bonusCrPerShrink} CR`, life: 1, decay: 0.010, color: "#ef4444", size: Math.max(12, cell * 0.7) });
+            const aMin2 = g.shrinkCount, aMax2 = BOARD - 1 - g.shrinkCount;
+            if (g.snake.some((s) => s.x < aMin2 || s.x > aMax2 || s.y < aMin2 || s.y > aMax2)) { doEndGame(g); return; }
+          }
+          const aMin = g.shrinkCount, aMax = BOARD - 1 - g.shrinkCount;
+          if (g.apple.x < aMin || g.apple.x > aMax || g.apple.y < aMin || g.apple.y > aMax) {
+            g.apple = randomPos(BOARD, [newHead, ...g.snake], aMin, aMax, aMin, aMax);
+          }
+        }
+
+        if (g.phase !== "playing") return;
+
+        if (modeCfg.goldenAppleEnabled && !g.goldenApple
+          && g.score % Math.max(1, Math.floor(modeCfg.bonusEveryN / 2)) === 0
+          && g.score % modeCfg.bonusEveryN !== 0) {
+          const gMin = g.mode === "grind" ? g.shrinkCount : 0;
+          const gMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
+          g.goldenApple = randomPos(BOARD, [...g.snake, g.apple], gMin, gMax, gMin, gMax);
+          g.goldenAppleMovesLeft = modeCfg.goldenAppleLifeApples;
+        }
+
+        g.snake = [newHead, ...g.snake];
+        const aMin = g.mode === "grind" ? g.shrinkCount : 0;
+        const aMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
+        g.apple = randomPos(BOARD, [newHead, ...g.snake, ...(g.goldenApple ? [g.goldenApple] : [])], aMin, aMax, aMin, aMax);
+        setScore(g.score);
+        setCreditsEarned(g.creditsEarned);
+        setScorePopKey((k) => k + 1);
+      } else {
+        g.snake = [newHead, ...g.snake.slice(0, -1)];
+        if (g.goldenApple) { g.goldenAppleMovesLeft--; if (g.goldenAppleMovesLeft <= 0) g.goldenApple = null; }
+      }
+      g.lastMoveTime = now;
+    }
+
     const loop = (now: number) => {
       const g = gameRef.current;
-      const modeCfg = getModeCfg(g.mode);
+      const mode = g.mode;
+      const modeCfg = getModeCfgLocal(mode);
       const W = canvas.width;
-      const BOARD = modeCfg.boardSize;
-      const cell = W / BOARD;
+      const cell = W / modeCfg.boardSize;
+      const theme = THEMES[mode];
 
-      // Ambient particle update
       for (const p of g.ambientParticles) {
         p.x += p.vx; p.y += p.vy;
         p.life = 0.3 + 0.7 * Math.abs(Math.sin(g.frameCount * 0.018 + p.r * 10));
         if (p.x < 0 || p.x > W) p.vx *= -1;
-        if (p.y < 0) { p.y = W; }
-        else if (p.y > W) { p.y = 0; }
+        if (p.y < 0) { p.y = W; } else if (p.y > W) { p.y = 0; }
+      }
+      g.particles = g.particles.filter((p) => { p.x += p.vx; p.y += p.vy; p.vy += 0.07; p.life -= p.decay; return p.life > 0; });
+      g.floatingTexts = g.floatingTexts.filter((ft) => { ft.y += ft.vy; ft.life -= ft.decay; return ft.life > 0; });
+
+      if (mode === "x2" && g.phase === "playing") {
+        const h = g.snake[0];
+        if (h) g.speedTrails.push({ x: (h.x + 0.5) * cell, y: (h.y + 0.5) * cell, alpha: 0.6 });
+        g.speedTrails = g.speedTrails.map((tr) => ({ ...tr, alpha: tr.alpha - 0.06 })).filter((tr) => tr.alpha > 0).slice(-12);
       }
 
-      // Game particles
-      g.particles = g.particles.filter((p) => {
-        p.x += p.vx; p.y += p.vy;
-        p.vy += 0.07;
-        p.life -= p.decay;
-        return p.life > 0;
-      });
-
-      // Floating texts
-      g.floatingTexts = g.floatingTexts.filter((ft) => {
-        ft.y += ft.vy; ft.life -= ft.decay; return ft.life > 0;
-      });
-
-      // x2 speed trails
-      if (g.mode === "x2" && g.phase === "playing") {
-        const head = g.snake[0];
-        if (head) {
-          g.speedTrails.push({ x: (head.x + 0.5) * cell, y: (head.y + 0.5) * cell, alpha: 0.6 });
-        }
-        g.speedTrails = g.speedTrails
-          .map((tr) => ({ ...tr, alpha: tr.alpha - 0.06 }))
-          .filter((tr) => tr.alpha > 0)
-          .slice(-12);
-      }
-
-      // Frame timers
       if (g.bonusFlashFrames > 0) g.bonusFlashFrames--;
       if (g.deathFlashFrames > 0) g.deathFlashFrames--;
       if (g.shrinkFlashFrames > 0) g.shrinkFlashFrames--;
 
-      // Game tick
       if (g.phase === "playing") {
         const speedMs = getSpeedMs(g.score, modeCfg);
         if (now - g.lastMoveTime >= speedMs) {
-          tick(g, canvas, W, cell, modeCfg, now);
+          doTick(g, modeCfg, W, cell, theme, now);
         }
       }
 
@@ -947,196 +1044,7 @@ export function SnakeShell({
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMode, config]);
-
-  const tick = useCallback((
-    g: GameState,
-    canvas: HTMLCanvasElement,
-    W: number,
-    cell: number,
-    modeCfg: SnakeModeConfig | SnakeGrindConfig,
-    now: number,
-  ) => {
-    const BOARD = modeCfg.boardSize;
-    const theme = THEMES[g.mode];
-
-    // Save prev positions for smooth interpolation
-    g.prevSnake = g.snake.map((s) => ({ ...s }));
-
-    g.dir = g.nextDir;
-    const head = g.snake[0];
-    let nx = head.x + (g.dir === "RIGHT" ? 1 : g.dir === "LEFT" ? -1 : 0);
-    let ny = head.y + (g.dir === "DOWN" ? 1 : g.dir === "UP" ? -1 : 0);
-
-    // Grind: check against current arena bounds
-    if (g.mode === "grind") {
-      const arenaMin = g.shrinkCount;
-      const arenaMax = BOARD - 1 - g.shrinkCount;
-      if (nx < arenaMin || nx > arenaMax || ny < arenaMin || ny > arenaMax) {
-        doEndGame(g, canvas); return;
-      }
-    } else if (modeCfg.wallWrap) {
-      nx = ((nx % BOARD) + BOARD) % BOARD;
-      ny = ((ny % BOARD) + BOARD) % BOARD;
-    } else if (nx < 0 || nx >= BOARD || ny < 0 || ny >= BOARD) {
-      doEndGame(g, canvas); return;
-    }
-
-    const newHead: Pos = { x: nx, y: ny };
-    if (g.snake.slice(0, -1).some((s) => posEq(s, newHead))) {
-      doEndGame(g, canvas); return;
-    }
-
-    const ateApple = posEq(newHead, g.apple);
-    const ateGolden = g.goldenApple !== null && posEq(newHead, g.goldenApple);
-
-    if (ateApple || ateGolden) {
-      g.score++;
-
-      let crBase = modeCfg.creditsPerApple;
-      if (ateGolden) {
-        crBase = Math.round(crBase * modeCfg.goldenAppleCrMultiplier);
-        g.goldenApple = null;
-      }
-      if (g.comboMultLeft > 0) {
-        crBase *= 2;
-        g.comboMultLeft--;
-        if (g.comboMultLeft === 0) setComboActive(false);
-      }
-
-      g.creditsEarned += crBase;
-
-      // Particles + floating text
-      const eatX = ateGolden && g.goldenApple ? g.goldenApple.x : g.apple.x;
-      const eatY = ateGolden && g.goldenApple ? g.goldenApple.y : g.apple.y;
-      const px = (eatX + 0.5) * cell;
-      const py = (eatY + 0.5) * cell;
-      if (modeCfg.particlesEnabled) spawnAppleBurst(g, px, py, ateGolden, theme);
-      g.floatingTexts.push({
-        x: px, y: py - cell * 0.3, vy: -1.2,
-        text: `+${crBase} CR`,
-        life: 1, decay: 0.022,
-        color: ateGolden ? theme.goldenColor : "#34d399",
-        size: Math.max(9, cell * 0.45),
-      });
-
-      // Bonus milestone
-      if (modeCfg.bonusEveryN > 0 && g.score % modeCfg.bonusEveryN === 0) {
-        g.creditsEarned += modeCfg.bonusCrFlat;
-        g.bonusFlashFrames = 40;
-        if (modeCfg.bonusMultiplierApples > 0) {
-          g.comboMultLeft = modeCfg.bonusMultiplierApples;
-          setComboActive(true);
-        }
-        if (modeCfg.particlesEnabled) spawnBonusBurst(g, W / 2, W / 2, theme);
-        const bannerText = `🎉 BONUS! +${modeCfg.bonusCrFlat} CR${modeCfg.bonusMultiplierApples > 0 ? ` + 2× für ${modeCfg.bonusMultiplierApples} Äpfel` : ""}`;
-        g.floatingTexts.push({
-          x: W / 2, y: W * 0.35, vy: -0.5,
-          text: `BONUS! +${modeCfg.bonusCrFlat}`,
-          life: 1, decay: 0.011, color: "#fbbf24", size: Math.max(12, cell * 0.65),
-        });
-        setBonusBannerText(bannerText);
-        setTimeout(() => setBonusBannerText(null), 2800);
-      }
-
-      // Grind: shrink countdown
-      if (g.mode === "grind") {
-        const grindCfg = modeCfg as SnakeGrindConfig;
-        g.applesUntilShrink--;
-        setShrinkWarning(g.applesUntilShrink <= 3 && g.applesUntilShrink > 0);
-
-        if (g.applesUntilShrink <= 0) {
-          const newArenaMin = g.shrinkCount + 1;
-          const newArenaMax = BOARD - 2 - g.shrinkCount;
-          if (newArenaMin >= newArenaMax || (newArenaMax - newArenaMin + 1) < grindCfg.minBoardSize) {
-            // Board too small → game over
-            doEndGame(g, canvas); return;
-          }
-          g.shrinkCount++;
-          g.applesUntilShrink = grindCfg.shrinkEveryN;
-          g.shrinkFlashFrames = 45;
-          g.creditsEarned += grindCfg.bonusCrPerShrink;
-          setShrinkWarning(false);
-          if (modeCfg.particlesEnabled) spawnShrinkBurst(g, W, theme);
-          g.floatingTexts.push({
-            x: W / 2, y: W / 2 - cell * 2, vy: -0.7,
-            text: `⚠ SHRINK! +${grindCfg.bonusCrPerShrink} CR`,
-            life: 1, decay: 0.010, color: "#ef4444", size: Math.max(12, cell * 0.7),
-          });
-          // Kill snake if now in dead zone
-          const arenaMin = g.shrinkCount;
-          const arenaMax = BOARD - 1 - g.shrinkCount;
-          if (g.snake.some((s) => s.x < arenaMin || s.x > arenaMax || s.y < arenaMin || s.y > arenaMax)) {
-            doEndGame(g, canvas); return;
-          }
-        }
-
-        // Keep apple inside arena
-        const arenaMin = g.shrinkCount;
-        const arenaMax = BOARD - 1 - g.shrinkCount;
-        if (g.apple.x < arenaMin || g.apple.x > arenaMax || g.apple.y < arenaMin || g.apple.y > arenaMax) {
-          g.apple = randomPos(BOARD, [newHead, ...g.snake], arenaMin, arenaMax, arenaMin, arenaMax);
-        }
-      }
-
-      // Golden apple spawn
-      if (modeCfg.goldenAppleEnabled
-        && g.score % Math.max(1, Math.floor(modeCfg.bonusEveryN / 2)) === 0
-        && g.score % modeCfg.bonusEveryN !== 0
-        && !g.goldenApple) {
-        const arenaMin = g.mode === "grind" ? g.shrinkCount : 0;
-        const arenaMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
-        const excluded = [...g.snake, g.apple];
-        g.goldenApple = randomPos(BOARD, excluded, arenaMin, arenaMax, arenaMin, arenaMax);
-        g.goldenAppleMovesLeft = modeCfg.goldenAppleLifeApples;
-      }
-
-      // Grow snake
-      g.snake = [newHead, ...g.snake];
-      // Spawn new apple
-      const arenaMin = g.mode === "grind" ? g.shrinkCount : 0;
-      const arenaMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
-      g.apple = randomPos(BOARD, [newHead, ...g.snake, ...(g.goldenApple ? [g.goldenApple] : [])], arenaMin, arenaMax, arenaMin, arenaMax);
-
-      setScore(g.score);
-      setCreditsEarned(g.creditsEarned);
-      setScorePopKey((k) => k + 1);
-    } else {
-      // Normal move
-      g.snake = [newHead, ...g.snake.slice(0, -1)];
-      if (g.goldenApple) {
-        g.goldenAppleMovesLeft--;
-        if (g.goldenAppleMovesLeft <= 0) g.goldenApple = null;
-      }
-    }
-
-    g.lastMoveTime = now;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config]);
-
-  function doEndGame(g: GameState, canvas: HTMLCanvasElement) {
-    void canvas;
-    g.phase = "dead";
-    g.deathFlashFrames = 30;
-    setPhase("dead");
-    setShrinkWarning(false);
-
-    const finalScore = g.score;
-    const finalCredits = g.creditsEarned;
-    const mode = g.mode;
-
-    if (finalScore === 0) return;
-    setSubmitting(true);
-    submitSnakeScore(finalScore, finalCredits, mode).then((res) => {
-      setSubmitting(false);
-      if (res.success) {
-        setCredits(res.newCredits ?? credits);
-        setDailyCr((prev) => prev + (res.creditsAwarded ?? 0));
-        setLastResult({ creditsAwarded: res.creditsAwarded ?? 0, isNewRecord: res.isNewRecord ?? false, previousBest: res.previousBest ?? 0 });
-        router.refresh();
-      }
-    });
-  }
+  }, []); // Mount-only: reads configRef for fresh config, gameRef for mutable state
 
   // Keyboard input
   useEffect(() => {
@@ -1178,7 +1086,8 @@ export function SnakeShell({
 
   function startGame() {
     const mode = activeModeRef.current;
-    const modeCfg = getModeCfg(mode);
+    const cfg = configRef.current;
+    const modeCfg = mode === "grind" ? cfg.grind : mode === "x2" ? cfg.x2 : cfg.x1;
     const BOARD = modeCfg.boardSize;
     const startX = Math.floor(BOARD / 2);
     const startY = Math.floor(BOARD / 2);
@@ -1210,7 +1119,7 @@ export function SnakeShell({
     sound.click();
   }
 
-  const modeCfg = getModeCfg();
+  const modeCfg = activeMode === "grind" ? config.grind : activeMode === "x2" ? config.x2 : config.x1;
   const dailyLimitReached = modeCfg.dailyCrLimit !== null && dailyCr >= modeCfg.dailyCrLimit;
   const dailyRemaining = modeCfg.dailyCrLimit !== null ? Math.max(0, modeCfg.dailyCrLimit - dailyCr) : null;
 
@@ -1289,7 +1198,7 @@ export function SnakeShell({
                   mode={m}
                   selected={activeMode === m}
                   disabled={false}
-                  modeCfg={getModeCfg(m)}
+                  modeCfg={config[m === "grind" ? "grind" : m === "x2" ? "x2" : "x1"]}
                   onClick={() => {
                     setActiveMode(m);
                     activeModeRef.current = m;
