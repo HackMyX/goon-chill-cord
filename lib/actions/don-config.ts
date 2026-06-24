@@ -33,7 +33,7 @@ export async function getDonConfig(): Promise<DonConfig> {
   const def = DEFAULT_DON_CONFIG;
   return {
     enabled: row.enabled ?? def.enabled,
-    dailyFlipLimit: typeof row.daily_flip_limit === "number" ? Math.max(1, row.daily_flip_limit) : def.dailyFlipLimit,
+    dailyFlipLimit: typeof row.daily_flip_limit === "number" ? Math.max(1, row.daily_flip_limit) : null,
     hourlyFlipLimit: typeof row.hourly_flip_limit === "number" ? Math.max(1, row.hourly_flip_limit) : null,
     cooldownSec: typeof row.cooldown_sec === "number" ? Math.max(0, row.cooldown_sec) : def.cooldownSec,
     winChance: typeof row.win_chance === "number" ? Math.min(1, Math.max(0, row.win_chance)) : def.winChance,
@@ -61,7 +61,7 @@ export async function updateDonConfig(
   const { error } = await admin.from("don_config").upsert({
     id: "default",
     enabled: input.enabled,
-    daily_flip_limit: Math.max(1, Math.round(input.dailyFlipLimit)),
+    daily_flip_limit: input.dailyFlipLimit !== null ? Math.max(1, Math.round(input.dailyFlipLimit)) : null,
     hourly_flip_limit: input.hourlyFlipLimit !== null ? Math.max(1, Math.round(input.hourlyFlipLimit)) : null,
     cooldown_sec: Math.max(0, Math.round(input.cooldownSec)),
     win_chance: Math.min(1, Math.max(0, input.winChance)),

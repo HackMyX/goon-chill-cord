@@ -66,14 +66,16 @@ export function DonShell({
   }
 
   const stake = customBet ? Math.floor(Number(customBet)) || 0 : selectedQuick;
-  const flipsRemaining = Math.max(0, donConfig.dailyFlipLimit - flipsUsed);
+  const flipsRemaining = donConfig.dailyFlipLimit !== null ? Math.max(0, donConfig.dailyFlipLimit - flipsUsed) : null;
   const hourlyRemaining = donConfig.hourlyFlipLimit !== null
     ? Math.max(0, donConfig.hourlyFlipLimit - hourlyFlipsUsed)
     : null;
   const sessionWins = history.filter((h) => h.won).length;
   const sessionLosses = history.filter((h) => !h.won).length;
   const sessionNet = history.reduce((acc, h) => acc + (h.won ? h.amount : -h.amount), 0);
-  const flipsProgress = donConfig.dailyFlipLimit > 0 ? (flipsUsed / donConfig.dailyFlipLimit) * 100 : 0;
+  const flipsProgress = donConfig.dailyFlipLimit !== null && donConfig.dailyFlipLimit > 0
+    ? (flipsUsed / donConfig.dailyFlipLimit) * 100
+    : 0;
   const hourlyProgress = donConfig.hourlyFlipLimit !== null && donConfig.hourlyFlipLimit > 0
     ? (hourlyFlipsUsed / donConfig.hourlyFlipLimit) * 100
     : 0;
@@ -81,7 +83,7 @@ export function DonShell({
   const canFlip =
     phase === "idle" &&
     donConfig.enabled &&
-    flipsRemaining > 0 &&
+    (flipsRemaining === null || flipsRemaining > 0) &&
     (hourlyRemaining === null || hourlyRemaining > 0) &&
     stake >= donConfig.minBet &&
     stake > 0 &&
@@ -219,8 +221,9 @@ export function DonShell({
           }}
         >
           {/* Daily limit progress */}
-          {donConfig.showRemainingSpins && (
+          {donConfig.showRemainingSpins && (donConfig.dailyFlipLimit !== null || donConfig.hourlyFlipLimit !== null) && (
             <div className="mb-8 space-y-2.5">
+              {donConfig.dailyFlipLimit !== null && (
               <div>
                 <div className="mb-1.5 flex items-center justify-between text-xs">
                   <span className="text-zinc-600">Tägliche Flips</span>
@@ -228,7 +231,7 @@ export function DonShell({
                     className={`font-mono font-bold ${
                       flipsRemaining === 0
                         ? "text-red-400"
-                        : flipsRemaining < 5
+                        : (flipsRemaining ?? 1) < 5
                         ? "text-amber-400"
                         : "text-emerald-400"
                     }`}
@@ -245,6 +248,7 @@ export function DonShell({
                   />
                 </div>
               </div>
+              )}
 
               {donConfig.hourlyFlipLimit !== null && (
                 <div>
@@ -555,7 +559,7 @@ export function DonShell({
                   ? "Nochmal versuchen?"
                   : !donConfig.enabled
                   ? "Deaktiviert"
-                  : flipsRemaining === 0
+                  : flipsRemaining !== null && flipsRemaining === 0
                   ? "Tageslimit erreicht"
                   : hourlyRemaining === 0
                   ? "Stundenlimit erreicht"

@@ -1,7 +1,7 @@
 export interface DonConfig {
   enabled: boolean;
-  /** Maximum flips per calendar day (UTC) per user. */
-  dailyFlipLimit: number;
+  /** Maximum flips per calendar day (UTC) per user. null = no daily limit. */
+  dailyFlipLimit: number | null;
   /** Maximum flips per rolling 60-minute window. null = no hourly limit. */
   hourlyFlipLimit: number | null;
   /** Minimum cooldown between flips in seconds. 0 = no cooldown. */

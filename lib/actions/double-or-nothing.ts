@@ -84,21 +84,23 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
       }
     }
 
-    const todayStart = new Date();
-    todayStart.setUTCHours(0, 0, 0, 0);
-    const { count: todayFlips } = await adminClient
-      .from("audit_logs")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("action", "double_or_nothing")
-      .gte("created_at", todayStart.toISOString());
+    if (config.dailyFlipLimit !== null) {
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+      const { count: todayFlips } = await adminClient
+        .from("audit_logs")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("action", "double_or_nothing")
+        .gte("created_at", todayStart.toISOString());
 
-    if ((todayFlips ?? 0) >= config.dailyFlipLimit) {
-      return {
-        success: false,
-        error: `Tageslimit von ${config.dailyFlipLimit} Flips erreicht. Komm morgen wieder!`,
-        remainingFlips: 0,
-      };
+      if ((todayFlips ?? 0) >= config.dailyFlipLimit) {
+        return {
+          success: false,
+          error: `Tageslimit von ${config.dailyFlipLimit} Flips erreicht. Komm morgen wieder!`,
+          remainingFlips: 0,
+        };
+      }
     }
   } catch {
     // audit_logs unavailable — skip limits.
@@ -155,7 +157,7 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
       action: "double_or_nothing",
       payload: { stake, won, newCredits: updatedRows[0].credits },
     });
-    remainingFlips = Math.max(0, config.dailyFlipLimit - ((usedAfter ?? 0) + 1));
+    remainingFlips = config.dailyFlipLimit !== null ? Math.max(0, config.dailyFlipLimit - ((usedAfter ?? 0) + 1)) : undefined;
     if (config.hourlyFlipLimit !== null) {
       remainingHourlyFlips = Math.max(0, config.hourlyFlipLimit - ((usedHour ?? 0) + 1));
     }

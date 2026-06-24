@@ -86,11 +86,15 @@ export function DonConfigEditor({ config }: Props) {
             type="number"
             min={1}
             max={9999}
-            value={form.dailyFlipLimit}
-            onChange={(e) => setForm((f) => ({ ...f, dailyFlipLimit: Math.max(1, Number(e.target.value) || 1) }))}
-            className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60"
+            placeholder="Kein Limit"
+            value={form.dailyFlipLimit ?? ""}
+            onChange={(e) => setForm((f) => ({
+              ...f,
+              dailyFlipLimit: e.target.value.trim() ? Math.max(1, Number(e.target.value) || 1) : null,
+            }))}
+            className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-400/60"
           />
-          <span className="text-[10px] text-zinc-600">Maximale Anzahl Flips pro User pro Tag.</span>
+          <span className="text-[10px] text-zinc-600">Leerlassen = kein Tageslimit. Zahl eingeben = max. Flips pro User pro Tag.</span>
         </div>
 
         {/* Hourly limit */}

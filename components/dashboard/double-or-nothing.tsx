@@ -37,13 +37,15 @@ export function DoubleOrNothing({ credits, onCreditsChange, donConfig, initialFl
   const sound = useSoundManager();
   const { currencyName } = useSiteConfig();
 
-  const remaining = Math.max(0, donConfig.dailyFlipLimit - flipsUsed);
-  const remainingPct = donConfig.dailyFlipLimit > 0 ? remaining / donConfig.dailyFlipLimit : 0;
+  const remaining = donConfig.dailyFlipLimit !== null ? Math.max(0, donConfig.dailyFlipLimit - flipsUsed) : null;
+  const remainingPct = donConfig.dailyFlipLimit !== null && donConfig.dailyFlipLimit > 0
+    ? (remaining ?? 0) / donConfig.dailyFlipLimit
+    : 1;
 
   const maxAllowed = donConfig.maxBet !== null ? Math.min(credits, donConfig.maxBet) : credits;
   const clampedAmount = Math.max(donConfig.minBet, Math.min(amount, maxAllowed || donConfig.minBet));
   const isCoolingDown = cooldownSecs > 0;
-  const isExhausted = remaining <= 0;
+  const isExhausted = remaining !== null && remaining <= 0;
 
   // Keep amount synced if config changes
   useEffect(() => {
@@ -90,7 +92,7 @@ export function DoubleOrNothing({ credits, onCreditsChange, donConfig, initialFl
     setFlipping(false);
     onCreditsChange(res.newCredits!);
 
-    if (res.remainingFlips !== undefined) {
+    if (res.remainingFlips !== undefined && donConfig.dailyFlipLimit !== null) {
       setFlipsUsed(donConfig.dailyFlipLimit - res.remainingFlips);
     } else {
       setFlipsUsed((n) => n + 1);
@@ -119,14 +121,14 @@ export function DoubleOrNothing({ credits, onCreditsChange, donConfig, initialFl
       <p className="mt-1 text-sm text-zinc-400">{donConfig.sectionSubtitle}</p>
 
       {/* Remaining spins display */}
-      {donConfig.showRemainingSpins && (
+      {donConfig.showRemainingSpins && donConfig.dailyFlipLimit !== null && (
         <div className="mx-auto mt-4 w-full max-w-xs">
           <div className="mb-1 flex items-center justify-between text-xs">
             <span className="flex items-center gap-1 text-zinc-500">
               <Zap className="h-3 w-3 text-amber-400" />
               Verbleibende Flips heute
             </span>
-            <span className={`font-bold tabular-nums ${remaining === 0 ? "text-red-400" : remaining <= 5 ? "text-amber-400" : "text-emerald-400"}`}>
+            <span className={`font-bold tabular-nums ${remaining === 0 ? "text-red-400" : (remaining ?? 1) <= 5 ? "text-amber-400" : "text-emerald-400"}`}>
               {remaining} / {donConfig.dailyFlipLimit}
             </span>
           </div>
@@ -137,7 +139,7 @@ export function DoubleOrNothing({ credits, onCreditsChange, donConfig, initialFl
                 width: `${remainingPct * 100}%`,
                 background: remaining === 0
                   ? "rgb(239,68,68)"
-                  : remaining <= 5
+                  : (remaining ?? 1) <= 5
                     ? "rgb(251,191,36)"
                     : "linear-gradient(90deg, rgb(52,211,153), rgb(16,185,129))",
               }}
