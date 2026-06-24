@@ -11,7 +11,32 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { USER_SYSTEM_PROMPT, MOD_SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT } from "@/lib/ai-site-context";
 
-// ── Tool declarations ─────────────────────────────────────────────────────────
+// ── Model priority list ───────────────────────────────────────────────────
+// gemini-2.5-flash:      proven primary (free tier, good quota)
+// gemini-2.5-flash-lite: fallback (may be 503 during high demand, retried)
+const MODEL_PRIORITY = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+] as const;
+
+// ── Per-user in-memory rate limiter (max 12 req/min) ─────────────────────
+const RL = new Map<string, { n: number; t: number }>();
+const RL_WINDOW = 60_000;
+const RL_MAX = 12;
+
+function allowRequest(userId: string): boolean {
+  const now = Date.now();
+  const e = RL.get(userId);
+  if (!e || now - e.t > RL_WINDOW) {
+    RL.set(userId, { n: 1, t: now });
+    return true;
+  }
+  if (e.n >= RL_MAX) return false;
+  e.n++;
+  return true;
+}
+
+// ── Tool declarations ─────────────────────────────────────────────────────
 
 const USER_TOOLS: Tool = {
   functionDeclarations: [
@@ -209,21 +234,145 @@ async function executeFunction(
   }
 }
 
-// ── Route handler ─────────────────────────────────────────────────────────────
+// ── Helper: error classification ──────────────────────────────────────────
+
+function isQuotaError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return (
+    msg.includes("429") ||
+    msg.includes("Too Many Requests") ||
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("quota")
+  );
+}
+
+function isTransientError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return (
+    msg.includes("503") ||
+    msg.includes("502") ||
+    msg.includes("Service Unavailable") ||
+    msg.includes("high demand") ||
+    msg.includes("overloaded")
+  );
+}
+
+// ── Helper: sleep ─────────────────────────────────────────────────────────
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ── Core: call Gemini with model fallback + retry ─────────────────────────
+
+interface GeminiCallResult {
+  reply: string;
+  actionLog: Array<{ fn: string; result: Record<string, unknown> }>;
+}
+
+async function callGemini(opts: {
+  apiKey: string;
+  systemPrompt: string;
+  tools: Tool;
+  history: Content[];
+  message: string;
+  context: "user" | "mod" | "admin";
+}): Promise<GeminiCallResult> {
+  const { apiKey, systemPrompt, tools, history, message, context } = opts;
+
+  // Trim history to last 10 entries (5 turns) to limit token usage
+  const trimmedHistory = history.slice(-10);
+
+  let lastError: unknown = null;
+
+  for (const modelName of MODEL_PRIORITY) {
+    // Each model gets up to 3 attempts total
+    for (let attempt = 0; attempt <= 2; attempt++) {
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: systemPrompt,
+          tools: [tools],
+        });
+
+        const chat = model.startChat({ history: trimmedHistory });
+        let result = await chat.sendMessage(message);
+        let response = result.response;
+        const actionLog: Array<{ fn: string; result: Record<string, unknown> }> = [];
+
+        // Function-call loop
+        let iterations = 0;
+        while (response.functionCalls()?.length && iterations < 6) {
+          iterations++;
+          const calls = response.functionCalls()!;
+          const fnParts: Part[] = [];
+
+          for (const call of calls) {
+            const fnResult = await executeFunction(
+              call.name,
+              call.args as Record<string, unknown>,
+              context
+            );
+            actionLog.push({ fn: call.name, result: fnResult });
+            fnParts.push({ functionResponse: { name: call.name, response: fnResult } });
+          }
+
+          result = await chat.sendMessage(fnParts);
+          response = result.response;
+        }
+
+        return { reply: response.text(), actionLog };
+      } catch (e) {
+        lastError = e;
+
+        const quota = isQuotaError(e);
+        const transient = isTransientError(e);
+
+        if (!quota && !transient) {
+          // Hard error (auth, bad request…) — don't retry at all
+          throw e;
+        }
+
+        if (quota) {
+          // Daily/minute quota exhausted → skip remaining attempts on this model, try next
+          break;
+        }
+
+        // Transient 503/overloaded → retry same model with backoff
+        if (attempt < 2) {
+          await sleep((attempt + 1) * 2_500);
+        }
+        // After 3 attempts on transient → fall through to next model
+      }
+    }
+  }
+
+  // All models exhausted
+  throw lastError ?? new Error("Alle KI-Modelle nicht verfügbar.");
+}
+
+// ── Route handler ─────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // Validate API key early — gives a clear error instead of a cryptic runtime crash
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({
-      error: "GEMINI_API_KEY ist nicht konfiguriert. Bitte in .env.local setzen und den Dev-Server neu starten.",
-    }, { status: 500 });
+    return NextResponse.json(
+      { error: "KI-Assistent ist nicht konfiguriert (fehlender API-Key)." },
+      { status: 500 }
+    );
   }
 
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Nicht eingeloggt." }, { status: 401 });
+
+    // Per-user rate limit
+    if (!allowRequest(user.id)) {
+      return NextResponse.json(
+        { error: "Zu viele Anfragen — bitte warte kurz und versuche es erneut." },
+        { status: 429 }
+      );
+    }
 
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
 
@@ -251,47 +400,33 @@ export async function POST(req: NextRequest) {
       context === "mod" ? MOD_TOOLS :
       USER_TOOLS;
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash-lite",
-      systemInstruction: systemPrompt,
-      tools: [tools],
+    const { reply, actionLog } = await callGemini({
+      apiKey,
+      systemPrompt,
+      tools,
+      history,
+      message: message.trim(),
+      context,
     });
 
-    const chat = model.startChat({ history });
-
-    let result = await chat.sendMessage(message);
-    let response = result.response;
-    const actionLog: Array<{ fn: string; result: Record<string, unknown> }> = [];
-
-    // Function-call loop — Gemini may call multiple functions before final text
-    let iterations = 0;
-    while (response.functionCalls()?.length && iterations < 6) {
-      iterations++;
-      const calls = response.functionCalls()!;
-      const fnParts: Part[] = [];
-
-      for (const call of calls) {
-        const fnResult = await executeFunction(
-          call.name,
-          call.args as Record<string, unknown>,
-          context
-        );
-        actionLog.push({ fn: call.name, result: fnResult });
-        fnParts.push({
-          functionResponse: { name: call.name, response: fnResult },
-        });
-      }
-
-      result = await chat.sendMessage(fnParts);
-      response = result.response;
-    }
-
-    const reply = response.text();
     return NextResponse.json({ reply, actionLog });
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
-    console.error("AI chat error:", detail);
-    return NextResponse.json({ error: `KI-Fehler: ${detail}` }, { status: 500 });
+    const raw = e instanceof Error ? e.message : String(e);
+    console.error("AI chat error:", raw);
+
+    // User-friendly error messages — never expose raw API errors
+    let userMsg = "Der KI-Assistent ist gerade nicht verfügbar. Bitte versuche es in einer Minute erneut.";
+
+    if (isQuotaError(e)) {
+      userMsg = "Der KI-Assistent hat sein Tageslimit erreicht. Bitte versuche es morgen oder in einigen Stunden erneut.";
+    } else if (isTransientError(e)) {
+      userMsg = "Der KI-Assistent ist gerade überlastet. Bitte warte 30 Sekunden und versuche es erneut.";
+    } else if (raw.includes("API_KEY") || raw.includes("API key") || raw.includes("401") || raw.includes("403")) {
+      userMsg = "KI-Konfigurationsfehler — bitte Administrator kontaktieren.";
+    } else if (raw.includes("SAFETY") || raw.includes("blocked")) {
+      userMsg = "Diese Anfrage konnte aus Sicherheitsgründen nicht verarbeitet werden.";
+    }
+
+    return NextResponse.json({ error: userMsg }, { status: 500 });
   }
 }
