@@ -93,6 +93,27 @@ export function DonConfigEditor({ config }: Props) {
           <span className="text-[10px] text-zinc-600">Maximale Anzahl Flips pro User pro Tag.</span>
         </div>
 
+        {/* Hourly limit */}
+        <div className="flex flex-col gap-1 rounded-xl border border-white/8 bg-black/30 p-3">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+            <Timer className="h-3.5 w-3.5 text-cyan-400" />
+            Stundenlimit (Flips/Stunde)
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={9999}
+            placeholder="Kein Limit"
+            value={form.hourlyFlipLimit ?? ""}
+            onChange={(e) => setForm((f) => ({
+              ...f,
+              hourlyFlipLimit: e.target.value.trim() ? Math.max(1, Number(e.target.value) || 1) : null,
+            }))}
+            className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/60"
+          />
+          <span className="text-[10px] text-zinc-600">Leerlassen = kein Stundenlimit. Gilt pro rollendem 60-Minuten-Fenster.</span>
+        </div>
+
         {/* Cooldown */}
         <div className="flex flex-col gap-1 rounded-xl border border-white/8 bg-black/30 p-3">
           <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">

@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isModerator } from "@/lib/admin";
-import { getDonConfig, getFlipsToday } from "@/lib/actions/don-config";
+import { getDonConfig, getFlipsToday, getFlipsThisHour } from "@/lib/actions/don-config";
 import { DonShell } from "@/components/don/don-shell";
 
 export default async function DonPage() {
@@ -14,7 +14,7 @@ export default async function DonPage() {
 
   if (!user) redirect("/");
 
-  const [{ data: profile }, { count: inventoryCount }, donConfig, flipsToday] = await Promise.all([
+  const [{ data: profile }, { count: inventoryCount }, donConfig, flipsToday, flipsThisHour] = await Promise.all([
     supabase
       .from("profiles")
       .select("credits, streak_days, username, role")
@@ -26,6 +26,7 @@ export default async function DonPage() {
       .eq("user_id", user.id),
     getDonConfig(),
     getFlipsToday(user.id),
+    getFlipsThisHour(user.id),
   ]);
 
   return (
@@ -37,6 +38,7 @@ export default async function DonPage() {
       isModerator={isModerator(profile)}
       donConfig={donConfig}
       initialFlipsToday={flipsToday}
+      initialHourlyFlipsUsed={flipsThisHour}
     />
   );
 }

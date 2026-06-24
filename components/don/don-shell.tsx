@@ -29,6 +29,7 @@ export function DonShell({
   isModerator = false,
   donConfig,
   initialFlipsToday,
+  initialHourlyFlipsUsed = 0,
 }: {
   initialCredits: number;
   inventoryCount: number;
@@ -37,6 +38,7 @@ export function DonShell({
   isModerator?: boolean;
   donConfig: DonConfig;
   initialFlipsToday: number;
+  initialHourlyFlipsUsed?: number;
 }) {
   const [credits, setCredits] = useState(initialCredits);
   const [phase, setPhase] = useState<"idle" | "loading" | "flipping" | "won" | "lost">("idle");
@@ -45,6 +47,7 @@ export function DonShell({
   const [lastResult, setLastResult] = useState<{ won: boolean; amount: number } | null>(null);
   const [history, setHistory] = useState<FlipEntry[]>([]);
   const [flipsUsed, setFlipsUsed] = useState(initialFlipsToday);
+  const [hourlyFlipsUsed, setHourlyFlipsUsed] = useState(initialHourlyFlipsUsed);
   const [error, setError] = useState<string | null>(null);
 
   const coinControls = useAnimation();
@@ -64,15 +67,22 @@ export function DonShell({
 
   const stake = customBet ? Math.floor(Number(customBet)) || 0 : selectedQuick;
   const flipsRemaining = Math.max(0, donConfig.dailyFlipLimit - flipsUsed);
+  const hourlyRemaining = donConfig.hourlyFlipLimit !== null
+    ? Math.max(0, donConfig.hourlyFlipLimit - hourlyFlipsUsed)
+    : null;
   const sessionWins = history.filter((h) => h.won).length;
   const sessionLosses = history.filter((h) => !h.won).length;
   const sessionNet = history.reduce((acc, h) => acc + (h.won ? h.amount : -h.amount), 0);
   const flipsProgress = donConfig.dailyFlipLimit > 0 ? (flipsUsed / donConfig.dailyFlipLimit) * 100 : 0;
+  const hourlyProgress = donConfig.hourlyFlipLimit !== null && donConfig.hourlyFlipLimit > 0
+    ? (hourlyFlipsUsed / donConfig.hourlyFlipLimit) * 100
+    : 0;
 
   const canFlip =
     phase === "idle" &&
     donConfig.enabled &&
     flipsRemaining > 0 &&
+    (hourlyRemaining === null || hourlyRemaining > 0) &&
     stake >= donConfig.minBet &&
     stake > 0 &&
     credits >= stake &&
@@ -110,6 +120,7 @@ export function DonShell({
     setLastResult({ won: res.won!, amount: res.amount! });
     setCredits(res.newCredits!);
     setFlipsUsed((f) => f + 1);
+    setHourlyFlipsUsed((f) => f + 1);
     setHistory((h) => [entry, ...h].slice(0, 20));
     setPhase(res.won ? "won" : "lost");
 
@@ -209,29 +220,64 @@ export function DonShell({
         >
           {/* Daily limit progress */}
           {donConfig.showRemainingSpins && (
-            <div className="mb-8">
-              <div className="mb-1.5 flex items-center justify-between text-xs">
-                <span className="text-zinc-600">Tägliche Flips</span>
-                <span
-                  className={`font-mono font-bold ${
-                    flipsRemaining === 0
-                      ? "text-red-400"
-                      : flipsRemaining < 5
-                      ? "text-amber-400"
-                      : "text-emerald-400"
-                  }`}
-                >
-                  {flipsRemaining} / {donConfig.dailyFlipLimit} übrig
-                </span>
+            <div className="mb-8 space-y-2.5">
+              <div>
+                <div className="mb-1.5 flex items-center justify-between text-xs">
+                  <span className="text-zinc-600">Tägliche Flips</span>
+                  <span
+                    className={`font-mono font-bold ${
+                      flipsRemaining === 0
+                        ? "text-red-400"
+                        : flipsRemaining < 5
+                        ? "text-amber-400"
+                        : "text-emerald-400"
+                    }`}
+                  >
+                    {flipsRemaining} / {donConfig.dailyFlipLimit} übrig
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800/80">
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ background: limitBarColor }}
+                    animate={{ width: `${flipsProgress}%` }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                  />
+                </div>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800/80">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: limitBarColor }}
-                  animate={{ width: `${flipsProgress}%` }}
-                  transition={{ duration: 0.5, ease: "easeOut" }}
-                />
-              </div>
+
+              {donConfig.hourlyFlipLimit !== null && (
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between text-xs">
+                    <span className="text-zinc-600">Stündliche Flips</span>
+                    <span
+                      className={`font-mono font-bold ${
+                        hourlyRemaining === 0
+                          ? "text-red-400"
+                          : (hourlyRemaining ?? 1) < 3
+                          ? "text-amber-400"
+                          : "text-cyan-400"
+                      }`}
+                    >
+                      {hourlyRemaining} / {donConfig.hourlyFlipLimit} übrig
+                    </span>
+                  </div>
+                  <div className="h-1 overflow-hidden rounded-full bg-zinc-800/80">
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{
+                        background: hourlyProgress >= 90
+                          ? "linear-gradient(90deg,#ef4444,#dc2626)"
+                          : hourlyProgress >= 60
+                          ? "linear-gradient(90deg,#f59e0b,#d97706)"
+                          : "linear-gradient(90deg,#22d3ee,#0891b2)",
+                      }}
+                      animate={{ width: `${hourlyProgress}%` }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -511,6 +557,8 @@ export function DonShell({
                   ? "Deaktiviert"
                   : flipsRemaining === 0
                   ? "Tageslimit erreicht"
+                  : hourlyRemaining === 0
+                  ? "Stundenlimit erreicht"
                   : credits < donConfig.minBet
                   ? "Zu wenig Credits"
                   : stake < donConfig.minBet

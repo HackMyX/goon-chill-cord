@@ -868,16 +868,19 @@ interface SnakeShellProps {
   leaderboardFarm: SnakeLeaderboardEntry[];
   myBestX1: number; myBestX2: number; myBestGrind: number; myBestFarm: number;
   dailyCrEarned: number;
+  dailyGamesX1?: number; dailyGamesX2?: number; dailyGamesGrind?: number; dailyGamesFarm?: number;
 }
 
 export function SnakeShell({
   userId, credits: initialCredits, streakDays, isAdmin, isModerator,
   config, leaderboardX1, leaderboardX2, leaderboardGrind, leaderboardFarm,
   myBestX1, myBestX2, myBestGrind, myBestFarm, dailyCrEarned: initDaily,
+  dailyGamesX1 = 0, dailyGamesX2 = 0, dailyGamesGrind = 0, dailyGamesFarm = 0,
 }: SnakeShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   const [activeMode, setActiveMode] = useState<SnakeMode>("x1");
   const [phase, setPhase] = useState<Phase>("idle");
+  const [dailyGames, setDailyGames] = useState({ x1: dailyGamesX1, x2: dailyGamesX2, grind: dailyGamesGrind, farm: dailyGamesFarm });
   const [score, setScore] = useState(0);
   const [creditsEarned, setCreditsEarned] = useState(0);
   const [lbTab, setLbTab] = useState<SnakeMode>("x1");
@@ -945,6 +948,7 @@ export function SnakeShell({
         if (res.success) {
           setCredits((prev) => res.newCredits ?? prev);
           setDailyCr((prev) => prev + (res.creditsAwarded ?? 0));
+          setDailyGames((prev) => ({ ...prev, [finalMode]: prev[finalMode] + 1 }));
           setLastResult({ creditsAwarded: res.creditsAwarded ?? 0, isNewRecord: res.isNewRecord ?? false, previousBest: res.previousBest ?? 0 });
           router.refresh();
         }
@@ -1215,6 +1219,9 @@ export function SnakeShell({
   const modeCfg = activeMode === "grind" ? config.grind : activeMode === "x2" ? config.x2 : activeMode === "farm" ? config.farm : config.x1;
   const dailyLimitReached = modeCfg.dailyCrLimit !== null && dailyCr >= modeCfg.dailyCrLimit;
   const dailyRemaining = modeCfg.dailyCrLimit !== null ? Math.max(0, modeCfg.dailyCrLimit - dailyCr) : null;
+  const dailyGamesUsed = dailyGames[activeMode];
+  const dailyGameLimitReached = modeCfg.dailyGameLimit !== null && dailyGamesUsed >= modeCfg.dailyGameLimit;
+  const dailyGamesRemaining = modeCfg.dailyGameLimit !== null ? Math.max(0, modeCfg.dailyGameLimit - dailyGamesUsed) : null;
 
   const lbEntries = lbTab === "grind" ? leaderboardGrind : lbTab === "x2" ? leaderboardX2 : lbTab === "farm" ? leaderboardFarm : leaderboardX1;
   const myBest = lbTab === "grind" ? myBestGrind : lbTab === "x2" ? myBestX2 : lbTab === "farm" ? myBestFarm : myBestX1;
@@ -1353,10 +1360,23 @@ export function SnakeShell({
               </div>
             )}
             {dailyRemaining !== null && (
-              <div className="ml-auto">
+              <div className="ml-auto text-right">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Heute noch</p>
                 <p className={`text-sm font-bold ${dailyRemaining === 0 ? "text-red-400" : "text-zinc-300"}`}>
                   {dailyRemaining.toLocaleString("de-DE")} CR
+                </p>
+                {dailyGamesRemaining !== null && (
+                  <p className={`text-[11px] font-bold ${dailyGamesRemaining === 0 ? "text-orange-400" : "text-zinc-500"}`}>
+                    {dailyGamesRemaining} / {modeCfg.dailyGameLimit} Spiele übrig
+                  </p>
+                )}
+              </div>
+            )}
+            {dailyRemaining === null && dailyGamesRemaining !== null && (
+              <div className="ml-auto text-right">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Spiele heute</p>
+                <p className={`text-sm font-bold ${dailyGamesRemaining === 0 ? "text-orange-400" : "text-zinc-300"}`}>
+                  {dailyGamesRemaining} / {modeCfg.dailyGameLimit} übrig
                 </p>
               </div>
             )}
@@ -1401,7 +1421,11 @@ export function SnakeShell({
                 </div>
                 <p className="text-xs text-zinc-600">← → ↑ ↓ oder WASD · Swipe auf Handy</p>
                 {dailyLimitReached ? (
-                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-3 text-sm font-bold text-red-400">Tageslimit erreicht</div>
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-3 text-sm font-bold text-red-400">CR-Tageslimit erreicht</div>
+                ) : dailyGameLimitReached ? (
+                  <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-6 py-3 text-center text-sm font-bold text-orange-400">
+                    Tageslimit: {modeCfg.dailyGameLimit} Spiele gespielt — komm morgen wieder!
+                  </div>
                 ) : (
                   <button onClick={startGame} onMouseEnter={sound.hover}
                     className={`group relative overflow-hidden rounded-2xl px-12 py-4 text-xl font-extrabold shadow-lg transition-all active:scale-95 ${

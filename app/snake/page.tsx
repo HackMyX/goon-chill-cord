@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isModerator } from "@/lib/admin";
-import { getSnakeConfig, getSnakeLeaderboard, getMySnakeBest, getDailyCrEarned } from "@/lib/actions/snake";
+import { getSnakeConfig, getSnakeLeaderboard, getMySnakeBest, getDailyCrEarned, getDailyGamesPerMode } from "@/lib/actions/snake";
 import { SnakeShell } from "@/components/snake/snake-shell";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export default async function SnakePage() {
     .eq("id", user.id)
     .single();
 
-  const [config, lbX1, lbX2, lbGrind, lbFarm, myBest, dailyCrEarned] = await Promise.all([
+  const [config, lbX1, lbX2, lbGrind, lbFarm, myBest, dailyCrEarned, dailyGames] = await Promise.all([
     getSnakeConfig(),
     getSnakeLeaderboard("x1", 20),
     getSnakeLeaderboard("x2", 20),
@@ -25,6 +25,7 @@ export default async function SnakePage() {
     getSnakeLeaderboard("farm", 20),
     getMySnakeBest(user.id),
     getDailyCrEarned(user.id),
+    getDailyGamesPerMode(user.id),
   ]);
 
   return (
@@ -45,6 +46,10 @@ export default async function SnakePage() {
       myBestGrind={myBest.grind}
       myBestFarm={myBest.farm}
       dailyCrEarned={dailyCrEarned}
+      dailyGamesX1={dailyGames.x1}
+      dailyGamesX2={dailyGames.x2}
+      dailyGamesGrind={dailyGames.grind}
+      dailyGamesFarm={dailyGames.farm}
     />
   );
 }

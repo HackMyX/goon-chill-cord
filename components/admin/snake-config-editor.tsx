@@ -131,8 +131,11 @@ function ModeEditor<T extends SnakeModeConfig>({
         <Row label="CR pro Apfel">
           <Num value={cfg.creditsPerApple} min={1} max={10000} onChange={(v) => set("creditsPerApple" as keyof T, v as T[keyof T])} />
         </Row>
-        <Row label="Tageslimit" hint="Max. CR pro Tag (leer = kein Limit)">
+        <Row label="CR-Tageslimit" hint="Max. CR pro Tag (leer = kein Limit)">
           <NullableNum value={cfg.dailyCrLimit} onChange={(v) => set("dailyCrLimit" as keyof T, v as T[keyof T])} />
+        </Row>
+        <Row label="Spiele-Tageslimit" hint="Max. Spielsessions pro Tag (leer = kein Limit)">
+          <NullableNum value={cfg.dailyGameLimit} onChange={(v) => set("dailyGameLimit" as keyof T, v as T[keyof T])} min={1} />
         </Row>
         <Row label="Bestenliste Einträge">
           <Num value={cfg.leaderboardSize} min={5} max={100} onChange={(v) => set("leaderboardSize" as keyof T, v as T[keyof T])} />
