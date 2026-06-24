@@ -11,6 +11,7 @@ import {
   UserRound,
   ShieldAlert,
   Shield,
+  ClipboardList,
 } from "lucide-react";
 import { IconButton } from "@/components/layout/icon-button";
 import { GamesMenu } from "@/components/layout/games-menu";
@@ -121,6 +122,8 @@ export function TopBar({
         );
       case "community":
         return <IconButton key="community" icon={Users} label="Community" href="/community" className="hidden lg:flex" />;
+      case "surveys":
+        return <IconButton key="surveys" icon={ClipboardList} label="Umfragen" href="/surveys" className="hidden lg:flex" />;
       case "wardrobe":
         return (
           <IconButton

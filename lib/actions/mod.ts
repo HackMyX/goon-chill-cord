@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isModerator, isAdmin } from "@/lib/admin";
+import { notifyUser } from "@/lib/notifications-internal";
 import {
   DEFAULT_MOD_PERMISSIONS,
   type ModPermissions,
@@ -247,6 +248,13 @@ export async function modWarnUser(
       action_type: "warning", reason: reason.trim() || null,
     });
     if (error) return { success: false, error: error.message };
+    await notifyUser({
+      userId: targetUserId,
+      type: "admin_action",
+      title: "Verwarnung erhalten",
+      message: reason.trim() ? `Grund: ${reason.trim()}` : "Du hast eine Verwarnung erhalten.",
+      link: "/account",
+    });
     return { success: true };
   } catch (e) { return { success: false, error: String(e) }; }
 }
@@ -291,6 +299,15 @@ export async function modTempBan(
     ]);
     if (actionRes.error) return { success: false, error: actionRes.error.message };
     if (banRes.error) return { success: false, error: banRes.error.message };
+    await notifyUser({
+      userId: targetUserId,
+      type: "admin_ban",
+      title: "Temporär gesperrt",
+      message: reason.trim()
+        ? `Du wurdest für ${cappedHours}h gesperrt. Grund: ${reason.trim()}`
+        : `Du wurdest für ${cappedHours}h temporär gesperrt.`,
+      link: "/account",
+    });
     return { success: true };
   } catch (e) { return { success: false, error: String(e) }; }
 }
@@ -338,6 +355,64 @@ export async function modCloseTicket(
     ]);
     if (ticketRes.error) return { success: false, error: ticketRes.error.message };
     if (actionRes.error) return { success: false, error: actionRes.error.message };
+    if (ticket?.user_id) {
+      await notifyUser({
+        userId: ticket.user_id,
+        type: "ticket_status",
+        title: "Ticket geschlossen",
+        message: reason.trim() ? `Dein Ticket wurde geschlossen. Begründung: ${reason.trim()}` : "Dein Support-Ticket wurde geschlossen.",
+        link: "/support",
+      });
+    }
+    return { success: true };
+  } catch (e) { return { success: false, error: String(e) }; }
+}
+
+export async function getModWarningsForUser(userId: string): Promise<ModActionRow[]> {
+  await requireMod();
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("mod_actions")
+    .select("id, mod_id, target_user_id, action_type, reason, details, expires_at, created_at")
+    .eq("target_user_id", userId)
+    .eq("action_type", "warning")
+    .order("created_at", { ascending: false });
+  if (!data || data.length === 0) return [];
+  const modIds = Array.from(new Set(data.map((r) => r.mod_id)));
+  const { data: profiles } = await admin.from("profiles").select("id, username").in("id", modIds);
+  const byId = new Map((profiles ?? []).map((p) => [p.id, p.username as string | null]));
+  return data.map((r) => ({
+    id: r.id, modId: r.mod_id, modUsername: byId.get(r.mod_id) ?? null,
+    targetUserId: r.target_user_id, targetUsername: null,
+    actionType: r.action_type as ModActionRow["actionType"],
+    reason: r.reason, details: r.details as Record<string, unknown> | null,
+    expiresAt: r.expires_at, createdAt: r.created_at,
+  }));
+}
+
+export async function modRemoveWarning(
+  warningId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user } = await requireMod();
+    const perms = await getModPermissions();
+    if (!perms.canWarnUsers) return { success: false, error: "Keine Berechtigung." };
+    const admin = createAdminClient();
+    const { data: warning, error: fetchErr } = await admin
+      .from("mod_actions")
+      .select("id, target_user_id, action_type")
+      .eq("id", warningId)
+      .single();
+    if (fetchErr || !warning) return { success: false, error: "Verwarnung nicht gefunden." };
+    if (warning.action_type !== "warning") return { success: false, error: "Kein Verwarnung-Eintrag." };
+    const [deleteRes] = await Promise.all([
+      admin.from("mod_actions").delete().eq("id", warningId),
+      admin.from("mod_actions").insert({
+        mod_id: user.id, target_user_id: warning.target_user_id,
+        action_type: "note", reason: `Verwarnung entfernt (ID: ${warningId.slice(0, 8)})`,
+      }),
+    ]);
+    if (deleteRes.error) return { success: false, error: deleteRes.error.message };
     return { success: true };
   } catch (e) { return { success: false, error: String(e) }; }
 }
@@ -366,6 +441,15 @@ export async function modAddCredits(
     ]);
     if (updateRes.error) return { success: false, error: updateRes.error.message };
     if (actionRes.error) return { success: false, error: actionRes.error.message };
+    await notifyUser({
+      userId: targetUserId,
+      type: "admin_credits",
+      title: amount > 0 ? "Credits erhalten" : "Credits abgezogen",
+      message: reason.trim()
+        ? `${amount > 0 ? "+" : ""}${amount} CR ${reason.trim()}`
+        : `${amount > 0 ? "+" : ""}${amount} Credits durch Mod-Aktion.`,
+      link: "/account",
+    });
     return { success: true };
   } catch (e) { return { success: false, error: String(e) }; }
 }

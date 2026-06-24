@@ -860,6 +860,7 @@ export function SnakeShell({
   const activeModeRef = useRef<SnakeMode>("x1");
   const rafRef = useRef<number>(0);
   const configRef = useRef(config);
+  const inputQueueRef = useRef<Dir[]>([]);
   const router = useRouter();
   const sound = useSoundManager();
 
@@ -908,6 +909,13 @@ export function SnakeShell({
     }
 
     function doTick(g: GameState, modeCfg: SnakeModeConfig | SnakeGrindConfig, W: number, cell: number, theme: ModeTheme, now: number) {
+      // Drain one queued input per tick — every keypress is guaranteed to land
+      const iq = inputQueueRef.current;
+      if (iq.length > 0) {
+        const d = iq.shift()!;
+        if (d !== OPP[g.dir]) g.nextDir = d;
+      }
+
       const BOARD = modeCfg.boardSize;
       g.prevSnake = g.snake.map((s) => ({ ...s }));
       g.dir = g.nextDir;
@@ -1046,45 +1054,82 @@ export function SnakeShell({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Mount-only: reads configRef for fresh config, gameRef for mutable state
 
-  // Keyboard input
+  // Keyboard input — pushes into an input queue so rapid key combos are
+  // never silently dropped. When the queue is full we REPLACE the last
+  // pending entry with the newer input (latest direction always wins).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (gameRef.current.phase !== "playing") return;
       const d = DIR_MAP[e.code];
       if (!d) return;
       e.preventDefault();
-      if (d !== OPP[gameRef.current.dir]) gameRef.current.nextDir = d;
+      const iq = inputQueueRef.current;
+      const refDir = iq.length > 0 ? iq[iq.length - 1] : gameRef.current.dir;
+      if (d === OPP[refDir] || d === refDir) return; // can't reverse or repeat last
+      if (iq.length >= 3) {
+        // Queue full — replace last entry so the newest direction is always captured
+        const prev2 = iq.length >= 2 ? iq[iq.length - 2] : gameRef.current.dir;
+        if (d !== OPP[prev2] && d !== prev2) iq[iq.length - 1] = d;
+      } else {
+        iq.push(d);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Touch swipe support
+  // Touch swipe support — uses touchmove for real-time detection (doesn't wait for lift).
   useEffect(() => {
-    let touchStartX = 0, touchStartY = 0;
+    let touchStartX = 0, touchStartY = 0, swiped = false;
     const onTouchStart = (e: TouchEvent) => {
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
+      swiped = false;
+    };
+    const pushSwipeDir = (d: Dir) => {
+      const iq = inputQueueRef.current;
+      const refDir = iq.length > 0 ? iq[iq.length - 1] : gameRef.current.dir;
+      if (d === OPP[refDir] || d === refDir) return;
+      if (iq.length >= 3) {
+        const prev2 = iq.length >= 2 ? iq[iq.length - 2] : gameRef.current.dir;
+        if (d !== OPP[prev2] && d !== prev2) iq[iq.length - 1] = d;
+      } else {
+        iq.push(d);
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (gameRef.current.phase !== "playing" || swiped) return;
+      const dx = e.touches[0].clientX - touchStartX;
+      const dy = e.touches[0].clientY - touchStartY;
+      if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;
+      swiped = true;
+      let d: Dir;
+      if (Math.abs(dx) > Math.abs(dy)) d = dx > 0 ? "RIGHT" : "LEFT";
+      else d = dy > 0 ? "DOWN" : "UP";
+      pushSwipeDir(d);
     };
     const onTouchEnd = (e: TouchEvent) => {
-      if (gameRef.current.phase !== "playing") return;
+      if (gameRef.current.phase !== "playing" || swiped) return;
       const dx = e.changedTouches[0].clientX - touchStartX;
       const dy = e.changedTouches[0].clientY - touchStartY;
       if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
       let d: Dir;
       if (Math.abs(dx) > Math.abs(dy)) d = dx > 0 ? "RIGHT" : "LEFT";
       else d = dy > 0 ? "DOWN" : "UP";
-      if (d !== OPP[gameRef.current.dir]) gameRef.current.nextDir = d;
+      pushSwipeDir(d);
     };
     window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
     window.addEventListener("touchend", onTouchEnd, { passive: true });
     return () => {
       window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("touchend", onTouchEnd);
     };
   }, []);
 
   function startGame() {
+    inputQueueRef.current = []; // flush any buffered inputs from prev game
     const mode = activeModeRef.current;
     const cfg = configRef.current;
     const modeCfg = mode === "grind" ? cfg.grind : mode === "x2" ? cfg.x2 : cfg.x1;

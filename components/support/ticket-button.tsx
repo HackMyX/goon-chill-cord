@@ -92,9 +92,7 @@ function SupportButtonInner() {
   const [visible, setVisible] = useState(false);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>("list");
-  const [pendingOpenTicketId, setPendingOpenTicketId] = useState<string | null>(
-    () => searchParams.get("openTicket")
-  );
+  const [pendingOpenTicketId, setPendingOpenTicketId] = useState<string | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [detail, setDetail] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -114,14 +112,17 @@ function SupportButtonInner() {
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) {
-        setVisible(false);
-        return;
-      }
+      if (!user) { setVisible(false); return; }
       const { data: profile } = await supabase.from("profiles").select("support_banned").eq("id", user.id).single();
       setVisible(!profile?.support_banned);
     });
   }, []);
+
+  // Watch URL for ?openTicket=xxx — handles both initial load and notification-click navigation
+  useEffect(() => {
+    const id = searchParams.get("openTicket");
+    if (id) setPendingOpenTicketId(id);
+  }, [searchParams]);
 
   const loadTickets = useCallback(async () => {
     setLoading(true);

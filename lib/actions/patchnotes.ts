@@ -24,10 +24,28 @@ function rowToNote(r: Record<string, unknown>): PatchNote {
     noteType: (r.note_type as PatchNoteType) ?? "update",
     status: (r.status as PatchNoteStatus) ?? "draft",
     isPinned: (r.is_pinned as boolean) ?? false,
+    showPopup: (r.show_popup as boolean) ?? false,
     publishedAt: r.published_at as string | null,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
   };
+}
+
+/** Returns the latest published note with show_popup=true, or null. */
+export async function getActivePopupNote(): Promise<PatchNote | null> {
+  const admin = createAdminClient();
+  // show_popup column may not exist yet — graceful fallback to null
+  try {
+    const { data } = await admin
+      .from("patch_notes")
+      .select("*")
+      .eq("status", "published")
+      .eq("show_popup", true)
+      .order("published_at", { ascending: false })
+      .limit(1)
+      .single();
+    return data ? rowToNote(data as Record<string, unknown>) : null;
+  } catch { return null; }
 }
 
 /** Public — returns only published notes, newest first, pinned first. */
@@ -151,6 +169,23 @@ export async function deletePatchNote(id: string): Promise<{ success: boolean; e
   const { error } = await admin.from("patch_notes").delete().eq("id", id);
   if (error) return { success: false, error: error.message };
   revalidatePath("/patchnotes");
+  return { success: true };
+}
+
+export async function togglePatchNotePopup(
+  id: string,
+  show: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+  const admin = createAdminClient();
+  const { error } = await admin.from("patch_notes").update({
+    show_popup: show,
+    updated_at: new Date().toISOString(),
+  }).eq("id", id);
+  if (error) return { success: false, error: error.message };
+  revalidatePath("/patchnotes");
+  revalidatePath("/", "layout");
   return { success: true };
 }
 

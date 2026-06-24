@@ -11,6 +11,8 @@ import { SupportButton } from "@/components/support/ticket-button";
 import { FpRegistrar } from "@/components/auth/fp-registrar";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getPetConfigs } from "@/lib/actions/pets";
+import { getActivePopupNote } from "@/lib/actions/patchnotes";
+import { PatchnotePopup } from "@/components/layout/patchnote-popup";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -45,7 +47,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [siteConfig, petConfigs] = await Promise.all([getSiteConfig(), getPetConfigs()]);
+  const [siteConfig, petConfigs, popupNote] = await Promise.all([getSiteConfig(), getPetConfigs(), getActivePopupNote()]);
   return (
     <html
       lang="de"
@@ -63,6 +65,7 @@ export default async function RootLayout({
           </PetConfigProvider>
         </SiteConfigProvider>
         <SupportButton />
+        {popupNote && <PatchnotePopup note={popupNote} />}
       </body>
     </html>
   );

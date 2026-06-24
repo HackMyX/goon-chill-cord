@@ -80,7 +80,8 @@ export async function createTicket(input: {
     type: "ticket_new",
     title: category === "suggestion" ? "Neuer Verbesserungsvorschlag" : "Neues Support-Ticket",
     message: `${username}: ${subject}`,
-    link: `/admin?tab=tickets&open=${data.id}`,
+    adminLink: `/admin?tab=tickets&open=${data.id}`,
+    modLink: `/mod?tab=tickets&open=${data.id}`,
   });
 
   revalidatePath("/admin");
@@ -208,12 +209,12 @@ export async function addTicketMessage(input: {
       link: `/?openTicket=${input.ticketId}`,
     });
   } else {
-    // Notify staff of user reply — deep-link to the specific ticket in admin panel
     await notifyStaff({
       type: "ticket_reply",
       title: "User-Antwort auf Ticket",
       message: `${username}: ${message.slice(0, 80)}`,
-      link: `/admin?tab=tickets&open=${input.ticketId}`,
+      adminLink: `/admin?tab=tickets&open=${input.ticketId}`,
+      modLink: `/mod?tab=tickets&open=${input.ticketId}`,
     });
   }
 

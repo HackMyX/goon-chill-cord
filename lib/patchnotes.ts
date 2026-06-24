@@ -17,6 +17,7 @@ export interface PatchNote {
   noteType: PatchNoteType;
   status: PatchNoteStatus;
   isPinned: boolean;
+  showPopup: boolean;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;

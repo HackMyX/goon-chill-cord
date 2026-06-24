@@ -46,7 +46,7 @@ export interface SiteConfig {
   perkLabels: { speed: string; jump: string; regen: string };
   /** Ordered list of right-side TopBar slot keys. Controls which buttons
    * appear on the right side of the TopBar and in what order.
-   * Keys: 'games' | 'shop' | 'auctions' | 'trading' | 'community' |
+   * Keys: 'games' | 'shop' | 'auctions' | 'trading' | 'community' | 'surveys' |
    *       'wardrobe' | 'notifications' | 'profile' | 'logout'
    * null/empty = use DEFAULT_TOPBAR_RIGHT_SLOTS. */
   topbarRightSlots: string[];

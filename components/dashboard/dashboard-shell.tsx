@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Zap, Shirt, Users, ShieldAlert, Shield } from "lucide-react";
+import { Zap, Shirt, Users, ShieldAlert, Shield, ClipboardList } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseOpeningSection } from "@/components/dashboard/case-opening-section";
 import { DoubleOrNothing } from "@/components/dashboard/double-or-nothing";
@@ -114,6 +114,15 @@ export function DashboardShell({
             >
               <Shirt className="h-4 w-4" />
               Garderobe öffnen
+            </Link>
+            <Link
+              href="/surveys"
+              onMouseEnter={sound.hover}
+              onClick={sound.click}
+              className="flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-5 py-2.5 text-sm font-semibold text-purple-300 transition-colors hover:border-purple-400/50 hover:bg-purple-500/10"
+            >
+              <ClipboardList className="h-4 w-4" />
+              Umfragen
             </Link>
             <Link
               href="/community"

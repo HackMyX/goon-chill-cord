@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -22,6 +22,7 @@ import { BackupTab } from "@/components/admin/backup-tab";
 import { SecurityTab } from "@/components/admin/security-tab";
 import { ModConfigEditor } from "@/components/admin/mod-config-editor";
 import { PatchNotesEditor } from "@/components/admin/patchnotes-editor";
+import { SurveysTab } from "@/components/admin/surveys-tab";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
 import type { SnakeConfig } from "@/lib/snake-config";
@@ -114,7 +115,7 @@ interface AdminShellProps {
   mineConfig: MineConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "debug" | "backup" | "security" | "patchnotes";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "debug" | "backup" | "security" | "patchnotes" | "surveys";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -129,6 +130,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "audit", label: "Audit-Log", icon: ScrollText },
   { id: "tickets", label: "Tickets", icon: MessageCircle },
   { id: "moderators", label: "Moderatoren", icon: Shield },
+  { id: "surveys", label: "Umfragen", icon: BarChart3 },
   { id: "debug", label: "Debug Log", icon: Bug },
   { id: "backup", label: "Backup", icon: Database },
   { id: "security", label: "Sicherheit", icon: ShieldAlert },
@@ -420,6 +422,8 @@ export function AdminShell({
         {tab === "backup" && <BackupTab />}
 
         {tab === "security" && <SecurityTab />}
+
+        {tab === "surveys" && <SurveysTab />}
 
         {tab === "patchnotes" && <PatchNotesEditor initialNotes={patchNotes} />}
       </main>

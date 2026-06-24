@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, Suspense } from "react";
 import {
   Shield, Users, Ticket, Activity, AlertTriangle, Ban, StickyNote,
-  ChevronDown, Check, X, Coins, Clock, Search, Info, LogOut,
+  ChevronDown, Check, X, Coins, Clock, Search, Info, LogOut, Trash2, Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { useSoundManager } from "@/lib/sound-manager";
 import { TopBar } from "@/components/layout/top-bar";
 import {
   modWarnUser, modAddNote, modTempBan, modLiftBan, modCloseTicket, modAddCredits,
+  modRemoveWarning, getModWarningsForUser,
 } from "@/lib/actions/mod";
 import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket } from "@/lib/mod";
 
@@ -80,6 +81,66 @@ function ActionLog({ actions }: { actions: ModActionRow[] }) {
 // ---------------------------------------------------------------------------
 // Users tab
 // ---------------------------------------------------------------------------
+
+function WarningsList({ userId, perms, warningCount, onDone }: {
+  userId: string; perms: ModPermissions; warningCount: number; onDone: () => void;
+}) {
+  const [warnings, setWarnings] = useState<ModActionRow[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const sound = useSoundManager();
+
+  useEffect(() => {
+    if (warningCount === 0) { setWarnings([]); return; }
+    setLoading(true);
+    getModWarningsForUser(userId).then((list) => { setWarnings(list); setLoading(false); });
+  }, [userId, warningCount]);
+
+  async function handleRemove(id: string) {
+    sound.click();
+    setRemoving(id);
+    const res = await modRemoveWarning(id);
+    setRemoving(null);
+    if (res.success) {
+      setWarnings((w) => (w ?? []).filter((x) => x.id !== id));
+      sound.win();
+      onDone();
+    } else { sound.error(); }
+  }
+
+  if (loading) return <div className="mt-3 flex items-center gap-2 text-xs text-zinc-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Lade Verwarnungen…</div>;
+  if (!warnings || warnings.length === 0) return null;
+
+  return (
+    <div className="mt-4">
+      <h4 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-amber-400">
+        <AlertTriangle className="h-3 w-3" />
+        Verwarnungen ({warnings.length})
+      </h4>
+      <div className="flex flex-col gap-1.5">
+        {warnings.map((w) => (
+          <div key={w.id} className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-amber-200">{w.reason ?? "(ohne Begründung)"}</p>
+              <p className="text-[10px] text-zinc-500">von {w.modUsername ?? "Mod"} · {timeAgo(w.createdAt)}</p>
+            </div>
+            {perms.canWarnUsers && (
+              <button
+                onClick={() => handleRemove(w.id)}
+                disabled={removing === w.id}
+                title="Verwarnung entfernen"
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-red-500/30 px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-500/15 disabled:opacity-50"
+              >
+                {removing === w.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                Entfernen
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function UserActionsPanel({
   user: u, perms, onDone,
@@ -268,6 +329,7 @@ function UsersTab({ users: initialUsers, perms, onRefresh }: {
                       )}
                     </div>
                   )}
+                  <WarningsList userId={u.id} perms={perms} warningCount={u.warningCount} onDone={onRefresh} />
                   <UserActionsPanel user={u} perms={perms} onDone={onRefresh} />
                 </div>
               )}
@@ -284,12 +346,18 @@ function UsersTab({ users: initialUsers, perms, onRefresh }: {
 // Tickets tab
 // ---------------------------------------------------------------------------
 
-function TicketsTab({ tickets, perms, onRefresh }: {
+function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }: {
   tickets: ModTicket[];
   perms: ModPermissions;
   onRefresh: () => void;
+  openTicketId?: string | null;
+  onTicketOpened?: () => void;
 }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(openTicketId ?? null);
+
+  useEffect(() => {
+    if (openTicketId) { setExpanded(openTicketId); onTicketOpened?.(); }
+  }, [openTicketId, onTicketOpened]);
   const [reason, setReason] = useState("");
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
@@ -491,7 +559,7 @@ interface ModShellProps {
   isAdminUser?: boolean;
 }
 
-// Full permissions override used when an admin views the mod panel
+// Full permissions override for admins viewing the mod panel
 const ADMIN_PERMS: ModPermissions = {
   canViewTickets: true,
   canCloseTickets: true,
@@ -501,24 +569,34 @@ const ADMIN_PERMS: ModPermissions = {
   canViewAuditLog: true,
   canAddCredits: true,
   warnRequiresReason: false,
-  maxTempBanHours: 8760, // 1 year
+  maxTempBanHours: 8760,
 };
 
-export function ModShell({
-  modUsername,
-  credits,
-  streakDays,
-  permissions: rawPerms,
-  users,
-  tickets,
-  recentActions,
-  myActions,
-  isAdminUser = false,
+// Inner component — uses useSearchParams for deep-link tab/ticket navigation
+function ModShellInner({
+  modUsername, credits, streakDays, permissions: rawPerms,
+  users, tickets, recentActions, myActions, isAdminUser = false,
 }: ModShellProps) {
   const permissions = isAdminUser ? ADMIN_PERMS : rawPerms;
-  const [activeTab, setActiveTab] = useState<ModTab>("overview");
+  const searchParams = useSearchParams();
+
+  const [activeTab, setActiveTab] = useState<ModTab>(() => {
+    const q = searchParams.get("tab");
+    return (q === "tickets" || q === "users" || q === "actions") ? q : "overview";
+  });
+  const [deepOpenTicketId, setDeepOpenTicketId] = useState<string | null>(
+    () => searchParams.get("open")
+  );
   const router = useRouter();
   const sound = useSoundManager();
+
+  // Handle client-side navigation deep links
+  useEffect(() => {
+    const q = searchParams.get("tab");
+    if (q === "tickets" || q === "users" || q === "actions") setActiveTab(q);
+    const open = searchParams.get("open");
+    if (open) setDeepOpenTicketId(open);
+  }, [searchParams]);
 
   const tabs: { id: ModTab; label: string; icon: typeof Shield; show: boolean }[] = [
     { id: "overview", label: "Übersicht", icon: Activity, show: true },
@@ -532,63 +610,56 @@ export function ModShell({
   return (
     <div className="flex flex-1 flex-col">
       <TopBar credits={credits} streakDays={streakDays} isModerator={!isAdminUser} isAdmin={isAdminUser} />
-    <div className="mx-auto w-full max-w-5xl px-4 py-8">
-      {/* Header */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2.5 text-2xl font-extrabold text-zinc-100">
-            <Shield className="h-6 w-6 text-sky-400" />
-            Moderations-Panel
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500">Eingeloggt als <strong className="text-zinc-300">{modUsername}</strong></p>
+      <div className="mx-auto w-full max-w-5xl px-4 py-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="flex items-center gap-2.5 text-2xl font-extrabold text-zinc-100">
+              <Shield className="h-6 w-6 text-sky-400" />
+              Moderations-Panel
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500">Eingeloggt als <strong className="text-zinc-300">{modUsername}</strong></p>
+          </div>
+          <Link href="/" onMouseEnter={sound.hover} onClick={sound.click}
+            className="flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-zinc-200">
+            <LogOut className="h-3.5 w-3.5" />Zurück
+          </Link>
         </div>
-        <Link
-          href="/"
-          onMouseEnter={sound.hover}
-          onClick={sound.click}
-          className="flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          Zurück
-        </Link>
-      </div>
 
-      {/* Tabs */}
-      <div className="mb-6 flex gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-1">
-        {tabs.filter((t) => t.show).map((t) => (
-          <button
-            key={t.id}
-            onMouseEnter={sound.hover}
-            onClick={() => { sound.click(); setActiveTab(t.id); }}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-all ${
-              activeTab === t.id
-                ? "bg-sky-500/20 text-sky-200 shadow-[0_0_12px_rgba(14,165,233,0.2)]"
-                : "text-zinc-500 hover:text-zinc-200"
-            }`}
-          >
-            <t.icon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      {activeTab === "overview" && (
-        <OverviewTab users={users} tickets={tickets} perms={permissions} myActions={myActions} />
-      )}
-      {activeTab === "users" && (
-        <UsersTab users={users} perms={permissions} onRefresh={refresh} />
-      )}
-      {activeTab === "tickets" && (
-        <TicketsTab tickets={tickets} perms={permissions} onRefresh={refresh} />
-      )}
-      {activeTab === "actions" && (
-        <div className="flex flex-col gap-4">
-          <h3 className="text-sm font-bold text-zinc-300">Alle Moderations-Aktionen</h3>
-          <ActionLog actions={recentActions} />
+        <div className="mb-6 flex gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-1">
+          {tabs.filter((t) => t.show).map((t) => (
+            <button key={t.id} onMouseEnter={sound.hover}
+              onClick={() => { sound.click(); setActiveTab(t.id); }}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-all ${
+                activeTab === t.id ? "bg-sky-500/20 text-sky-200 shadow-[0_0_12px_rgba(14,165,233,0.2)]" : "text-zinc-500 hover:text-zinc-200"
+              }`}
+            >
+              <t.icon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{t.label}</span>
+            </button>
+          ))}
         </div>
-      )}
+
+        {activeTab === "overview" && <OverviewTab users={users} tickets={tickets} perms={permissions} myActions={myActions} />}
+        {activeTab === "users" && <UsersTab users={users} perms={permissions} onRefresh={refresh} />}
+        {activeTab === "tickets" && (
+          <TicketsTab tickets={tickets} perms={permissions} onRefresh={refresh}
+            openTicketId={deepOpenTicketId} onTicketOpened={() => setDeepOpenTicketId(null)} />
+        )}
+        {activeTab === "actions" && (
+          <div className="flex flex-col gap-4">
+            <h3 className="text-sm font-bold text-zinc-300">Alle Moderations-Aktionen</h3>
+            <ActionLog actions={recentActions} />
+          </div>
+        )}
+      </div>
     </div>
-    </div>
+  );
+}
+
+export function ModShell(props: ModShellProps) {
+  return (
+    <Suspense fallback={null}>
+      <ModShellInner {...props} />
+    </Suspense>
   );
 }

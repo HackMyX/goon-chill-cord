@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import {
   Plus, Trash2, Save, Eye, EyeOff, Pin, PinOff, Loader2,
   ChevronDown, ChevronUp, ArrowUp, ArrowDown, Pencil, Check,
-  X, FileText, Rocket, Globe, AlertTriangle, Copy,
+  X, FileText, Rocket, Globe, AlertTriangle, Copy, Bell, BellOff,
 } from "lucide-react";
 import {
   getAllNotes,
@@ -13,6 +13,7 @@ import {
   publishPatchNote,
   unpublishPatchNote,
   deletePatchNote,
+  togglePatchNotePopup,
 } from "@/lib/actions/patchnotes";
 import type { PatchNote, PatchNoteType, SectionType, PatchNoteSection } from "@/lib/patchnotes";
 import { NOTE_TYPE_META, SECTION_TYPE_META } from "@/lib/patchnotes";
@@ -245,6 +246,13 @@ function NoteRow({ note, onEdit, onDuplicate, onRefresh }: NoteRowProps) {
     });
   }
 
+  async function handleTogglePopup() {
+    start(async () => {
+      await togglePatchNotePopup(note.id, !note.showPopup);
+      onRefresh();
+    });
+  }
+
   async function handleDelete() {
     if (!confirmDelete) { setConfirmDelete(true); return; }
     start(async () => {
@@ -263,6 +271,7 @@ function NoteRow({ note, onEdit, onDuplicate, onRefresh }: NoteRowProps) {
           <StatusBadge status={note.status} />
           <span className="font-mono text-xs text-zinc-500">{note.version}</span>
           {note.isPinned && <Pin className="h-3 w-3 text-purple-400" />}
+          {note.showPopup && <span title="Popup aktiv"><Bell className="h-3 w-3 text-amber-400" /></span>}
         </div>
         <span className="truncate font-semibold text-zinc-200">{note.title}</span>
         {note.publishedAt && (
@@ -281,6 +290,19 @@ function NoteRow({ note, onEdit, onDuplicate, onRefresh }: NoteRowProps) {
           className="rounded-lg border border-white/10 p-1.5 text-zinc-500 transition-colors hover:border-purple-400/50 hover:text-purple-300 disabled:opacity-40"
         >
           {note.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          title={note.showPopup ? "Popup deaktivieren" : "Als Popup anzeigen (erscheint beim nächsten Seitenbesuch)"}
+          onMouseEnter={sound.hover}
+          onClick={() => { sound.click(); handleTogglePopup(); }}
+          disabled={pending || note.status !== "published"}
+          className={`rounded-lg border p-1.5 transition-colors disabled:opacity-40 ${
+            note.showPopup
+              ? "border-amber-400/40 bg-amber-500/10 text-amber-300 hover:border-amber-400/60"
+              : "border-white/10 text-zinc-500 hover:border-amber-400/40 hover:text-amber-300"
+          }`}
+        >
+          {note.showPopup ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
         </button>
         <button
           title="Duplizieren"

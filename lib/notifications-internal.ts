@@ -24,46 +24,46 @@ export async function notifyStaff(input: {
   type: string;
   title: string;
   message: string;
+  /** Default link for all staff (used if no role-specific link is provided). */
   link?: string;
+  /** Link sent exclusively to admins — overrides `link` for admins. */
+  adminLink?: string;
+  /** Link sent exclusively to moderators — overrides `link` for mods. */
+  modLink?: string;
 }): Promise<void> {
   try {
     const admin = createAdminClient();
 
-    // Try to fetch with prefs so opted-out staff are skipped.
-    // If the column doesn't exist yet, fall back to fetching just id
-    // and send to everyone — we'd rather over-notify than drop messages.
-    let staffIds: string[] = [];
+    let staff: { id: string; role: string }[] = [];
     const { data: staffWithPrefs, error: prefsError } = await admin
       .from("profiles")
-      .select("id, notification_prefs")
+      .select("id, role, notification_prefs")
       .in("role", ["admin", "moderator"]);
 
     if (!prefsError && staffWithPrefs?.length) {
-      staffIds = staffWithPrefs
-        .filter((s: { id: string; notification_prefs: unknown }) => {
+      staff = staffWithPrefs
+        .filter((s: { id: string; role: string; notification_prefs: unknown }) => {
           const prefs = (s.notification_prefs as Record<string, boolean>) ?? {};
           return prefs[input.type] !== false;
         })
-        .map((s: { id: string }) => s.id);
+        .map((s: { id: string; role: string }) => ({ id: s.id, role: s.role }));
     } else {
-      // Column not yet migrated — send to all staff.
       const { data: fallback } = await admin
         .from("profiles")
-        .select("id")
+        .select("id, role")
         .in("role", ["admin", "moderator"]);
-      staffIds = (fallback ?? []).map((s: { id: string }) => s.id);
+      staff = (fallback ?? []).map((s: { id: string; role: string }) => ({ id: s.id, role: s.role }));
     }
 
-    if (!staffIds.length) return;
+    if (!staff.length) return;
 
     await admin.from("notifications").insert(
-      staffIds.map((id) => ({
-        user_id: id,
-        type: input.type,
-        title: input.title,
-        message: input.message,
-        link: input.link ?? null,
-      }))
+      staff.map(({ id, role }) => {
+        const link = role === "admin" && input.adminLink ? input.adminLink
+          : role === "moderator" && input.modLink ? input.modLink
+          : (input.link ?? null);
+        return { user_id: id, type: input.type, title: input.title, message: input.message, link };
+      })
     );
   } catch {
     // best-effort
