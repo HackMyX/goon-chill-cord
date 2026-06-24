@@ -10,9 +10,9 @@ import {
 } from "@/components/auctions/auctions-shell";
 import type { Rarity } from "@/lib/cases";
 
-const ITEM_STAT_SELECT = "id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec";
+const ITEM_STAT_SELECT = "id, name, rarity, type, price_cr, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec";
 
-type ItemRow = { id: string; name: string; rarity: Rarity; type: string; damage?: number | null; armor?: number | null; perk_type?: string | null; perk_magnitude?: number | null; shield_hp?: number | null; shield_regen_cooldown_sec?: number | null };
+type ItemRow = { id: string; name: string; rarity: Rarity; type: string; price_cr?: number | null; damage?: number | null; armor?: number | null; perk_type?: string | null; perk_magnitude?: number | null; shield_hp?: number | null; shield_regen_cooldown_sec?: number | null };
 
 export default async function AuctionsPage() {
   await sweepExpiredAuctions();
@@ -98,7 +98,7 @@ export default async function AuctionsPage() {
     .filter((row) => row.item && !activelyListedInventoryIds.has(row.id))
     .map((row) => {
       const item = row.item as unknown as ItemRow;
-      return { inventoryId: row.id, name: item.name, rarity: item.rarity, type: item.type, damage: item.damage, armor: item.armor, perk_type: item.perk_type, perk_magnitude: item.perk_magnitude, shield_hp: item.shield_hp, shield_regen_cooldown_sec: item.shield_regen_cooldown_sec };
+      return { inventoryId: row.id, name: item.name, rarity: item.rarity, type: item.type, priceCr: item.price_cr ?? null, damage: item.damage, armor: item.armor, perk_type: item.perk_type, perk_magnitude: item.perk_magnitude, shield_hp: item.shield_hp, shield_regen_cooldown_sec: item.shield_regen_cooldown_sec };
     });
 
   return (

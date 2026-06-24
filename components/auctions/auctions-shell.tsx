@@ -20,12 +20,31 @@ export interface OwnedItem {
   name: string;
   rarity: Rarity;
   type: string;
+  priceCr?: number | null;
   damage?: number | null;
   armor?: number | null;
   perk_type?: string | null;
   perk_magnitude?: number | null;
   shield_hp?: number | null;
   shield_regen_cooldown_sec?: number | null;
+}
+
+/** Fallback item values by rarity — used when price_cr is not set in DB. */
+const RARITY_FALLBACK_PRICE: Record<string, number> = {
+  normal: 5000,
+  selten: 32000,
+  mythisch: 135000,
+  ultra: 560000,
+};
+
+function suggestedBid(item: OwnedItem) {
+  const base = item.priceCr ?? RARITY_FALLBACK_PRICE[item.rarity] ?? 5000;
+  return Math.max(100, Math.round((base * 0.7) / 100) * 100);
+}
+
+function suggestedBuyout(item: OwnedItem) {
+  const base = item.priceCr ?? RARITY_FALLBACK_PRICE[item.rarity] ?? 5000;
+  return Math.max(200, Math.round((base * 1.4) / 100) * 100);
 }
 
 export interface AuctionListEntry {
@@ -100,6 +119,7 @@ function CreateAuctionForm({
   const [durationHours, setDurationHours] = useState(24);
   const [buyoutEnabled, setBuyoutEnabled] = useState(false);
   const [buyoutPrice, setBuyoutPrice] = useState(1500);
+  const estimatedValue = selected ? (selected.priceCr ?? RARITY_FALLBACK_PRICE[selected.rarity] ?? null) : null;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
@@ -148,6 +168,8 @@ function CreateAuctionForm({
             onClick={() => {
               sound.click();
               setSelected(item);
+              setStartingBid(suggestedBid(item));
+              setBuyoutPrice(suggestedBuyout(item));
             }}
             className={`flex w-full items-start justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-sm transition-colors ${
               selected?.inventoryId === item.inventoryId
@@ -187,6 +209,11 @@ function CreateAuctionForm({
                 onChange={(e) => setStartingBid(Math.max(1, Number(e.target.value)))}
                 className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
               />
+              {estimatedValue != null && (
+                <span className="text-[10px] text-zinc-500">
+                  ≈ Item-Wert: {fmt(estimatedValue)} {currencyName}
+                </span>
+              )}
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-semibold text-zinc-400">Laufzeit (Stunden)</span>
