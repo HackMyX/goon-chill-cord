@@ -32,7 +32,7 @@ export async function getAiApiKey(): Promise<string | null> {
   }
 }
 
-export function invalidateAiKeyCache() {
+export async function invalidateAiKeyCache() {
   keyCache = null;
 }
 
