@@ -296,8 +296,8 @@ function SupportButtonInner() {
       {!open && (
         <div className="fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6">
           <div className="relative flex flex-col items-center">
-            {/* Pills centered above the button via absolute positioning */}
-            <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex -translate-x-1/2 flex-col items-center gap-1 whitespace-nowrap">
+            {/* Pills right-aligned with the button — extend only leftward, never off-screen */}
+            <div className="pointer-events-none absolute bottom-full right-0 mb-2 flex flex-col items-end gap-1 whitespace-nowrap">
               <span className="rounded-xl bg-purple-600 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_0_14px_rgba(147,51,234,0.75),0_2px_8px_rgba(0,0,0,0.4)]">
                 Hilfe & Chat
               </span>
