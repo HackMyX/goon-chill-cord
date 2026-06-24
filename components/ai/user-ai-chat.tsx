@@ -240,9 +240,12 @@ function MessageText({ text }: { text: string }) {
 
 function fnLabel(fn: string): string {
   const labels: Record<string, string> = {
+    get_my_profile: "Profil abgerufen",
+    get_platform_info: "Plattform-Infos",
+    get_leaderboard: "Bestenliste",
+    get_player_settings: "Einstellungen gelesen",
     update_player_setting: "Einstellung",
     update_notification_pref: "Benachrichtigung",
-    get_player_settings: "Einstellungen gelesen",
     find_user: "User gesucht",
     warn_user: "Verwarnt",
     temp_ban_user: "Gebannt",

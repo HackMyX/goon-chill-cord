@@ -19,6 +19,7 @@ import {
   GripHorizontal,
   Paperclip,
   Trophy,
+  Shield,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -34,6 +35,7 @@ import {
 } from "@/lib/actions/tickets";
 import { UserAiChat } from "@/components/ai/user-ai-chat";
 import { GlobalChatPanel } from "@/components/global/global-chat-panel";
+import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: "Offen",
@@ -67,7 +69,7 @@ function StatusBadge({ status }: { status: TicketStatus }) {
 }
 
 type PanelView = "list" | "new" | "detail";
-type Tab = "support" | "ai" | "chat";
+type Tab = "support" | "ai" | "chat" | "admin-ai";
 
 const CATEGORY_META: Record<TicketCategory, { label: string; caption: string; icon: typeof Bug; placeholder: string }> = {
   bug: {
@@ -277,10 +279,12 @@ function SupportButtonInner() {
   if (pathname?.startsWith("/world")) return null;
   if (!visible) return null;
 
+  const isStaffUser = userRole === "admin" || userRole === "moderator";
   const TABS: { id: Tab; icon: typeof Bot; label: string }[] = [
-    { id: "support", icon: MessageCircle, label: "Support" },
-    { id: "ai",      icon: Bot,           label: "KI" },
-    { id: "chat",    icon: Globe,         label: "Chat" },
+    { id: "support",  icon: MessageCircle, label: "Support" },
+    { id: "ai",       icon: Bot,           label: "KI" },
+    { id: "chat",     icon: Globe,         label: "Chat" },
+    ...(isStaffUser ? [{ id: "admin-ai" as Tab, icon: Shield, label: userRole === "admin" ? "Admin KI" : "Mod KI" }] : []),
   ];
 
   return (
@@ -333,6 +337,7 @@ function SupportButtonInner() {
                 {tab === "support" && view === "detail" && (detail?.subject ?? "Ticket")}
                 {tab === "ai" && "KI-Assistent"}
                 {tab === "chat" && "Global Chat"}
+                {tab === "admin-ai" && (userRole === "admin" ? "Admin-Assistent" : "Mod-Assistent")}
               </span>
               <button onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200">
                 <X className="h-4 w-4" />
@@ -579,6 +584,13 @@ function SupportButtonInner() {
               {tab === "chat" && (
                 <div className="h-full w-full">
                   <GlobalChatPanel panelHeight={panelH} isStaff={userRole === "admin" || userRole === "moderator"} />
+                </div>
+              )}
+
+              {/* ── Admin / Mod KI tab ── */}
+              {tab === "admin-ai" && (
+                <div className="h-full w-full overflow-y-auto p-4">
+                  <AdminAiChat context={userRole === "admin" ? "admin" : "mod"} />
                 </div>
               )}
             </div>

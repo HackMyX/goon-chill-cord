@@ -41,6 +41,30 @@ const USER_TOOLS: GroqTool[] = [
   {
     type: "function",
     function: {
+      name: "get_my_profile",
+      description: "Vollständiges Profil des anfragenden Spielers abrufen: Credits, Streak-Tage, Inventar-Größe, Rolle, Einstellungen. Nutze das IMMER bei Fragen nach dem eigenen Profil, Credits, Streak oder Inventar.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_platform_info",
+      description: "Aktuelle Plattform-Statistiken abrufen: Spieleranzahl, Items im Umlauf (sammelbar), aktive Cases, Shop-Angebote, laufende Auktionen. Nutze das IMMER bei Fragen nach Plattform-Zahlen oder 'Wie viele Items gibt es?'.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_leaderboard",
+      description: "Bestenliste abrufen: Top-10 nach Credits und nach Streak-Tagen. Nutze das bei Fragen wie 'Wer führt die Rangliste an?' oder 'Zeig mir die Bestenliste'.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_player_settings",
       description: "Aktuelle Spielereinstellungen abrufen (Trades, Profil-Sichtbarkeit, Benachrichtigungen)",
       parameters: { type: "object", properties: {} },
@@ -271,6 +295,90 @@ async function executeFunction(
 ): Promise<Record<string, unknown>> {
   try {
     switch (name) {
+      case "get_my_profile": {
+        const client = await createClient();
+        const { data: { user: me } } = await client.auth.getUser();
+        if (!me) return { error: "Nicht eingeloggt." };
+        const adminDb = createAdminClient();
+        const [{ data: profile }, { count: invCount }] = await Promise.all([
+          adminDb
+            .from("profiles")
+            .select("username, credits, streak_days, role, accepts_trades, profile_visible, created_at, temp_banned_until")
+            .eq("id", me.id)
+            .single(),
+          adminDb
+            .from("inventory")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", me.id),
+        ]);
+        if (!profile) return { error: "Profil nicht gefunden." };
+        const isBanned = !!(profile.temp_banned_until && new Date(profile.temp_banned_until as string) > new Date());
+        return {
+          username: profile.username,
+          credits: profile.credits,
+          streak_days: profile.streak_days,
+          role: profile.role,
+          accepts_trades: profile.accepts_trades,
+          profile_visible: profile.profile_visible,
+          inventory_count: invCount ?? 0,
+          member_since: profile.created_at,
+          is_temp_banned: isBanned,
+        };
+      }
+      case "get_platform_info": {
+        const adminDb = createAdminClient();
+        const results = await Promise.allSettled([
+          adminDb.from("profiles").select("*", { count: "exact", head: true }),
+          adminDb.from("inventory").select("*", { count: "exact", head: true }),
+          adminDb.from("case_groups").select("id, name").eq("is_active", true).limit(30),
+          adminDb.from("shop_items").select("*", { count: "exact", head: true }).eq("is_active", true),
+          adminDb.from("auctions").select("*", { count: "exact", head: true }).eq("status", "active"),
+        ]);
+        const userCount   = results[0].status === "fulfilled" ? (results[0].value.count ?? 0) : 0;
+        const itemCount   = results[1].status === "fulfilled" ? (results[1].value.count ?? 0) : 0;
+        const caseGroups  = results[2].status === "fulfilled" ? (results[2].value.data ?? []) : [];
+        const shopCount   = results[3].status === "fulfilled" ? (results[3].value.count ?? 0) : 0;
+        const auctionCount = results[4].status === "fulfilled" ? (results[4].value.count ?? 0) : 0;
+        return {
+          registered_players: userCount,
+          collectible_items_in_circulation: itemCount,
+          active_case_groups: caseGroups.length,
+          case_group_names: (caseGroups as Array<{ name: string }>).map((g) => g.name),
+          active_shop_offers: shopCount,
+          active_auctions: auctionCount,
+        };
+      }
+      case "get_leaderboard": {
+        const adminDb = createAdminClient();
+        const [{ data: byCredits }, { data: byStreak }] = await Promise.all([
+          adminDb
+            .from("profiles")
+            .select("username, credits, streak_days")
+            .eq("profile_visible", true)
+            .order("credits", { ascending: false })
+            .limit(10),
+          adminDb
+            .from("profiles")
+            .select("username, streak_days")
+            .eq("profile_visible", true)
+            .gt("streak_days", 0)
+            .order("streak_days", { ascending: false })
+            .limit(10),
+        ]);
+        return {
+          credits_top10: (byCredits ?? []).map((p, i) => ({
+            rank: i + 1,
+            username: p.username,
+            credits: p.credits,
+            streak_days: p.streak_days,
+          })),
+          streak_top10: (byStreak ?? []).map((p, i) => ({
+            rank: i + 1,
+            username: p.username,
+            streak_days: p.streak_days,
+          })),
+        };
+      }
       case "get_player_settings": {
         const { getPlayerSettings, getNotificationPrefs } = await import("@/lib/actions/account");
         const [settings, notifPrefs] = await Promise.all([getPlayerSettings(), getNotificationPrefs()]);

@@ -60,6 +60,13 @@ function UserAvatar({ avatarUrl, username, role, size = 22 }: {
   );
 }
 
+interface CurrentUser {
+  id: string;
+  username: string;
+  avatarUrl: string | null;
+  role: string;
+}
+
 interface GlobalChatPanelProps {
   panelHeight?: number;
   isStaff?: boolean;
@@ -73,15 +80,41 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
   const [clearing, setClearing] = useState(false);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const supabase = useRef(createClient());
   const sound = useSoundManager();
+  // Tracks the ID of an optimistic (not-yet-confirmed) message so appendMessage can replace it
+  const pendingOptimisticRef = useRef<string | null>(null);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   const latestIdRef = useRef<string | null>(null);
+
+  // Fetch current user profile for optimistic messages
+  useEffect(() => {
+    const client = supabase.current;
+    client.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      client
+        .from("profiles")
+        .select("username, avatar_url, role")
+        .eq("id", user.id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setCurrentUser({
+              id: user.id,
+              username: data.username as string,
+              avatarUrl: (data.avatar_url as string | null) ?? null,
+              role: (data.role as string) ?? "user",
+            });
+          }
+        });
+    });
+  }, []);
 
   useEffect(() => {
     getGlobalChatMessages(60).then((msgs) => {
@@ -94,10 +127,16 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
 
   const appendMessage = useCallback((row: Record<string, unknown>) => {
     const id = row.id as string;
+    // Capture the optimistic ID before the state update
+    const optId = pendingOptimisticRef.current;
+
     setMessages((prev) => {
-      if (prev.some((m) => m.id === id)) return prev;
+      // Remove the optimistic placeholder if present
+      const cleaned = optId ? prev.filter((m) => m.id !== optId) : prev;
+      // Dedup: don't add if real message already present
+      if (cleaned.some((m) => m.id === id)) return cleaned;
       return [
-        ...prev,
+        ...cleaned,
         {
           id,
           userId: row.user_id as string | null,
@@ -111,6 +150,9 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
         },
       ];
     });
+
+    // Clear the optimistic ref once the real message landed
+    if (optId) pendingOptimisticRef.current = null;
     latestIdRef.current = id;
     setTimeout(scrollToBottom, 30);
   }, [scrollToBottom]);
@@ -128,7 +170,6 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
         "postgres_changes",
         { event: "DELETE", schema: "public", table: "global_chat_messages" },
         () => {
-          // Chat was cleared — reload all messages
           getGlobalChatMessages(60).then((msgs) => {
             setMessages(msgs);
             if (msgs.length > 0) latestIdRef.current = msgs[msgs.length - 1].id;
@@ -150,16 +191,19 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
       const newestId = fresh[fresh.length - 1].id;
       if (newestId === latestIdRef.current) return;
       setMessages((prev) => {
-        const existingIds = new Set(prev.map((m) => m.id));
+        // Remove any stale optimistic messages on poll sync
+        const withoutOptimistic = pendingOptimisticRef.current
+          ? prev.filter((m) => m.id !== pendingOptimisticRef.current)
+          : prev;
+        const existingIds = new Set(withoutOptimistic.map((m) => m.id));
         const added = fresh.filter((m) => !existingIds.has(m.id));
-        if (added.length === 0 && fresh.length < prev.length) {
-          // Messages were deleted (chat clear)
+        if (added.length === 0 && fresh.length < withoutOptimistic.length) {
           latestIdRef.current = newestId;
           return fresh;
         }
-        if (added.length === 0) return prev;
+        if (added.length === 0) return withoutOptimistic;
         latestIdRef.current = newestId;
-        return [...prev, ...added];
+        return [...withoutOptimistic, ...added];
       });
       setTimeout(scrollToBottom, 30);
     }, 8000);
@@ -169,17 +213,49 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() || sending) return;
-    setSending(true);
+    const text = input.trim();
+
     setError(null);
+    setInput(""); // clear input immediately — feels instant
     sound.click();
-    const res = await sendGlobalChatMessage(input.trim());
+
+    // Optimistic: show message right away if we know the user
+    if (currentUser) {
+      const tempId = `__opt_${Date.now()}`;
+      pendingOptimisticRef.current = tempId;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: tempId,
+          userId: currentUser.id,
+          username: currentUser.username,
+          role: currentUser.role,
+          content: text,
+          isSystem: false,
+          metadata: null,
+          createdAt: new Date().toISOString(),
+          avatarUrl: currentUser.avatarUrl,
+        },
+      ]);
+      setTimeout(scrollToBottom, 30);
+    }
+
+    setSending(true);
+    const res = await sendGlobalChatMessage(text);
     setSending(false);
-    if (res.success) {
-      setInput("");
-    } else {
+
+    if (!res.success) {
+      // Remove optimistic message on failure and restore input
+      if (pendingOptimisticRef.current) {
+        const optId = pendingOptimisticRef.current;
+        pendingOptimisticRef.current = null;
+        setMessages((prev) => prev.filter((m) => m.id !== optId));
+      }
+      setInput(text);
       sound.error();
       setError(res.error ?? "Fehler.");
     }
+    // On success: realtime INSERT fires → appendMessage removes the optimistic + adds the real message
   }
 
   async function handleClear() {
@@ -245,6 +321,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
           <p className="text-center text-xs text-zinc-600 py-6">Noch keine Nachrichten. Seid die Ersten!</p>
         )}
         {messages.map((msg) => {
+          const isOptimistic = msg.id.startsWith("__opt_");
           const isSystemMsg = msg.isSystem;
           const badge = ROLE_BADGE[msg.role];
           const RoleIcon = ROLE_ICON[msg.role];
@@ -276,7 +353,9 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
           return (
             <div
               key={msg.id}
-              className={`group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.025] ${isSpecial ? "hover:bg-amber-500/[0.03]" : ""}`}
+              className={`group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.025] ${
+                isSpecial ? "hover:bg-amber-500/[0.03]" : ""
+              } ${isOptimistic ? "opacity-60" : ""}`}
             >
               <div className="mt-0.5">
                 <UserAvatar avatarUrl={msg.avatarUrl} username={msg.username} role={msg.role} size={22} />
@@ -293,7 +372,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
                     )}
                   </span>
                   <span className="text-[9px] text-zinc-600 ml-auto shrink-0">
-                    {formatTime(msg.createdAt)}
+                    {isOptimistic ? "Sendet…" : formatTime(msg.createdAt)}
                   </span>
                 </div>
                 <p className="text-xs leading-snug text-zinc-300 break-words mt-0.5">{msg.content}</p>
