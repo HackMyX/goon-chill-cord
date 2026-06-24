@@ -140,14 +140,61 @@ const ADMIN_TOOLS: Tool = {
     ...MOD_TOOLS.functionDeclarations!,
     {
       name: "add_credits",
-      description: "Credits zu einem Spieler hinzufügen oder abziehen (negativer Wert = abziehen)",
+      description: "Credits zu JEDEM Spieler hinzufügen oder abziehen — funktioniert auch für Admins (negativer Wert = abziehen). Kein Mod-Berechtigungs-Check.",
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
-          userId: { type: SchemaType.STRING },
+          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
           amount: { type: SchemaType.NUMBER, description: "Betrag (negativ = abziehen)" },
+          reason: { type: SchemaType.STRING, description: "Optionaler Grund" },
         },
         required: ["userId", "amount"],
+      },
+    },
+    {
+      name: "set_role",
+      description: "Benutzerrolle setzen: 'user', 'moderator' oder 'admin'. ACHTUNG: Admin-Rollen können NICHT durch die KI entfernt werden (Sicherheitssperre).",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
+          role: { type: SchemaType.STRING, description: "'user', 'moderator' oder 'admin'" },
+        },
+        required: ["userId", "role"],
+      },
+    },
+    {
+      name: "reset_user",
+      description: "Spieler komplett zurücksetzen: Streak→0, Ban aufheben, alle Verwarnungen löschen. Admin-Rolle bleibt IMMER erhalten (kann via KI nicht entfernt werden). Optional Credits auf 0.",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
+          resetCredits: { type: SchemaType.BOOLEAN, description: "true = Credits auf 0 setzen, false/weggelassen = Credits beibehalten" },
+        },
+        required: ["userId"],
+      },
+    },
+    {
+      name: "remove_warnings",
+      description: "Alle Verwarnungen eines Spielers löschen",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
+        },
+        required: ["userId"],
+      },
+    },
+    {
+      name: "get_user_history",
+      description: "Detaillierte Aktionshistorie eines Spielers abrufen (Verwarnungen, Bans, Credit-Änderungen, Notizen)",
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: {
+          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
+        },
+        required: ["userId"],
       },
     },
   ],
@@ -222,9 +269,87 @@ async function executeFunction(
       }
       case "add_credits": {
         if (context !== "admin") return { error: "Nur Admins können Credits vergeben." };
-        const { modAddCredits } = await import("@/lib/actions/mod");
-        const res = await modAddCredits(args.userId as string, args.amount as number, "");
-        return res as Record<string, unknown>;
+        // Direct admin-client path — bypasses mod-permission check, works for ALL users incl. admins
+        const supabaseForCredits = await createClient();
+        const { data: { user: adminUser } } = await supabaseForCredits.auth.getUser();
+        if (!adminUser) return { error: "Nicht eingeloggt." };
+        const { data: adminProf } = await supabaseForCredits.from("profiles").select("role").eq("id", adminUser.id).single();
+        if (!isAdmin(adminProf)) return { error: "Keine Admin-Berechtigung." };
+        const adminDb = createAdminClient();
+        const targetId = args.userId as string;
+        const amount = args.amount as number;
+        if (!amount || amount === 0) return { success: false, error: "Betrag darf nicht 0 sein." };
+        const { data: target } = await adminDb.from("profiles").select("credits, username").eq("id", targetId).single();
+        if (!target) return { success: false, error: "Nutzer nicht gefunden." };
+        const newCredits = Math.max(0, ((target.credits as number) ?? 0) + amount);
+        const { error: credErr } = await adminDb.from("profiles").update({ credits: newCredits }).eq("id", targetId);
+        if (credErr) return { success: false, error: credErr.message };
+        await adminDb.from("mod_actions").insert({
+          mod_id: adminUser.id, target_user_id: targetId,
+          action_type: "credits_add", reason: (args.reason as string) || null,
+          details: { amount, newTotal: newCredits, via: "admin_ai" },
+        });
+        return { success: true, username: target.username, oldCredits: target.credits, newCredits, amount };
+      }
+      case "set_role": {
+        if (context !== "admin") return { error: "Keine Berechtigung." };
+        const adminDb2 = createAdminClient();
+        const targetId2 = args.userId as string;
+        const newRole = (args.role as string).toLowerCase();
+        const validRoles = ["user", "moderator", "admin"];
+        if (!validRoles.includes(newRole)) return { error: `Ungültige Rolle. Erlaubt: ${validRoles.join(", ")}` };
+        const { data: target2 } = await adminDb2.from("profiles").select("role, username").eq("id", targetId2).single();
+        if (!target2) return { success: false, error: "Nutzer nicht gefunden." };
+        if ((target2.role as string) === "admin" && newRole !== "admin") {
+          return { success: false, error: "Admin-Berechtigungen können nicht durch die KI entfernt werden. Bitte manuell im Admin-Panel ändern." };
+        }
+        const { error: roleErr } = await adminDb2.from("profiles").update({ role: newRole }).eq("id", targetId2);
+        if (roleErr) return { success: false, error: roleErr.message };
+        return { success: true, username: target2.username as string, oldRole: target2.role as string, newRole };
+      }
+      case "reset_user": {
+        if (context !== "admin") return { error: "Keine Berechtigung." };
+        const adminDb3 = createAdminClient();
+        const targetId3 = args.userId as string;
+        const { data: target3 } = await adminDb3.from("profiles").select("role, username, credits, streak_days").eq("id", targetId3).single();
+        if (!target3) return { success: false, error: "Nutzer nicht gefunden." };
+        const wasAdmin3 = (target3.role as string) === "admin";
+        const patch: Record<string, unknown> = { streak_days: 0, temp_banned_until: null };
+        if (args.resetCredits === true) patch.credits = 0;
+        if (wasAdmin3) patch.role = "admin"; // Always preserve admin role
+        const { error: resetErr } = await adminDb3.from("profiles").update(patch).eq("id", targetId3);
+        if (resetErr) return { success: false, error: resetErr.message };
+        await adminDb3.from("mod_actions").delete().eq("target_user_id", targetId3).eq("action_type", "warning");
+        await adminDb3.from("mod_actions").delete().eq("target_user_id", targetId3).eq("action_type", "temp_ban");
+        return {
+          success: true,
+          username: target3.username as string,
+          wasAdmin: wasAdmin3,
+          creditsReset: args.resetCredits === true,
+          message: `${target3.username} wurde zurückgesetzt${wasAdmin3 ? " (Admin-Rolle beibehalten)" : ""}.`,
+        };
+      }
+      case "remove_warnings": {
+        if (context !== "admin") return { error: "Keine Berechtigung." };
+        const adminDb4 = createAdminClient();
+        const { data: target4 } = await adminDb4.from("profiles").select("username").eq("id", args.userId as string).single();
+        if (!target4) return { success: false, error: "Nutzer nicht gefunden." };
+        const { error: warnErr } = await adminDb4.from("mod_actions").delete().eq("target_user_id", args.userId as string).eq("action_type", "warning");
+        if (warnErr) return { success: false, error: warnErr.message };
+        return { success: true, username: target4.username as string };
+      }
+      case "get_user_history": {
+        if (context === "user") return { error: "Keine Berechtigung." };
+        const adminDb5 = createAdminClient();
+        const { data: target5 } = await adminDb5.from("profiles")
+          .select("id, username, role, credits, streak_days, temp_banned_until, created_at")
+          .eq("id", args.userId as string).single();
+        if (!target5) return { success: false, error: "Nutzer nicht gefunden." };
+        const { data: history5 } = await adminDb5.from("mod_actions")
+          .select("action_type, reason, details, created_at")
+          .eq("target_user_id", args.userId as string)
+          .order("created_at", { ascending: false }).limit(20);
+        return { success: true, user: target5, history: history5 ?? [] };
       }
       default:
         return { error: `Unbekannte Funktion: ${name}` };

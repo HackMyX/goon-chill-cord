@@ -11,8 +11,7 @@ import { SupportButton } from "@/components/support/ticket-button";
 import { FpRegistrar } from "@/components/auth/fp-registrar";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getPetConfigs } from "@/lib/actions/pets";
-import { getActivePopupNote } from "@/lib/actions/patchnotes";
-import { PatchnotePopup } from "@/components/layout/patchnote-popup";
+import { PatchnotePopupLoader } from "@/components/layout/patchnote-popup-loader";
 import { GlobalBroadcast } from "@/components/global/global-broadcast";
 import "./globals.css";
 
@@ -48,7 +47,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [siteConfig, petConfigs, popupNote] = await Promise.all([getSiteConfig(), getPetConfigs(), getActivePopupNote()]);
+  const [siteConfig, petConfigs] = await Promise.all([getSiteConfig(), getPetConfigs()]);
   return (
     <html
       lang="de"
@@ -67,7 +66,7 @@ export default async function RootLayout({
         </SiteConfigProvider>
         <GlobalBroadcast />
         <SupportButton />
-        {popupNote && <PatchnotePopup note={popupNote} />}
+        <PatchnotePopupLoader />
       </body>
     </html>
   );

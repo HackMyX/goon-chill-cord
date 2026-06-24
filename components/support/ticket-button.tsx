@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   MessageCircle,
@@ -16,6 +16,7 @@ import {
   XCircle,
   Bot,
   Globe,
+  GripHorizontal,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -110,6 +111,32 @@ function SupportButtonInner() {
 
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+
+  // Resize state
+  const [panelW, setPanelW] = useState(352);
+  const [panelH, setPanelH] = useState(560);
+  const isResizing = useRef(false);
+  const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
+
+  function startResize(e: React.MouseEvent) {
+    e.preventDefault();
+    isResizing.current = true;
+    resizeStart.current = { x: e.clientX, y: e.clientY, w: panelW, h: panelH };
+    function onMove(ev: MouseEvent) {
+      if (!isResizing.current) return;
+      const dx = resizeStart.current.x - ev.clientX;
+      const dy = resizeStart.current.y - ev.clientY;
+      setPanelW(Math.max(320, Math.min(800, resizeStart.current.w + dx)));
+      setPanelH(Math.max(460, Math.min(Math.floor(window.innerHeight * 0.93), resizeStart.current.h + dy)));
+    }
+    function onUp() {
+      isResizing.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -234,7 +261,19 @@ function SupportButtonInner() {
       {open && (
         <>
           <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="fixed bottom-6 right-6 z-50 flex w-[22rem] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b0814] shadow-[0_8px_40px_rgba(0,0,0,0.65)]" style={{ maxHeight: "80vh" }}>
+          <div
+            className="fixed bottom-6 right-6 z-50 flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b0814] shadow-[0_8px_40px_rgba(0,0,0,0.65)]"
+            style={{ width: panelW, height: panelH, maxHeight: "95vh" }}
+          >
+            {/* Resize handle — drag to expand top-left */}
+            <div
+              onMouseDown={startResize}
+              title="Größe ändern"
+              className="absolute left-0 top-0 z-10 flex h-7 w-7 cursor-nw-resize items-center justify-center rounded-br-xl bg-white/[0.03] text-zinc-700 opacity-0 transition-opacity hover:opacity-100 hover:text-zinc-400"
+              style={{ touchAction: "none" }}
+            >
+              <GripHorizontal className="h-3 w-3 rotate-45" />
+            </div>
 
             {/* Header */}
             <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3 shrink-0">
@@ -276,8 +315,8 @@ function SupportButtonInner() {
               ))}
             </div>
 
-            {/* Content — fixed height for AI and Chat tabs */}
-            <div className={`overflow-hidden ${tab !== "support" ? "flex-1" : "max-h-[65vh] overflow-y-auto"}`} style={tab !== "support" ? { height: "60vh" } : {}}>
+            {/* Content */}
+            <div className={`min-h-0 flex-1 overflow-hidden ${tab === "support" ? "overflow-y-auto" : "flex"}`}>
 
               {/* ── Support tab ── */}
               {tab === "support" && (
@@ -442,15 +481,15 @@ function SupportButtonInner() {
 
               {/* ── AI tab ── */}
               {tab === "ai" && (
-                <div className="h-full">
+                <div className="h-full w-full">
                   <UserAiChat />
                 </div>
               )}
 
               {/* ── Chat tab ── */}
               {tab === "chat" && (
-                <div className="h-full">
-                  <GlobalChatPanel />
+                <div className="h-full w-full">
+                  <GlobalChatPanel panelHeight={panelH} />
                 </div>
               )}
             </div>

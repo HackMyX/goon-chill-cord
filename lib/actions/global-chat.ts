@@ -12,6 +12,7 @@ export interface GlobalChatMessage {
   isSystem: boolean;
   metadata: Record<string, unknown> | null;
   createdAt: string;
+  avatarUrl: string | null;
 }
 
 function rowToMsg(r: Record<string, unknown>): GlobalChatMessage {
@@ -24,6 +25,7 @@ function rowToMsg(r: Record<string, unknown>): GlobalChatMessage {
     isSystem: (r.is_system as boolean) ?? false,
     metadata: (r.metadata as Record<string, unknown>) ?? null,
     createdAt: r.created_at as string,
+    avatarUrl: (r.avatar_url as string) ?? null,
   };
 }
 
@@ -45,7 +47,7 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Nicht eingeloggt." };
 
-  const { data: profile } = await supabase.from("profiles").select("username, role, temp_banned_until").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("username, role, temp_banned_until, avatar_url").eq("id", user.id).single();
   if (!profile) return { success: false, error: "Profil nicht gefunden." };
 
   if (profile.temp_banned_until && new Date(profile.temp_banned_until) > new Date()) {
@@ -71,6 +73,7 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
     role: profile.role ?? "user",
     content: trimmed,
     is_system: false,
+    avatar_url: (profile as Record<string, unknown>).avatar_url ?? null,
   });
 
   if (error) return { success: false, error: error.message };

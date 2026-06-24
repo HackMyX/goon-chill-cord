@@ -16,10 +16,10 @@ interface AiMessage {
 type AiContext = "mod" | "admin";
 
 const ADMIN_STARTERS = [
+  "Suche den Spieler 'Max' und gib ihm 500 Credits.",
   "Formuliere eine Patch Note für Version 1.5.0 mit Inhalt: KI-Assistent wurde hinzugefügt, Global Chat eingebaut",
-  "Suche den Spieler 'Max' und zeig mir seine Infos.",
-  "Welche Moderations-Aktionen kann ich hier ausführen?",
-  "Formuliere einen professionellen Verwarnungstext für Spam im Chat.",
+  "Suche den Spieler 'TestUser', zeig mir seine Aktionshistorie und setze ihn dann zurück.",
+  "Welche Aktionen kann ich als Admin hier ausführen?",
   "Schreib eine Community-Ankündigung für ein Doppel-Credits-Event.",
 ];
 
@@ -127,7 +127,7 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
           </p>
           <p className="text-[10px] text-zinc-500">
             {context === "admin"
-              ? "Voller Zugriff: Moderation, Credits, Patch Notes, Textgenerierung"
+              ? "Voller Zugriff: Credits, Rollen, Reset, Moderation, Textgenerierung"
               : "Moderation, Ticket-Management, Textgenerierung"}
           </p>
         </div>
@@ -152,7 +152,9 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
                 Hey! Ich bin dein {context === "admin" ? "Admin" : "Mod"}-Assistent. Ich kann dir helfen bei:
                 <ul className="mt-2 space-y-1 text-xs text-zinc-400">
                   <li>• Spieler suchen, verwarnen, sperren</li>
-                  {context === "admin" && <li>• Credits vergeben / abziehen</li>}
+                  {context === "admin" && <li>• Credits vergeben / abziehen (auch für Admins)</li>}
+                  {context === "admin" && <li>• Benutzerrolle setzen (user / mod / admin)</li>}
+                  {context === "admin" && <li>• Spieler zurücksetzen (Streak, Ban, Verwarnungen)</li>}
                   <li>• Support-Tickets schließen</li>
                   <li>• Patch Notes formulieren</li>
                   <li>• Texte schreiben & verbessern</li>
@@ -293,11 +295,15 @@ function fnLabel(fn: string): string {
     update_notification_pref: "Benachrichtigung",
     get_player_settings: "Einstellungen gelesen",
     find_user: "User gefunden",
+    get_user_history: "Historie abgerufen",
     warn_user: "Verwarnung erteilt",
     temp_ban_user: "Temp-Ban",
     lift_ban: "Ban aufgehoben",
     close_ticket: "Ticket geschlossen",
     add_credits: "Credits geändert",
+    set_role: "Rolle gesetzt",
+    reset_user: "User zurückgesetzt",
+    remove_warnings: "Verwarnungen gelöscht",
   };
   return labels[fn] ?? fn;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useMemo } from "react";
 import {
   Plus, Trash2, Save, Eye, EyeOff, Pin, PinOff, Loader2,
   ChevronDown, ChevronUp, ArrowUp, ArrowDown, Pencil, Check,
@@ -224,9 +224,10 @@ interface NoteRowProps {
   onEdit: (n: PatchNote) => void;
   onDuplicate: (n: PatchNote) => void;
   onRefresh: () => void;
+  isActivePopup?: boolean;
 }
 
-function NoteRow({ note, onEdit, onDuplicate, onRefresh }: NoteRowProps) {
+function NoteRow({ note, onEdit, onDuplicate, onRefresh, isActivePopup }: NoteRowProps) {
   const [pending, start] = useTransition();
   const sound = useSoundManager();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -271,7 +272,13 @@ function NoteRow({ note, onEdit, onDuplicate, onRefresh }: NoteRowProps) {
           <StatusBadge status={note.status} />
           <span className="font-mono text-xs text-zinc-500">{note.version}</span>
           {note.isPinned && <Pin className="h-3 w-3 text-purple-400" />}
-          {note.showPopup && <span title="Popup aktiv"><Bell className="h-3 w-3 text-amber-400" /></span>}
+          {note.showPopup && <span title="Popup aktiviert"><Bell className="h-3 w-3 text-amber-400" /></span>}
+          {isActivePopup && (
+            <span className="flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-300">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+              LIVE
+            </span>
+          )}
         </div>
         <span className="truncate font-semibold text-zinc-200">{note.title}</span>
         {note.publishedAt && (
@@ -479,6 +486,17 @@ export function PatchNotesEditor({ initialNotes }: { initialNotes: PatchNote[] }
   const draftCount = notes.filter((n) => n.status === "draft").length;
   const publishedCount = notes.filter((n) => n.status === "published").length;
 
+  // The active popup is the most recently published note with show_popup=true
+  // (matches what getActivePopupNote() returns server-side)
+  const activePopupId = useMemo(() => {
+    const eligible = notes
+      .filter(n => n.status === "published" && n.showPopup && n.publishedAt)
+      .sort((a, b) => new Date(b.publishedAt!).getTime() - new Date(a.publishedAt!).getTime());
+    return eligible[0]?.id ?? null;
+  }, [notes]);
+
+  const activePopupNote = activePopupId ? notes.find(n => n.id === activePopupId) ?? null : null;
+
   return (
     <div className="flex flex-col gap-5">
       {/* Header */}
@@ -498,6 +516,25 @@ export function PatchNotesEditor({ initialNotes }: { initialNotes: PatchNote[] }
           Neue Patch Note
         </button>
       </div>
+
+      {/* Active popup banner */}
+      {activePopupNote ? (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-400/25 bg-amber-500/8 px-4 py-3">
+          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-400/30 bg-amber-500/15">
+            <Bell className="h-4 w-4 text-amber-300" />
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 animate-ping rounded-full bg-amber-400 opacity-75" />
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-amber-200">
+              Aktiver Popup: {activePopupNote.version} — {activePopupNote.title}
+            </p>
+            <p className="text-[11px] text-amber-500/80">
+              Erscheint bei jedem Seitenaufruf für Nutzer, die ihn noch nicht gelesen haben.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {/* Message */}
       {message && (
@@ -670,6 +707,7 @@ export function PatchNotesEditor({ initialNotes }: { initialNotes: PatchNote[] }
               onEdit={openEdit}
               onDuplicate={openDuplicate}
               onRefresh={refreshNotes}
+              isActivePopup={note.id === activePopupId}
             />
           ))}
         </div>
