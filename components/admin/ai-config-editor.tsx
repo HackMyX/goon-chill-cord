@@ -97,7 +97,7 @@ export function AiConfigEditor() {
     <div className="rounded-2xl border border-white/8 bg-black/30 p-5">
       <div className="mb-4 flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-purple-400" />
-        <h3 className="text-sm font-bold text-zinc-200">KI-Konfiguration</h3>
+        <h3 className="text-sm font-bold text-zinc-200">KI-Konfiguration (Groq)</h3>
       </div>
 
       {/* Current key status */}
@@ -128,7 +128,7 @@ export function AiConfigEditor() {
           <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
           <input
             type={showKey ? "text" : "password"}
-            placeholder="Neuen Gemini API-Schlüssel eingeben…"
+            placeholder="Neuen Groq API-Schlüssel eingeben… (gsk_…)"
             value={inputKey}
             onChange={(e) => setInputKey(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSave()}
@@ -171,9 +171,9 @@ export function AiConfigEditor() {
           Schlüssel testen
         </button>
         <p className="text-[11px] text-zinc-500">
-          Neuer Schlüssel unter{" "}
-          <span className="font-mono text-zinc-400">aistudio.google.com</span> generieren.
-          DB-Schlüssel hat Vorrang vor <span className="font-mono text-zinc-400">GEMINI_API_KEY</span>.
+          Neuen Schlüssel unter{" "}
+          <span className="font-mono text-zinc-400">console.groq.com/keys</span> generieren.
+          DB-Schlüssel hat Vorrang vor <span className="font-mono text-zinc-400">GROQ_API_KEY</span>.
         </p>
       </div>
 

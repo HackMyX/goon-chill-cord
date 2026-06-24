@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  GoogleGenerativeAI,
-  SchemaType,
-  type Tool,
-  type Part,
-  type Content,
-} from "@google/generative-ai";
+import Groq from "groq-sdk";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isModerator } from "@/lib/admin";
@@ -13,15 +7,13 @@ import { USER_SYSTEM_PROMPT, MOD_SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT } from "@/li
 import { getAiApiKey } from "@/lib/actions/ai-config";
 
 // ── Model priority list ───────────────────────────────────────────────────
-// Stable Flash models first — 2.0-flash is the most reliable for function
-// calling; 1.5-flash as fallback; 2.5-flash last (Thinking can produce
-// unexpected formats for multi-turn function calling).
+// Models with reliable function/tool-calling support on Groq.
 const MODEL_PRIORITY = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-1.5-flash-8b",
-  "gemini-2.5-flash",
+  "llama-3.3-70b-versatile",
+  "llama-3.1-70b-versatile",
+  "llama3-groq-70b-8192-tool-use-preview",
+  "llama3-groq-8b-8192-tool-use-preview",
+  "llama-3.1-8b-instant",
 ] as const;
 
 // ── Per-user in-memory rate limiter (max 12 req/min) ─────────────────────
@@ -41,174 +33,209 @@ function allowRequest(userId: string): boolean {
   return true;
 }
 
-// ── Tool declarations ─────────────────────────────────────────────────────
+// ── Tool declarations (OpenAI-compatible JSON Schema format) ──────────────
 
-const USER_TOOLS: Tool = {
-  functionDeclarations: [
-    {
+type GroqTool = Groq.Chat.Completions.ChatCompletionTool;
+
+const USER_TOOLS: GroqTool[] = [
+  {
+    type: "function",
+    function: {
       name: "get_player_settings",
       description: "Aktuelle Spielereinstellungen abrufen (Trades, Profil-Sichtbarkeit, Benachrichtigungen)",
-      parameters: { type: SchemaType.OBJECT, properties: {} },
+      parameters: { type: "object", properties: {} },
     },
-    {
+  },
+  {
+    type: "function",
+    function: {
       name: "update_player_setting",
       description: "Spielereinstellung ändern: 'accepts_trades' oder 'profile_visible'",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          setting: { type: SchemaType.STRING, description: "'accepts_trades' oder 'profile_visible'" },
-          value: { type: SchemaType.BOOLEAN, description: "true=an, false=aus" },
+          setting: { type: "string", description: "'accepts_trades' oder 'profile_visible'" },
+          value: { type: "boolean", description: "true=an, false=aus" },
         },
         required: ["setting", "value"],
       },
     },
-    {
+  },
+  {
+    type: "function",
+    function: {
       name: "update_notification_pref",
       description: "Eine Benachrichtigungseinstellung ändern",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          key: { type: SchemaType.STRING, description: "Benachrichtigungstyp-Key" },
-          value: { type: SchemaType.BOOLEAN, description: "true=an, false=aus" },
+          key: { type: "string", description: "Benachrichtigungstyp-Key" },
+          value: { type: "boolean", description: "true=an, false=aus" },
         },
         required: ["key", "value"],
       },
     },
-  ],
-};
+  },
+];
 
-const MOD_TOOLS: Tool = {
-  functionDeclarations: [
-    ...USER_TOOLS.functionDeclarations!,
-    {
+const MOD_TOOLS: GroqTool[] = [
+  ...USER_TOOLS,
+  {
+    type: "function",
+    function: {
       name: "find_user",
       description: "Spieler nach Username suchen — gibt userId + Infos zurück",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          username: { type: SchemaType.STRING, description: "Exakter oder teilweiser Username" },
+          username: { type: "string", description: "Exakter oder teilweiser Username" },
         },
         required: ["username"],
       },
     },
-    {
+  },
+  {
+    type: "function",
+    function: {
       name: "warn_user",
       description: "Spieler verwarnen",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          userId: { type: SchemaType.STRING, description: "User-ID des Spielers" },
-          reason: { type: SchemaType.STRING, description: "Begründung der Verwarnung" },
+          userId: { type: "string", description: "User-ID des Spielers" },
+          reason: { type: "string", description: "Begründung der Verwarnung" },
         },
         required: ["userId", "reason"],
       },
     },
-    {
+  },
+  {
+    type: "function",
+    function: {
       name: "temp_ban_user",
       description: "Spieler temporär sperren",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          userId: { type: SchemaType.STRING },
-          hours: { type: SchemaType.NUMBER, description: "Sperrdauer in Stunden" },
-          reason: { type: SchemaType.STRING },
+          userId: { type: "string" },
+          hours: { type: "number", description: "Sperrdauer in Stunden" },
+          reason: { type: "string" },
         },
         required: ["userId", "hours"],
       },
     },
-    {
+  },
+  {
+    type: "function",
+    function: {
       name: "lift_ban",
       description: "Temporären Ban aufheben",
       parameters: {
-        type: SchemaType.OBJECT,
-        properties: { userId: { type: SchemaType.STRING } },
+        type: "object",
+        properties: { userId: { type: "string" } },
         required: ["userId"],
       },
     },
-    {
+  },
+  {
+    type: "function",
+    function: {
       name: "close_ticket",
       description: "Support-Ticket schließen",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          ticketId: { type: SchemaType.STRING },
-          reason: { type: SchemaType.STRING, description: "Abschlussgrund (optional)" },
+          ticketId: { type: "string" },
+          reason: { type: "string", description: "Abschlussgrund (optional)" },
         },
         required: ["ticketId"],
       },
     },
-  ],
-};
+  },
+];
 
-const ADMIN_TOOLS: Tool = {
-  functionDeclarations: [
-    ...MOD_TOOLS.functionDeclarations!,
-    {
+const ADMIN_TOOLS: GroqTool[] = [
+  ...MOD_TOOLS,
+  {
+    type: "function",
+    function: {
       name: "add_credits",
       description: "Credits zu JEDEM Spieler hinzufügen oder abziehen (auch Admins). Übergib username ODER userId — kein find_user nötig!",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          username: { type: SchemaType.STRING, description: "Username des Spielers (bevorzugt — kein separater find_user nötig)" },
-          userId: { type: SchemaType.STRING, description: "User-ID (alternativ zu username)" },
-          amount: { type: SchemaType.NUMBER, description: "Betrag (negativ = abziehen)" },
-          reason: { type: SchemaType.STRING, description: "Optionaler Grund" },
+          username: { type: "string", description: "Username des Spielers (bevorzugt — kein separater find_user nötig)" },
+          userId: { type: "string", description: "User-ID (alternativ zu username)" },
+          amount: { type: "number", description: "Betrag (negativ = abziehen)" },
+          reason: { type: "string", description: "Optionaler Grund" },
         },
         required: ["amount"],
       },
     },
-    {
+  },
+  {
+    type: "function",
+    function: {
       name: "set_role",
       description: "Benutzerrolle setzen: 'user', 'moderator' oder 'admin'. Admin-Rolle kann NICHT entfernt werden (Sicherheitssperre). Übergib username ODER userId.",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          username: { type: SchemaType.STRING, description: "Username des Spielers" },
-          userId: { type: SchemaType.STRING, description: "User-ID (alternativ zu username)" },
-          role: { type: SchemaType.STRING, description: "'user', 'moderator' oder 'admin'" },
+          username: { type: "string", description: "Username des Spielers" },
+          userId: { type: "string", description: "User-ID (alternativ zu username)" },
+          role: { type: "string", description: "'user', 'moderator' oder 'admin'" },
         },
         required: ["role"],
       },
     },
-    {
+  },
+  {
+    type: "function",
+    function: {
       name: "reset_user",
       description: "Spieler zurücksetzen: Streak→0, Ban aufheben, Verwarnungen löschen. Admin-Rolle bleibt immer erhalten. Übergib username ODER userId.",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          username: { type: SchemaType.STRING, description: "Username des Spielers" },
-          userId: { type: SchemaType.STRING, description: "User-ID (alternativ zu username)" },
-          resetCredits: { type: SchemaType.BOOLEAN, description: "true = Credits auf 0 setzen" },
+          username: { type: "string", description: "Username des Spielers" },
+          userId: { type: "string", description: "User-ID (alternativ zu username)" },
+          resetCredits: { type: "boolean", description: "true = Credits auf 0 setzen" },
         },
         required: [],
       },
     },
-    {
+  },
+  {
+    type: "function",
+    function: {
       name: "remove_warnings",
       description: "Alle Verwarnungen eines Spielers löschen. Übergib username ODER userId.",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          username: { type: SchemaType.STRING, description: "Username des Spielers" },
-          userId: { type: SchemaType.STRING, description: "User-ID (alternativ zu username)" },
+          username: { type: "string", description: "Username des Spielers" },
+          userId: { type: "string", description: "User-ID (alternativ zu username)" },
         },
         required: [],
       },
     },
-    {
+  },
+  {
+    type: "function",
+    function: {
       name: "get_user_history",
       description: "Detaillierte Aktionshistorie abrufen (Verwarnungen, Bans, Credits). Übergib username ODER userId.",
       parameters: {
-        type: SchemaType.OBJECT,
+        type: "object",
         properties: {
-          username: { type: SchemaType.STRING, description: "Username des Spielers" },
-          userId: { type: SchemaType.STRING, description: "User-ID (alternativ zu username)" },
+          username: { type: "string", description: "Username des Spielers" },
+          userId: { type: "string", description: "User-ID (alternativ zu username)" },
         },
         required: [],
       },
     },
-  ],
-};
+  },
+];
 
 // ── User resolver — accepts userId OR username ────────────────────────────────
 
@@ -357,13 +384,11 @@ async function executeFunction(
         const { data: target3 } = await adminDb3.from("profiles").select("role, username, credits, streak_days").eq("id", targetId3).single();
         if (!target3) return { success: false, error: "Nutzer nicht gefunden." };
         const wasAdmin3 = (target3.role as string) === "admin";
-        // Build patch — always preserve Admin role, always reset streak + ban
         const patch: Record<string, unknown> = { streak_days: 0, temp_banned_until: null };
         if (args.resetCredits === true) patch.credits = 0;
-        if (wasAdmin3) patch.role = "admin"; // explicit: role stays admin
+        if (wasAdmin3) patch.role = "admin";
         const { error: resetErr } = await adminDb3.from("profiles").update(patch).eq("id", targetId3);
         if (resetErr) return { success: false, error: resetErr.message };
-        // Delete warnings and active bans from mod_actions
         await adminDb3.from("mod_actions").delete().eq("target_user_id", targetId3).eq("action_type", "warning");
         await adminDb3.from("mod_actions").delete().eq("target_user_id", targetId3).eq("action_type", "temp_ban");
         return {
@@ -410,46 +435,22 @@ async function executeFunction(
 
 // ── Helper: error classification ──────────────────────────────────────────
 
-function classifyGeminiError(e: unknown): "expired" | "invalid_key" | "quota" | "transient" | "safety" | "other" {
-  const raw = (e instanceof Error ? e.message : String(e));
-  const msg = raw.toLowerCase();
+function classifyGroqError(e: unknown): "invalid_key" | "quota" | "transient" | "bad_request" | "other" {
+  if (e instanceof Groq.AuthenticationError) return "invalid_key";
+  if (e instanceof Groq.RateLimitError) return "quota";
+  if (e instanceof Groq.InternalServerError) return "transient";
+  if (e instanceof Groq.BadRequestError) return "bad_request";
 
-  // Expired key — check before generic "invalid" for a more specific message
-  if (msg.includes("api key expired") || (msg.includes("expired") && msg.includes("api"))) return "expired";
+  const status = (e as { status?: number }).status;
+  if (status === 401) return "invalid_key";
+  if (status === 429) return "quota";
+  if (status === 503 || status === 502) return "transient";
+  if (status === 400) return "bad_request";
 
-  // Invalid / unauthorized key
-  if (
-    msg.includes("api_key_invalid") ||
-    msg.includes("api key not valid") ||
-    msg.includes("invalid api key") ||
-    msg.includes("permission_denied") ||
-    (msg.includes("api key") && msg.includes("invalid")) ||
-    msg.includes("401") ||
-    msg.includes("403")
-  ) return "invalid_key";
-
-  // True rate-limit / quota — precise patterns only to avoid false positives
-  if (
-    msg.includes("429") ||
-    msg.includes("too many requests") ||
-    msg.includes("resource_exhausted") ||
-    msg.includes("rate limit") ||
-    msg.includes("quota exceeded") ||
-    msg.includes("daily limit") ||
-    msg.includes("per day")
-  ) return "quota";
-
-  // Overloaded / temporary unavailable
-  if (
-    msg.includes("503") ||
-    msg.includes("502") ||
-    msg.includes("service unavailable") ||
-    msg.includes("high demand") ||
-    msg.includes("overloaded")
-  ) return "transient";
-
-  // Safety block
-  if (msg.includes("safety") || msg.includes("blocked")) return "safety";
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  if (msg.includes("rate limit") || msg.includes("quota") || msg.includes("too many")) return "quota";
+  if (msg.includes("unauthorized") || msg.includes("invalid api key") || msg.includes("authentication")) return "invalid_key";
+  if (msg.includes("service unavailable") || msg.includes("overloaded") || msg.includes("temporarily")) return "transient";
 
   return "other";
 }
@@ -458,79 +459,112 @@ function classifyGeminiError(e: unknown): "expired" | "invalid_key" | "quota" | 
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// ── Core: call Gemini with model fallback + retry ─────────────────────────
+// ── Core: call Groq with model fallback + tool-calling loop ───────────────
 
-interface GeminiCallResult {
+type HistoryMessage = { role: "user" | "assistant"; content: string };
+
+interface GroqCallResult {
   reply: string;
   actionLog: Array<{ fn: string; result: Record<string, unknown> }>;
 }
 
-async function callGemini(opts: {
+async function callGroq(opts: {
   apiKey: string;
   systemPrompt: string;
-  tools: Tool;
-  history: Content[];
+  tools: GroqTool[];
+  history: HistoryMessage[];
   message: string;
   context: "user" | "mod" | "admin";
-}): Promise<GeminiCallResult> {
+}): Promise<GroqCallResult> {
   const { apiKey, systemPrompt, tools, history, message, context } = opts;
+  const groq = new Groq({ apiKey });
 
-  const trimmedHistory = history.slice(-10);
+  const baseMessages: Groq.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: systemPrompt },
+    ...history.slice(-10).map((h) => ({
+      role: h.role,
+      content: h.content,
+    })),
+    { role: "user", content: message },
+  ];
+
   let lastError: unknown = null;
 
   for (const modelName of MODEL_PRIORITY) {
     for (let attempt = 0; attempt <= 1; attempt++) {
       try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          systemInstruction: systemPrompt,
-          tools: [tools],
-        });
-
-        const chat = model.startChat({ history: trimmedHistory });
-        let result = await chat.sendMessage(message);
-        let response = result.response;
+        const messages: Groq.Chat.Completions.ChatCompletionMessageParam[] = [...baseMessages];
         const actionLog: Array<{ fn: string; result: Record<string, unknown> }> = [];
 
-        // Function-call loop (max 6 iterations)
-        let iterations = 0;
-        while (response.functionCalls()?.length && iterations < 6) {
-          iterations++;
-          const calls = response.functionCalls()!;
-          const fnParts: Part[] = [];
+        let response = await groq.chat.completions.create({
+          model: modelName,
+          messages,
+          tools,
+          tool_choice: "auto",
+          max_tokens: 2048,
+          temperature: 0.7,
+        });
 
-          for (const call of calls) {
-            const fnResult = await executeFunction(
-              call.name,
-              call.args as Record<string, unknown>,
-              context
-            );
-            actionLog.push({ fn: call.name, result: fnResult });
-            fnParts.push({ functionResponse: { name: call.name, response: fnResult } });
+        // Tool-calling loop (max 6 iterations)
+        let iterations = 0;
+        while (
+          response.choices[0]?.finish_reason === "tool_calls" &&
+          iterations < 6
+        ) {
+          iterations++;
+          const assistantMsg = response.choices[0].message;
+
+          // Add assistant turn (with tool_calls) to messages
+          messages.push({
+            role: "assistant",
+            content: assistantMsg.content ?? null,
+            tool_calls: assistantMsg.tool_calls,
+          });
+
+          const toolCalls = assistantMsg.tool_calls ?? [];
+          for (const toolCall of toolCalls) {
+            let fnArgs: Record<string, unknown> = {};
+            try {
+              fnArgs = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+            } catch { /* invalid JSON from model — skip parsing */ }
+
+            const fnResult = await executeFunction(toolCall.function.name, fnArgs, context);
+            actionLog.push({ fn: toolCall.function.name, result: fnResult });
+
+            messages.push({
+              role: "tool",
+              content: JSON.stringify(fnResult),
+              tool_call_id: toolCall.id,
+            });
           }
 
-          result = await chat.sendMessage(fnParts);
-          response = result.response;
+          response = await groq.chat.completions.create({
+            model: modelName,
+            messages,
+            tools,
+            tool_choice: "auto",
+            max_tokens: 2048,
+            temperature: 0.7,
+          });
         }
 
-        let replyText: string;
-        try {
-          replyText = response.text();
-        } catch {
-          replyText = actionLog.length > 0 ? "Aktion erfolgreich ausgeführt." : "";
-        }
+        const reply =
+          response.choices[0]?.message?.content?.trim() ??
+          (actionLog.length > 0 ? "Aktion erfolgreich ausgeführt." : "");
 
-        return { reply: replyText, actionLog };
+        return { reply, actionLog };
       } catch (e) {
         lastError = e;
-        const kind = classifyGeminiError(e);
+        const kind = classifyGroqError(e);
 
-        // Key errors (expired, invalid) — no point trying other models with same key
-        if (kind === "expired" || kind === "invalid_key") throw e;
+        // Key errors — no point trying other models with same key
+        if (kind === "invalid_key") throw e;
 
-        // Quota exhausted — skip remaining attempts on this model, try next
+        // Rate-limited — skip remaining attempts on this model, try next
         if (kind === "quota") break;
+
+        // Bad request (model may not support tools) — skip to next model
+        if (kind === "bad_request") break;
 
         // Transient / other: one quick retry, then next model
         if (attempt < 1) await sleep(600);
@@ -544,14 +578,13 @@ async function callGemini(opts: {
 // ── Route handler ─────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // Fetch key from DB (with env fallback)
   const apiKey = await getAiApiKey();
 
   if (!apiKey) {
     return NextResponse.json(
       {
         error:
-          "Kein Gemini API-Schlüssel konfiguriert. " +
+          "Kein Groq API-Schlüssel konfiguriert. " +
           "Bitte im Admin-Panel → KI-Assistent einen gültigen Schlüssel eintragen.",
       },
       { status: 503 }
@@ -574,7 +607,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json() as {
       message: string;
-      history: Content[];
+      history: HistoryMessage[];
       context: "user" | "mod" | "admin";
     };
 
@@ -591,12 +624,12 @@ export async function POST(req: NextRequest) {
       context === "mod"   ? MOD_SYSTEM_PROMPT :
                             USER_SYSTEM_PROMPT;
 
-    const tools: Tool =
+    const tools: GroqTool[] =
       context === "admin" ? ADMIN_TOOLS :
       context === "mod"   ? MOD_TOOLS :
                             USER_TOOLS;
 
-    const { reply, actionLog } = await callGemini({
+    const { reply, actionLog } = await callGroq({
       apiKey,
       systemPrompt,
       tools,
@@ -608,33 +641,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply, actionLog });
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
-    const kind = classifyGeminiError(e);
-    // Log full error for Vercel Function Logs diagnosis
+    const kind = classifyGroqError(e);
     console.error(`[ai-chat] kind=${kind} error=${raw}`);
 
     let userMsg: string;
 
     switch (kind) {
-      case "expired":
-        userMsg =
-          "Der Gemini API-Schlüssel ist abgelaufen. " +
-          "Bitte im Admin-Panel → KI-Assistent → Schlüssel testen, dann einen neuen Schlüssel eintragen.";
-        break;
       case "invalid_key":
         userMsg =
-          "Der Gemini API-Schlüssel ist ungültig. " +
-          "Bitte im Admin-Panel → KI-Assistent → Schlüssel testen um den genauen Fehler zu sehen.";
+          "Der Groq API-Schlüssel ist ungültig oder abgelaufen. " +
+          "Bitte im Admin-Panel → KI-Assistent einen gültigen Schlüssel eintragen.";
         break;
       case "quota":
         userMsg =
-          "Das KI-Tageslimit ist erreicht (RESOURCE_EXHAUSTED). " +
-          "Bitte morgen erneut versuchen oder im Admin-Panel einen Schlüssel mit größerem Kontingent (Paid-Tier) eintragen.";
+          "Das KI-Rate-Limit wurde erreicht. " +
+          "Bitte versuche es in einer Minute erneut oder trage im Admin-Panel einen anderen Schlüssel ein.";
         break;
       case "transient":
         userMsg = "Der KI-Dienst ist momentan überlastet. Bitte versuche es in 30 Sekunden erneut.";
-        break;
-      case "safety":
-        userMsg = "Diese Anfrage wurde aus Sicherheitsgründen blockiert. Bitte formuliere sie anders.";
         break;
       default:
         userMsg =

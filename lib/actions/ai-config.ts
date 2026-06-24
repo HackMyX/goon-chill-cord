@@ -18,15 +18,15 @@ export async function getAiApiKey(): Promise<string | null> {
     const admin = createAdminClient();
     const { data } = await admin
       .from("ai_config")
-      .select("gemini_api_key")
+      .select("groq_api_key")
       .eq("id", "default")
       .single();
-    const dbKey = (data?.gemini_api_key as string | null)?.trim() || null;
-    const finalKey = dbKey || process.env.GEMINI_API_KEY || null;
+    const dbKey = (data?.groq_api_key as string | null)?.trim() || null;
+    const finalKey = dbKey || process.env.GROQ_API_KEY || null;
     keyCache = { value: finalKey, ts: Date.now() };
     return finalKey;
   } catch {
-    const envKey = process.env.GEMINI_API_KEY || null;
+    const envKey = process.env.GROQ_API_KEY || null;
     keyCache = { value: envKey, ts: Date.now() };
     return envKey;
   }
@@ -48,14 +48,14 @@ export async function getAiConfigStatus(): Promise<{
     const admin = createAdminClient();
     const { data } = await admin
       .from("ai_config")
-      .select("gemini_api_key")
+      .select("groq_api_key")
       .eq("id", "default")
       .maybeSingle();
-    const dbKey = (data?.gemini_api_key as string | null)?.trim() || null;
+    const dbKey = (data?.groq_api_key as string | null)?.trim() || null;
     if (dbKey) return { hasKey: true, source: "db", maskedKey: mask(dbKey) };
   } catch { /* table may not exist yet */ }
 
-  const envKey = process.env.GEMINI_API_KEY || null;
+  const envKey = process.env.GROQ_API_KEY || null;
   if (envKey) return { hasKey: true, source: "env", maskedKey: mask(envKey) };
   return { hasKey: false, source: "none", maskedKey: null };
 }
@@ -79,7 +79,7 @@ export async function updateAiApiKey(
     const trimmedKey = key.trim();
     const { error } = await admin.from("ai_config").upsert({
       id: "default",
-      gemini_api_key: trimmedKey || null,
+      groq_api_key: trimmedKey || null,
       updated_at: new Date().toISOString(),
     });
     if (error) return { success: false, error: error.message };

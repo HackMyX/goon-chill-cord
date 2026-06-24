@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Bot, Send, Loader2, User, RefreshCw, Sparkles } from "lucide-react";
-import type { Content } from "@google/generative-ai";
 import { useSoundManager } from "@/lib/sound-manager";
 import { createClient } from "@/lib/supabase/client";
 
@@ -11,6 +10,9 @@ interface AiMessage {
   text: string;
   actions?: Array<{ fn: string; result: Record<string, unknown> }>;
 }
+
+// History format expected by the /api/ai-chat route (OpenAI-compatible)
+type HistoryMessage = { role: "user" | "assistant"; content: string };
 
 const STARTER_PROMPTS = [
   "Was sind Credits und wie verdiene ich sie?",
@@ -44,10 +46,10 @@ export function UserAiChat() {
 
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  function buildHistory(): Content[] {
+  function buildHistory(): HistoryMessage[] {
     return messages.map((m) => ({
-      role: m.role,
-      parts: [{ text: m.text }],
+      role: m.role === "model" ? "assistant" : "user",
+      content: m.text,
     }));
   }
 
@@ -222,7 +224,6 @@ export function UserAiChat() {
 }
 
 function MessageText({ text }: { text: string }) {
-  // Simple markdown-like rendering for bold and line breaks
   const parts = text.split(/(\*\*[^*]+\*\*|\n)/g);
   return (
     <>

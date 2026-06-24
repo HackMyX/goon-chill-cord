@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
@@ -27,17 +27,20 @@ export async function GET() {
       });
     }
 
-    // Minimal test: list models or send a one-token message
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-      const result = await model.generateContent("Antworte mit genau einem Wort: OK");
-      const text = result.response.text().trim().slice(0, 50);
+      const groq = new Groq({ apiKey });
+      const response = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: "Antworte mit genau einem Wort: OK" }],
+        max_tokens: 10,
+        temperature: 0,
+      });
+      const text = response.choices[0]?.message?.content?.trim().slice(0, 50) ?? "OK";
       return NextResponse.json({
         ok: true,
         source: status.source,
         maskedKey: status.maskedKey,
-        model: "gemini-2.0-flash",
+        model: "llama-3.3-70b-versatile",
         reply: text,
       });
     } catch (e) {
@@ -46,7 +49,7 @@ export async function GET() {
         ok: false,
         source: status.source,
         maskedKey: status.maskedKey,
-        error: "Gemini-Fehler — siehe rawError für Details.",
+        error: "Groq-Fehler — siehe rawError für Details.",
         rawError: raw,
       });
     }

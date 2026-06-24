@@ -4,7 +4,6 @@ import { useRef, useState, useEffect } from "react";
 import {
   Bot, Send, Loader2, User, RefreshCw, Sparkles, ShieldAlert, Shield,
 } from "lucide-react";
-import type { Content } from "@google/generative-ai";
 import { useSoundManager } from "@/lib/sound-manager";
 import { createClient } from "@/lib/supabase/client";
 
@@ -13,6 +12,9 @@ interface AiMessage {
   text: string;
   actions?: Array<{ fn: string; result: Record<string, unknown> }>;
 }
+
+// History format expected by the /api/ai-chat route (OpenAI-compatible)
+type HistoryMessage = { role: "user" | "assistant"; content: string };
 
 type AiContext = "mod" | "admin";
 
@@ -60,10 +62,10 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
 
-  function buildHistory(): Content[] {
+  function buildHistory(): HistoryMessage[] {
     return messages.map((m) => ({
-      role: m.role,
-      parts: [{ text: m.text }],
+      role: m.role === "model" ? "assistant" : "user",
+      content: m.text,
     }));
   }
 
@@ -168,7 +170,7 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
                   {context === "admin" && <li>• Spieler zurücksetzen (Streak, Ban, Verwarnungen)</li>}
                   <li>• Support-Tickets schließen</li>
                   <li>• Patch Notes formulieren</li>
-                  <li>• Texte schreiben & verbessern</li>
+                  <li>• Texte schreiben &amp; verbessern</li>
                 </ul>
               </div>
             </div>
@@ -288,7 +290,6 @@ function FormattedText({ text }: { text: string }) {
         if (line.startsWith("```")) {
           return null;
         }
-        // Bold text
         const parts = line.split(/(\*\*[^*]+\*\*)/g);
         return (
           <p key={li} className={li > 0 ? "mt-0.5" : ""}>
