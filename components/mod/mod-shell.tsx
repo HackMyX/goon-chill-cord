@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition, useEffect, Suspense } from "react";
+import { useState, useTransition, useEffect, useMemo, Suspense } from "react";
 import {
   Shield, Users, Ticket, Activity, AlertTriangle, Ban, StickyNote,
-  ChevronDown, Check, X, Coins, Clock, Search, Info, LogOut, Trash2, Loader2, Sparkles,
+  ChevronDown, Check, X, Coins, Clock, Search, LogOut, Trash2, Loader2,
+  Sparkles, LayoutDashboard, RefreshCw, History, NotepadText, FileText,
 } from "lucide-react";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import Link from "next/link";
@@ -13,7 +14,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { TopBar } from "@/components/layout/top-bar";
 import {
   modWarnUser, modAddNote, modTempBan, modLiftBan, modCloseTicket, modAddCredits,
-  modRemoveWarning, getModWarningsForUser,
+  modRemoveWarning, getModUserHistory,
 } from "@/lib/actions/mod";
 import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket } from "@/lib/mod";
 
@@ -33,151 +34,215 @@ function timeAgo(iso: string): string {
   return `vor ${Math.floor(h / 24)}d`;
 }
 
-function ActionTypeBadge({ type }: { type: ModActionRow["actionType"] }) {
-  const map: Record<ModActionRow["actionType"], { label: string; cls: string }> = {
-    warning: { label: "Verwarnung", cls: "bg-amber-500/20 text-amber-300" },
-    note: { label: "Notiz", cls: "bg-sky-500/20 text-sky-300" },
-    temp_ban: { label: "Temp-Ban", cls: "bg-red-500/20 text-red-300" },
-    ticket_close: { label: "Ticket", cls: "bg-purple-500/20 text-purple-300" },
-    credits_add: { label: "Credits", cls: "bg-emerald-500/20 text-emerald-300" },
-  };
-  const { label, cls } = map[type] ?? { label: type, cls: "bg-zinc-700 text-zinc-300" };
-  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${cls}`}>{label}</span>;
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 // ---------------------------------------------------------------------------
-// Action tab
+// Action type badge
 // ---------------------------------------------------------------------------
 
-function ActionLog({ actions }: { actions: ModActionRow[] }) {
+const ACTION_MAP: Record<ModActionRow["actionType"], { label: string; cls: string; Icon: typeof AlertTriangle }> = {
+  warning: { label: "Verwarnung", cls: "bg-amber-500/20 text-amber-300 border-amber-500/30", Icon: AlertTriangle },
+  note: { label: "Notiz", cls: "bg-sky-500/20 text-sky-300 border-sky-500/30", Icon: StickyNote },
+  temp_ban: { label: "Temp-Ban", cls: "bg-red-500/20 text-red-300 border-red-500/30", Icon: Ban },
+  ticket_close: { label: "Ticket", cls: "bg-purple-500/20 text-purple-300 border-purple-500/30", Icon: Ticket },
+  credits_add: { label: "Credits", cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30", Icon: Coins },
+};
+
+function ActionTypeBadge({ type }: { type: ModActionRow["actionType"] }) {
+  const { label, cls, Icon } = ACTION_MAP[type] ?? {
+    label: type, cls: "bg-zinc-700 text-zinc-300 border-zinc-600", Icon: Activity,
+  };
   return (
-    <div className="flex flex-col gap-2">
-      {actions.length === 0 && (
-        <p className="py-8 text-center text-sm text-zinc-500">Noch keine Aktionen.</p>
-      )}
-      {actions.map((a) => (
-        <div key={a.id} className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3">
-          <ActionTypeBadge type={a.actionType} />
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-1 text-xs text-zinc-400">
-              <span className="font-semibold text-zinc-200">{a.modUsername ?? "Mod"}</span>
-              <span>→</span>
-              <span className="font-semibold text-zinc-200">{a.targetUsername ?? "(kein Ziel)"}</span>
-            </div>
-            {a.reason && <p className="mt-0.5 text-[11px] text-zinc-500">{a.reason}</p>}
-            {a.expiresAt && (
-              <p className="mt-0.5 flex items-center gap-1 text-[10px] text-red-400">
-                <Clock className="h-2.5 w-2.5" />
-                Bis {new Date(a.expiresAt).toLocaleString("de-DE")}
-              </p>
-            )}
-          </div>
-          <span className="text-[10px] text-zinc-600 flex-shrink-0">{timeAgo(a.createdAt)}</span>
-        </div>
-      ))}
-    </div>
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${cls}`}>
+      <Icon className="h-2.5 w-2.5" />
+      {label}
+    </span>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Users tab
+// User History Panel — warnings, notes, bans, credits all in one timeline
 // ---------------------------------------------------------------------------
 
-function WarningsList({ userId, perms, warningCount, onDone }: {
-  userId: string; perms: ModPermissions; warningCount: number; onDone: () => void;
+function UserHistoryPanel({ userId, perms, onWarningRemoved }: {
+  userId: string;
+  perms: ModPermissions;
+  onWarningRemoved: () => void;
 }) {
-  const [warnings, setWarnings] = useState<ModActionRow[] | null>(null);
+  const [history, setHistory] = useState<ModActionRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [filter, setFilter] = useState<ModActionRow["actionType"] | "all">("all");
   const sound = useSoundManager();
 
   useEffect(() => {
-    if (warningCount === 0) { setWarnings([]); return; }
     setLoading(true);
-    getModWarningsForUser(userId).then((list) => { setWarnings(list); setLoading(false); });
-  }, [userId, warningCount]);
+    getModUserHistory(userId).then((list) => { setHistory(list); setLoading(false); });
+  }, [userId]);
 
-  async function handleRemove(id: string) {
+  async function handleRemoveWarning(id: string) {
     sound.click();
     setRemoving(id);
     const res = await modRemoveWarning(id);
     setRemoving(null);
     if (res.success) {
-      setWarnings((w) => (w ?? []).filter((x) => x.id !== id));
+      setHistory((h) => (h ?? []).filter((x) => x.id !== id));
       sound.win();
-      onDone();
-    } else { sound.error(); }
+      onWarningRemoved();
+    } else {
+      sound.error();
+    }
   }
 
-  if (loading) return <div className="mt-3 flex items-center gap-2 text-xs text-zinc-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Lade Verwarnungen…</div>;
-  if (!warnings || warnings.length === 0) return null;
+  if (loading) {
+    return (
+      <div className="mt-4 flex items-center gap-2 text-xs text-zinc-500">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Lade Verlauf…
+      </div>
+    );
+  }
+
+  if (!history || history.length === 0) return null;
+
+  const filterOptions: Array<{ key: ModActionRow["actionType"] | "all"; label: string }> = [
+    { key: "all", label: "Alle" },
+    { key: "warning", label: "Verw." },
+    { key: "note", label: "Notizen" },
+    { key: "temp_ban", label: "Bans" },
+    { key: "credits_add", label: "Credits" },
+  ];
+
+  const shown = filter === "all" ? history : history.filter((h) => h.actionType === filter);
 
   return (
     <div className="mt-4">
-      <h4 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-amber-400">
-        <AlertTriangle className="h-3 w-3" />
-        Verwarnungen ({warnings.length})
-      </h4>
-      <div className="flex flex-col gap-1.5">
-        {warnings.map((w) => (
-          <div key={w.id} className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-amber-200">{w.reason ?? "(ohne Begründung)"}</p>
-              <p className="text-[10px] text-zinc-500">von {w.modUsername ?? "Mod"} · {timeAgo(w.createdAt)}</p>
+      <div className="mb-2 flex items-center gap-2 flex-wrap">
+        <History className="h-3.5 w-3.5 text-zinc-600" />
+        <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-600">
+          Mod-Verlauf ({history.length})
+        </span>
+        <div className="ml-auto flex gap-1 flex-wrap">
+          {filterOptions.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                filter === key
+                  ? "bg-sky-500/25 text-sky-300"
+                  : "bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex max-h-52 flex-col gap-1.5 overflow-y-auto pr-1">
+        {shown.length === 0 ? (
+          <p className="py-3 text-center text-[11px] text-zinc-600">Keine Einträge.</p>
+        ) : (
+          shown.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-start gap-2.5 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2"
+            >
+              <ActionTypeBadge type={item.actionType} />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-zinc-300">
+                  {item.reason
+                    ? item.reason
+                    : <span className="italic text-zinc-600">(keine Begründung)</span>
+                  }
+                </p>
+                <p className="text-[10px] text-zinc-600">
+                  von {item.modUsername ?? "Mod"} · {timeAgo(item.createdAt)}
+                  {item.expiresAt && (
+                    <> · <span className="text-red-400">bis {fmtDate(item.expiresAt)}</span></>
+                  )}
+                </p>
+              </div>
+              {item.actionType === "warning" && perms.canWarnUsers && (
+                <button
+                  onClick={() => handleRemoveWarning(item.id)}
+                  disabled={removing === item.id}
+                  title="Verwarnung entfernen"
+                  className="shrink-0 rounded-lg border border-red-500/20 p-1.5 text-red-400 hover:bg-red-500/15 disabled:opacity-40 transition-colors"
+                >
+                  {removing === item.id
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Trash2 className="h-3 w-3" />
+                  }
+                </button>
+              )}
             </div>
-            {perms.canWarnUsers && (
-              <button
-                onClick={() => handleRemove(w.id)}
-                disabled={removing === w.id}
-                title="Verwarnung entfernen"
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-red-500/30 px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-500/15 disabled:opacity-50"
-              >
-                {removing === w.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                Entfernen
-              </button>
-            )}
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function UserActionsPanel({
-  user: u, perms, onDone,
-}: {
+// ---------------------------------------------------------------------------
+// User Actions Panel
+// ---------------------------------------------------------------------------
+
+const BAN_PRESETS = [1, 6, 12, 24, 48, 168] as const;
+const CREDIT_PRESETS = [100, 500, 1000, -100, -500] as const;
+
+function UserActionsPanel({ user: u, perms, onDone }: {
   user: ModUserSummary;
   perms: ModPermissions;
   onDone: () => void;
 }) {
-  const [tab, setTab] = useState<"warn" | "note" | "ban" | "credits">("warn");
+  const availableTabs = useMemo(() => {
+    const tabs: Array<"warn" | "note" | "ban" | "credits"> = [];
+    if (perms.canWarnUsers) { tabs.push("warn"); tabs.push("note"); }
+    if (perms.canTempBanUsers) tabs.push("ban");
+    if (perms.canAddCredits) tabs.push("credits");
+    return tabs;
+  }, [perms]);
+
+  const [tab, setTab] = useState<"warn" | "note" | "ban" | "credits">(availableTabs[0] ?? "warn");
   const [reason, setReason] = useState("");
-  const [banHours, setBanHours] = useState(1);
+  const [banHours, setBanHours] = useState(24);
   const [creditsAmount, setCreditsAmount] = useState(100);
+  const [confirmBan, setConfirmBan] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const sound = useSoundManager();
   const { currencyName } = useSiteConfig();
 
-  const isBanned = u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date();
+  const isBanned = !!(u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date());
+  const cappedHours = Math.min(banHours, perms.maxTempBanHours);
 
-  function flash(msg: string, ok: boolean) {
-    setMessage(msg);
-    if (ok) { sound.win(); } else { sound.error(); }
+  function flash(text: string, ok: boolean) {
+    setMessage({ text, ok });
+    if (ok) sound.win(); else sound.error();
     setTimeout(() => setMessage(null), 3000);
   }
 
   function doAction() {
+    if (tab === "ban" && !confirmBan) { setConfirmBan(true); return; }
     sound.click();
+    setConfirmBan(false);
     startTransition(async () => {
       let res: { success: boolean; error?: string };
       if (tab === "warn") res = await modWarnUser(u.id, reason);
       else if (tab === "note") res = await modAddNote(u.id, reason);
-      else if (tab === "ban") res = await modTempBan(u.id, banHours, reason);
+      else if (tab === "ban") res = await modTempBan(u.id, cappedHours, reason);
       else res = await modAddCredits(u.id, creditsAmount, reason);
 
-      if (res.success) { flash("Erfolgreich.", true); setReason(""); onDone(); }
-      else flash(res.error ?? "Fehler.", false);
+      if (res.success) {
+        flash(tab === "ban" ? `${cappedHours}h Ban gesetzt.` : "Erfolgreich.", true);
+        setReason("");
+        onDone();
+      } else {
+        flash(res.error ?? "Fehler.", false);
+      }
     });
   }
 
@@ -188,163 +253,464 @@ function UserActionsPanel({
     else flash(res.error ?? "Fehler.", false);
   }
 
-  return (
-    <div className="mt-3 rounded-xl border border-white/10 bg-[#0b0814] p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        {perms.canWarnUsers && (
-          <button onClick={() => setTab("warn")} className={`rounded-full px-3 py-1 text-[11px] font-bold transition-colors ${tab === "warn" ? "bg-amber-500/25 text-amber-200" : "bg-white/5 text-zinc-500 hover:bg-white/10"}`}>
-            <AlertTriangle className="inline-block h-3 w-3 mr-1" />Verwarnen
-          </button>
-        )}
-        {perms.canWarnUsers && (
-          <button onClick={() => setTab("note")} className={`rounded-full px-3 py-1 text-[11px] font-bold transition-colors ${tab === "note" ? "bg-sky-500/25 text-sky-200" : "bg-white/5 text-zinc-500 hover:bg-white/10"}`}>
-            <StickyNote className="inline-block h-3 w-3 mr-1" />Notiz
-          </button>
-        )}
-        {perms.canTempBanUsers && (
-          <button onClick={() => setTab("ban")} className={`rounded-full px-3 py-1 text-[11px] font-bold transition-colors ${tab === "ban" ? "bg-red-500/25 text-red-200" : "bg-white/5 text-zinc-500 hover:bg-white/10"}`}>
-            <Ban className="inline-block h-3 w-3 mr-1" />Temp-Ban
-          </button>
-        )}
-        {perms.canAddCredits && (
-          <button onClick={() => setTab("credits")} className={`rounded-full px-3 py-1 text-[11px] font-bold transition-colors ${tab === "credits" ? "bg-emerald-500/25 text-emerald-200" : "bg-white/5 text-zinc-500 hover:bg-white/10"}`}>
-            <Coins className="inline-block h-3 w-3 mr-1" />Credits
-          </button>
-        )}
-        {isBanned && perms.canTempBanUsers && (
-          <button onClick={liftBan} className="rounded-full bg-red-500/20 px-3 py-1 text-[11px] font-bold text-red-300 hover:bg-red-500/30">
-            <X className="inline-block h-3 w-3 mr-1" />Ban aufheben
-          </button>
-        )}
-      </div>
+  if (availableTabs.length === 0 && !isBanned) return null;
 
-      {tab === "ban" && (
-        <div className="mb-2 flex items-center gap-2">
-          <label className="text-[11px] text-zinc-400">Dauer:</label>
-          <input type="number" min={1} max={perms.maxTempBanHours} value={banHours}
-            onChange={(e) => setBanHours(Number(e.target.value))}
-            className="w-20 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100" />
-          <span className="text-[11px] text-zinc-500">Stunden (max. {perms.maxTempBanHours}h)</span>
-        </div>
-      )}
-
-      {tab === "credits" && (
-        <div className="mb-2 flex items-center gap-2">
-          <label className="text-[11px] text-zinc-400">Betrag:</label>
-          <input type="number" value={creditsAmount}
-            onChange={(e) => setCreditsAmount(Number(e.target.value))}
-            className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100" />
-          <span className="text-[11px] text-zinc-500">{currencyName}</span>
-        </div>
-      )}
-
-      <input
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        placeholder={perms.warnRequiresReason && tab !== "note" ? "Begründung (Pflicht)..." : "Begründung (optional)..."}
-        className="mb-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
-      />
-      <div className="flex items-center gap-2">
-        <button
-          onClick={doAction}
-          disabled={pending}
-          className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-60"
-        >
-          <Check className="h-3 w-3" />Ausführen
-        </button>
-        {message && <span className="text-xs text-zinc-400">{message}</span>}
-      </div>
-    </div>
-  );
-}
-
-function UsersTab({ users: initialUsers, perms, onRefresh }: {
-  users: ModUserSummary[];
-  perms: ModPermissions;
-  onRefresh: () => void;
-}) {
-  const [users] = useState(initialUsers);
-  const [query, setQuery] = useState("");
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const filtered = users.filter((u) => u.username.toLowerCase().includes(query.toLowerCase()));
-  const { currencyName } = useSiteConfig();
+  const tabMeta = {
+    warn:    { label: "Verwarnen", Icon: AlertTriangle, active: "bg-amber-500/20 text-amber-200 border-amber-500/30" },
+    note:    { label: "Notiz",     Icon: NotepadText,   active: "bg-sky-500/20 text-sky-200 border-sky-500/30" },
+    ban:     { label: "Temp-Ban",  Icon: Ban,           active: "bg-red-500/20 text-red-200 border-red-500/30" },
+    credits: { label: "Credits",   Icon: Coins,         active: "bg-emerald-500/20 text-emerald-200 border-emerald-500/30" },
+  } as const;
+  const inactiveCls = "bg-white/5 text-zinc-500 hover:bg-white/8 hover:text-zinc-300 border-transparent";
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Nutzer suchen..."
-          className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-2 pl-10 pr-3 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        {filtered.map((u) => {
-          const isBanned = u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date();
+    <div className="mt-4 rounded-2xl border border-white/8 bg-black/30 p-4">
+      {/* Tab pills */}
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {availableTabs.map((t) => {
+          const { label, Icon, active } = tabMeta[t];
           return (
-            <div key={u.id} className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
-              <button
-                className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
-                onClick={() => setExpanded(expanded === u.id ? null : u.id)}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`h-2 w-2 rounded-full flex-shrink-0 ${isBanned ? "bg-red-500" : u.role === "admin" ? "bg-amber-400" : u.role === "moderator" ? "bg-sky-400" : "bg-zinc-600"}`} />
-                  <span className="font-semibold text-zinc-200 truncate">{u.username}</span>
-                  {u.role !== "user" && (
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${u.role === "admin" ? "bg-amber-500/20 text-amber-300" : "bg-sky-500/20 text-sky-300"}`}>
-                      {u.role === "admin" ? "Admin" : "Mod"}
-                    </span>
-                  )}
-                  {isBanned && <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">GESPERRT</span>}
-                  {u.warningCount > 0 && (
-                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
-                      {u.warningCount}× verwarnt
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  {perms.canViewUserDetails && (
-                    <span className="hidden text-[11px] text-zinc-500 sm:block">
-                      {fmt(u.credits)} {currencyName} · {u.streakDays}🔥
-                    </span>
-                  )}
-                  <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${expanded === u.id ? "rotate-180" : ""}`} />
-                </div>
-              </button>
-
-              {expanded === u.id && (
-                <div className="border-t border-white/5 px-4 pb-4">
-                  {perms.canViewUserDetails && (
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-zinc-500 sm:grid-cols-4">
-                      <span>Credits: <strong className="text-zinc-300">{fmt(u.credits)}</strong></span>
-                      <span>Streak: <strong className="text-zinc-300">{u.streakDays} Tage</strong></span>
-                      <span>Verwarnungen: <strong className="text-zinc-300">{u.warningCount}</strong></span>
-                      <span>Notizen: <strong className="text-zinc-300">{u.noteCount}</strong></span>
-                      {isBanned && (
-                        <span className="col-span-4 text-red-400">
-                          Gesperrt bis: {new Date(u.tempBannedUntil!).toLocaleString("de-DE")}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <WarningsList userId={u.id} perms={perms} warningCount={u.warningCount} onDone={onRefresh} />
-                  <UserActionsPanel user={u} perms={perms} onDone={onRefresh} />
-                </div>
-              )}
-            </div>
+            <button
+              key={t}
+              onClick={() => { setTab(t); setConfirmBan(false); }}
+              className={`flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-bold transition-colors ${tab === t ? active : inactiveCls}`}
+            >
+              <Icon className="h-3 w-3" />{label}
+            </button>
           );
         })}
-        {filtered.length === 0 && <p className="py-6 text-center text-sm text-zinc-500">Keine Nutzer gefunden.</p>}
+        {isBanned && perms.canTempBanUsers && (
+          <button
+            onClick={liftBan}
+            className="flex items-center gap-1 rounded-full border border-red-400/30 bg-red-400/10 px-3 py-1 text-[11px] font-bold text-red-300 hover:bg-red-400/20 transition-colors"
+          >
+            <X className="h-3 w-3" />Ban aufheben
+          </button>
+        )}
+      </div>
+
+      {/* Ban duration presets */}
+      {tab === "ban" && (
+        <div className="mb-3">
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+            Dauer (max. {perms.maxTempBanHours}h)
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {BAN_PRESETS.filter((h) => h <= perms.maxTempBanHours).map((h) => (
+              <button
+                key={h}
+                onClick={() => setBanHours(h)}
+                className={`rounded-lg border px-3 py-1 text-[11px] font-bold transition-colors ${
+                  banHours === h
+                    ? "border-red-400/50 bg-red-500/20 text-red-300"
+                    : "border-white/10 text-zinc-500 hover:border-white/20 hover:text-zinc-300"
+                }`}
+              >
+                {h >= 168 ? "1 Woche" : h >= 24 ? `${h / 24}d` : `${h}h`}
+              </button>
+            ))}
+            <input
+              type="number" min={1} max={perms.maxTempBanHours} value={banHours}
+              onChange={(e) => setBanHours(Math.max(1, Math.min(perms.maxTempBanHours, Number(e.target.value))))}
+              className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-center text-[11px] text-zinc-100 outline-none focus:border-red-400/40"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Credits presets */}
+      {tab === "credits" && (
+        <div className="mb-3">
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+            Betrag ({currencyName})
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {CREDIT_PRESETS.map((amount) => (
+              <button
+                key={amount}
+                onClick={() => setCreditsAmount(amount)}
+                className={`rounded-lg border px-3 py-1 text-[11px] font-bold transition-colors ${
+                  creditsAmount === amount
+                    ? amount > 0
+                      ? "border-emerald-400/50 bg-emerald-500/20 text-emerald-300"
+                      : "border-red-400/50 bg-red-500/20 text-red-300"
+                    : "border-white/10 text-zinc-500 hover:border-white/20 hover:text-zinc-300"
+                }`}
+              >
+                {amount > 0 ? "+" : ""}{fmt(amount)}
+              </button>
+            ))}
+            <input
+              type="number" value={creditsAmount}
+              onChange={(e) => setCreditsAmount(Number(e.target.value) || 0)}
+              className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-center text-[11px] text-zinc-100 outline-none focus:border-emerald-400/40"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Reason textarea */}
+      <textarea
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        rows={2}
+        placeholder={perms.warnRequiresReason && tab === "warn" ? "Begründung (Pflicht)…" : "Begründung (optional)…"}
+        className="mb-3 w-full resize-none rounded-xl border border-white/8 bg-black/20 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-purple-400/40 placeholder:text-zinc-600"
+      />
+
+      {/* Action / confirm */}
+      <div className="flex flex-wrap items-center gap-2">
+        {confirmBan ? (
+          <>
+            <span className="text-xs text-amber-400">
+              Sicher? {cappedHours}h Ban für <strong>{u.username}</strong>?
+            </span>
+            <button
+              onClick={doAction} disabled={pending}
+              className="flex items-center gap-1 rounded-xl bg-red-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-red-500 disabled:opacity-60"
+            >
+              {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+              Ja, sperren
+            </button>
+            <button
+              onClick={() => setConfirmBan(false)}
+              className="rounded-xl bg-zinc-700 px-4 py-1.5 text-xs font-bold text-zinc-300 hover:bg-zinc-600"
+            >
+              Abbrechen
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={doAction}
+            disabled={pending || (perms.warnRequiresReason && tab === "warn" && !reason.trim())}
+            className={`flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-bold text-white transition-colors disabled:opacity-50 ${
+              tab === "ban"
+                ? "bg-red-600 hover:bg-red-500"
+                : tab === "credits" && creditsAmount < 0
+                  ? "bg-red-700 hover:bg-red-600"
+                  : tab === "credits"
+                    ? "bg-emerald-700 hover:bg-emerald-600"
+                    : "bg-purple-600 hover:bg-purple-500"
+            }`}
+          >
+            {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+            {tab === "ban" ? "Sperren" : tab === "credits" ? "Credits senden" : "Ausführen"}
+          </button>
+        )}
+        {message && (
+          <span className={`text-xs font-medium ${message.ok ? "text-emerald-400" : "text-red-400"}`}>
+            {message.ok && <Check className="mr-1 inline h-3 w-3" />}
+            {message.text}
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Tickets tab
+// Users Tab
+// ---------------------------------------------------------------------------
+
+type UserFilter = "all" | "banned" | "warned";
+
+function UsersTab({ users: initialUsers, perms, onRefresh }: {
+  users: ModUserSummary[];
+  perms: ModPermissions;
+  onRefresh: () => void;
+}) {
+  const [users, setUsers] = useState(initialUsers);
+  const [query, setQuery] = useState("");
+  const [userFilter, setUserFilter] = useState<UserFilter>("all");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const { currencyName } = useSiteConfig();
+
+  // Sync with server refresh
+  useEffect(() => { setUsers(initialUsers); }, [initialUsers]);
+
+  const bannedCount = useMemo(
+    () => users.filter((u) => u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date()).length,
+    [users]
+  );
+  const warnedCount = useMemo(() => users.filter((u) => u.warningCount > 0).length, [users]);
+
+  const filtered = useMemo(() => {
+    let list = users;
+    if (userFilter === "banned") list = list.filter((u) => u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date());
+    if (userFilter === "warned") list = list.filter((u) => u.warningCount > 0);
+    if (query.trim()) list = list.filter((u) => u.username.toLowerCase().includes(query.toLowerCase()));
+    return list;
+  }, [users, userFilter, query]);
+
+  function handleWarningRemoved(userId: string) {
+    setUsers((prev) =>
+      prev.map((u) => u.id === userId ? { ...u, warningCount: Math.max(0, u.warningCount - 1) } : u)
+    );
+    onRefresh();
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Search + filter chips */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Nutzer suchen…"
+            className="w-full rounded-xl border border-white/8 bg-white/[0.03] py-2.5 pl-10 pr-3 text-sm text-zinc-100 outline-none transition-colors focus:border-sky-400/40"
+          />
+        </div>
+        <div className="flex gap-1.5">
+          {([
+            { key: "all",    label: `Alle (${users.length})` },
+            { key: "banned", label: `Gesperrt (${bannedCount})` },
+            { key: "warned", label: `Verwarnt (${warnedCount})` },
+          ] as const).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setUserFilter(key)}
+              className={`rounded-xl border px-3 py-2 text-xs font-bold transition-colors ${
+                userFilter === key
+                  ? "border-sky-500/40 bg-sky-500/15 text-sky-300"
+                  : "border-white/8 bg-white/[0.02] text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* User list */}
+      <div className="flex flex-col gap-2">
+        {filtered.length === 0 ? (
+          <div className="py-12 text-center">
+            <Search className="mx-auto mb-2 h-8 w-8 text-zinc-700" />
+            <p className="text-sm text-zinc-500">Keine Nutzer gefunden.</p>
+          </div>
+        ) : (
+          filtered.map((u) => {
+            const isBanned = !!(u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date());
+            const isExpanded = expanded === u.id;
+            return (
+              <div
+                key={u.id}
+                className={`overflow-hidden rounded-2xl border transition-colors ${
+                  isBanned
+                    ? "border-red-500/20 bg-red-500/5"
+                    : isExpanded
+                      ? "border-sky-500/20 bg-sky-500/5"
+                      : "border-white/8 bg-white/[0.02] hover:border-white/[0.12]"
+                }`}
+              >
+                <button
+                  className="flex w-full items-center justify-between gap-2 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.02]"
+                  onClick={() => setExpanded(isExpanded ? null : u.id)}
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                      isBanned ? "bg-red-500" :
+                      u.role === "admin" ? "bg-amber-400" :
+                      u.role === "moderator" ? "bg-sky-400" :
+                      "bg-zinc-600"
+                    }`} />
+                    <span className="truncate font-semibold text-zinc-100">{u.username}</span>
+                    {u.role !== "user" && (
+                      <span className={`hidden rounded-full px-2 py-0.5 text-[10px] font-bold sm:inline-block ${
+                        u.role === "admin" ? "bg-amber-500/20 text-amber-300" : "bg-sky-500/20 text-sky-300"
+                      }`}>
+                        {u.role === "admin" ? "Admin" : "Mod"}
+                      </span>
+                    )}
+                    {isBanned && (
+                      <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
+                        GESPERRT
+                      </span>
+                    )}
+                    {u.warningCount > 0 && (
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                        {u.warningCount}× verwarnt
+                      </span>
+                    )}
+                    {u.noteCount > 0 && (
+                      <span className="hidden rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-500 sm:inline-block">
+                        {u.noteCount} Notiz{u.noteCount !== 1 ? "en" : ""}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {perms.canViewUserDetails && (
+                      <span className="hidden text-[11px] text-zinc-500 sm:block">
+                        {fmt(u.credits)} {currencyName} · {u.streakDays}🔥
+                      </span>
+                    )}
+                    <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="border-t border-white/5 px-4 pb-5 pt-4">
+                    {perms.canViewUserDetails && (
+                      <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                        <div className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
+                          <p className="text-zinc-600">Credits</p>
+                          <p className="mt-0.5 font-bold text-zinc-200">{fmt(u.credits)}</p>
+                        </div>
+                        <div className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
+                          <p className="text-zinc-600">Streak</p>
+                          <p className="mt-0.5 font-bold text-zinc-200">{u.streakDays}d 🔥</p>
+                        </div>
+                        <div className={`rounded-xl border px-3 py-2 ${u.warningCount > 0 ? "border-amber-500/20 bg-amber-500/5" : "border-white/5 bg-white/[0.02]"}`}>
+                          <p className="text-zinc-600">Verwarnungen</p>
+                          <p className={`mt-0.5 font-bold ${u.warningCount > 0 ? "text-amber-300" : "text-zinc-200"}`}>
+                            {u.warningCount}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
+                          <p className="text-zinc-600">Dabei seit</p>
+                          <p className="mt-0.5 font-bold text-zinc-200">{fmtDate(u.createdAt)}</p>
+                        </div>
+                        {isBanned && (
+                          <div className="col-span-full rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                            <p className="text-[10px] text-red-400">
+                              Gesperrt bis:{" "}
+                              <strong>{new Date(u.tempBannedUntil!).toLocaleString("de-DE")}</strong>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <UserHistoryPanel
+                      userId={u.id}
+                      perms={perms}
+                      onWarningRemoved={() => handleWarningRemoved(u.id)}
+                    />
+                    <UserActionsPanel user={u} perms={perms} onDone={onRefresh} />
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ticket Item — own state so multiple tickets don't share reason input
+// ---------------------------------------------------------------------------
+
+function TicketItem({ t, perms, onRefresh, defaultOpen }: {
+  t: ModTicket;
+  perms: ModPermissions;
+  onRefresh: () => void;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
+  const [reason, setReason] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const isOpen = t.status === "open";
+  const sound = useSoundManager();
+
+  function handleClose() {
+    sound.click();
+    startTransition(async () => {
+      const res = await modCloseTicket(t.id, reason);
+      if (res.success) {
+        setMessage({ text: "Ticket geschlossen.", ok: true });
+        sound.win();
+        setReason("");
+        onRefresh();
+      } else {
+        setMessage({ text: res.error ?? "Fehler.", ok: false });
+        sound.error();
+      }
+      setTimeout(() => setMessage(null), 3000);
+    });
+  }
+
+  return (
+    <div className={`overflow-hidden rounded-2xl border transition-colors ${
+      isOpen ? "border-purple-500/20 bg-purple-500/5" : "border-white/8 bg-white/[0.02]"
+    }`}>
+      <button
+        className="flex w-full items-center justify-between gap-2 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.02]"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className={`h-2 w-2 shrink-0 rounded-full ${
+            isOpen ? "bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]" : "bg-zinc-600"
+          }`} />
+          <span className="truncate font-semibold text-zinc-100">{t.subject}</span>
+          <span className="hidden text-[11px] text-zinc-500 sm:block">von {t.username}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {isOpen && (
+            <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
+              Offen
+            </span>
+          )}
+          <span className="text-[10px] text-zinc-600">{timeAgo(t.createdAt)}</span>
+          <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        </div>
+      </button>
+
+      {open && (
+        <div className="border-t border-white/5 px-4 pb-4 pt-3">
+          <p className="mb-2 text-[11px] text-zinc-500">
+            von <strong className="text-zinc-300">{t.username}</strong>
+            {" · "}{new Date(t.createdAt).toLocaleString("de-DE")}
+          </p>
+          <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-3">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{t.message}</p>
+          </div>
+
+          {!isOpen && t.closedByUsername && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-zinc-700/50 bg-zinc-800/30 px-3 py-2 text-[11px] text-zinc-500">
+              <Check className="h-3 w-3 shrink-0 text-emerald-500" />
+              Geschlossen von <strong className="text-zinc-300">{t.closedByUsername}</strong>
+              {t.closedAt && <> · {timeAgo(t.closedAt)}</>}
+            </div>
+          )}
+
+          {isOpen && perms.canCloseTickets && (
+            <div className="mt-3 flex flex-col gap-2">
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={2}
+                placeholder="Abschluss-Notiz (optional)…"
+                className="resize-none rounded-xl border border-white/8 bg-black/30 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-purple-400/40 placeholder:text-zinc-600"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleClose} disabled={pending}
+                  className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
+                >
+                  {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                  Ticket schließen
+                </button>
+                {message && (
+                  <span className={`text-xs font-medium ${message.ok ? "text-emerald-400" : "text-red-400"}`}>
+                    {message.text}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tickets Tab
 // ---------------------------------------------------------------------------
 
 function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }: {
@@ -354,118 +720,64 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
   openTicketId?: string | null;
   onTicketOpened?: () => void;
 }) {
-  const [expanded, setExpanded] = useState<string | null>(openTicketId ?? null);
-
   useEffect(() => {
-    if (openTicketId) { setExpanded(openTicketId); onTicketOpened?.(); }
+    if (openTicketId) onTicketOpened?.();
   }, [openTicketId, onTicketOpened]);
-  const [reason, setReason] = useState("");
-  const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
-  const sound = useSoundManager();
-
-  function handleClose(ticketId: string) {
-    sound.click();
-    startTransition(async () => {
-      const res = await modCloseTicket(ticketId, reason);
-      if (res.success) {
-        setMessage({ id: ticketId, msg: "Ticket geschlossen.", ok: true });
-        sound.win();
-        setReason("");
-        onRefresh();
-      } else {
-        setMessage({ id: ticketId, msg: res.error ?? "Fehler.", ok: false });
-        sound.error();
-      }
-      setTimeout(() => setMessage(null), 3000);
-    });
-  }
 
   const open = tickets.filter((t) => t.status === "open");
   const closed = tickets.filter((t) => t.status !== "open");
 
-  function TicketItem({ t }: { t: ModTicket }) {
-    const isOpen = t.status === "open";
-    return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
-        <button
-          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
-          onClick={() => setExpanded(expanded === t.id ? null : t.id)}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <span className={`h-2 w-2 rounded-full flex-shrink-0 ${isOpen ? "bg-emerald-400" : "bg-zinc-600"}`} />
-            <span className="font-semibold text-zinc-200 truncate">{t.subject}</span>
-            <span className="text-[11px] text-zinc-500">von {t.username}</span>
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Open tickets */}
+      <div>
+        <div className="mb-3 flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]" />
+          <h3 className="text-sm font-bold text-zinc-200">Offene Tickets</h3>
+          <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
+            {open.length}
+          </span>
+        </div>
+        {open.length === 0 ? (
+          <div className="rounded-2xl border border-white/5 bg-white/[0.02] py-12 text-center">
+            <Ticket className="mx-auto mb-2 h-8 w-8 text-zinc-700" />
+            <p className="text-sm text-zinc-600">Keine offenen Tickets. Alles erledigt!</p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-[10px] text-zinc-600">{timeAgo(t.createdAt)}</span>
-            <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${expanded === t.id ? "rotate-180" : ""}`} />
-          </div>
-        </button>
-
-        {expanded === t.id && (
-          <div className="border-t border-white/5 px-4 pb-4">
-            <p className="mt-3 text-sm text-zinc-300 whitespace-pre-wrap">{t.message}</p>
-            {!isOpen && t.closedByUsername && (
-              <p className="mt-2 text-[11px] text-zinc-500">
-                Geschlossen von <strong>{t.closedByUsername}</strong> · {t.closedAt ? timeAgo(t.closedAt) : ""}
-              </p>
-            )}
-            {isOpen && perms.canCloseTickets && (
-              <div className="mt-3 flex flex-col gap-2">
-                <input
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Abschluss-Begründung (optional)..."
-                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
-                />
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleClose(t.id)}
-                    disabled={pending}
-                    className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-60"
-                  >
-                    <Check className="h-3 w-3" />Ticket schließen
-                  </button>
-                  {message?.id === t.id && (
-                    <span className="text-xs text-zinc-400">{message.msg}</span>
-                  )}
-                </div>
-              </div>
-            )}
+        ) : (
+          <div className="flex flex-col gap-2">
+            {open.map((t) => (
+              <TicketItem
+                key={t.id} t={t} perms={perms} onRefresh={onRefresh}
+                defaultOpen={openTicketId === t.id}
+              />
+            ))}
           </div>
         )}
       </div>
-    );
-  }
 
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-300">
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
-          Offen ({open.length})
-        </h3>
-        {open.length === 0 && <p className="text-sm text-zinc-500">Keine offenen Tickets.</p>}
-        <div className="flex flex-col gap-2">
-          {open.map((t) => <TicketItem key={t.id} t={t} />)}
+      {/* Closed tickets */}
+      {closed.length > 0 && (
+        <div>
+          <div className="mb-3 flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-zinc-600" />
+            <h3 className="text-sm font-bold text-zinc-500">Geschlossene Tickets</h3>
+            <span className="rounded-full bg-zinc-700/50 px-2 py-0.5 text-[10px] font-bold text-zinc-600">
+              {closed.length}
+            </span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {closed.slice(0, 20).map((t) => (
+              <TicketItem key={t.id} t={t} perms={perms} onRefresh={onRefresh} />
+            ))}
+          </div>
         </div>
-      </div>
-      <div>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-zinc-500">
-          <span className="h-2 w-2 rounded-full bg-zinc-600" />
-          Geschlossen ({closed.length})
-        </h3>
-        <div className="flex flex-col gap-2">
-          {closed.slice(0, 20).map((t) => <TicketItem key={t.id} t={t} />)}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Overview tab
+// Overview Tab
 // ---------------------------------------------------------------------------
 
 function OverviewTab({ users, tickets, perms, myActions }: {
@@ -474,44 +786,67 @@ function OverviewTab({ users, tickets, perms, myActions }: {
   perms: ModPermissions;
   myActions: ModActionRow[];
 }) {
-  const { currencyName } = useSiteConfig();
   const bannedCount = users.filter((u) => u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date()).length;
   const openTickets = tickets.filter((t) => t.status === "open").length;
   const totalWarnings = users.reduce((s, u) => s + u.warningCount, 0);
+  const totalNotes = users.reduce((s, u) => s + u.noteCount, 0);
+
+  const stats = [
+    { label: "Nutzer gesamt",   value: users.length,   Icon: Users,         color: "text-sky-300",    glow: "from-sky-500/10" },
+    { label: "Offene Tickets",  value: openTickets,    Icon: Ticket,        color: "text-purple-300", glow: "from-purple-500/10" },
+    { label: "Temp-Gesperrt",   value: bannedCount,    Icon: Ban,           color: "text-red-300",    glow: "from-red-500/10" },
+    { label: "Aktive Verw.",    value: totalWarnings,  Icon: AlertTriangle, color: "text-amber-300",  glow: "from-amber-500/10" },
+  ];
+
+  const permRows = [
+    { label: "Tickets ansehen",   val: perms.canViewTickets,    Icon: Ticket },
+    { label: "Tickets schließen", val: perms.canCloseTickets,   Icon: Check },
+    { label: "Nutzer verwarnen",  val: perms.canWarnUsers,      Icon: AlertTriangle },
+    { label: "Temp-Ban",          val: perms.canTempBanUsers,   Icon: Ban },
+    { label: "Nutzerdetails",     val: perms.canViewUserDetails, Icon: Users },
+    { label: "Audit-Log",         val: perms.canViewAuditLog,   Icon: Activity },
+    { label: "Credits vergeben",  val: perms.canAddCredits,     Icon: Coins },
+    { label: `Max Ban: ${perms.maxTempBanHours}h`, val: perms.canTempBanUsers, Icon: Clock },
+    { label: perms.warnRequiresReason ? "Begr. Pflicht" : "Begr. Optional", val: true, Icon: FileText },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Stats */}
+      {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: "Nutzer gesamt", value: users.length, icon: Users, color: "text-purple-300" },
-          { label: "Offene Tickets", value: openTickets, icon: Ticket, color: "text-amber-300" },
-          { label: "Gesperrte Nutzer", value: bannedCount, icon: Ban, color: "text-red-300" },
-          { label: "Verwarnungen ges.", value: totalWarnings, icon: AlertTriangle, color: "text-orange-300" },
-        ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="flex flex-col gap-1 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3">
-            <div className="flex items-center gap-1.5">
-              <Icon className={`h-4 w-4 ${color}`} />
-              <span className="text-[11px] text-zinc-500">{label}</span>
+        {stats.map(({ label, value, Icon, color, glow }) => (
+          <div key={label} className={`relative overflow-hidden rounded-2xl border border-white/8 bg-gradient-to-br ${glow} to-transparent px-4 py-4`}>
+            <div className="pointer-events-none absolute right-3 top-3 opacity-[0.07]">
+              <Icon className="h-10 w-10" />
             </div>
-            <span className={`text-2xl font-extrabold ${color}`}>{value}</span>
+            <p className="text-[11px] text-zinc-500">{label}</p>
+            <p className={`mt-1 text-3xl font-black ${color}`}>{value}</p>
           </div>
         ))}
       </div>
 
       {/* My recent actions */}
       <div>
-        <h3 className="mb-3 text-sm font-bold text-zinc-300">Meine letzten Aktionen</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-zinc-300">
+          <Activity className="h-4 w-4 text-sky-400" />
+          Meine letzten Aktionen
+        </h3>
         {myActions.length === 0 ? (
-          <p className="text-sm text-zinc-500">Noch keine Aktionen.</p>
+          <div className="rounded-2xl border border-white/5 py-10 text-center">
+            <p className="text-sm text-zinc-600">Noch keine Aktionen durchgeführt.</p>
+          </div>
         ) : (
           <div className="flex flex-col gap-1.5">
             {myActions.slice(0, 8).map((a) => (
-              <div key={a.id} className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs">
+              <div key={a.id} className="flex items-center gap-2.5 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2.5 text-xs">
                 <ActionTypeBadge type={a.actionType} />
-                <span className="text-zinc-400">→ <strong className="text-zinc-200">{a.targetUsername ?? "?"}</strong></span>
-                {a.reason && <span className="text-zinc-500 truncate flex-1">· {a.reason}</span>}
-                <span className="text-zinc-600 flex-shrink-0">{timeAgo(a.createdAt)}</span>
+                <span className="text-zinc-500">
+                  → <strong className="text-zinc-300">{a.targetUsername ?? "?"}</strong>
+                </span>
+                {a.reason && (
+                  <span className="min-w-0 flex-1 truncate text-zinc-600">· {a.reason}</span>
+                )}
+                <span className="shrink-0 text-zinc-700">{timeAgo(a.createdAt)}</span>
               </div>
             ))}
           </div>
@@ -520,30 +855,105 @@ function OverviewTab({ users, tickets, perms, myActions }: {
 
       {/* Permissions */}
       <div>
-        <h3 className="mb-3 text-sm font-bold text-zinc-300">Deine Berechtigungen</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-zinc-300">
+          <Shield className="h-4 w-4 text-sky-400" />
+          Deine Berechtigungen
+        </h3>
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-          {[
-            ["Tickets ansehen", perms.canViewTickets],
-            ["Tickets schließen", perms.canCloseTickets],
-            ["Nutzer verwarnen", perms.canWarnUsers],
-            ["Temp-Ban", perms.canTempBanUsers],
-            ["Nutzerdetails", perms.canViewUserDetails],
-            ["Audit-Log", perms.canViewAuditLog],
-            ["Credits vergeben", perms.canAddCredits],
-          ].map(([label, enabled]) => (
-            <div key={label as string} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium ${enabled ? "bg-emerald-500/10 text-emerald-300" : "bg-zinc-800 text-zinc-600"}`}>
-              {enabled ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+          {permRows.map(({ label, val, Icon }) => (
+            <div
+              key={label}
+              className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[11px] font-medium ${
+                val
+                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                  : "border-white/5 bg-white/[0.02] text-zinc-700"
+              }`}
+            >
+              <Icon className={`h-3 w-3 shrink-0 ${val ? "text-emerald-400" : "text-zinc-700"}`} />
               {label}
             </div>
           ))}
         </div>
+        <p className="mt-2 text-[11px] text-zinc-700">
+          {totalNotes > 0 && `${totalNotes} Mod-Notizen gesamt · `}
+          {totalWarnings} aktive Verwarnungen gesamt
+        </p>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Main shell
+// Action Log Tab
+// ---------------------------------------------------------------------------
+
+function ActionLog({ actions }: { actions: ModActionRow[] }) {
+  const [filter, setFilter] = useState<ModActionRow["actionType"] | "all">("all");
+
+  const shown = filter === "all" ? actions : actions.filter((a) => a.actionType === filter);
+
+  const typeFilters: Array<{ key: ModActionRow["actionType"] | "all"; label: string }> = [
+    { key: "all",          label: "Alle" },
+    { key: "warning",      label: "Verwarnungen" },
+    { key: "note",         label: "Notizen" },
+    { key: "temp_ban",     label: "Bans" },
+    { key: "ticket_close", label: "Tickets" },
+    { key: "credits_add",  label: "Credits" },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap gap-1.5">
+        {typeFilters.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
+              filter === key
+                ? "border-sky-500/40 bg-sky-500/15 text-sky-300"
+                : "border-white/8 bg-white/[0.02] text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        {shown.length === 0 ? (
+          <div className="py-12 text-center">
+            <Activity className="mx-auto mb-2 h-8 w-8 text-zinc-700" />
+            <p className="text-sm text-zinc-600">Keine Aktionen gefunden.</p>
+          </div>
+        ) : (
+          shown.map((a) => (
+            <div key={a.id} className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3">
+              <ActionTypeBadge type={a.actionType} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1 text-xs text-zinc-400">
+                  <span className="font-semibold text-zinc-200">{a.modUsername ?? "Mod"}</span>
+                  <span>→</span>
+                  <span className="font-semibold text-zinc-200">{a.targetUsername ?? "(kein Ziel)"}</span>
+                </div>
+                {a.reason && <p className="mt-0.5 text-[11px] text-zinc-500">{a.reason}</p>}
+                {a.expiresAt && (
+                  <p className="mt-0.5 flex items-center gap-1 text-[10px] text-red-400">
+                    <Clock className="h-2.5 w-2.5" />
+                    Bis {new Date(a.expiresAt).toLocaleString("de-DE")}
+                  </p>
+                )}
+              </div>
+              <span className="shrink-0 text-[10px] text-zinc-600">{timeAgo(a.createdAt)}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Shell
 // ---------------------------------------------------------------------------
 
 type ModTab = "overview" | "users" | "tickets" | "actions" | "ki";
@@ -560,7 +970,6 @@ interface ModShellProps {
   isAdminUser?: boolean;
 }
 
-// Full permissions override for admins viewing the mod panel
 const ADMIN_PERMS: ModPermissions = {
   canViewTickets: true,
   canCloseTickets: true,
@@ -573,83 +982,141 @@ const ADMIN_PERMS: ModPermissions = {
   maxTempBanHours: 8760,
 };
 
-// Inner component — uses useSearchParams for deep-link tab/ticket navigation
 function ModShellInner({
   modUsername, credits, streakDays, permissions: rawPerms,
   users, tickets, recentActions, myActions, isAdminUser = false,
 }: ModShellProps) {
   const permissions = isAdminUser ? ADMIN_PERMS : rawPerms;
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const sound = useSoundManager();
 
   const [activeTab, setActiveTab] = useState<ModTab>(() => {
     const q = searchParams.get("tab");
-    return (q === "tickets" || q === "users" || q === "actions") ? q : "overview";
+    return (q === "tickets" || q === "users" || q === "actions" || q === "ki") ? q : "overview";
   });
   const [deepOpenTicketId, setDeepOpenTicketId] = useState<string | null>(
     () => searchParams.get("open")
   );
-  const router = useRouter();
-  const sound = useSoundManager();
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Handle client-side navigation deep links
   useEffect(() => {
     const q = searchParams.get("tab");
-    if (q === "tickets" || q === "users" || q === "actions") setActiveTab(q);
+    if (q === "tickets" || q === "users" || q === "actions" || q === "ki") setActiveTab(q);
     const open = searchParams.get("open");
     if (open) setDeepOpenTicketId(open);
   }, [searchParams]);
 
-  const tabs: { id: ModTab; label: string; icon: typeof Shield; show: boolean }[] = [
-    { id: "overview", label: "Übersicht", icon: Activity, show: true },
-    { id: "users", label: "Nutzer", icon: Users, show: permissions.canViewUserDetails || permissions.canWarnUsers || permissions.canTempBanUsers },
-    { id: "tickets", label: "Tickets", icon: Ticket, show: permissions.canViewTickets },
-    { id: "actions", label: "Aktionen", icon: Activity, show: permissions.canViewAuditLog || true },
-    { id: "ki", label: "KI-Assistent", icon: Sparkles, show: true },
+  const openTicketsCount = tickets.filter((t) => t.status === "open").length;
+
+  const tabs: { id: ModTab; label: string; Icon: typeof Shield; badge?: number; show: boolean }[] = [
+    { id: "overview", label: "Übersicht",     Icon: LayoutDashboard, show: true },
+    { id: "users",    label: "Nutzer",         Icon: Users,           badge: users.length,
+      show: permissions.canViewUserDetails || permissions.canWarnUsers || permissions.canTempBanUsers },
+    { id: "tickets",  label: "Tickets",        Icon: Ticket,          badge: openTicketsCount,
+      show: permissions.canViewTickets },
+    { id: "actions",  label: "Aktionen",       Icon: History,         show: true },
+    { id: "ki",       label: "KI-Assistent",   Icon: Sparkles,        show: true },
   ];
 
-  function refresh() { router.refresh(); }
+  function refresh() {
+    setRefreshing(true);
+    router.refresh();
+    setTimeout(() => setRefreshing(false), 1200);
+  }
 
   return (
     <div className="flex flex-1 flex-col">
       <TopBar credits={credits} streakDays={streakDays} isModerator={!isAdminUser} isAdmin={isAdminUser} />
+
       <div className="mx-auto w-full max-w-5xl px-4 py-8">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="flex items-center gap-2.5 text-2xl font-extrabold text-zinc-100">
-              <Shield className="h-6 w-6 text-sky-400" />
-              Moderations-Panel
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">Eingeloggt als <strong className="text-zinc-300">{modUsername}</strong></p>
+        {/* Header */}
+        <div className="relative mb-8 overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-950/50 via-purple-950/20 to-transparent p-6">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(14,165,233,0.12),transparent_65%)]" />
+          <div className="relative flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="flex items-center gap-3 text-2xl font-extrabold text-zinc-100">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/15 shadow-[0_0_20px_rgba(14,165,233,0.2)]">
+                  <Shield className="h-5 w-5 text-sky-400" />
+                </div>
+                Moderations-Panel
+              </h1>
+              <p className="mt-1.5 text-sm text-zinc-500">
+                Eingeloggt als <strong className="text-zinc-300">{modUsername}</strong>
+                {isAdminUser && (
+                  <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                    Admin
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={refresh} disabled={refreshing}
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                Aktualisieren
+              </button>
+              <Link
+                href="/"
+                onMouseEnter={sound.hover}
+                onClick={sound.click}
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Zurück
+              </Link>
+            </div>
           </div>
-          <Link href="/" onMouseEnter={sound.hover} onClick={sound.click}
-            className="flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-zinc-200">
-            <LogOut className="h-3.5 w-3.5" />Zurück
-          </Link>
         </div>
 
-        <div className="mb-6 flex gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-1">
+        {/* Tab bar */}
+        <div className="mb-6 flex gap-1 rounded-2xl border border-white/8 bg-black/30 p-1">
           {tabs.filter((t) => t.show).map((t) => (
-            <button key={t.id} onMouseEnter={sound.hover}
+            <button
+              key={t.id}
+              onMouseEnter={sound.hover}
               onClick={() => { sound.click(); setActiveTab(t.id); }}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-all ${
-                activeTab === t.id ? "bg-sky-500/20 text-sky-200 shadow-[0_0_12px_rgba(14,165,233,0.2)]" : "text-zinc-500 hover:text-zinc-200"
+              className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition-all ${
+                activeTab === t.id
+                  ? "bg-sky-500/20 text-sky-200 shadow-[0_0_16px_rgba(14,165,233,0.2)]"
+                  : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
               }`}
             >
-              <t.icon className="h-3.5 w-3.5" />
+              <t.Icon className="h-3.5 w-3.5 shrink-0" />
               <span className="hidden sm:inline">{t.label}</span>
+              {t.id === "tickets" && openTicketsCount > 0 && (
+                <span className="absolute right-1.5 top-1.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-purple-500 px-0.5 text-[9px] font-black text-white">
+                  {openTicketsCount > 9 ? "9+" : openTicketsCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
-        {activeTab === "overview" && <OverviewTab users={users} tickets={tickets} perms={permissions} myActions={myActions} />}
-        {activeTab === "users" && <UsersTab users={users} perms={permissions} onRefresh={refresh} />}
+        {/* Content */}
+        {activeTab === "overview" && (
+          <OverviewTab users={users} tickets={tickets} perms={permissions} myActions={myActions} />
+        )}
+        {activeTab === "users" && (
+          <UsersTab users={users} perms={permissions} onRefresh={refresh} />
+        )}
         {activeTab === "tickets" && (
-          <TicketsTab tickets={tickets} perms={permissions} onRefresh={refresh}
-            openTicketId={deepOpenTicketId} onTicketOpened={() => setDeepOpenTicketId(null)} />
+          <TicketsTab
+            tickets={tickets} perms={permissions} onRefresh={refresh}
+            openTicketId={deepOpenTicketId} onTicketOpened={() => setDeepOpenTicketId(null)}
+          />
         )}
         {activeTab === "actions" && (
           <div className="flex flex-col gap-4">
-            <h3 className="text-sm font-bold text-zinc-300">Alle Moderations-Aktionen</h3>
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-sky-400" />
+              <h3 className="text-sm font-bold text-zinc-300">Alle Moderations-Aktionen</h3>
+              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">
+                {recentActions.length}
+              </span>
+            </div>
             <ActionLog actions={recentActions} />
           </div>
         )}

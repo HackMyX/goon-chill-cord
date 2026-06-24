@@ -417,6 +417,28 @@ export async function modRemoveWarning(
   } catch (e) { return { success: false, error: String(e) }; }
 }
 
+export async function getModUserHistory(userId: string): Promise<ModActionRow[]> {
+  await requireMod();
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("mod_actions")
+    .select("id, mod_id, target_user_id, action_type, reason, details, expires_at, created_at")
+    .eq("target_user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (!data || data.length === 0) return [];
+  const modIds = Array.from(new Set(data.map((r) => r.mod_id)));
+  const { data: profiles } = await admin.from("profiles").select("id, username").in("id", modIds);
+  const byId = new Map((profiles ?? []).map((p) => [p.id, p.username as string | null]));
+  return data.map((r) => ({
+    id: r.id, modId: r.mod_id, modUsername: byId.get(r.mod_id) ?? null,
+    targetUserId: r.target_user_id, targetUsername: null,
+    actionType: r.action_type as ModActionRow["actionType"],
+    reason: r.reason, details: r.details as Record<string, unknown> | null,
+    expiresAt: r.expires_at, createdAt: r.created_at,
+  }));
+}
+
 export async function modAddCredits(
   targetUserId: string,
   amount: number,
