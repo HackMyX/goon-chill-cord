@@ -1541,10 +1541,14 @@ export function JacketVariant({
 
 const SKIN = "#caa472";
 
+// Pants height changed from 1.0 → 0.86, center y from -0.5 → -0.43 (hip-local).
+// Previously the pants bottom landed exactly at character-local y=0 (the ground),
+// same level as the shoe group, so the legs visually pierced through the feet.
+// Now the bottom sits at character-local y=0.14, leaving the shoe clearly visible below.
 function SkinnyPants({ color }: { color: string }) {
   return (
-    <mesh position={[0, -0.5, 0]}>
-      <boxGeometry args={[0.24, 1, 0.24]} />
+    <mesh position={[0, -0.43, 0]}>
+      <boxGeometry args={[0.24, 0.86, 0.24]} />
       <meshStandardMaterial color={color} />
     </mesh>
   );
@@ -1552,8 +1556,8 @@ function SkinnyPants({ color }: { color: string }) {
 
 function BaggyPants({ color }: { color: string }) {
   return (
-    <mesh position={[0, -0.5, 0]}>
-      <boxGeometry args={[0.34, 1, 0.32]} />
+    <mesh position={[0, -0.43, 0]}>
+      <boxGeometry args={[0.34, 0.86, 0.32]} />
       <meshStandardMaterial color={color} />
     </mesh>
   );
@@ -1566,8 +1570,11 @@ function ShortsPants({ color }: { color: string }) {
         <boxGeometry args={[0.28, 0.55, 0.28]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0, -0.85, 0]}>
-        <boxGeometry args={[0.22, 0.5, 0.22]} />
+      {/* Bare-leg section below shorts — was height=0.5 at y=-0.85 which
+          put the bottom at character-local y=-0.10, through the floor.
+          Shortened so it stops at character-local ≈0.07 (above ground). */}
+      <mesh position={[0, -0.79, 0]}>
+        <boxGeometry args={[0.22, 0.26, 0.22]} />
         <meshStandardMaterial color={SKIN} />
       </mesh>
     </group>
@@ -1577,12 +1584,12 @@ function ShortsPants({ color }: { color: string }) {
 function StripedPants({ color }: { color: string }) {
   return (
     <group>
-      <mesh position={[0, -0.5, 0]}>
-        <boxGeometry args={[0.28, 1, 0.28]} />
+      <mesh position={[0, -0.43, 0]}>
+        <boxGeometry args={[0.28, 0.86, 0.28]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      <mesh position={[0.15, -0.5, 0]}>
-        <boxGeometry args={[0.03, 1, 0.29]} />
+      <mesh position={[0.15, -0.43, 0]}>
+        <boxGeometry args={[0.03, 0.86, 0.29]} />
         <meshStandardMaterial color="#f5f5f5" emissive="#f5f5f5" emissiveIntensity={0.2} />
       </mesh>
     </group>

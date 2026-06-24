@@ -576,11 +576,12 @@ function hashSeed(name: string): number {
 }
 
 /** Bare-legs fallback when no pants are equipped — keeps the silhouette
- * intact instead of leaving a gap. */
+ * intact instead of leaving a gap. Same height/center fix as PantsVariants:
+ * stops at character-local y=0.14 so bare feet remain visible below. */
 function SkinnyFallbackLeg() {
   return (
-    <mesh position={[0, -0.5, 0]}>
-      <boxGeometry args={[0.26, 1, 0.26]} />
+    <mesh position={[0, -0.43, 0]}>
+      <boxGeometry args={[0.26, 0.86, 0.26]} />
       <meshStandardMaterial color={SKIN} />
     </mesh>
   );

@@ -13,6 +13,7 @@ import { getSiteConfig } from "@/lib/actions/site-config";
 import { getPetConfigs } from "@/lib/actions/pets";
 import { PatchnotePopupLoader } from "@/components/layout/patchnote-popup-loader";
 import { GlobalBroadcast } from "@/components/global/global-broadcast";
+import { GenderGate } from "@/components/auth/gender-gate";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -65,6 +66,7 @@ export default async function RootLayout({
           </PetConfigProvider>
         </SiteConfigProvider>
         <GlobalBroadcast />
+        <GenderGate />
         <SupportButton />
         <PatchnotePopupLoader />
       </body>
