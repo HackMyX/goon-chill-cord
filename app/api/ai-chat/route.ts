@@ -414,7 +414,10 @@ function classifyGeminiError(e: unknown): "expired" | "invalid_key" | "quota" | 
   const raw = (e instanceof Error ? e.message : String(e));
   const msg = raw.toLowerCase();
 
-  if (msg.includes("expired") || msg.includes("api key expired")) return "expired";
+  // Expired key — check before generic "invalid" for a more specific message
+  if (msg.includes("api key expired") || (msg.includes("expired") && msg.includes("api"))) return "expired";
+
+  // Invalid / unauthorized key
   if (
     msg.includes("api_key_invalid") ||
     msg.includes("api key not valid") ||
@@ -424,12 +427,19 @@ function classifyGeminiError(e: unknown): "expired" | "invalid_key" | "quota" | 
     msg.includes("401") ||
     msg.includes("403")
   ) return "invalid_key";
+
+  // True rate-limit / quota — precise patterns only to avoid false positives
   if (
     msg.includes("429") ||
     msg.includes("too many requests") ||
     msg.includes("resource_exhausted") ||
-    msg.includes("quota")
+    msg.includes("rate limit") ||
+    msg.includes("quota exceeded") ||
+    msg.includes("daily limit") ||
+    msg.includes("per day")
   ) return "quota";
+
+  // Overloaded / temporary unavailable
   if (
     msg.includes("503") ||
     msg.includes("502") ||
@@ -437,7 +447,10 @@ function classifyGeminiError(e: unknown): "expired" | "invalid_key" | "quota" | 
     msg.includes("high demand") ||
     msg.includes("overloaded")
   ) return "transient";
+
+  // Safety block
   if (msg.includes("safety") || msg.includes("blocked")) return "safety";
+
   return "other";
 }
 
@@ -595,26 +608,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply, actionLog });
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
-    console.error("AI chat error:", raw);
-
     const kind = classifyGeminiError(e);
+    // Log full error for Vercel Function Logs diagnosis
+    console.error(`[ai-chat] kind=${kind} error=${raw}`);
+
     let userMsg: string;
 
     switch (kind) {
       case "expired":
         userMsg =
           "Der Gemini API-Schlüssel ist abgelaufen. " +
-          "Bitte im Admin-Panel → KI-Assistent einen neuen Schlüssel eintragen.";
+          "Bitte im Admin-Panel → KI-Assistent → Schlüssel testen, dann einen neuen Schlüssel eintragen.";
         break;
       case "invalid_key":
         userMsg =
           "Der Gemini API-Schlüssel ist ungültig. " +
-          "Bitte im Admin-Panel → KI-Assistent einen gültigen Schlüssel eintragen.";
+          "Bitte im Admin-Panel → KI-Assistent → Schlüssel testen um den genauen Fehler zu sehen.";
         break;
       case "quota":
         userMsg =
-          "Das KI-Tageslimit ist erreicht. " +
-          "Bitte versuche es in einigen Stunden erneut oder nutze einen API-Schlüssel mit größerem Kontingent.";
+          "Das KI-Tageslimit ist erreicht (RESOURCE_EXHAUSTED). " +
+          "Bitte morgen erneut versuchen oder im Admin-Panel einen Schlüssel mit größerem Kontingent (Paid-Tier) eintragen.";
         break;
       case "transient":
         userMsg = "Der KI-Dienst ist momentan überlastet. Bitte versuche es in 30 Sekunden erneut.";
@@ -623,7 +637,9 @@ export async function POST(req: NextRequest) {
         userMsg = "Diese Anfrage wurde aus Sicherheitsgründen blockiert. Bitte formuliere sie anders.";
         break;
       default:
-        userMsg = "Der KI-Assistent ist gerade nicht erreichbar. Bitte versuche es in einer Minute erneut.";
+        userMsg =
+          "KI-Fehler: " + raw.slice(0, 200) +
+          " — Bitte im Admin-Panel → KI-Assistent → Schlüssel testen für Details.";
     }
 
     return NextResponse.json({ error: userMsg }, { status: 500 });

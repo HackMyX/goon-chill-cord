@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { KeyRound, CheckCircle2, AlertCircle, RefreshCw, Eye, EyeOff, Sparkles } from "lucide-react";
+import { KeyRound, CheckCircle2, AlertCircle, RefreshCw, Eye, EyeOff, Sparkles, FlaskConical } from "lucide-react";
 import { getAiConfigStatus, updateAiApiKey } from "@/lib/actions/ai-config";
 
 type KeySource = "db" | "env" | "none";
@@ -12,11 +12,23 @@ interface StatusState {
   maskedKey: string | null;
 }
 
+interface TestResult {
+  ok: boolean;
+  source?: string;
+  maskedKey?: string | null;
+  model?: string;
+  reply?: string;
+  error?: string;
+  rawError?: string | null;
+}
+
 export function AiConfigEditor() {
   const [status, setStatus] = useState<StatusState | null>(null);
   const [inputKey, setInputKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testing, setTesting] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -26,6 +38,7 @@ export function AiConfigEditor() {
   function handleSave() {
     if (!inputKey.trim()) return;
     setFeedback(null);
+    setTestResult(null);
     startTransition(async () => {
       const res = await updateAiApiKey(inputKey.trim());
       if (res.success) {
@@ -41,6 +54,7 @@ export function AiConfigEditor() {
 
   function handleClear() {
     setFeedback(null);
+    setTestResult(null);
     startTransition(async () => {
       const res = await updateAiApiKey("");
       if (res.success) {
@@ -53,10 +67,24 @@ export function AiConfigEditor() {
     });
   }
 
+  async function handleTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/ai-test-key");
+      const data = await res.json() as TestResult;
+      setTestResult(data);
+    } catch {
+      setTestResult({ ok: false, error: "Verbindungsfehler beim Test." });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   const sourceLabel: Record<KeySource, string> = {
-    db: "Datenbank",
-    env: ".env.local",
-    none: "Kein Schlüssel",
+    db: "Datenbank (DB-Schlüssel aktiv)",
+    env: "Umgebungsvariable (kein DB-Schlüssel gesetzt)",
+    none: "Kein Schlüssel konfiguriert",
   };
 
   const sourceColor: Record<KeySource, string> = {
@@ -88,14 +116,14 @@ export function AiConfigEditor() {
               <span className="text-zinc-500 italic">nicht konfiguriert</span>
             )}
             <span className={`ml-auto text-xs font-semibold ${sourceColor[status.source]}`}>
-              Quelle: {sourceLabel[status.source]}
+              {sourceLabel[status.source]}
             </span>
           </div>
         )}
       </div>
 
-      {/* Input */}
-      <div className="mb-3 flex gap-2">
+      {/* Input row */}
+      <div className="mb-2 flex gap-2">
         <div className="relative flex-1">
           <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
           <input
@@ -132,21 +160,66 @@ export function AiConfigEditor() {
         )}
       </div>
 
-      <p className="mb-3 text-[11px] text-zinc-500">
-        Neuen Schlüssel unter{" "}
-        <span className="font-mono text-zinc-400">aistudio.google.com</span> generieren.
-        Gespeicherte Schlüssel überschreiben <span className="font-mono text-zinc-400">GEMINI_API_KEY</span> aus der .env.
-      </p>
-
-      {/* Feedback */}
-      {feedback && (
-        <div
-          className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${
-            feedback.ok
-              ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-              : "border border-red-500/30 bg-red-500/10 text-red-300"
-          }`}
+      {/* Test button row */}
+      <div className="mb-3 flex items-center gap-3">
+        <button
+          onClick={handleTest}
+          disabled={testing || !status?.hasKey}
+          className="flex items-center gap-1.5 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
+          {testing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
+          Schlüssel testen
+        </button>
+        <p className="text-[11px] text-zinc-500">
+          Neuer Schlüssel unter{" "}
+          <span className="font-mono text-zinc-400">aistudio.google.com</span> generieren.
+          DB-Schlüssel hat Vorrang vor <span className="font-mono text-zinc-400">GEMINI_API_KEY</span>.
+        </p>
+      </div>
+
+      {/* Test result */}
+      {testResult && (
+        <div className={`mb-3 rounded-xl border px-4 py-3 text-xs ${
+          testResult.ok
+            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+            : "border-red-500/30 bg-red-500/10 text-red-300"
+        }`}>
+          {testResult.ok ? (
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div>
+                <p className="font-bold">Schlüssel funktioniert!</p>
+                <p className="mt-0.5 text-emerald-400/80">
+                  Modell: {testResult.model} · Antwort: „{testResult.reply}"
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div>
+                <p className="font-bold">{testResult.error}</p>
+                {testResult.rawError && (
+                  <p className="mt-1 font-mono text-[10px] break-all text-red-400/80">
+                    {testResult.rawError}
+                  </p>
+                )}
+                <p className="mt-1 text-red-400/60">
+                  Quelle: {testResult.source ?? "?"} · Schlüssel: {testResult.maskedKey ?? "(keiner)"}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Save feedback */}
+      {feedback && (
+        <div className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${
+          feedback.ok
+            ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+            : "border border-red-500/30 bg-red-500/10 text-red-300"
+        }`}>
           {feedback.ok ? (
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           ) : (
