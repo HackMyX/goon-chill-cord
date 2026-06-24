@@ -6,6 +6,7 @@ import { isModerator, isAdmin } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
 import {
   DEFAULT_MOD_PERMISSIONS,
+  ADMIN_MOD_PERMISSIONS,
   type ModPermissions,
   type ModActionRow,
   type ModUserSummary,
@@ -23,7 +24,8 @@ async function requireMod() {
   if (!user) throw new Error("Nicht eingeloggt");
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (!isModerator(profile)) throw new Error("Keine Moderator-Berechtigung");
-  return { user, profile, supabase };
+  const isAdminUser = isAdmin(profile);
+  return { user, profile, supabase, isAdminUser };
 }
 
 async function requireAdmin() {
@@ -33,6 +35,12 @@ async function requireAdmin() {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (!isAdmin(profile)) throw new Error("Keine Admin-Berechtigung");
   return { user, profile, supabase };
+}
+
+// Returns full admin permissions for admins, DB-stored perms for mods.
+async function effectivePerms(isAdminUser: boolean): Promise<ModPermissions> {
+  if (isAdminUser) return ADMIN_MOD_PERMISSIONS;
+  return getModPermissions();
 }
 
 // ---------------------------------------------------------------------------
@@ -276,8 +284,8 @@ export async function modMarkInProgress(
   ticketId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canCloseTickets) return { success: false, error: "Keine Berechtigung." };
     const admin = createAdminClient();
     const [ticketRes] = await Promise.all([
@@ -299,8 +307,8 @@ export async function modReplyToTicket(
   message: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canCloseTickets) return { success: false, error: "Keine Berechtigung." };
     if (!message.trim()) return { success: false, error: "Nachricht darf nicht leer sein." };
     const admin = createAdminClient();
@@ -335,8 +343,8 @@ export async function modWarnUser(
   reason: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canWarnUsers) return { success: false, error: "Keine Berechtigung zum Verwarnen." };
     if (perms.warnRequiresReason && !reason.trim()) return { success: false, error: "Begründung erforderlich." };
     const admin = createAdminClient();
@@ -361,8 +369,8 @@ export async function modAddNote(
   note: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canWarnUsers) return { success: false, error: "Keine Berechtigung." };
     const admin = createAdminClient();
     const { error } = await admin.from("mod_actions").insert({
@@ -380,8 +388,8 @@ export async function modTempBan(
   reason: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canTempBanUsers) return { success: false, error: "Keine Berechtigung für Temp-Bans." };
     const cappedHours = Math.min(hours, perms.maxTempBanHours);
     const expiresAt = new Date(Date.now() + cappedHours * 3_600_000).toISOString();
@@ -413,8 +421,8 @@ export async function modLiftBan(
   targetUserId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canTempBanUsers) return { success: false, error: "Keine Berechtigung." };
     const admin = createAdminClient();
     const [actionRes, liftRes] = await Promise.all([
@@ -435,8 +443,8 @@ export async function modCloseTicket(
   reason: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canCloseTickets) return { success: false, error: "Keine Berechtigung zum Schließen." };
     const admin = createAdminClient();
     const { data: ticket } = await admin.from("tickets").select("user_id").eq("id", ticketId).single();
@@ -491,8 +499,8 @@ export async function modRemoveWarning(
   warningId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canWarnUsers) return { success: false, error: "Keine Berechtigung." };
     const admin = createAdminClient();
     const { data: warning, error: fetchErr } = await admin
@@ -542,8 +550,8 @@ export async function modAddCredits(
   reason: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canAddCredits) return { success: false, error: "Keine Berechtigung." };
     if (amount === 0) return { success: false, error: "Betrag darf nicht 0 sein." };
     const admin = createAdminClient();
@@ -581,8 +589,8 @@ export async function modDeleteTicket(
   ticketId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canDeleteTickets) return { success: false, error: "Keine Berechtigung zum Löschen." };
     const admin = createAdminClient();
     await admin.from("ticket_messages").delete().eq("ticket_id", ticketId);
@@ -602,8 +610,8 @@ export async function modSetTicketPriority(
   priority: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireMod();
-    const perms = await getModPermissions();
+    const { isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canSetTicketPriority) return { success: false, error: "Keine Berechtigung." };
     const admin = createAdminClient();
     const { error } = await admin.from("tickets").update({ priority, updated_at: new Date().toISOString() }).eq("id", ticketId);
@@ -617,8 +625,8 @@ export async function modUpdateTicketStatus(
   status: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canUpdateTicketStatus) return { success: false, error: "Keine Berechtigung." };
     const admin = createAdminClient();
     const isClosing = status === "closed" || status === "resolved";
@@ -648,8 +656,8 @@ export async function modGrantTicketReward(
   opts: { credits?: number; note?: string }
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireMod();
-    const perms = await getModPermissions();
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser);
     if (!perms.canRewardTickets) return { success: false, error: "Keine Berechtigung für Ticketbelohnungen." };
     const admin = createAdminClient();
     const { data: ticket } = await admin.from("tickets").select("user_id, subject").eq("id", ticketId).single();

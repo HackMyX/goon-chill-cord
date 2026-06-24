@@ -20,6 +20,7 @@ import {
   modDeleteTicket, modSetTicketPriority, modUpdateTicketStatus, modGrantTicketReward,
 } from "@/lib/actions/mod";
 import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage } from "@/lib/mod";
+import { ADMIN_MOD_PERMISSIONS } from "@/lib/mod";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1029,6 +1030,43 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
 // Tickets Tab
 // ---------------------------------------------------------------------------
 
+const TICKET_STATUS_CONFIG = [
+  {
+    key: "open",
+    label: "Offen",
+    dot: "bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]",
+    badge: "bg-purple-500/20 text-purple-300",
+    heading: "text-zinc-200",
+    empty: "Keine offenen Tickets. Alles erledigt!",
+  },
+  {
+    key: "in_progress",
+    label: "In Bearbeitung",
+    dot: "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]",
+    badge: "bg-amber-500/20 text-amber-300",
+    heading: "text-zinc-200",
+    empty: "Keine Tickets in Bearbeitung.",
+  },
+  {
+    key: "resolved",
+    label: "Gelöst",
+    dot: "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]",
+    badge: "bg-emerald-500/20 text-emerald-300",
+    heading: "text-zinc-300",
+    empty: "Keine gelösten Tickets.",
+  },
+  {
+    key: "closed",
+    label: "Geschlossen",
+    dot: "bg-zinc-600",
+    badge: "bg-zinc-700/50 text-zinc-500",
+    heading: "text-zinc-500",
+    empty: "",
+  },
+] as const;
+
+type TicketStatusFilter = "open" | "in_progress" | "resolved" | "closed" | "all";
+
 function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }: {
   tickets: ModTicket[];
   perms: ModPermissions;
@@ -1036,56 +1074,112 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
   openTicketId?: string | null;
   onTicketOpened?: () => void;
 }) {
+  const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>(() => {
+    if (openTicketId) return "all";
+    return "open";
+  });
+
   useEffect(() => {
     if (openTicketId) onTicketOpened?.();
   }, [openTicketId, onTicketOpened]);
 
-  const open = tickets.filter((t) => t.status === "open" || t.status === "in_progress");
-  const closed = tickets.filter((t) => t.status === "closed");
+  const countByStatus = {
+    open: tickets.filter((t) => t.status === "open").length,
+    in_progress: tickets.filter((t) => t.status === "in_progress").length,
+    resolved: tickets.filter((t) => t.status === "resolved").length,
+    closed: tickets.filter((t) => t.status === "closed").length,
+  };
+  const totalActive = countByStatus.open + countByStatus.in_progress;
+
+  const filterButtons: Array<{ key: TicketStatusFilter; label: string; count?: number }> = [
+    { key: "all", label: `Alle (${tickets.length})` },
+    { key: "open", label: `Offen`, count: countByStatus.open },
+    { key: "in_progress", label: `In Bearb.`, count: countByStatus.in_progress },
+    { key: "resolved", label: `Gelöst`, count: countByStatus.resolved },
+    { key: "closed", label: `Geschlossen`, count: countByStatus.closed },
+  ];
+
+  const visibleStatuses = statusFilter === "all"
+    ? TICKET_STATUS_CONFIG.map((s) => s.key)
+    : [statusFilter];
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Open tickets */}
-      <div>
-        <div className="mb-3 flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]" />
-          <h3 className="text-sm font-bold text-zinc-200">Offene Tickets</h3>
-          <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
-            {open.length}
+    <div className="flex flex-col gap-4">
+      {/* Status filter bar */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {filterButtons.map(({ key, label, count }) => {
+          const active = statusFilter === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setStatusFilter(key)}
+              className={`flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
+                active
+                  ? "border-sky-500/40 bg-sky-500/15 text-sky-200"
+                  : "border-white/8 bg-white/[0.02] text-zinc-500 hover:border-white/20 hover:text-zinc-300"
+              }`}
+            >
+              {label}
+              {count !== undefined && count > 0 && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+                  active ? "bg-sky-500/30 text-sky-200" : "bg-white/10 text-zinc-400"
+                }`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+        {totalActive > 0 && statusFilter !== "open" && statusFilter !== "in_progress" && statusFilter !== "all" && (
+          <span className="ml-auto text-[11px] text-amber-400">
+            {totalActive} aktiv
           </span>
-        </div>
-        {open.length === 0 ? (
-          <div className="rounded-2xl border border-white/5 bg-white/[0.02] py-12 text-center">
-            <Ticket className="mx-auto mb-2 h-8 w-8 text-zinc-700" />
-            <p className="text-sm text-zinc-600">Keine offenen Tickets. Alles erledigt!</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {open.map((t) => (
-              <TicketItem
-                key={t.id} t={t} perms={perms} onRefresh={onRefresh}
-                defaultOpen={openTicketId === t.id}
-              />
-            ))}
-          </div>
         )}
       </div>
 
-      {/* Closed tickets */}
-      {closed.length > 0 && (
-        <div>
-          <div className="mb-3 flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-zinc-600" />
-            <h3 className="text-sm font-bold text-zinc-500">Geschlossene Tickets</h3>
-            <span className="rounded-full bg-zinc-700/50 px-2 py-0.5 text-[10px] font-bold text-zinc-600">
-              {closed.length}
-            </span>
+      {/* Ticket sections per status */}
+      {TICKET_STATUS_CONFIG.filter((s) => visibleStatuses.includes(s.key)).map((cfg) => {
+        const group = tickets.filter((t) => t.status === cfg.key);
+        if (statusFilter !== "all" && group.length === 0 && cfg.empty === "") return null;
+        return (
+          <div key={cfg.key}>
+            <div className="mb-2 flex items-center gap-2">
+              <div className={`h-2 w-2 rounded-full ${cfg.dot}`} />
+              <h3 className={`text-sm font-bold ${cfg.heading}`}>{cfg.label}</h3>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${cfg.badge}`}>
+                {group.length}
+              </span>
+            </div>
+            {group.length === 0 ? (
+              cfg.empty ? (
+                <div className="rounded-2xl border border-white/5 bg-white/[0.02] py-8 text-center">
+                  <Ticket className="mx-auto mb-2 h-7 w-7 text-zinc-700" />
+                  <p className="text-sm text-zinc-600">{cfg.empty}</p>
+                </div>
+              ) : null
+            ) : (
+              <div className="flex flex-col gap-2">
+                {(cfg.key === "closed" ? group.slice(0, 30) : group).map((t) => (
+                  <TicketItem
+                    key={t.id} t={t} perms={perms} onRefresh={onRefresh}
+                    defaultOpen={openTicketId === t.id}
+                  />
+                ))}
+                {cfg.key === "closed" && group.length > 30 && (
+                  <p className="text-center text-[11px] text-zinc-600">
+                    + {group.length - 30} weitere geschlossene Tickets
+                  </p>
+                )}
+              </div>
+            )}
           </div>
-          <div className="flex flex-col gap-2">
-            {closed.slice(0, 20).map((t) => (
-              <TicketItem key={t.id} t={t} perms={perms} onRefresh={onRefresh} />
-            ))}
-          </div>
+        );
+      })}
+
+      {tickets.length === 0 && (
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] py-16 text-center">
+          <Ticket className="mx-auto mb-3 h-10 w-10 text-zinc-700" />
+          <p className="text-sm font-semibold text-zinc-500">Keine Tickets vorhanden.</p>
         </div>
       )}
     </div>
@@ -1286,22 +1380,7 @@ interface ModShellProps {
   isAdminUser?: boolean;
 }
 
-const ADMIN_PERMS: ModPermissions = {
-  canViewTickets: true,
-  canCloseTickets: true,
-  canWarnUsers: true,
-  canTempBanUsers: true,
-  canViewUserDetails: true,
-  canViewAuditLog: true,
-  canAddCredits: true,
-  warnRequiresReason: false,
-  maxTempBanHours: 8760,
-  canClearChat: true,
-  canDeleteTickets: true,
-  canSetTicketPriority: true,
-  canUpdateTicketStatus: true,
-  canRewardTickets: true,
-};
+const ADMIN_PERMS = ADMIN_MOD_PERMISSIONS;
 
 function ModShellInner({
   modUsername, credits, streakDays, permissions: rawPerms,

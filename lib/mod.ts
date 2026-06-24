@@ -40,6 +40,23 @@ export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
   canRewardTickets: false,
 };
 
+export const ADMIN_MOD_PERMISSIONS: ModPermissions = {
+  canViewTickets: true,
+  canCloseTickets: true,
+  canWarnUsers: true,
+  canTempBanUsers: true,
+  canViewUserDetails: true,
+  canViewAuditLog: true,
+  canAddCredits: true,
+  maxTempBanHours: 8760,
+  warnRequiresReason: false,
+  canClearChat: true,
+  canDeleteTickets: true,
+  canSetTicketPriority: true,
+  canUpdateTicketStatus: true,
+  canRewardTickets: true,
+};
+
 export interface ChatConfig {
   enabled: boolean;
   messageCooldownSec: number;
