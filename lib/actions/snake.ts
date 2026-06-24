@@ -130,6 +130,10 @@ export async function updateSnakeConfig(
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(v)));
 
+  function sanitizeGameLimit(v: number | null | undefined) {
+    return (v !== null && v !== undefined) ? Math.max(1, Math.round(v)) : null;
+  }
+
   const sanitizedX1: SnakeModeConfig = {
     enabled: input.x1.enabled,
     boardSize: clamp(input.x1.boardSize, 10, 50),
@@ -139,6 +143,7 @@ export async function updateSnakeConfig(
     minSpeedMs: clamp(input.x1.minSpeedMs, 30, 500),
     wallWrap: input.x1.wallWrap,
     dailyCrLimit: input.x1.dailyCrLimit !== null ? Math.max(1, Math.round(input.x1.dailyCrLimit)) : null,
+    dailyGameLimit: sanitizeGameLimit(input.x1.dailyGameLimit),
     bonusEveryN: clamp(input.x1.bonusEveryN, 1, 100),
     bonusCrFlat: Math.max(0, Math.round(input.x1.bonusCrFlat)),
     bonusMultiplierApples: Math.max(0, Math.round(input.x1.bonusMultiplierApples)),
@@ -159,6 +164,7 @@ export async function updateSnakeConfig(
     minSpeedMs: clamp(input.x2.minSpeedMs, 20, 500),
     wallWrap: input.x2.wallWrap,
     dailyCrLimit: input.x2.dailyCrLimit !== null ? Math.max(1, Math.round(input.x2.dailyCrLimit)) : null,
+    dailyGameLimit: sanitizeGameLimit(input.x2.dailyGameLimit),
     bonusEveryN: clamp(input.x2.bonusEveryN, 1, 100),
     bonusCrFlat: Math.max(0, Math.round(input.x2.bonusCrFlat)),
     bonusMultiplierApples: Math.max(0, Math.round(input.x2.bonusMultiplierApples)),
@@ -179,6 +185,7 @@ export async function updateSnakeConfig(
     minSpeedMs: clamp(input.grind.minSpeedMs, 30, 500),
     wallWrap: false, // grind always has walls
     dailyCrLimit: input.grind.dailyCrLimit !== null ? Math.max(1, Math.round(input.grind.dailyCrLimit)) : null,
+    dailyGameLimit: sanitizeGameLimit(input.grind.dailyGameLimit),
     bonusEveryN: clamp(input.grind.bonusEveryN, 1, 100),
     bonusCrFlat: Math.max(0, Math.round(input.grind.bonusCrFlat)),
     bonusMultiplierApples: Math.max(0, Math.round(input.grind.bonusMultiplierApples)),
@@ -193,13 +200,34 @@ export async function updateSnakeConfig(
     bonusCrPerShrink: Math.max(0, Math.round(input.grind.bonusCrPerShrink)),
   };
 
+  const sanitizedFarm: SnakeModeConfig = {
+    enabled: input.farm.enabled,
+    boardSize: clamp(input.farm.boardSize, 10, 50),
+    creditsPerApple: clamp(input.farm.creditsPerApple, 1, 10000),
+    initialSpeedMs: clamp(input.farm.initialSpeedMs, 30, 1000),
+    speedIncreasePerApple: Math.max(0, input.farm.speedIncreasePerApple),
+    minSpeedMs: clamp(input.farm.minSpeedMs, 20, 500),
+    wallWrap: input.farm.wallWrap,
+    dailyCrLimit: input.farm.dailyCrLimit !== null ? Math.max(1, Math.round(input.farm.dailyCrLimit)) : null,
+    dailyGameLimit: sanitizeGameLimit(input.farm.dailyGameLimit),
+    bonusEveryN: clamp(input.farm.bonusEveryN, 0, 100),
+    bonusCrFlat: Math.max(0, Math.round(input.farm.bonusCrFlat)),
+    bonusMultiplierApples: Math.max(0, Math.round(input.farm.bonusMultiplierApples)),
+    goldenAppleEnabled: input.farm.goldenAppleEnabled,
+    goldenAppleCrMultiplier: Math.max(1, input.farm.goldenAppleCrMultiplier),
+    goldenAppleLifeApples: Math.max(1, Math.round(input.farm.goldenAppleLifeApples)),
+    startLength: clamp(input.farm.startLength, 1, 15),
+    particlesEnabled: input.farm.particlesEnabled,
+    leaderboardSize: clamp(input.farm.leaderboardSize, 5, 100),
+  };
+
   const admin = createAdminClient();
   const { error } = await admin.from("snake_config").upsert({
     id: "default",
     enabled: input.enabled,
     section_title: input.sectionTitle?.trim() || DEFAULT_SNAKE_CONFIG.sectionTitle,
     section_subtitle: input.sectionSubtitle?.trim() || DEFAULT_SNAKE_CONFIG.sectionSubtitle,
-    modes_config: { x1: sanitizedX1, x2: sanitizedX2, grind: sanitizedGrind },
+    modes_config: { x1: sanitizedX1, x2: sanitizedX2, grind: sanitizedGrind, farm: sanitizedFarm },
     // Keep legacy columns updated for any existing external reads
     board_size: sanitizedX1.boardSize,
     credits_per_apple_x1: sanitizedX1.creditsPerApple,
@@ -273,6 +301,28 @@ export async function submitSnakeScore(
 
     const remaining = Math.max(0, modeCfg.dailyCrLimit - earnedToday);
     actualCredits = Math.min(creditsEarned, remaining);
+  }
+
+  // Daily game limit check
+  if (modeCfg.dailyGameLimit !== null) {
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const { data: gameLogs } = await admin
+      .from("audit_logs")
+      .select("payload")
+      .eq("user_id", user.id)
+      .eq("action", "snake_earn")
+      .gte("created_at", todayStart.toISOString());
+    const gamesThisMode = (gameLogs ?? []).filter((row) => {
+      const p = row.payload as Record<string, unknown> | null;
+      return p?.speed_mode === speedMode;
+    }).length;
+    if (gamesThisMode >= modeCfg.dailyGameLimit) {
+      return {
+        success: false,
+        error: `Tageslimit von ${modeCfg.dailyGameLimit} Spielen (${speedMode}) erreicht. Komm morgen wieder!`,
+      };
+    }
   }
 
   // Server-side sanity cap: max possible CR ≈ score * creditsPerApple * multipliers
@@ -384,6 +434,27 @@ export async function getMySnakeBest(
   const grind = (data ?? []).find((r) => r.speed_mode === "grind")?.best_score ?? 0;
   const farm = (data ?? []).find((r) => r.speed_mode === "farm")?.best_score ?? 0;
   return { x1, x2, grind, farm };
+}
+
+export async function getDailyGamesPerMode(
+  userId: string
+): Promise<{ x1: number; x2: number; grind: number; farm: number }> {
+  const admin = createAdminClient();
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const { data } = await admin
+    .from("audit_logs")
+    .select("payload")
+    .eq("user_id", userId)
+    .eq("action", "snake_earn")
+    .gte("created_at", todayStart.toISOString());
+
+  const result = { x1: 0, x2: 0, grind: 0, farm: 0 };
+  for (const row of data ?? []) {
+    const mode = (row.payload as Record<string, unknown> | null)?.speed_mode as string | undefined;
+    if (mode === "x1" || mode === "x2" || mode === "grind" || mode === "farm") result[mode]++;
+  }
+  return result;
 }
 
 export async function getDailyCrEarned(userId: string): Promise<number> {

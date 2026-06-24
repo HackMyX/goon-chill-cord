@@ -9,6 +9,8 @@ export interface SnakeModeConfig {
   minSpeedMs: number;
   wallWrap: boolean;
   dailyCrLimit: number | null;
+  /** Max number of game sessions per day. null = no limit. */
+  dailyGameLimit: number | null;
   bonusEveryN: number;
   bonusCrFlat: number;
   bonusMultiplierApples: number;
@@ -45,6 +47,7 @@ export const DEFAULT_X1_CONFIG: SnakeModeConfig = {
   minSpeedMs: 60,
   wallWrap: true,
   dailyCrLimit: 5000,
+  dailyGameLimit: null,
   bonusEveryN: 10,
   bonusCrFlat: 50,
   bonusMultiplierApples: 5,
@@ -65,6 +68,7 @@ export const DEFAULT_X2_CONFIG: SnakeModeConfig = {
   minSpeedMs: 40,
   wallWrap: false,
   dailyCrLimit: 10000,
+  dailyGameLimit: null,
   bonusEveryN: 10,
   bonusCrFlat: 100,
   bonusMultiplierApples: 5,
@@ -85,6 +89,7 @@ export const DEFAULT_GRIND_CONFIG: SnakeGrindConfig = {
   minSpeedMs: 70,
   wallWrap: false,
   dailyCrLimit: 20000,
+  dailyGameLimit: null,
   bonusEveryN: 10,
   bonusCrFlat: 30,
   bonusMultiplierApples: 3,
@@ -108,6 +113,7 @@ export const DEFAULT_FARM_CONFIG: SnakeModeConfig = {
   minSpeedMs: 140,
   wallWrap: true,
   dailyCrLimit: 3000,
+  dailyGameLimit: 5,
   bonusEveryN: 0,
   bonusCrFlat: 0,
   bonusMultiplierApples: 0,

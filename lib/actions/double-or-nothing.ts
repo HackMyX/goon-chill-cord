@@ -16,6 +16,8 @@ export interface FlipResult {
   cooldownRemaining?: number;
   /** How many flips remain today after this one. */
   remainingFlips?: number;
+  /** How many flips remain in the current hour after this one. */
+  remainingHourlyFlips?: number;
 }
 
 export async function flipDouble(amount: number): Promise<FlipResult> {
@@ -64,6 +66,24 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
       }
     }
 
+    // Hourly limit check
+    if (config.hourlyFlipLimit !== null) {
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const { count: hourFlips } = await adminClient
+        .from("audit_logs")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("action", "double_or_nothing")
+        .gte("created_at", hourAgo.toISOString());
+      if ((hourFlips ?? 0) >= config.hourlyFlipLimit) {
+        return {
+          success: false,
+          error: `Stundenlimit von ${config.hourlyFlipLimit} Flips erreicht. Bitte warte etwas!`,
+          remainingHourlyFlips: 0,
+        };
+      }
+    }
+
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
     const { count: todayFlips } = await adminClient
@@ -108,15 +128,27 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   }
 
   let remainingFlips: number | undefined;
+  let remainingHourlyFlips: number | undefined;
   try {
     const todayStart2 = new Date();
     todayStart2.setUTCHours(0, 0, 0, 0);
-    const { count: usedAfter } = await adminClient
-      .from("audit_logs")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("action", "double_or_nothing")
-      .gte("created_at", todayStart2.toISOString());
+    const hourAgo2 = new Date(Date.now() - 60 * 60 * 1000);
+    const [{ count: usedAfter }, { count: usedHour }] = await Promise.all([
+      adminClient
+        .from("audit_logs")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("action", "double_or_nothing")
+        .gte("created_at", todayStart2.toISOString()),
+      config.hourlyFlipLimit !== null
+        ? adminClient
+            .from("audit_logs")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .eq("action", "double_or_nothing")
+            .gte("created_at", hourAgo2.toISOString())
+        : Promise.resolve({ count: 0 }),
+    ]);
 
     await adminClient.from("audit_logs").insert({
       user_id: user.id,
@@ -124,6 +156,9 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
       payload: { stake, won, newCredits: updatedRows[0].credits },
     });
     remainingFlips = Math.max(0, config.dailyFlipLimit - ((usedAfter ?? 0) + 1));
+    if (config.hourlyFlipLimit !== null) {
+      remainingHourlyFlips = Math.max(0, config.hourlyFlipLimit - ((usedHour ?? 0) + 1));
+    }
   } catch {
     // logging failed — ignore
   }
@@ -138,5 +173,5 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
     link: "/",
   });
 
-  return { success: true, won, amount: stake, newCredits: updatedRows[0].credits, remainingFlips };
+  return { success: true, won, amount: stake, newCredits: updatedRows[0].credits, remainingFlips, remainingHourlyFlips };
 }

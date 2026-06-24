@@ -9,6 +9,7 @@ import { DEFAULT_DON_CONFIG, type DonConfig } from "@/lib/don-config";
 interface DonConfigRow {
   enabled: boolean | null;
   daily_flip_limit: number | null;
+  hourly_flip_limit: number | null;
   cooldown_sec: number | null;
   win_chance: number | null;
   min_bet: number | null;
@@ -23,7 +24,7 @@ export async function getDonConfig(): Promise<DonConfig> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("don_config")
-    .select("enabled, daily_flip_limit, cooldown_sec, win_chance, min_bet, max_bet, quick_amounts, section_title, section_subtitle, show_remaining_spins")
+    .select("enabled, daily_flip_limit, hourly_flip_limit, cooldown_sec, win_chance, min_bet, max_bet, quick_amounts, section_title, section_subtitle, show_remaining_spins")
     .eq("id", "default")
     .maybeSingle();
 
@@ -33,6 +34,7 @@ export async function getDonConfig(): Promise<DonConfig> {
   return {
     enabled: row.enabled ?? def.enabled,
     dailyFlipLimit: typeof row.daily_flip_limit === "number" ? Math.max(1, row.daily_flip_limit) : def.dailyFlipLimit,
+    hourlyFlipLimit: typeof row.hourly_flip_limit === "number" ? Math.max(1, row.hourly_flip_limit) : null,
     cooldownSec: typeof row.cooldown_sec === "number" ? Math.max(0, row.cooldown_sec) : def.cooldownSec,
     winChance: typeof row.win_chance === "number" ? Math.min(1, Math.max(0, row.win_chance)) : def.winChance,
     minBet: typeof row.min_bet === "number" ? Math.max(1, row.min_bet) : def.minBet,
@@ -60,6 +62,7 @@ export async function updateDonConfig(
     id: "default",
     enabled: input.enabled,
     daily_flip_limit: Math.max(1, Math.round(input.dailyFlipLimit)),
+    hourly_flip_limit: input.hourlyFlipLimit !== null ? Math.max(1, Math.round(input.hourlyFlipLimit)) : null,
     cooldown_sec: Math.max(0, Math.round(input.cooldownSec)),
     win_chance: Math.min(1, Math.max(0, input.winChance)),
     min_bet: Math.max(1, Math.round(input.minBet)),
@@ -75,6 +78,19 @@ export async function updateDonConfig(
   revalidatePath("/");
   revalidatePath("/", "layout");
   return { success: true };
+}
+
+/** How many times has this user flipped in the last 60 minutes? */
+export async function getFlipsThisHour(userId: string): Promise<number> {
+  const admin = createAdminClient();
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const { count } = await admin
+    .from("audit_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("action", "double_or_nothing")
+    .gte("created_at", hourAgo.toISOString());
+  return count ?? 0;
 }
 
 /** How many times has this user flipped today (UTC)? For display purposes. */
