@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   MessageCircle,
@@ -76,7 +76,17 @@ const CATEGORY_META: Record<TicketCategory, { label: string; caption: string; ic
   },
 };
 
+// Suspense wrapper — useSearchParams() requires a Suspense boundary in Next.js App Router.
+// SupportButtonInner contains all the actual logic; SupportButton is the exported shell.
 export function SupportButton() {
+  return (
+    <Suspense fallback={null}>
+      <SupportButtonInner />
+    </Suspense>
+  );
+}
+
+function SupportButtonInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [visible, setVisible] = useState(false);

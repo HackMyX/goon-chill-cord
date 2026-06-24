@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -181,6 +182,7 @@ export default async function AdminPage() {
   });
 
   return (
+    <Suspense fallback={null}>
     <AdminShell
       credits={profile?.credits ?? 0}
       streakDays={profile?.streak_days ?? 0}
@@ -205,5 +207,6 @@ export default async function AdminPage() {
       snakeConfig={adminSnakeConfig}
       mineConfig={adminMineConfig}
     />
+    </Suspense>
   );
 }
