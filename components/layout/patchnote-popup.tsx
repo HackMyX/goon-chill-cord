@@ -55,7 +55,7 @@ export function PatchnotePopup({ note }: { note: PatchNote }) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center px-4"
+          className="fixed inset-0 z-[200] flex items-center justify-center px-4 py-4"
         >
           {/* Backdrop */}
           <div
@@ -69,12 +69,12 @@ export function PatchnotePopup({ note }: { note: PatchNote }) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.94, y: 20 }}
             transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
-            className={`relative w-full max-w-xl overflow-hidden rounded-2xl border shadow-[0_40px_130px_rgba(0,0,0,0.97)] ${meta.border} ${meta.glow}`}
+            className={`relative flex max-h-[90dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border shadow-[0_40px_130px_rgba(0,0,0,0.97)] ${meta.border} ${meta.glow}`}
             style={{ background: "linear-gradient(155deg, #0f0e1e 0%, #09080f 100%)" }}
           >
             {/* Animated top color strip */}
             <div
-              className={`absolute inset-x-0 top-0 h-[3px]`}
+              className={`absolute inset-x-0 top-0 z-10 h-[3px]`}
               style={{
                 background: `linear-gradient(90deg, transparent 0%, currentColor 20%, currentColor 80%, transparent 100%)`,
                 filter: "brightness(3.5)",
@@ -92,8 +92,8 @@ export function PatchnotePopup({ note }: { note: PatchNote }) {
               style={{ opacity: 0.2 }}
             />
 
-            {/* Header */}
-            <div className="relative flex items-start justify-between gap-3 px-6 pt-6 pb-4">
+            {/* Header — sticky, never scrolls away */}
+            <div className="relative shrink-0 flex items-start justify-between gap-3 px-6 pt-6 pb-4">
               <div className="flex items-center gap-3.5">
                 {/* Type icon */}
                 <div className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${meta.border} ${meta.bg} ${meta.glow}`}>
@@ -130,20 +130,19 @@ export function PatchnotePopup({ note }: { note: PatchNote }) {
               </button>
             </div>
 
-            {/* Title + summary */}
-            <div className="relative px-6 pb-4">
-              <h2 className="text-xl font-extrabold tracking-tight text-zinc-50">{note.title}</h2>
-              {note.summary && (
-                <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{note.summary}</p>
-              )}
-            </div>
+            {/* Scrollable body: title + summary + content */}
+            <div className="relative min-h-0 flex-1 overflow-y-auto px-6 pb-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+              {/* Title + summary */}
+              <div className="pb-4">
+                <h2 className="text-xl font-extrabold tracking-tight text-zinc-50">{note.title}</h2>
+                {note.summary && (
+                  <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{note.summary}</p>
+                )}
+              </div>
 
-            {/* Content */}
-            {hasContent && (
-              <div className="relative px-6 pb-4">
-                <div
-                  className={`max-h-64 overflow-y-auto rounded-xl border border-white/[0.06] bg-black/30 px-5 py-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent`}
-                >
+              {/* Content */}
+              {hasContent && (
+                <div className="rounded-xl border border-white/[0.06] bg-black/30 px-5 py-4">
                   {hasRichContent ? (
                     <div
                       className="patchnote-richtext text-sm"
@@ -184,11 +183,11 @@ export function PatchnotePopup({ note }: { note: PatchNote }) {
                     </div>
                   )}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* Footer */}
-            <div className={`flex flex-wrap items-center gap-2 border-t px-6 py-4 ${meta.border.replace("border-", "border-t-")}`}
+            {/* Footer — sticky, never scrolls away */}
+            <div className={`relative shrink-0 flex flex-wrap items-center gap-2 border-t px-6 py-4`}
               style={{ borderTopColor: "rgba(255,255,255,0.08)" }}
             >
               <Link
