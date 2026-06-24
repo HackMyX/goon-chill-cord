@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Zap, Shirt, Users, ShieldAlert, Shield, ClipboardList, Coins } from "lucide-react";
+import { Zap, Shirt, Users, ShieldAlert, Shield, ClipboardList } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseOpeningSection } from "@/components/dashboard/case-opening-section";
 import { Leaderboard, type LeaderboardEntry } from "@/components/dashboard/leaderboard";
@@ -117,15 +117,6 @@ export function DashboardShell({
             >
               <ClipboardList className="h-4 w-4" />
               Umfragen
-            </Link>
-            <Link
-              href="/don"
-              onMouseEnter={sound.hover}
-              onClick={sound.click}
-              className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-5 py-2.5 text-sm font-semibold text-amber-300 transition-colors hover:border-amber-400/50 hover:bg-amber-500/15"
-            >
-              <Coins className="h-4 w-4" />
-              Double or Nothing
             </Link>
             <Link
               href="/community"
