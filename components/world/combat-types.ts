@@ -133,7 +133,9 @@ export interface RemotePlayerHandle {
    * position — called by Player.tsx after a confirmed PvP hit so the
    * attacker sees visual feedback even though `broadcast: { self: false }`
    * prevents their own `pvp_damage` broadcast from echoing back to them. */
-  triggerBloodBurst: () => void;
+  /** Optional amount shows the damage number above the avatar on the
+   * attacker's own screen. Defaults to 0 (burst only, no number). */
+  triggerBloodBurst: (amount?: number) => void;
 }
 
 export type RemotePlayerRegistry = React.RefObject<RemotePlayerHandle[]>;

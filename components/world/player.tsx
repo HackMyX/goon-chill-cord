@@ -362,6 +362,8 @@ export function Player({
     return subscribeToWorldPvpDamage((payload) => {
       if (payload.targetUserId !== userId) return;
       applyIncomingDamage(combatRef.current, payload.amount);
+      // Stronger shake than landing a hit — being punched hurts more than punching.
+      cameraShake.current = 1.5;
     });
   }, [userId, combatRef]);
 
@@ -866,7 +868,9 @@ export function Player({
         );
         broadcastPvpDamage({ targetUserId: nearestPlayerId, attackerId: userId, amount: pvpDmg });
         const targetHandle = remotePlayerRegistryRef.current.find((h) => h.id === nearestPlayerId);
-        targetHandle?.triggerBloodBurst();
+        // Pass the damage so the attacker sees the floating number on their
+        // own screen (self: false prevents them from receiving the broadcast).
+        targetHandle?.triggerBloodBurst(pvpDmg);
       }
       debugLog("World", "attack", {
         damage: dmg,

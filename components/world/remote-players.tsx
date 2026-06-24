@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { Html } from "@react-three/drei";
+import { Html, Billboard, Text } from "@react-three/drei";
 import { CharacterModel, type CharacterLimbRefs } from "@/components/world/character-model";
 import { angleDelta } from "@/components/world/player";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
@@ -23,6 +23,30 @@ const HEADING_TURN_RATE = 12;
 const DR_MAX_LOOKAHEAD = 0.12;
 
 let pvpBloodBurstSeq = 0;
+const REMOTE_ATTACK_SWING_DURATION = 0.38;
+
+/** Mirrors monster.tsx's FloatingDamageNumber — floats upward and fades out
+ * above the hit avatar so every observer in the room sees how much damage
+ * the hit dealt, not just the attacker. */
+function FloatingDamageNumber({ amount }: { amount: number }) {
+  const ref = useRef<THREE.Group>(null);
+  const age = useRef(0);
+  useFrame((_, delta) => {
+    age.current += delta;
+    const g = ref.current;
+    if (!g) return;
+    g.position.y = 0.4 + age.current * 1.0;
+    const mat = (g.children[0] as unknown as { material?: THREE.Material & { opacity: number } })?.material;
+    if (mat) mat.opacity = Math.max(0, 1 - age.current / 0.7);
+  });
+  return (
+    <Billboard ref={ref} position={[0, 0.4, 0]}>
+      <Text fontSize={0.42} color="#fca5a5" outlineWidth={0.025} outlineColor="#3f0a0a">
+        -{amount}
+      </Text>
+    </Billboard>
+  );
+}
 
 interface RemotePlayersProps {
   /** Own user id — never rendered as a remote avatar, even if it briefly
@@ -114,7 +138,10 @@ function RemotePlayerAvatar({
   const walkAmplitude = useRef(0);
   const movingRef = useRef(false);
   const sprintingRef = useRef(false);
-  const [bloodBursts, setBloodBursts] = useState<{ id: number }[]>([]);
+  const [bloodBursts, setBloodBursts] = useState<{ id: number; amount: number }[]>([]);
+  // Drives the right-arm swing animation when a pvp_damage event says this
+  // avatar landed a hit — 0 = idle, 0→1 = mid-swing, resets to 0 when done.
+  const attackProgressRef = useRef(0);
   // HP bar: updated from transform broadcasts (10Hz). Using state so the
   // Html overlay re-renders when HP changes, but only at 10Hz max.
   const [displayHp, setDisplayHp] = useState(maxHp);
@@ -129,9 +156,9 @@ function RemotePlayerAvatar({
     const handle = {
       id: userId,
       getPosition: () => group.current?.position ?? new THREE.Vector3(),
-      triggerBloodBurst: () => {
+      triggerBloodBurst: (amount = 0) => {
         const id = ++pvpBloodBurstSeq;
-        setBloodBursts((curr) => [...curr, { id }]);
+        setBloodBursts((curr) => [...curr, { id, amount }]);
         setTimeout(() => setBloodBursts((curr) => curr.filter((b) => b.id !== id)), BLOOD_BURST_LIFETIME_MS);
       },
     };
@@ -151,10 +178,18 @@ function RemotePlayerAvatar({
 
   useEffect(() => {
     return subscribeToWorldPvpDamage((payload) => {
-      if (payload.targetUserId !== userId) return;
-      const id = ++pvpBloodBurstSeq;
-      setBloodBursts((curr) => [...curr, { id }]);
-      setTimeout(() => setBloodBursts((curr) => curr.filter((b) => b.id !== id)), BLOOD_BURST_LIFETIME_MS);
+      if (payload.targetUserId === userId) {
+        // This avatar took a hit — show blood burst + floating damage number
+        // so every observer in the room sees the damage dealt.
+        const id = ++pvpBloodBurstSeq;
+        setBloodBursts((curr) => [...curr, { id, amount: payload.amount }]);
+        setTimeout(() => setBloodBursts((curr) => curr.filter((b) => b.id !== id)), BLOOD_BURST_LIFETIME_MS);
+      }
+      if (payload.attackerId === userId) {
+        // This avatar just landed a PvP hit — play the arm swing so observers
+        // see the attack, not just the blood burst on the target.
+        attackProgressRef.current = 0.001;
+      }
     });
   }, [userId]);
 
@@ -231,6 +266,15 @@ function RemotePlayerAvatar({
       if (l.legR.current) l.legR.current.rotation.x = -swing;
       if (l.armL.current) l.armL.current.rotation.x = -swing;
       if (l.armR.current) l.armR.current.rotation.x = swing;
+
+      // Attack swing: override the right arm when this avatar just landed a
+      // PvP hit, so observers see the punch — 0→1 progress, then resets.
+      if (attackProgressRef.current > 0) {
+        attackProgressRef.current = Math.min(1, attackProgressRef.current + delta / REMOTE_ATTACK_SWING_DURATION);
+        const a = attackProgressRef.current < 1 ? Math.sin(attackProgressRef.current * Math.PI) : 0;
+        if (l.armR.current) l.armR.current.rotation.x = -1.4 * a;
+        if (attackProgressRef.current >= 1) attackProgressRef.current = 0;
+      }
     }
   });
 
@@ -252,6 +296,7 @@ function RemotePlayerAvatar({
       {bloodBursts.map((b) => (
         <group key={b.id} position={[0, 1.1, 0]}>
           <BloodBurst />
+          <FloatingDamageNumber amount={b.amount} />
         </group>
       ))}
       {/* HP bar + name tag — HTML overlay in 3D space, always faces camera */}
