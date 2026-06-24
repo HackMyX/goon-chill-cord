@@ -1773,6 +1773,31 @@ export function PantsVariant({ item }: { item: EquippedItem }) {
   );
 }
 
+/** Full-width hip/waistband rendered ONCE at the hip joint (not inside the
+ * per-leg groups) — bridges the crotch gap between the two per-leg
+ * PantsVariant pieces so the pants read as one garment instead of two
+ * disconnected floating boxes. Especially critical in the solo Garderobe
+ * preview where no jacket covers this area. Also provides a visual seam
+ * where the pants meet the torso/jacket above. */
+export function PantsHipSection({ item, width, depth }: { item: EquippedItem; width: number; depth: number }) {
+  const color = rarityColorFor(item, "#1e3a8a");
+  return (
+    <RarityFX rarity={item.rarity}>
+      {/* Main waistband box — slightly wider than the torso so the seam
+          reads as a natural overlap where pants meet jacket/bare torso. */}
+      <mesh position={[0, 0.04, 0]}>
+        <boxGeometry args={[width + 0.02, 0.18, depth + 0.02]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      {/* Thin belt-line ridge at the very top of the waistband */}
+      <mesh position={[0, 0.135, 0]}>
+        <boxGeometry args={[width + 0.04, 0.03, depth + 0.04]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.12} />
+      </mesh>
+    </RarityFX>
+  );
+}
+
 // --- Shoes: 4 distinct footwear silhouettes -------------------------------
 
 function SneakerShoe({ color }: { color: string }) {

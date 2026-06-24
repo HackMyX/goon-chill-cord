@@ -15,6 +15,7 @@ import {
   WeaponVariant,
   JacketVariant,
   PantsVariant,
+  PantsHipSection,
   ShoeVariant,
   ShieldVariant,
   ShieldAura,
@@ -197,6 +198,16 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
             {shoes ? <ShoeVariant item={shoes} /> : <BareFoot skin={SKIN} />}
           </group>
         </group>
+
+        {/* pants hip section — rendered once at HIP_Y, centered between
+            both legs, fills the crotch gap and connects the two per-leg
+            PantsVariant pieces into one coherent garment. Also adds a
+            visible waistband seam where pants meet the torso above. */}
+        {pants && (
+          <group position={[0, HIP_Y, 0]}>
+            <PantsHipSection item={pants} width={build.torsoWidth} depth={build.torsoDepth} />
+          </group>
+        )}
 
         {/* torso */}
         {jacket ? (
