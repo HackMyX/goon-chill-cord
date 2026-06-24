@@ -228,7 +228,7 @@ export async function broadcastSystemWin(opts: {
     const admin = createAdminClient();
     const emoji = opts.rarity === "ultra" ? "🌟" : opts.rarity === "mythisch" ? "✨" : "⭐";
     const rarityLabel = opts.rarity === "ultra" ? "Ultra" : opts.rarity === "mythisch" ? "Mythisch" : opts.rarity;
-    const content = `${emoji} ${opts.username} hat „${opts.itemName}" (${rarityLabel}) ${opts.caseName ? `aus „${opts.caseName}" ` : ""}gewonnen!`;
+    const content = `${emoji} ${opts.username} hat „${opts.itemName}" (${rarityLabel}) gezogen!`;
     await admin.from("global_chat_messages").insert({
       user_id: null,
       username: "System",

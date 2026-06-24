@@ -116,10 +116,19 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
   );
 
   try {
+    const { data: targetProfile } = await admin
+      .from("profiles")
+      .select("username")
+      .eq("id", input.targetUserId)
+      .single();
     await admin.from("audit_logs").insert({
       user_id: user.id,
       action: "pvp_hit_attempt",
-      payload: { targetUserId: input.targetUserId, damage },
+      payload: {
+        targetUserId: input.targetUserId,
+        targetUsername: (targetProfile?.username as string | null) ?? null,
+        damage,
+      },
     });
   } catch {
     // best-effort — the hit still lands below either way.

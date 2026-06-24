@@ -328,7 +328,7 @@ export async function respondToTrade(
   }
 
   const [{ data: senderProfile }, { data: receiverProfile }] = await Promise.all([
-    admin.from("profiles").select("credits").eq("id", trade.sender_id).single(),
+    admin.from("profiles").select("credits, username").eq("id", trade.sender_id).single(),
     admin.from("profiles").select("credits").eq("id", user.id).single(),
   ]);
 
@@ -379,7 +379,13 @@ export async function respondToTrade(
     await admin.from("audit_logs").insert({
       user_id: user.id,
       action: "trade_accepted",
-      payload: { tradeId, senderId: trade.sender_id, receiverId: user.id },
+      payload: {
+        tradeId,
+        senderId: trade.sender_id,
+        senderUsername: (senderProfile as unknown as { username?: string })?.username ?? null,
+        receiverId: user.id,
+        receiverUsername: receiverProfileForNotice?.username ?? null,
+      },
     });
   } catch {
     // best-effort

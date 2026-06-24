@@ -89,7 +89,7 @@ export async function sweepExpiredAuctions(): Promise<void> {
 
     const { data: bidderProfile } = await admin
       .from("profiles")
-      .select("credits")
+      .select("credits, username")
       .eq("id", auction.current_bidder_id)
       .single();
     const { data: sellerProfile } = await admin
@@ -132,6 +132,8 @@ export async function sweepExpiredAuctions(): Promise<void> {
         payload: {
           auctionId: auction.id,
           buyerId: auction.current_bidder_id,
+          buyerUsername: (bidderProfile as unknown as { username?: string })?.username ?? null,
+          itemName,
           price: auction.current_bid,
         },
       });
@@ -357,7 +359,14 @@ async function finalizeBuyout(
     await admin.from("audit_logs").insert({
       user_id: buyerId,
       action: "auction_buyout",
-      payload: { auctionId: auction.id, sellerId: auction.seller_id, buyerId, price },
+      payload: {
+        auctionId: auction.id,
+        sellerId: auction.seller_id,
+        buyerId,
+        buyerUsername: (buyerProfile as unknown as { username?: string })?.username ?? null,
+        itemName,
+        price,
+      },
     });
   } catch {
     // best-effort

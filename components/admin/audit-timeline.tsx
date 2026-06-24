@@ -108,32 +108,42 @@ const ACTION_META: Record<string, ActionMeta> = {
     color: "text-rose-300",
     bg: "bg-rose-500/10",
     border: "border-rose-500/30",
-    format: (p) =>
-      `PvP-Angriff: ${str(p.damage)} Schaden auf Spieler ${str(p.targetUserId).slice(0, 8)}…`,
+    format: (p) => {
+      const target = typeof p.targetUsername === "string" ? p.targetUsername : `${str(p.targetUserId).slice(0, 8)}…`;
+      return `PvP-Angriff: ${str(p.damage)} Schaden auf ${target}`;
+    },
   },
   auction_sold: {
     icon: Gavel,
     color: "text-amber-300",
     bg: "bg-amber-500/10",
     border: "border-amber-500/30",
-    format: (p, c) =>
-      `Auktion verkauft an Käufer ${str(p.buyerId).slice(0, 8)}… für ${cr(p.price, c)}`,
+    format: (p, c) => {
+      const buyer = typeof p.buyerUsername === "string" ? p.buyerUsername : `${str(p.buyerId).slice(0, 8)}…`;
+      const item = typeof p.itemName === "string" ? ` — „${p.itemName}"` : "";
+      return `Auktion verkauft${item} an ${buyer} für ${cr(p.price, c)}`;
+    },
   },
   auction_buyout: {
     icon: Gavel,
     color: "text-amber-300",
     bg: "bg-amber-500/10",
     border: "border-amber-500/30",
-    format: (p, c) =>
-      `Auktion per Sofortkauf abgeschlossen: ${cr(p.price, c)} von Käufer ${str(p.buyerId).slice(0, 8)}…`,
+    format: (p, c) => {
+      const buyer = typeof p.buyerUsername === "string" ? p.buyerUsername : `${str(p.buyerId).slice(0, 8)}…`;
+      const item = typeof p.itemName === "string" ? ` „${p.itemName}"` : "";
+      return `Sofortkauf${item} von ${buyer} für ${cr(p.price, c)}`;
+    },
   },
   trade_accepted: {
     icon: Repeat,
     color: "text-cyan-300",
     bg: "bg-cyan-500/10",
     border: "border-cyan-500/30",
-    format: (p) =>
-      `Trade ${str(p.tradeId).slice(0, 8)}… angenommen`,
+    format: (p) => {
+      const sender = typeof p.senderUsername === "string" ? p.senderUsername : typeof p.senderId === "string" ? `${p.senderId.slice(0, 8)}…` : null;
+      return sender ? `Trade mit ${sender} angenommen` : `Trade angenommen`;
+    },
   },
   shop_purchase: {
     icon: ShoppingBag,

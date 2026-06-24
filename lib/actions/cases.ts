@@ -199,7 +199,7 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
       wonItem.rarity === "mythisch" || wonItem.rarity === "ultra"
         ? `${rarityLabel}-Drop!`
         : "Case geöffnet",
-    message: `Du hast „${wonItem.name}" (${rarityLabel}) aus „${tier.label}" gezogen.`,
+    message: `Du hast „${wonItem.name}" (${rarityLabel}) gezogen!`,
     link: "/garderobe",
   });
 
@@ -359,7 +359,7 @@ export async function openCaseBatch(tierId: string, count: number): Promise<Open
     userId: user.id,
     type: "case_opened",
     title: bestRarity === "ultra" || bestRarity === "mythisch" ? `${bestLabel}-Drop in Batch!` : `${safeCount}× Case geöffnet`,
-    message: `Du hast ${safeCount} ${tier.label}-Cases geöffnet. Bestes Item: ${bestRarity === "ultra" || bestRarity === "mythisch" ? `„${wonItems.find((i) => i.rarity === bestRarity)?.name}" (${bestLabel})` : `${bestLabel}`}.`,
+    message: `Du hast ${safeCount}× Cases geöffnet. Bestes Item: „${wonItems.find((i) => i.rarity === bestRarity)?.name ?? "Unbekannt"}" (${bestLabel}).`,
     link: "/garderobe",
   });
 
