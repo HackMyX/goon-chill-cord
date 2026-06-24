@@ -73,12 +73,13 @@ export function DonShell({
   const sessionWins = history.filter((h) => h.won).length;
   const sessionLosses = history.filter((h) => !h.won).length;
   const sessionNet = history.reduce((acc, h) => acc + (h.won ? h.amount : -h.amount), 0);
+  // Bar drains left-to-right: starts full, empties as flips are used.
   const flipsProgress = donConfig.dailyFlipLimit !== null && donConfig.dailyFlipLimit > 0
-    ? (flipsUsed / donConfig.dailyFlipLimit) * 100
-    : 0;
+    ? ((donConfig.dailyFlipLimit - flipsUsed) / donConfig.dailyFlipLimit) * 100
+    : 100;
   const hourlyProgress = donConfig.hourlyFlipLimit !== null && donConfig.hourlyFlipLimit > 0
-    ? (hourlyFlipsUsed / donConfig.hourlyFlipLimit) * 100
-    : 0;
+    ? ((donConfig.hourlyFlipLimit - hourlyFlipsUsed) / donConfig.hourlyFlipLimit) * 100
+    : 100;
 
   const canFlip =
     phase === "idle" &&
@@ -140,10 +141,11 @@ export function DonShell({
     setTimeout(() => setPhase("idle"), 2600);
   }
 
+  // Color shifts to amber then red as remaining flips drain low.
   const limitBarColor =
-    flipsProgress >= 90
+    flipsProgress <= 10
       ? "linear-gradient(90deg,#ef4444,#dc2626)"
-      : flipsProgress >= 60
+      : flipsProgress <= 35
       ? "linear-gradient(90deg,#f59e0b,#d97706)"
       : "linear-gradient(90deg,#a78bfa,#7c3aed)";
 
@@ -270,9 +272,9 @@ export function DonShell({
                     <motion.div
                       className="h-full rounded-full"
                       style={{
-                        background: hourlyProgress >= 90
+                        background: hourlyProgress <= 10
                           ? "linear-gradient(90deg,#ef4444,#dc2626)"
-                          : hourlyProgress >= 60
+                          : hourlyProgress <= 35
                           ? "linear-gradient(90deg,#f59e0b,#d97706)"
                           : "linear-gradient(90deg,#22d3ee,#0891b2)",
                       }}
@@ -495,6 +497,21 @@ export function DonShell({
               })}
             </div>
 
+            {/* ALL IN button */}
+            {donConfig.allowAllIn && (
+              <button
+                onClick={() => { setCustomBet(String(credits)); setSelectedQuick(-1); }}
+                disabled={credits <= 0}
+                className={`w-full rounded-xl border py-2.5 text-sm font-black uppercase tracking-widest transition-all duration-200 ${
+                  customBet === String(credits) && credits > 0
+                    ? "border-red-500/60 bg-red-500/20 text-red-300 shadow-[0_0_18px_rgba(239,68,68,0.3)]"
+                    : "border-red-500/25 bg-red-500/8 text-red-500 hover:border-red-500/50 hover:text-red-300"
+                } disabled:opacity-30`}
+              >
+                🔴 ALL IN — {new Intl.NumberFormat("de-DE").format(credits)} {currencyName}
+              </button>
+            )}
+
             {/* Custom amount */}
             <div className="relative">
               <input
@@ -502,7 +519,7 @@ export function DonShell({
                 inputMode="numeric"
                 placeholder={`Eigener Betrag (min. ${donConfig.minBet})`}
                 value={customBet}
-                onChange={(e) => setCustomBet(e.target.value)}
+                onChange={(e) => { setCustomBet(e.target.value); setSelectedQuick(-1); }}
                 className="w-full rounded-xl border border-white/8 bg-black/20 px-4 py-3 pr-16 text-sm text-zinc-200 placeholder-zinc-700 outline-none transition-all focus:border-amber-400/35 focus:ring-1 focus:ring-amber-400/15"
               />
               {customBet && (

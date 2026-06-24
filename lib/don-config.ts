@@ -20,6 +20,8 @@ export interface DonConfig {
   sectionSubtitle: string;
   /** Whether to show the remaining-spins bar/counter. */
   showRemainingSpins: boolean;
+  /** When true, an "ALL IN" quick-select button lets players stake their full balance. */
+  allowAllIn: boolean;
 }
 
 export const DEFAULT_DON_CONFIG: DonConfig = {
@@ -34,4 +36,5 @@ export const DEFAULT_DON_CONFIG: DonConfig = {
   sectionTitle: "Double or Nothing",
   sectionSubtitle: "Riskiere deine Credits — 50/50 Chance auf das Doppelte",
   showRemainingSpins: true,
+  allowAllIn: false,
 };

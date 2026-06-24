@@ -211,6 +211,24 @@ export function DonConfigEditor({ config }: Props) {
           </button>
           <span className="text-[10px] text-zinc-600">Fortschrittsbalken + Zähler sichtbar für den User.</span>
         </div>
+
+        {/* All In */}
+        <div className="flex flex-col justify-between gap-2 rounded-xl border border-white/8 bg-black/30 p-3">
+          <span className="text-xs font-semibold text-zinc-300">ALL IN Schnellwahl</span>
+          <button
+            type="button"
+            onClick={() => setForm((f) => ({ ...f, allowAllIn: !f.allowAllIn }))}
+            className={`flex items-center gap-2 self-start rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
+              form.allowAllIn
+                ? "border-red-500/40 bg-red-500/15 text-red-300"
+                : "border-zinc-600/40 bg-zinc-800/40 text-zinc-500"
+            }`}
+          >
+            {form.allowAllIn ? <Check className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+            {form.allowAllIn ? "Aktiviert" : "Deaktiviert"}
+          </button>
+          <span className="text-[10px] text-zinc-600">Zeigt Spielern einen &quot;ALL IN&quot;-Button — setzt den gesamten Kontostand als Einsatz.</span>
+        </div>
       </div>
 
       {/* Texts */}

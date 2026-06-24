@@ -18,13 +18,14 @@ interface DonConfigRow {
   section_title: string | null;
   section_subtitle: string | null;
   show_remaining_spins: boolean | null;
+  allow_all_in: boolean | null;
 }
 
 export async function getDonConfig(): Promise<DonConfig> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("don_config")
-    .select("enabled, daily_flip_limit, hourly_flip_limit, cooldown_sec, win_chance, min_bet, max_bet, quick_amounts, section_title, section_subtitle, show_remaining_spins")
+    .select("enabled, daily_flip_limit, hourly_flip_limit, cooldown_sec, win_chance, min_bet, max_bet, quick_amounts, section_title, section_subtitle, show_remaining_spins, allow_all_in")
     .eq("id", "default")
     .maybeSingle();
 
@@ -45,6 +46,7 @@ export async function getDonConfig(): Promise<DonConfig> {
     sectionTitle: row.section_title?.trim() || def.sectionTitle,
     sectionSubtitle: row.section_subtitle?.trim() || def.sectionSubtitle,
     showRemainingSpins: row.show_remaining_spins ?? def.showRemainingSpins,
+    allowAllIn: row.allow_all_in ?? def.allowAllIn,
   };
 }
 
@@ -71,6 +73,7 @@ export async function updateDonConfig(
     section_title: input.sectionTitle?.trim() || DEFAULT_DON_CONFIG.sectionTitle,
     section_subtitle: input.sectionSubtitle?.trim() || DEFAULT_DON_CONFIG.sectionSubtitle,
     show_remaining_spins: input.showRemainingSpins,
+    allow_all_in: input.allowAllIn,
     updated_at: new Date().toISOString(),
   });
 

@@ -27,6 +27,7 @@ const statements = [
   )`,
   `ALTER TABLE don_config ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE don_config ADD COLUMN IF NOT EXISTS hourly_flip_limit integer`,
+  `ALTER TABLE don_config ADD COLUMN IF NOT EXISTS allow_all_in boolean NOT NULL DEFAULT false`,
 ];
 
 for (const sql of statements) {
