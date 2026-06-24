@@ -1,4 +1,4 @@
-export type SnakeMode = "x1" | "x2" | "grind";
+export type SnakeMode = "x1" | "x2" | "grind" | "farm";
 
 export interface SnakeModeConfig {
   enabled: boolean;
@@ -33,6 +33,7 @@ export interface SnakeConfig {
   x1: SnakeModeConfig;
   x2: SnakeModeConfig;
   grind: SnakeGrindConfig;
+  farm: SnakeModeConfig;
 }
 
 export const DEFAULT_X1_CONFIG: SnakeModeConfig = {
@@ -98,6 +99,26 @@ export const DEFAULT_GRIND_CONFIG: SnakeGrindConfig = {
   bonusCrPerShrink: 50,
 };
 
+export const DEFAULT_FARM_CONFIG: SnakeModeConfig = {
+  enabled: true,
+  boardSize: 20,
+  creditsPerApple: 2,
+  initialSpeedMs: 140,
+  speedIncreasePerApple: 0,
+  minSpeedMs: 140,
+  wallWrap: true,
+  dailyCrLimit: 3000,
+  bonusEveryN: 0,
+  bonusCrFlat: 0,
+  bonusMultiplierApples: 0,
+  goldenAppleEnabled: false,
+  goldenAppleCrMultiplier: 1,
+  goldenAppleLifeApples: 0,
+  startLength: 5,
+  particlesEnabled: true,
+  leaderboardSize: 20,
+};
+
 export const DEFAULT_SNAKE_CONFIG: SnakeConfig = {
   enabled: true,
   sectionTitle: "Snake",
@@ -105,10 +126,12 @@ export const DEFAULT_SNAKE_CONFIG: SnakeConfig = {
   x1: DEFAULT_X1_CONFIG,
   x2: DEFAULT_X2_CONFIG,
   grind: DEFAULT_GRIND_CONFIG,
+  farm: DEFAULT_FARM_CONFIG,
 };
 
 export function getModeConfig(config: SnakeConfig, mode: SnakeMode): SnakeModeConfig | SnakeGrindConfig {
   if (mode === "grind") return config.grind;
   if (mode === "x2") return config.x2;
+  if (mode === "farm") return config.farm;
   return config.x1;
 }

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import {
-  DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG,
+  DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG, DEFAULT_FARM_CONFIG,
   type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig, type SnakeMode,
 } from "@/lib/snake-config";
 import { notifyUser } from "@/lib/notifications-internal";
@@ -52,6 +52,7 @@ export async function getSnakeConfig(): Promise<SnakeConfig> {
     x1?: Partial<SnakeModeConfig>;
     x2?: Partial<SnakeModeConfig>;
     grind?: Partial<SnakeGrindConfig>;
+    farm?: Partial<SnakeModeConfig>;
   } | null;
 
   if (mc && typeof mc === "object") {
@@ -62,6 +63,7 @@ export async function getSnakeConfig(): Promise<SnakeConfig> {
       x1: sanitizeMode(mc.x1 ?? {}, DEFAULT_X1_CONFIG),
       x2: sanitizeMode(mc.x2 ?? {}, DEFAULT_X2_CONFIG),
       grind: sanitizeGrind(mc.grind ?? {}),
+      farm: sanitizeMode(mc.farm ?? {}, DEFAULT_FARM_CONFIG),
     };
   }
 
@@ -113,6 +115,7 @@ export async function getSnakeConfig(): Promise<SnakeConfig> {
     x1,
     x2,
     grind: DEFAULT_GRIND_CONFIG,
+    farm: DEFAULT_FARM_CONFIG,
   };
 }
 
@@ -248,7 +251,7 @@ export async function submitSnakeScore(
   if (!config.enabled) return { success: false, error: "Snake ist derzeit deaktiviert." };
   if (!profile) return { success: false, error: "Profil nicht gefunden." };
 
-  const modeCfg = speedMode === "grind" ? config.grind : speedMode === "x2" ? config.x2 : config.x1;
+  const modeCfg = speedMode === "grind" ? config.grind : speedMode === "x2" ? config.x2 : speedMode === "farm" ? config.farm : config.x1;
   if (!modeCfg.enabled) return { success: false, error: `Snake ${speedMode} ist deaktiviert.` };
 
   // Daily CR limit check
@@ -369,7 +372,7 @@ export async function getSnakeLeaderboard(
 
 export async function getMySnakeBest(
   userId: string
-): Promise<{ x1: number; x2: number; grind: number }> {
+): Promise<{ x1: number; x2: number; grind: number; farm: number }> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("snake_best_scores")
@@ -379,7 +382,8 @@ export async function getMySnakeBest(
   const x1 = (data ?? []).find((r) => r.speed_mode === "x1")?.best_score ?? 0;
   const x2 = (data ?? []).find((r) => r.speed_mode === "x2")?.best_score ?? 0;
   const grind = (data ?? []).find((r) => r.speed_mode === "grind")?.best_score ?? 0;
-  return { x1, x2, grind };
+  const farm = (data ?? []).find((r) => r.speed_mode === "farm")?.best_score ?? 0;
+  return { x1, x2, grind, farm };
 }
 
 export async function getDailyCrEarned(userId: string): Promise<number> {

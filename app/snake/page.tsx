@@ -17,11 +17,12 @@ export default async function SnakePage() {
     .eq("id", user.id)
     .single();
 
-  const [config, lbX1, lbX2, lbGrind, myBest, dailyCrEarned] = await Promise.all([
+  const [config, lbX1, lbX2, lbGrind, lbFarm, myBest, dailyCrEarned] = await Promise.all([
     getSnakeConfig(),
     getSnakeLeaderboard("x1", 20),
     getSnakeLeaderboard("x2", 20),
     getSnakeLeaderboard("grind", 20),
+    getSnakeLeaderboard("farm", 20),
     getMySnakeBest(user.id),
     getDailyCrEarned(user.id),
   ]);
@@ -38,9 +39,11 @@ export default async function SnakePage() {
       leaderboardX1={lbX1}
       leaderboardX2={lbX2}
       leaderboardGrind={lbGrind}
+      leaderboardFarm={lbFarm}
       myBestX1={myBest.x1}
       myBestX2={myBest.x2}
       myBestGrind={myBest.grind}
+      myBestFarm={myBest.farm}
       dailyCrEarned={dailyCrEarned}
     />
   );

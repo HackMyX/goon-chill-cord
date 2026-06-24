@@ -79,6 +79,21 @@ interface ModeTheme {
 }
 
 const THEMES: Record<SnakeMode, ModeTheme> = {
+  farm: {
+    bg: "#030508",
+    gridColor: "rgba(139,92,246,0.045)",
+    snakeHead: "#a78bfa",
+    snakeTail: "#2e1065",
+    snakeGlow: "#8b5cf6",
+    appleColor: "#34d399",
+    appleGlow: "#10b981",
+    goldenColor: "#fbbf24",
+    ambientColors: ["rgba(139,92,246,0.5)", "rgba(109,40,217,0.4)", "rgba(167,139,250,0.3)"],
+    particleColors: ["#a78bfa", "#c4b5fd", "#8b5cf6", "#ffffff", "#34d399"],
+    cornerGlow1: "rgba(139,92,246,0.07)",
+    cornerGlow2: "rgba(52,211,153,0.04)",
+    borderColor: "#8b5cf6",
+  },
   x1: {
     bg: "#030a06",
     gridColor: "rgba(16,185,129,0.045)",
@@ -722,8 +737,9 @@ function Leaderboard({ entries, myBest, userId, mode }: {
   const myRank = entries.findIndex((e) => e.userId === userId) + 1;
   const modeColor = mode === "x2" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-300"
     : mode === "grind" ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+    : mode === "farm" ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
     : "border-emerald-400/30 bg-emerald-500/10 text-emerald-300";
-  const modeLabel = mode === "grind" ? "🔥 Grind" : mode === "x2" ? "⚡ x2" : "🌿 Classic";
+  const modeLabel = mode === "grind" ? "🔥 Grind" : mode === "x2" ? "⚡ x2" : mode === "farm" ? "🌾 Farm" : "🌿 Classic";
   return (
     <div className="flex flex-col overflow-hidden rounded-2xl border border-white/8 bg-[#080712]">
       <div className="flex items-center gap-2 border-b border-white/8 px-4 py-3">
@@ -799,6 +815,13 @@ function ModeCard({
       ring: "ring-amber-500/40",
       badge: "bg-amber-500/20 text-amber-300 border-amber-500/30",
     },
+    farm: {
+      label: "Farm", emoji: "🌾",
+      desc: `20×20 Feld · ${modeCfg.creditsPerApple} CR/Apfel · Wächst nicht · Konstante Geschwindigkeit`,
+      gradient: "from-violet-900/60 to-violet-950/80",
+      ring: "ring-violet-500/40",
+      badge: "bg-violet-500/20 text-violet-300 border-violet-500/30",
+    },
   };
   const m = meta[mode];
   return (
@@ -842,14 +865,15 @@ interface SnakeShellProps {
   leaderboardX1: SnakeLeaderboardEntry[];
   leaderboardX2: SnakeLeaderboardEntry[];
   leaderboardGrind: SnakeLeaderboardEntry[];
-  myBestX1: number; myBestX2: number; myBestGrind: number;
+  leaderboardFarm: SnakeLeaderboardEntry[];
+  myBestX1: number; myBestX2: number; myBestGrind: number; myBestFarm: number;
   dailyCrEarned: number;
 }
 
 export function SnakeShell({
   userId, credits: initialCredits, streakDays, isAdmin, isModerator,
-  config, leaderboardX1, leaderboardX2, leaderboardGrind,
-  myBestX1, myBestX2, myBestGrind, dailyCrEarned: initDaily,
+  config, leaderboardX1, leaderboardX2, leaderboardGrind, leaderboardFarm,
+  myBestX1, myBestX2, myBestGrind, myBestFarm, dailyCrEarned: initDaily,
 }: SnakeShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   const [activeMode, setActiveMode] = useState<SnakeMode>("x1");
@@ -903,7 +927,7 @@ export function SnakeShell({
 
     function getModeCfgLocal(mode: SnakeMode): SnakeModeConfig | SnakeGrindConfig {
       const cfg = configRef.current;
-      return mode === "grind" ? cfg.grind : mode === "x2" ? cfg.x2 : cfg.x1;
+      return mode === "grind" ? cfg.grind : mode === "x2" ? cfg.x2 : mode === "farm" ? cfg.farm : cfg.x1;
     }
 
     function doEndGame(g: GameState) {
@@ -1015,7 +1039,12 @@ export function SnakeShell({
           g.goldenAppleMovesLeft = modeCfg.goldenAppleLifeApples;
         }
 
-        g.snake = [newHead, ...g.snake];
+        // Farm mode: snake never grows — remove tail segment on eat
+        if (g.mode === "farm") {
+          g.snake = [newHead, ...g.snake.slice(0, -1)];
+        } else {
+          g.snake = [newHead, ...g.snake];
+        }
         const aMin = g.mode === "grind" ? g.shrinkCount : 0;
         const aMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
         g.apple = randomPos(BOARD, [newHead, ...g.snake, ...(g.goldenApple ? [g.goldenApple] : [])], aMin, aMax, aMin, aMax);
@@ -1151,7 +1180,7 @@ export function SnakeShell({
     inputQueueRef.current = []; // flush any buffered inputs from prev game
     const mode = activeModeRef.current;
     const cfg = configRef.current;
-    const modeCfg = mode === "grind" ? cfg.grind : mode === "x2" ? cfg.x2 : cfg.x1;
+    const modeCfg = mode === "grind" ? cfg.grind : mode === "x2" ? cfg.x2 : mode === "farm" ? cfg.farm : cfg.x1;
     const BOARD = modeCfg.boardSize;
     const startX = Math.floor(BOARD / 2);
     const startY = Math.floor(BOARD / 2);
@@ -1183,19 +1212,21 @@ export function SnakeShell({
     sound.click();
   }
 
-  const modeCfg = activeMode === "grind" ? config.grind : activeMode === "x2" ? config.x2 : config.x1;
+  const modeCfg = activeMode === "grind" ? config.grind : activeMode === "x2" ? config.x2 : activeMode === "farm" ? config.farm : config.x1;
   const dailyLimitReached = modeCfg.dailyCrLimit !== null && dailyCr >= modeCfg.dailyCrLimit;
   const dailyRemaining = modeCfg.dailyCrLimit !== null ? Math.max(0, modeCfg.dailyCrLimit - dailyCr) : null;
 
-  const lbEntries = lbTab === "grind" ? leaderboardGrind : lbTab === "x2" ? leaderboardX2 : leaderboardX1;
-  const myBest = lbTab === "grind" ? myBestGrind : lbTab === "x2" ? myBestX2 : myBestX1;
+  const lbEntries = lbTab === "grind" ? leaderboardGrind : lbTab === "x2" ? leaderboardX2 : lbTab === "farm" ? leaderboardFarm : leaderboardX1;
+  const myBest = lbTab === "grind" ? myBestGrind : lbTab === "x2" ? myBestX2 : lbTab === "farm" ? myBestFarm : myBestX1;
 
   const modeRingColor = activeMode === "grind" ? "shadow-[0_0_40px_rgba(245,158,11,0.12)]"
     : activeMode === "x2" ? "shadow-[0_0_40px_rgba(6,182,212,0.12)]"
+    : activeMode === "farm" ? "shadow-[0_0_40px_rgba(139,92,246,0.12)]"
     : "shadow-[0_0_40px_rgba(16,185,129,0.1)]";
 
   const modeBorderColor = activeMode === "grind" ? "border-amber-500/25"
     : activeMode === "x2" ? "border-cyan-500/25"
+    : activeMode === "farm" ? "border-violet-500/25"
     : "border-emerald-500/20";
 
   return (
@@ -1255,8 +1286,8 @@ export function SnakeShell({
         <div className="flex flex-1 flex-col gap-3">
           {/* Mode selector (only when idle/dead) */}
           {phase !== "playing" && (
-            <div className="grid grid-cols-3 gap-2">
-              {(["x1", "x2", "grind"] as SnakeMode[]).map((m) => (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {(["x1", "x2", "grind", "farm"] as SnakeMode[]).map((m) => (
                 <ModeCard
                   key={m}
                   mode={m}
@@ -1376,6 +1407,7 @@ export function SnakeShell({
                     className={`group relative overflow-hidden rounded-2xl px-12 py-4 text-xl font-extrabold shadow-lg transition-all active:scale-95 ${
                       activeMode === "grind" ? "bg-amber-500 text-black shadow-amber-500/30 hover:bg-amber-400 hover:shadow-amber-400/60"
                       : activeMode === "x2" ? "bg-cyan-500 text-black shadow-cyan-500/30 hover:bg-cyan-400 hover:shadow-cyan-400/60"
+                      : activeMode === "farm" ? "bg-violet-600 text-white shadow-violet-500/30 hover:bg-violet-500 hover:shadow-violet-400/60"
                       : "bg-emerald-600 text-white shadow-emerald-500/30 hover:bg-emerald-500 hover:shadow-emerald-400/60"
                     }`}>
                     <div className="absolute inset-0 -translate-x-full animate-[mine-shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
@@ -1447,16 +1479,17 @@ export function SnakeShell({
         {/* Leaderboard sidebar */}
         <div className="hidden w-52 flex-col gap-3 lg:flex">
           <div className="flex rounded-xl border border-white/8 bg-[#080712] p-1">
-            {(["x1", "x2", "grind"] as SnakeMode[]).map((m) => (
+            {(["x1", "x2", "grind", "farm"] as SnakeMode[]).map((m) => (
               <button key={m} onClick={() => { setLbTab(m); sound.click(); }} onMouseEnter={sound.hover}
                 className={`flex flex-1 items-center justify-center rounded-lg py-1.5 text-[10px] font-bold transition-colors ${
                   lbTab === m
                     ? m === "grind" ? "bg-amber-500/20 text-amber-300"
                     : m === "x2" ? "bg-cyan-500/20 text-cyan-300"
+                    : m === "farm" ? "bg-violet-500/20 text-violet-300"
                     : "bg-emerald-500/20 text-emerald-300"
                     : "text-zinc-500 hover:text-zinc-300"
                 }`}>
-                {m === "grind" ? "🔥" : m === "x2" ? "⚡" : "🌿"}{m}
+                {m === "grind" ? "🔥" : m === "x2" ? "⚡" : m === "farm" ? "🌾" : "🌿"}{m}
               </button>
             ))}
           </div>
@@ -1473,10 +1506,17 @@ export function SnakeShell({
             <ChevronDown className="ml-auto h-4 w-4 text-zinc-500" />
           </summary>
           <div className="flex gap-1 border-t border-white/8 p-2">
-            {(["x1", "x2", "grind"] as SnakeMode[]).map((m) => (
+            {(["x1", "x2", "grind", "farm"] as SnakeMode[]).map((m) => (
               <button key={m} onClick={() => setLbTab(m)}
-                className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold ${lbTab === m ? "bg-purple-500/20 text-purple-200" : "text-zinc-500"}`}>
-                {m === "grind" ? "🔥 Grind" : m === "x2" ? "⚡ x2" : "🌿 x1"}
+                className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold ${
+                  lbTab === m
+                    ? m === "grind" ? "bg-amber-500/20 text-amber-300"
+                    : m === "x2" ? "bg-cyan-500/20 text-cyan-300"
+                    : m === "farm" ? "bg-violet-500/20 text-violet-300"
+                    : "bg-emerald-500/20 text-emerald-300"
+                    : "text-zinc-500"
+                }`}>
+                {m === "grind" ? "🔥 Grind" : m === "x2" ? "⚡ x2" : m === "farm" ? "🌾 Farm" : "🌿 x1"}
               </button>
             ))}
           </div>

@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications-internal";
@@ -128,8 +127,6 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   } catch {
     // logging failed — ignore
   }
-
-  revalidatePath("/");
 
   await notifyUser({
     userId: user.id,

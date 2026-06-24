@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_noStore } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
@@ -33,6 +33,7 @@ function rowToNote(r: Record<string, unknown>): PatchNote {
 
 /** Returns the latest published note with show_popup=true, or null. */
 export async function getActivePopupNote(): Promise<PatchNote | null> {
+  unstable_noStore(); // never serve stale popup data from cache
   const admin = createAdminClient();
   // show_popup column may not exist yet — graceful fallback to null
   try {

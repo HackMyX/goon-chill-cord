@@ -48,24 +48,29 @@ export function AccountShell({
   const [profileVisible, setProfileVisible] = useState(initialProfileVisible);
   const [acceptsTradesSaving, setAcceptsTradesSaving] = useState(false);
   const [profileVisibleSaving, setProfileVisibleSaving] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
   const sound = useSoundManager();
 
   async function handleToggleAcceptsTrades() {
     sound.click();
+    setToggleError(null);
     setAcceptsTradesSaving(true);
     const next = !acceptsTrades;
     const res = await updatePlayerSettings({ acceptsTrades: next });
     setAcceptsTradesSaving(false);
     if (res.success) setAcceptsTrades(next);
+    else setToggleError(res.error ?? "Speichern fehlgeschlagen.");
   }
 
   async function handleToggleProfileVisible() {
     sound.click();
+    setToggleError(null);
     setProfileVisibleSaving(true);
     const next = !profileVisible;
     const res = await updatePlayerSettings({ profileVisible: next });
     setProfileVisibleSaving(false);
     if (res.success) setProfileVisible(next);
+    else setToggleError(res.error ?? "Speichern fehlgeschlagen.");
   }
 
   // Admin-driven changes (credits set, role changed) reach this tab the
@@ -217,6 +222,9 @@ export function AccountShell({
 
         <div className="mt-8">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-zinc-500">Einstellungen</h2>
+          {toggleError && (
+            <p className="mb-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{toggleError}</p>
+          )}
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
               <div className="flex items-center gap-3">

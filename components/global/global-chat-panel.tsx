@@ -36,12 +36,37 @@ export function GlobalChatPanel() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
+  const latestIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     getGlobalChatMessages(60).then((msgs) => {
       setMessages(msgs);
+      if (msgs.length > 0) latestIdRef.current = msgs[msgs.length - 1].id;
       setLoading(false);
       setTimeout(scrollToBottom, 50);
     });
+  }, [scrollToBottom]);
+
+  const appendMessage = useCallback((row: Record<string, unknown>) => {
+    const id = row.id as string;
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === id)) return prev; // dedupe
+      return [
+        ...prev,
+        {
+          id,
+          userId: row.user_id as string | null,
+          username: row.username as string,
+          role: (row.role as string) ?? "user",
+          content: row.content as string,
+          isSystem: (row.is_system as boolean) ?? false,
+          metadata: (row.metadata as Record<string, unknown>) ?? null,
+          createdAt: row.created_at as string,
+        },
+      ];
+    });
+    latestIdRef.current = id;
+    setTimeout(scrollToBottom, 30);
   }, [scrollToBottom]);
 
   useEffect(() => {
@@ -51,26 +76,29 @@ export function GlobalChatPanel() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "global_chat_messages" },
-        (payload) => {
-          const row = payload.new as Record<string, unknown>;
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: row.id as string,
-              userId: row.user_id as string | null,
-              username: row.username as string,
-              role: (row.role as string) ?? "user",
-              content: row.content as string,
-              isSystem: (row.is_system as boolean) ?? false,
-              metadata: (row.metadata as Record<string, unknown>) ?? null,
-              createdAt: row.created_at as string,
-            },
-          ]);
-          setTimeout(scrollToBottom, 30);
-        }
+        (payload) => appendMessage(payload.new as Record<string, unknown>)
       )
       .subscribe();
     return () => { client.removeChannel(channel); };
+  }, [appendMessage]);
+
+  // Polling fallback — keeps chat live even if Realtime isn't enabled for the table
+  useEffect(() => {
+    const poll = setInterval(async () => {
+      const fresh = await getGlobalChatMessages(60);
+      if (fresh.length === 0) return;
+      const newestId = fresh[fresh.length - 1].id;
+      if (newestId === latestIdRef.current) return;
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const added = fresh.filter((m) => !existingIds.has(m.id));
+        if (added.length === 0) return prev;
+        latestIdRef.current = newestId;
+        return [...prev, ...added];
+      });
+      setTimeout(scrollToBottom, 30);
+    }, 8000);
+    return () => clearInterval(poll);
   }, [scrollToBottom]);
 
   async function handleSend(e: React.FormEvent) {
