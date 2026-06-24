@@ -100,7 +100,7 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
       {
         key: "perkMultiplierCap",
         label: "Perk-Multiplikator-Deckel",
-        hint: "Obergrenze für gestapelte Tempo-/Sprung-/Regen-Perks (Amulett+Ring)",
+        hint: "Obergrenze für gestapelte Tempo-/Sprung-/Regen-Perks (Amulett+Ring). Standard 1.6 = max. +60% kombiniert.",
         step: 0.05,
       },
     ],

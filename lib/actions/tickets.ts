@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isModerator } from "@/lib/admin";
 import { notifyUser, notifyStaff } from "@/lib/notifications-internal";
+import { logDebugEvent } from "@/lib/debug-log-server";
 
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 export type TicketCategory = "bug" | "suggestion";
@@ -79,6 +80,7 @@ export async function createTicket(input: {
     .single();
 
   if (error || !data) {
+    void logDebugEvent({ level: "error", scope: "tickets", message: "createTicket DB-Fehler", detail: error?.message, context: { subject, category } });
     return { success: false, error: "Ticket konnte nicht erstellt werden — ist die Tickets-Migration eingespielt?" };
   }
 
@@ -88,8 +90,7 @@ export async function createTicket(input: {
     type: "ticket_new",
     title: category === "suggestion" ? "Neuer Verbesserungsvorschlag" : "Neues Support-Ticket",
     message: `${username}: ${subject}`,
-    adminLink: `/admin?tab=tickets&open=${data.id}`,
-    modLink: `/mod?tab=tickets&open=${data.id}`,
+    link: `/mod?tab=tickets&open=${data.id}`,
   });
 
   revalidatePath("/admin");
@@ -225,8 +226,7 @@ export async function addTicketMessage(input: {
       type: "ticket_reply",
       title: "User-Antwort auf Ticket",
       message: `${username}: ${message.slice(0, 80)}`,
-      adminLink: `/admin?tab=tickets&open=${input.ticketId}`,
-      modLink: `/mod?tab=tickets&open=${input.ticketId}`,
+      link: `/mod?tab=tickets&open=${input.ticketId}`,
     });
   }
 
@@ -339,7 +339,10 @@ export async function deleteTicket(ticketId: string): Promise<{ success: boolean
 
   await admin.from("ticket_messages").delete().eq("ticket_id", ticketId);
   const { error } = await admin.from("tickets").delete().eq("id", ticketId);
-  if (error) return { success: false, error: "Löschen fehlgeschlagen." };
+  if (error) {
+    void logDebugEvent({ level: "error", scope: "tickets", message: "deleteTicket fehlgeschlagen", detail: error.message, context: { ticketId } });
+    return { success: false, error: "Löschen fehlgeschlagen." };
+  }
 
   revalidatePath("/admin");
   return { success: true };

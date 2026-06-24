@@ -3,7 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isModerator } from "@/lib/admin";
-import { type ChatConfig, DEFAULT_CHAT_CONFIG } from "@/lib/mod";
+import { type ChatConfig, DEFAULT_CHAT_CONFIG, ADMIN_MOD_PERMISSIONS, DEFAULT_MOD_PERMISSIONS, type ModPermissions } from "@/lib/mod";
+import { logDebugEvent } from "@/lib/debug-log-server";
 
 export interface GlobalChatMessage {
   id: string;
@@ -122,14 +123,54 @@ export async function clearGlobalChat(): Promise<{ success: boolean; error?: str
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "Nicht eingeloggt." };
     const admin = createAdminClient();
-    const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("role, username, mod_permissions_override")
+      .eq("id", user.id)
+      .single();
     if (!isModerator(profile)) return { success: false, error: "Keine Berechtigung." };
+
     if (!isAdmin(profile)) {
+      // Resolve effective permissions: global defaults merged with per-user override
+      const { data: globalRow } = await admin
+        .from("mod_permissions")
+        .select("*")
+        .eq("id", "default")
+        .single();
+      const globalPerms: ModPermissions = globalRow
+        ? {
+            canViewTickets: globalRow.can_view_tickets ?? DEFAULT_MOD_PERMISSIONS.canViewTickets,
+            canCloseTickets: globalRow.can_close_tickets ?? DEFAULT_MOD_PERMISSIONS.canCloseTickets,
+            canWarnUsers: globalRow.can_warn_users ?? DEFAULT_MOD_PERMISSIONS.canWarnUsers,
+            canTempBanUsers: globalRow.can_temp_ban_users ?? DEFAULT_MOD_PERMISSIONS.canTempBanUsers,
+            canViewUserDetails: globalRow.can_view_user_details ?? DEFAULT_MOD_PERMISSIONS.canViewUserDetails,
+            canViewAuditLog: globalRow.can_view_audit_log ?? DEFAULT_MOD_PERMISSIONS.canViewAuditLog,
+            canAddCredits: globalRow.can_add_credits ?? DEFAULT_MOD_PERMISSIONS.canAddCredits,
+            maxTempBanHours: globalRow.max_temp_ban_hours ?? DEFAULT_MOD_PERMISSIONS.maxTempBanHours,
+            warnRequiresReason: globalRow.warn_requires_reason ?? DEFAULT_MOD_PERMISSIONS.warnRequiresReason,
+            canClearChat: globalRow.can_clear_chat ?? DEFAULT_MOD_PERMISSIONS.canClearChat,
+            canDeleteTickets: globalRow.can_delete_tickets ?? DEFAULT_MOD_PERMISSIONS.canDeleteTickets,
+            canSetTicketPriority: globalRow.can_set_ticket_priority ?? DEFAULT_MOD_PERMISSIONS.canSetTicketPriority,
+            canUpdateTicketStatus: globalRow.can_update_ticket_status ?? DEFAULT_MOD_PERMISSIONS.canUpdateTicketStatus,
+            canRewardTickets: globalRow.can_reward_tickets ?? DEFAULT_MOD_PERMISSIONS.canRewardTickets,
+          }
+        : DEFAULT_MOD_PERMISSIONS;
+      const override = ((profile as Record<string, unknown>).mod_permissions_override as Partial<ModPermissions>) ?? null;
+      const effectivePerms: ModPermissions = override ? { ...globalPerms, ...override } : globalPerms;
+      if (!effectivePerms.canClearChat) {
+        return { success: false, error: "Keine Berechtigung zum Chat leeren (Mod-Einstellung)." };
+      }
       const cfg = await getChatConfig();
-      if (!cfg.modsCanClear) return { success: false, error: "Mods dürfen den Chat nicht leeren (Admin-Einstellung)." };
+      if (!cfg.modsCanClear) {
+        return { success: false, error: "Mods dürfen den Chat nicht leeren (Chat-Einstellung)." };
+      }
     }
+
     const { error } = await admin.from("global_chat_messages").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    if (error) return { success: false, error: error.message };
+    if (error) {
+      void logDebugEvent({ level: "error", scope: "chat", message: "clearGlobalChat DB-Fehler", detail: error.message });
+      return { success: false, error: error.message };
+    }
     await admin.from("global_chat_messages").insert({
       user_id: null,
       username: "System",
@@ -140,6 +181,7 @@ export async function clearGlobalChat(): Promise<{ success: boolean; error?: str
     });
     return { success: true };
   } catch (e) {
+    void logDebugEvent({ level: "error", scope: "chat", message: "clearGlobalChat fehlgeschlagen", detail: String(e) });
     return { success: false, error: String(e) };
   }
 }

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isModerator, isAdmin } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
+import { logDebugEvent } from "@/lib/debug-log-server";
 import {
   DEFAULT_MOD_PERMISSIONS,
   ADMIN_MOD_PERMISSIONS,
@@ -371,7 +372,10 @@ export async function modWarnUser(
       link: "/account",
     });
     return { success: true };
-  } catch (e) { return { success: false, error: String(e) }; }
+  } catch (e) {
+    void logDebugEvent({ level: "error", scope: "mod", message: "modWarnUser fehlgeschlagen", detail: String(e), context: { targetUserId } });
+    return { success: false, error: String(e) };
+  }
 }
 
 export async function modAddNote(
@@ -424,7 +428,10 @@ export async function modTempBan(
       link: "/account",
     });
     return { success: true };
-  } catch (e) { return { success: false, error: String(e) }; }
+  } catch (e) {
+    void logDebugEvent({ level: "error", scope: "mod", message: "modTempBan fehlgeschlagen", detail: String(e), context: { targetUserId, hours } });
+    return { success: false, error: String(e) };
+  }
 }
 
 export async function modLiftBan(
@@ -445,7 +452,10 @@ export async function modLiftBan(
     if (liftRes.error) return { success: false, error: liftRes.error.message };
     if (actionRes.error) return { success: false, error: actionRes.error.message };
     return { success: true };
-  } catch (e) { return { success: false, error: String(e) }; }
+  } catch (e) {
+    void logDebugEvent({ level: "error", scope: "mod", message: "modLiftBan fehlgeschlagen", detail: String(e), context: { targetUserId } });
+    return { success: false, error: String(e) };
+  }
 }
 
 export async function modCloseTicket(
@@ -480,7 +490,10 @@ export async function modCloseTicket(
       });
     }
     return { success: true };
-  } catch (e) { return { success: false, error: String(e) }; }
+  } catch (e) {
+    void logDebugEvent({ level: "error", scope: "mod", message: "modCloseTicket fehlgeschlagen", detail: String(e), context: { ticketId } });
+    return { success: false, error: String(e) };
+  }
 }
 
 export async function getModWarningsForUser(userId: string): Promise<ModActionRow[]> {
@@ -588,7 +601,10 @@ export async function modAddCredits(
       link: "/account",
     });
     return { success: true };
-  } catch (e) { return { success: false, error: String(e) }; }
+  } catch (e) {
+    void logDebugEvent({ level: "error", scope: "mod", message: "modAddCredits fehlgeschlagen", detail: String(e), context: { targetUserId, amount } });
+    return { success: false, error: String(e) };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -701,7 +717,10 @@ export async function modGrantTicketReward(
       link: `/?openTicket=${ticketId}`,
     });
     return { success: true };
-  } catch (e) { return { success: false, error: String(e) }; }
+  } catch (e) {
+    void logDebugEvent({ level: "error", scope: "mod", message: "modGrantTicketReward fehlgeschlagen", detail: String(e), context: { ticketId, credits: opts.credits } });
+    return { success: false, error: String(e) };
+  }
 }
 
 // ---------------------------------------------------------------------------

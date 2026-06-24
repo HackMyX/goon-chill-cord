@@ -18,6 +18,7 @@ import { getAllNotes } from "@/lib/actions/patchnotes";
 import { getDonConfig } from "@/lib/actions/don-config";
 import { getSnakeConfig } from "@/lib/actions/snake";
 import { getMineConfig } from "@/lib/actions/mine";
+import { getCleanupRules } from "@/lib/actions/cleanup-config";
 import { CASE_GROUPS } from "@/lib/cases";
 import {
   AdminShell,
@@ -139,6 +140,7 @@ export default async function AdminPage() {
     adminDonConfig,
     adminSnakeConfig,
     adminMineConfig,
+    cleanupRules,
   ] = await Promise.all([
     admin
       .from("audit_logs")
@@ -169,6 +171,7 @@ export default async function AdminPage() {
     getDonConfig(),
     getSnakeConfig(),
     getMineConfig(),
+    getCleanupRules(),
   ]);
 
   // Keep case tiers in the same order as CASE_GROUPS (standard before premium,
@@ -210,6 +213,7 @@ export default async function AdminPage() {
       donConfig={adminDonConfig}
       snakeConfig={adminSnakeConfig}
       mineConfig={adminMineConfig}
+      cleanupRules={cleanupRules}
     />
     </Suspense>
   );

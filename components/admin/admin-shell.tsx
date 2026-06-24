@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -27,6 +27,8 @@ import { PatchNotesEditor } from "@/components/admin/patchnotes-editor";
 import { SurveysTab } from "@/components/admin/surveys-tab";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { AiConfigEditor } from "@/components/admin/ai-config-editor";
+import { CleanupConfigEditor } from "@/components/admin/cleanup-config-editor";
+import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
 import type { SnakeConfig } from "@/lib/snake-config";
@@ -118,9 +120,10 @@ interface AdminShellProps {
   donConfig: DonConfig;
   snakeConfig: SnakeConfig;
   mineConfig: MineConfig;
+  cleanupRules: CleanupRule[];
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -142,6 +145,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "backup", label: "Backup", icon: Database },
   { id: "security", label: "Sicherheit", icon: ShieldAlert },
   { id: "patchnotes", label: "Patch Notes", icon: FileText },
+  { id: "cleanup", label: "Verlaufs-Bereinigung", icon: Trash2 },
 ];
 
 export function AdminShell({
@@ -168,6 +172,7 @@ export function AdminShell({
   donConfig,
   snakeConfig,
   mineConfig,
+  cleanupRules,
 }: AdminShellProps) {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>(() => {
@@ -450,6 +455,8 @@ export function AdminShell({
         {tab === "surveys" && <SurveysTab />}
 
         {tab === "patchnotes" && <PatchNotesEditor initialNotes={patchNotes} />}
+
+        {tab === "cleanup" && <CleanupConfigEditor rules={cleanupRules} />}
 
         {tab === "ki" && (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">

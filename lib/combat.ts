@@ -287,17 +287,16 @@ const PERK_SLOTS = ["amulet", "ring", "ring2"] as const;
  * to +82% (1.35 × 1.35) uncapped — for `speed_boost` specifically, that
  * pushes the player's *unsprinted* walk speed (4.5) up to ~8.2, almost
  * exactly matching sprint (8.1, player.tsx SPRINT_MULTIPLIER) for free,
- * with no stamina cost. That would silently undo the entire "every
- * lib/monsters.ts variant is faster than walking, slower than sprinting"
- * design (see that file's doc comment) for anyone holding this one rare
- * item combo — turning the deliberately resource-gated sprint-to-escape
- * loop back into the old free-walk-away exploit it replaced, just gated
- * behind a different rare drop instead of behind nothing. Capped well
- * under sprint's own 1.8× multiplier so even this best-case stacked build
- * never matches sprinting outright, and the single fastest monster variant
- * (Geist, 6.4) can still catch a walking player even at the absolute
- * ceiling (4.5 × 1.4 = 6.3 < 6.4). */
-export const PERK_MULTIPLIER_CAP = 1.4;
+ * with no stamina cost. Capped below sprint's own 1.8× multiplier so even
+ * the best-case stacked build never matches sprinting outright. At 1.6 a
+ * fully-perked walker reaches 4.5 × 1.6 = 7.2 — faster than every monster
+ * variant (Geist tops out at 6.3), which is an intentional reward for
+ * stacking rare perk items: you can walk away from danger without sprinting,
+ * but sprint is still faster, still the burst-escape tool, and the cap
+ * still prevents the raw multiplicative overflow that would otherwise push
+ * unsprinted speed above sprint itself. Admin-configurable via
+ * CharacterConfig.perkMultiplierCap (lib/character-config.ts). */
+export const PERK_MULTIPLIER_CAP = 1.6;
 
 /** Multiplier (around 1.0) for whichever stat `type` boosts — amulet and
  * ring stack multiplicatively if both happen to carry the same perk type,
