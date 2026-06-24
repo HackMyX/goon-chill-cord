@@ -6,6 +6,8 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
+import { getSnakeLeaderboard } from "@/lib/actions/snake";
+import { getMineLeaderboard } from "@/lib/actions/mine";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -40,6 +42,11 @@ export default async function Home() {
     { data: streakProfiles },
     { count: userCount },
     siteConfig,
+    snakeX1,
+    snakeX2,
+    snakeGrind,
+    snakeFarm,
+    mineLeaderboard,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -67,6 +74,11 @@ export default async function Home() {
       .from("profiles")
       .select("*", { count: "exact", head: true }),
     getSiteConfig(),
+    getSnakeLeaderboard("x1", 10),
+    getSnakeLeaderboard("x2", 10),
+    getSnakeLeaderboard("grind", 10),
+    getSnakeLeaderboard("farm", 10),
+    getMineLeaderboard(10),
   ]);
 
   return (
@@ -85,6 +97,11 @@ export default async function Home() {
       username={profile?.username ?? undefined}
       userCount={userCount ?? 0}
       homepageConfig={siteConfig.homepageConfig}
+      snakeX1={snakeX1}
+      snakeX2={snakeX2}
+      snakeGrind={snakeGrind}
+      snakeFarm={snakeFarm}
+      mineLeaderboard={mineLeaderboard}
     />
   );
 }

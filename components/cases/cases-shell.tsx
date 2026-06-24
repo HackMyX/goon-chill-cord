@@ -77,7 +77,7 @@ const RARITY_DEFS = [
     key: "ultra" as Rarity,
     label: "Ultra",
     description: "Extremst seltene RGB-Schätze",
-    iconClass: "rainbow-text",
+    iconClass: "text-fuchsia-400",
     border: "border-fuchsia-500/40",
     bg: "bg-gradient-to-br from-fuchsia-500/5 to-rose-500/5",
     glow: "shadow-[0_0_24px_rgba(217,70,239,0.15)]",
@@ -86,7 +86,7 @@ const RARITY_DEFS = [
     textColor: "rainbow-text",
     barColor: "bg-gradient-to-r from-fuchsia-500 via-purple-500 to-rose-500",
     icon: Sparkles,
-    sparkColor: "rainbow-text",
+    sparkColor: "text-fuchsia-400",
     isUltra: true,
   },
 ];
@@ -240,7 +240,7 @@ export function CasesShell({
                   {/* Icon */}
                   <div className="mb-2 flex justify-center">
                     {r.isUltra ? (
-                      <Sparkles className={`h-7 w-7 rainbow-text animate-crown-bob drop-shadow-[0_0_12px_rgba(217,70,239,0.8)]`} />
+                      <Sparkles className="h-7 w-7 text-fuchsia-400 animate-crown-bob drop-shadow-[0_0_12px_rgba(217,70,239,0.8)]" />
                     ) : (
                       <r.icon className={`h-6 w-6 ${r.iconClass} drop-shadow-[0_0_8px_currentColor]`} />
                     )}

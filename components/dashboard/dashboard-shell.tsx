@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { Leaderboard, type LeaderboardEntry, type StreakEntry } from "@/components/dashboard/leaderboard";
+import { GameLeaderboards } from "@/components/dashboard/game-leaderboards";
+import type { SnakeLeaderboardEntry } from "@/lib/actions/snake";
+import type { MineLeaderboardEntry } from "@/lib/actions/mine";
 import { subscribeToPresence } from "@/lib/presence-client";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
@@ -150,6 +153,11 @@ interface DashboardShellProps {
   username?: string;
   userCount?: number;
   homepageConfig?: HomepageConfig;
+  snakeX1?: SnakeLeaderboardEntry[];
+  snakeX2?: SnakeLeaderboardEntry[];
+  snakeGrind?: SnakeLeaderboardEntry[];
+  snakeFarm?: SnakeLeaderboardEntry[];
+  mineLeaderboard?: MineLeaderboardEntry[];
 }
 
 export function DashboardShell({
@@ -163,6 +171,11 @@ export function DashboardShell({
   username,
   userCount = 0,
   homepageConfig,
+  snakeX1 = [],
+  snakeX2 = [],
+  snakeGrind = [],
+  snakeFarm = [],
+  mineLeaderboard = [],
 }: DashboardShellProps) {
   const cfg = homepageConfig ?? DEFAULT_HOMEPAGE_CONFIG;
   const [credits, setCredits] = useState(initialCredits);
@@ -416,7 +429,7 @@ export function DashboardShell({
                     href={card.href}
                     onMouseEnter={sound.hover}
                     onClick={sound.click}
-                    className={`group relative flex flex-col gap-3.5 overflow-hidden rounded-2xl border bg-gradient-to-br p-5 transition-all duration-300 ${card.gradient} ${card.border} ${card.shadow}`}
+                    className={`group relative flex h-[168px] flex-col gap-3.5 overflow-hidden rounded-2xl border bg-gradient-to-br p-5 transition-all duration-300 ${card.gradient} ${card.border} ${card.shadow}`}
                   >
                     {/* Shimmer on hover */}
                     <div className="card-shimmer-inner pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/8 to-transparent" />
@@ -426,7 +439,7 @@ export function DashboardShell({
 
                     {/* Icon */}
                     <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${card.iconBg} transition-transform duration-300 group-hover:scale-110`}>
-                      <card.icon className={`h-5.5 w-5.5 ${card.iconColor}`} />
+                      <card.icon className={`h-5 w-5 ${card.iconColor}`} />
                     </div>
 
                     {/* Text */}
@@ -462,6 +475,21 @@ export function DashboardShell({
             />
           </div>
         )}
+
+        {/* ── GAME LEADERBOARDS ──────────────────────────────────────── */}
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="flex items-center gap-3 py-2">
+            <div className="flex-1 h-px bg-gradient-to-l from-white/10 to-transparent" />
+            <div className="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent" />
+          </div>
+        </div>
+        <GameLeaderboards
+          snakeX1={snakeX1}
+          snakeX2={snakeX2}
+          snakeGrind={snakeGrind}
+          snakeFarm={snakeFarm}
+          mine={mineLeaderboard}
+        />
       </main>
     </div>
   );
