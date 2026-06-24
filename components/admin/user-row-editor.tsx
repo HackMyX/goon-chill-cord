@@ -49,8 +49,10 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
     if (res.success) {
       setSupportBannedState(next);
       setStatus("saved");
+      sound.save();
       router.refresh();
     } else {
+      sound.error();
       setStatus("error");
     }
   }
@@ -59,6 +61,7 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
     setSaving(true);
     setStatus("idle");
     editingRef.current = false;
+    sound.click();
 
     const [a, b] = await Promise.all([
       updateUserCredits(profile.id, credits),
@@ -69,11 +72,13 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
 
     if (a.success && b.success) {
       setStatus("saved");
+      sound.save();
       // Refresh server data so parent's profiles list reflects the change
       // and any other admin's view on the same page stays in sync.
       router.refresh();
       setTimeout(() => setStatus("idle"), 2500);
     } else {
+      sound.error();
       setStatus("error");
     }
   }
@@ -96,6 +101,7 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
       router.refresh();
       setTimeout(() => setStatus("idle"), 2500);
     } else {
+      sound.error();
       setStatus("error");
     }
   }

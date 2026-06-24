@@ -180,14 +180,14 @@ function QuestionEditor({
         required: form.required,
         sortOrder: questions.length,
       });
-      if (!res.success) { flash(res.error ?? "Fehler."); } else { sound.win(); onRefresh(); setEditing(null); }
+      if (!res.success) { sound.error(); flash(res.error ?? "Fehler."); } else { sound.save(); onRefresh(); setEditing(null); }
     } else if (editing) {
       const res = await updateSurveyQuestion(editing, {
         question: form.question, type: form.type,
         options: cleanOptions.length > 0 ? cleanOptions : null,
         required: form.required,
       });
-      if (!res.success) { flash(res.error ?? "Fehler."); } else { sound.win(); onRefresh(); setEditing(null); }
+      if (!res.success) { sound.error(); flash(res.error ?? "Fehler."); } else { sound.save(); onRefresh(); setEditing(null); }
     }
     setSaving(false);
   }
@@ -197,7 +197,7 @@ function QuestionEditor({
     setDeletingId(id);
     const res = await deleteSurveyQuestion(id);
     setDeletingId(null);
-    if (res.success) { sound.win(); onRefresh(); } else { sound.error(); }
+    if (res.success) { onRefresh(); } else { sound.error(); }
   }
 
   async function handleMove(idx: number, dir: -1 | 1) {
@@ -399,7 +399,7 @@ function SurveyRow({ survey, onRefresh }: { survey: Survey; onRefresh: () => voi
     sound.click();
     startTransition(async () => {
       const res = await updateSurvey(survey.id, { status });
-      if (res.success) { sound.win(); onRefresh(); } else { sound.error(); flash(res.error ?? "Fehler.", false); }
+      if (res.success) { sound.save(); onRefresh(); } else { sound.error(); flash(res.error ?? "Fehler.", false); }
     });
   }
 
@@ -414,7 +414,7 @@ function SurveyRow({ survey, onRefresh }: { survey: Survey; onRefresh: () => voi
         startAt: metaForm.startAt ? new Date(metaForm.startAt).toISOString() : null,
         endAt: metaForm.endAt ? new Date(metaForm.endAt).toISOString() : null,
       });
-      if (res.success) { sound.win(); flash("Gespeichert.", true); setEditingMeta(false); onRefresh(); }
+      if (res.success) { sound.save(); flash("Gespeichert.", true); setEditingMeta(false); onRefresh(); }
       else { sound.error(); flash(res.error ?? "Fehler.", false); }
     });
   }
@@ -424,7 +424,7 @@ function SurveyRow({ survey, onRefresh }: { survey: Survey; onRefresh: () => voi
     sound.click();
     startTransition(async () => {
       const res = await deleteSurvey(survey.id);
-      if (res.success) { sound.win(); onRefresh(); } else { sound.error(); flash(res.error ?? "Fehler.", false); }
+      if (res.success) { onRefresh(); } else { sound.error(); flash(res.error ?? "Fehler.", false); }
     });
   }
 
@@ -582,7 +582,7 @@ function CreateSurveyForm({ onCreated }: { onCreated: () => void }) {
     sound.click();
     const res = await createSurvey({ title, description: description || undefined, allowAnonymous });
     setSaving(false);
-    if (res.success) { sound.win(); onCreated(); setTitle(""); setDescription(""); setAllowAnonymous(false); }
+    if (res.success) { sound.save(); onCreated(); setTitle(""); setDescription(""); setAllowAnonymous(false); }
     else { sound.error(); setError(res.error ?? "Fehler."); }
   }
 

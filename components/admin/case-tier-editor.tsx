@@ -90,6 +90,8 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
     });
     setSaving(false);
     setStatus(res.success ? "saved" : "error");
+    if (res.success) sound.save();
+    else sound.error();
   }
 
   return (

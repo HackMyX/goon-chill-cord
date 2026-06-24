@@ -1,6 +1,6 @@
 "use client";
 
-export type FxSound = "win" | "ultraWin" | "click" | "error" | "flip";
+export type FxSound = "win" | "ultraWin" | "click" | "error" | "flip" | "save";
 // "hit" is an interrupt channel, not a queued Fx one, on purpose — sustained
 // melee (clicking as fast as ATTACK_COOLDOWN allows) needs every landed hit
 // to play immediately, the same way tick/hover never queue. Routing it
@@ -14,6 +14,7 @@ const FX_SRC: Record<FxSound, string> = {
   click: "/sounds/click.wav",
   error: "/sounds/error.wav",
   flip: "/sounds/flip.wav",
+  save: "/sounds/save.wav",
 };
 
 const INTERRUPT_SRC: Record<InterruptSound, string> = {
@@ -55,7 +56,7 @@ class SoundManager {
       audio.volume = base * this._volume;
     }
     for (const [name, audio] of this.fxPool) {
-      const base = name === "click" ? 0.32 : 0.55;
+      const base = name === "click" ? 0.32 : name === "save" ? 0.4 : 0.55;
       audio.volume = base * this._volume;
     }
   }
@@ -78,7 +79,7 @@ class SoundManager {
     let audio = this.fxPool.get(name);
     if (!audio) {
       audio = new Audio(FX_SRC[name]);
-      audio.volume = (name === "click" ? 0.32 : 0.55) * this._volume;
+      audio.volume = (name === "click" ? 0.32 : name === "save" ? 0.4 : 0.55) * this._volume;
       this.fxPool.set(name, audio);
     }
     return audio;
@@ -163,6 +164,7 @@ export function useSoundManager() {
     click: () => soundManager.play("click"),
     error: () => soundManager.play("error"),
     flip: () => soundManager.play("flip"),
+    save: () => soundManager.play("save"),
     setVolume: (v: number) => soundManager.setVolume(v),
   };
 }

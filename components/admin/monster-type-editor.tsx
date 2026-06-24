@@ -63,6 +63,8 @@ export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
     });
     setSaving(false);
     setStatus(res.success ? "saved" : "error");
+    if (res.success) sound.save();
+    else sound.error();
   }
 
   return (

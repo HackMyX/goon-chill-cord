@@ -33,6 +33,7 @@ import {
   type TicketStatus,
   type TicketCategory,
 } from "@/lib/actions/tickets";
+import { useSoundManager } from "@/lib/sound-manager";
 import { UserAiChat } from "@/components/ai/user-ai-chat";
 import { GlobalChatPanel } from "@/components/global/global-chat-panel";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
@@ -118,6 +119,7 @@ function SupportButtonInner() {
 
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  const sound = useSoundManager();
 
   // Resize state
   const [panelW, setPanelW] = useState(352);
@@ -246,6 +248,7 @@ function SupportButtonInner() {
     });
     setSubmitting(false);
     if (res.success) {
+      sound.save();
       setFormSuccess(true);
       setSubject("");
       setDescription("");
@@ -253,6 +256,7 @@ function SupportButtonInner() {
       setAttachmentPreview(null);
       setTimeout(() => { setFormSuccess(false); setView("list"); loadTickets(); }, 2000);
     } else {
+      sound.error();
       setFormError(res.error ?? "Fehler beim Erstellen.");
     }
   }

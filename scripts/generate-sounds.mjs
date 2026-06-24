@@ -278,6 +278,28 @@ writeWav(
   )
 );
 
+// Confirmation chime for "saved" feedback across admin/account forms — a
+// quick two-note rising "ding-ding", lighter/shorter than the win fanfare
+// (which signals a reward, not a settings save) but more substantial than
+// the generic click so a save genuinely reads as confirmed.
+writeWav(
+  "save.wav",
+  fadeTail(
+    finalize(
+      applyEcho(
+        mixLayers(
+          [
+            note(784, 110, { decay: 0.16, peak: 0.42, startMs: 0, harmonics: [[1, 1], [2, 0.3], [3, 0.08]] }),
+            note(1046.5, 150, { decay: 0.22, peak: 0.46, startMs: 90, harmonics: [[1, 1], [2, 0.32], [3, 0.1]] }),
+          ],
+          260
+        ),
+        { delayMs: 80, decay: 0.2, repeats: 2 }
+      )
+    )
+  )
+);
+
 // Melee impact: a short sub-bass thump (reusing the ultra-win kick-drum
 // shape, just much shorter/punchier) layered with a brief high "crack" —
 // the thump alone reads as a dull bump, the crack on top of it is what

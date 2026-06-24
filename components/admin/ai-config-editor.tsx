@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { KeyRound, CheckCircle2, AlertCircle, RefreshCw, Eye, EyeOff, Sparkles, FlaskConical } from "lucide-react";
 import { getAiConfigStatus, updateAiApiKey } from "@/lib/actions/ai-config";
+import { useSoundManager } from "@/lib/sound-manager";
 
 type KeySource = "db" | "env" | "none";
 
@@ -30,6 +31,7 @@ export function AiConfigEditor() {
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const sound = useSoundManager();
 
   useEffect(() => {
     getAiConfigStatus().then(setStatus);
@@ -42,11 +44,13 @@ export function AiConfigEditor() {
     startTransition(async () => {
       const res = await updateAiApiKey(inputKey.trim());
       if (res.success) {
+        sound.save();
         setFeedback({ ok: true, msg: "API-Schlüssel gespeichert. Neue Anfragen nutzen ihn sofort." });
         setInputKey("");
         const next = await getAiConfigStatus();
         setStatus(next);
       } else {
+        sound.error();
         setFeedback({ ok: false, msg: res.error ?? "Unbekannter Fehler." });
       }
     });
@@ -58,10 +62,12 @@ export function AiConfigEditor() {
     startTransition(async () => {
       const res = await updateAiApiKey("");
       if (res.success) {
+        sound.save();
         setFeedback({ ok: true, msg: "API-Schlüssel entfernt. KI-Assistent nutzt jetzt .env-Fallback (falls gesetzt)." });
         const next = await getAiConfigStatus();
         setStatus(next);
       } else {
+        sound.error();
         setFeedback({ ok: false, msg: res.error ?? "Unbekannter Fehler." });
       }
     });

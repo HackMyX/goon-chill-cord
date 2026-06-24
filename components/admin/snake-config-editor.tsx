@@ -9,6 +9,7 @@ import {
   DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG, DEFAULT_FARM_CONFIG,
   type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig,
 } from "@/lib/snake-config";
+import { useSoundManager } from "@/lib/sound-manager";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Small reusable form controls
@@ -224,11 +225,15 @@ export function SnakeConfigEditor({ config }: { config: SnakeConfig }) {
   const [tab, setTab] = useState<"shared" | "x1" | "x2" | "grind" | "farm">("shared");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const sound = useSoundManager();
 
   async function save() {
     setSaving(true);
+    sound.click();
     const res = await updateSnakeConfig(form);
     setSaving(false);
+    if (res.success) sound.save();
+    else sound.error();
     setMsg({ text: res.error ?? "Gespeichert!", ok: res.success });
     if (res.success) setTimeout(() => setMsg(null), 3000);
   }

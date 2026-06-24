@@ -132,7 +132,7 @@ function DayRuleEditor({
   async function handleSave() {
     sound.click();
     setSaving(true);
-    await upsertShopCategoryDayRule({
+    const res = await upsertShopCategoryDayRule({
       categoryId,
       dayOfWeek: dayOfWeek ?? null,
       specificDate: specificDate ?? null,
@@ -142,6 +142,8 @@ function DayRuleEditor({
       itemCountOverride: form.itemCountOverride,
     });
     setSaving(false);
+    if (res.success) sound.save();
+    else sound.error();
     onSaved();
   }
 
@@ -377,7 +379,12 @@ function CategoryCard({ category, onChanged }: { category: ShopCategory; onChang
     });
     setSaving(false);
     setStatus(res.success ? "saved" : "error");
-    if (res.success) onChanged();
+    if (res.success) {
+      sound.save();
+      onChanged();
+    } else {
+      sound.error();
+    }
   }
 
   async function handleDelete(e: React.MouseEvent) {
@@ -563,7 +570,7 @@ export function ShopCategoryManager({ onChanged }: { onChanged: () => void }) {
   async function handleCreate() {
     sound.click();
     setCreating(true);
-    await upsertShopCategory({
+    const res = await upsertShopCategory({
       name: "Neue Kategorie",
       icon: "Tag",
       color: "purple",
@@ -576,6 +583,8 @@ export function ShopCategoryManager({ onChanged }: { onChanged: () => void }) {
       priceMultiplierMax: 8,
     });
     setCreating(false);
+    if (res.success) sound.save();
+    else sound.error();
     handleChanged();
   }
 

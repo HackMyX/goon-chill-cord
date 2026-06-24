@@ -27,7 +27,7 @@ export function WorldSessionConfigEditor({ config }: { config: WorldSessionConfi
     const res = await updateWorldSessionConfig(form);
     setSaving(false);
     if (res.success) {
-      sound.win();
+      sound.save();
       setMessage("Gespeichert.");
     } else {
       sound.error();

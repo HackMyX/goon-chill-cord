@@ -60,6 +60,8 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
     });
     setSaving(false);
     setStatus(res.success ? "saved" : "error");
+    if (res.success) sound.save();
+    else sound.error();
   }
 
   async function handleDelete() {
@@ -67,7 +69,10 @@ export function ItemRowEditor({ item, onDeleted }: ItemRowEditorProps) {
     const res = await deleteItem(item.id);
     setDeleting(false);
     if (res.success) onDeleted(item.id);
-    else setStatus("error");
+    else {
+      sound.error();
+      setStatus("error");
+    }
   }
 
   const style = RARITY_STYLES[rarity];

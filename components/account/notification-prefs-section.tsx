@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Bell, Sparkles, Repeat, Gavel, ShieldCheck, Save, Loader2, Check, Lock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bell, Sparkles, Repeat, Gavel, ShieldCheck, Loader2, Check, Lock } from "lucide-react";
 import { updateNotificationPrefs, type NotificationPrefs } from "@/lib/actions/account";
 import { useSoundManager } from "@/lib/sound-manager";
 import { isModerator } from "@/lib/admin";
@@ -114,6 +114,36 @@ export function NotificationPrefsSection({
   const sound = useSoundManager();
   const isStaff = isModerator({ role });
 
+  // Auto-save: skip the very first render (that's just `initialPrefs`
+  // echoing back), then debounce so rapid toggle clicks collapse into one
+  // save instead of firing a request per click.
+  const skipFirstRef = useRef(true);
+  const savedFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (skipFirstRef.current) {
+      skipFirstRef.current = false;
+      return;
+    }
+    const handle = setTimeout(async () => {
+      setSaving(true);
+      setSaveError(null);
+      const res = await updateNotificationPrefs(prefs);
+      setSaving(false);
+      if (res.success) {
+        sound.save();
+        setSavedFlash(true);
+        if (savedFlashTimeoutRef.current) clearTimeout(savedFlashTimeoutRef.current);
+        savedFlashTimeoutRef.current = setTimeout(() => setSavedFlash(false), 2200);
+      } else {
+        sound.error();
+        setSaveError(res.error ?? "Speichern fehlgeschlagen.");
+      }
+    }, 600);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs]);
+
   function isEnabled(type: string) {
     return prefs[type] !== false;
   }
@@ -130,32 +160,6 @@ export function NotificationPrefsSection({
       types.forEach((t) => { next[t.type] = enabled; });
       return next;
     });
-  }
-
-  const allUserTypes = USER_GROUPS.flatMap((g) => g.types.map((t) => t.type));
-  const allStaffTypes = isStaff ? STAFF_ENTRIES.map((t) => t.type) : [];
-  const allTypes = [...allUserTypes, ...allStaffTypes];
-
-  const dirty = allTypes.some((t) => {
-    const was = initialPrefs[t] !== false;
-    const is = prefs[t] !== false;
-    return was !== is;
-  });
-
-  async function handleSave() {
-    setSaving(true);
-    setSaveError(null);
-    sound.click();
-    const res = await updateNotificationPrefs(prefs);
-    setSaving(false);
-    if (res.success) {
-      sound.win();
-      setSavedFlash(true);
-      setTimeout(() => setSavedFlash(false), 2500);
-    } else {
-      sound.error();
-      setSaveError(res.error ?? "Speichern fehlgeschlagen.");
-    }
   }
 
   return (
@@ -281,21 +285,15 @@ export function NotificationPrefsSection({
         )}
       </div>
 
-      {/* Save footer */}
-      <div className="mt-3 flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          disabled={saving || !dirty}
-          className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-40"
-        >
-          {saving ? (
+      {/* Auto-save status — no Speichern-Button, jede Änderung speichert sich selbst */}
+      <div className="mt-3 flex min-h-[20px] items-center gap-2">
+        {saving && (
+          <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-400">
             <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          Speichern
-        </button>
-        {savedFlash && (
+            Speichert...
+          </span>
+        )}
+        {!saving && savedFlash && (
           <span className="flex items-center gap-1.5 text-sm font-medium text-emerald-400">
             <Check className="h-4 w-4" />
             Gespeichert

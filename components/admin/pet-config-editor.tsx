@@ -25,6 +25,7 @@ export function PetConfigEditor({ type }: { type: PetTypeConfig }) {
   async function handleSave() {
     setSaving(true);
     setStatus("idle");
+    sound.click();
     const res = await updatePetConfig({
       id: type.id,
       damage,
@@ -35,6 +36,8 @@ export function PetConfigEditor({ type }: { type: PetTypeConfig }) {
     });
     setSaving(false);
     setStatus(res.success ? "saved" : "error");
+    if (res.success) sound.save();
+    else sound.error();
   }
 
   return (

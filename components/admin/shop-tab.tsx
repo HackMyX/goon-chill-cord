@@ -233,14 +233,18 @@ function ListingRow({ listing, onChanged }: { listing: AdminShopListing; onChang
     if (!dirty) return;
     setSavingPrice(true);
     sound.click();
-    await updateShopListing(listing.id, { priceCr });
+    const res = await updateShopListing(listing.id, { priceCr });
     setSavingPrice(false);
+    if (res.success) sound.save();
+    else sound.error();
     onChanged();
   }
 
   async function toggleFeatured() {
     sound.click();
-    await updateShopListing(listing.id, { featured: !listing.featured });
+    const res = await updateShopListing(listing.id, { featured: !listing.featured });
+    if (res.success) sound.save();
+    else sound.error();
     onChanged();
   }
 

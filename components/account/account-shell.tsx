@@ -58,8 +58,13 @@ export function AccountShell({
     const next = !acceptsTrades;
     const res = await updatePlayerSettings({ acceptsTrades: next });
     setAcceptsTradesSaving(false);
-    if (res.success) setAcceptsTrades(next);
-    else setToggleError(res.error ?? "Speichern fehlgeschlagen.");
+    if (res.success) {
+      setAcceptsTrades(next);
+      sound.save();
+    } else {
+      sound.error();
+      setToggleError(res.error ?? "Speichern fehlgeschlagen.");
+    }
   }
 
   async function handleToggleProfileVisible() {
@@ -69,8 +74,13 @@ export function AccountShell({
     const next = !profileVisible;
     const res = await updatePlayerSettings({ profileVisible: next });
     setProfileVisibleSaving(false);
-    if (res.success) setProfileVisible(next);
-    else setToggleError(res.error ?? "Speichern fehlgeschlagen.");
+    if (res.success) {
+      setProfileVisible(next);
+      sound.save();
+    } else {
+      sound.error();
+      setToggleError(res.error ?? "Speichern fehlgeschlagen.");
+    }
   }
 
   // Admin-driven changes (credits set, role changed) reach this tab the
@@ -86,9 +96,11 @@ export function AccountShell({
     const res = await updateUsername(draft);
     setSaving(false);
     if (!res.success) {
+      sound.error();
       setError(res.error ?? "Fehler.");
       return;
     }
+    sound.save();
     setDisplayName(draft);
     setEditing(false);
   }

@@ -69,7 +69,7 @@ export function ChatConfigEditor({ initialConfig }: Props) {
     const res = await updateChatConfig(config);
     setSaving(false);
     if (res.success) {
-      sound.win?.();
+      sound.save();
       setMessage({ text: "Gespeichert.", ok: true });
     } else {
       sound.error();

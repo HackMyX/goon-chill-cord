@@ -71,7 +71,7 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
     const res = await updateSiteConfig(form);
     setSaving(false);
     if (res.success) {
-      sound.win();
+      sound.save();
       setMessage("Gespeichert.");
     } else {
       sound.error();

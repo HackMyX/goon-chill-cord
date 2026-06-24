@@ -436,6 +436,7 @@ export function PatchNotesEditor({ initialNotes }: { initialNotes: PatchNote[] }
       });
       if (!res.success || !res.id) {
         setSaving(false);
+        sound.error();
         setMessage({ text: res.error ?? "Fehler beim Erstellen.", ok: false });
         setTimeout(() => setMessage(null), 3000);
         return;
@@ -452,6 +453,7 @@ export function PatchNotesEditor({ initialNotes }: { initialNotes: PatchNote[] }
       });
       if (!res.success) {
         setSaving(false);
+        sound.error();
         setMessage({ text: res.error ?? "Fehler.", ok: false });
         setTimeout(() => setMessage(null), 3000);
         return;
@@ -462,6 +464,7 @@ export function PatchNotesEditor({ initialNotes }: { initialNotes: PatchNote[] }
       const res = await publishPatchNote(id);
       if (!res.success) {
         setSaving(false);
+        sound.error();
         setMessage({ text: res.error ?? "Fehler beim Veröffentlichen.", ok: false });
         setTimeout(() => setMessage(null), 3000);
         return;
@@ -473,7 +476,7 @@ export function PatchNotesEditor({ initialNotes }: { initialNotes: PatchNote[] }
     }
 
     setSaving(false);
-    sound.win();
+    sound.save();
     setMessage({ text: andPublish ? "Veröffentlicht!" : "Gespeichert.", ok: true });
     setTimeout(() => setMessage(null), 3000);
     await refreshNotes();

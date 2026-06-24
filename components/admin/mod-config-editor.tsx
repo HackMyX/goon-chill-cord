@@ -53,7 +53,7 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
     sound.click();
     const res = await updateModPermissions(perms);
     setSaving(false);
-    if (res.success) { sound.win(); setMessage("Gespeichert."); }
+    if (res.success) { sound.save(); setMessage("Gespeichert."); }
     else { sound.error(); setMessage(res.error ?? "Fehler."); }
     setTimeout(() => setMessage(null), 3000);
   }

@@ -72,7 +72,7 @@ function ModRow({ mod, globalPerms }: { mod: ModeratorWithPermissions; globalPer
     sound.click();
     const res = await setModUserPermissions(mod.id, hasOverride ? override : null);
     setSaving(false);
-    if (res.success) { sound.win(); setMsg("Gespeichert."); }
+    if (res.success) { sound.save(); setMsg("Gespeichert."); }
     else { sound.error(); setMsg(res.error ?? "Fehler."); }
     setTimeout(() => setMsg(null), 3000);
   }

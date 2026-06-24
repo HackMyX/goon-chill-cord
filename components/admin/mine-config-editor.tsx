@@ -4,6 +4,7 @@ import { useState } from "react";
 import { RotateCcw, Save, CheckCircle, XCircle, Pickaxe, Plus, Trash2 } from "lucide-react";
 import { updateMineConfig } from "@/lib/actions/mine";
 import { DEFAULT_MINE_CONFIG, type MineConfig, type MineLevel } from "@/lib/mine-config";
+import { useSoundManager } from "@/lib/sound-manager";
 
 interface MineConfigEditorProps {
   config: MineConfig;
@@ -13,6 +14,7 @@ export function MineConfigEditor({ config }: MineConfigEditorProps) {
   const [form, setForm] = useState<MineConfig>(config);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const sound = useSoundManager();
 
   function setEnabled(v: boolean) { setForm((f) => ({ ...f, enabled: v })); }
   function setTitle(v: string) { setForm((f) => ({ ...f, sectionTitle: v })); }
@@ -45,8 +47,11 @@ export function MineConfigEditor({ config }: MineConfigEditorProps) {
 
   async function save() {
     setSaving(true);
+    sound.click();
     const res = await updateMineConfig(form);
     setSaving(false);
+    if (res.success) sound.save();
+    else sound.error();
     setMsg({ text: res.error ?? "Gespeichert!", ok: res.success });
     if (res.success) setTimeout(() => setMsg(null), 3000);
   }

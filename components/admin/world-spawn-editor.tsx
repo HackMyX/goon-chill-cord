@@ -57,7 +57,7 @@ export function WorldSpawnConfigEditor({ config }: { config: WorldSpawnConfig })
     const res = await updateWorldSpawnConfig(form);
     setSaving(false);
     if (res.success) {
-      sound.win();
+      sound.save();
       setMessage("Gespeichert.");
     } else {
       sound.error();

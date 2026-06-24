@@ -62,13 +62,20 @@ export function UserDetailPanel({ userId }: { userId: string }) {
 
   async function handleGrant(itemId: string) {
     const res = await grantItemToUser(userId, itemId);
-    if (res.success) await refresh();
+    if (res.success) {
+      sound.save();
+      await refresh();
+    } else {
+      sound.error();
+    }
   }
 
   async function handleRemove(inventoryId: string) {
     const res = await removeUserItem(inventoryId);
     if (res.success && detail) {
       setDetail({ ...detail, inventory: detail.inventory.filter((r) => r.id !== inventoryId) });
+    } else if (!res.success) {
+      sound.error();
     }
   }
 
@@ -82,6 +89,8 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     setModAction("kick");
     const res = await kickUser(userId);
     setModAction(null);
+    if (res.success) sound.save();
+    else sound.error();
     setModMessage(res.success ? "Ausgeloggt." : res.error ?? "Fehler.");
   }
 
@@ -101,9 +110,11 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     const res = await setUserBanned(userId, next);
     setModAction(null);
     if (res.success) {
+      sound.save();
       setDetail({ ...detail, banned: next });
       setModMessage(next ? "User gebannt." : "User entbannt.");
     } else {
+      sound.error();
       setModMessage(res.error ?? "Fehler.");
     }
   }
@@ -120,9 +131,11 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     const res = await wipeUserInventory(userId);
     setModAction(null);
     if (res.success) {
+      sound.save();
       setDetail((d) => (d ? { ...d, inventory: [] } : d));
       setModMessage("Inventar geleert.");
     } else {
+      sound.error();
       setModMessage(res.error ?? "Fehler.");
     }
   }
@@ -152,6 +165,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
       // User is gone — reload the admin page so the row disappears
       window.location.reload();
     } else {
+      sound.error();
       setModMessage(res.error ?? "Fehler beim Löschen.");
     }
   }
@@ -167,9 +181,11 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     const res = await grantAllItemsToUser(userId);
     setModAction(null);
     if (res.success) {
+      sound.save();
       await refresh();
       setModMessage("Alle Items vergeben.");
     } else {
+      sound.error();
       setModMessage(res.error ?? "Fehler.");
     }
   }
@@ -186,9 +202,11 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     const res = await setUserGender(userId, gender);
     setModAction(null);
     if (res.success) {
+      sound.save();
       setDetail({ ...detail, gender });
       setModMessage("Geschlecht geändert.");
     } else {
+      sound.error();
       setModMessage(res.error ?? "Fehler.");
     }
   }

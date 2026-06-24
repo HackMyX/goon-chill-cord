@@ -130,7 +130,7 @@ export function CharacterConfigEditor({ config }: { config: CharacterConfig }) {
     const res = await updateCharacterConfig(form);
     setSaving(false);
     if (res.success) {
-      sound.win();
+      sound.save();
       setMessage("Gespeichert.");
     } else {
       sound.error();

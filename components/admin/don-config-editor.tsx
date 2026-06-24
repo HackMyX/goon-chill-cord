@@ -25,7 +25,7 @@ export function DonConfigEditor({ config }: Props) {
     const res = await updateDonConfig(form);
     setSaving(false);
     if (res.success) {
-      sound.win();
+      sound.save();
       setMessage({ text: "Gespeichert.", ok: true });
     } else {
       sound.error();
