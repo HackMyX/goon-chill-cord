@@ -10,6 +10,10 @@ import {
 } from "@/components/auctions/auctions-shell";
 import type { Rarity } from "@/lib/cases";
 
+const ITEM_STAT_SELECT = "id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec";
+
+type ItemRow = { id: string; name: string; rarity: Rarity; type: string; damage?: number | null; armor?: number | null; perk_type?: string | null; perk_magnitude?: number | null; shield_hp?: number | null; shield_regen_cooldown_sec?: number | null };
+
 export default async function AuctionsPage() {
   await sweepExpiredAuctions();
 
@@ -27,8 +31,7 @@ export default async function AuctionsPage() {
 
   const admin = createAdminClient();
 
-  const auctionColumnsBase =
-    "id, seller_id, inventory_id, current_bid, current_bidder_id, listing_fee, status, ends_at, created_at, item:items(id, name, rarity, type), seller:profiles!auctions_seller_id_fkey(username), bidder:profiles!auctions_current_bidder_id_fkey(username)";
+  const auctionColumnsBase = `id, seller_id, inventory_id, current_bid, current_bidder_id, listing_fee, status, ends_at, created_at, item:items(${ITEM_STAT_SELECT}), seller:profiles!auctions_seller_id_fkey(username), bidder:profiles!auctions_current_bidder_id_fkey(username)`;
 
   const [auctionsResult, { data: myInventory }] = await Promise.all([
     // `buyout_price` may not exist yet if that migration hasn't run — try
@@ -41,7 +44,7 @@ export default async function AuctionsPage() {
       .limit(50),
     admin
       .from("inventory")
-      .select("id, equipped, item:items(id, name, rarity, type)")
+      .select(`id, equipped, item:items(${ITEM_STAT_SELECT})`)
       .eq("user_id", user.id),
   ]);
   let auctionRows = auctionsResult.data;
@@ -64,7 +67,7 @@ export default async function AuctionsPage() {
   const auctions: AuctionListEntry[] = (auctionRows ?? [])
     .filter((a) => a.item)
     .map((a) => {
-      const item = a.item as unknown as { id: string; name: string; rarity: Rarity; type: string };
+      const item = a.item as unknown as ItemRow;
       const seller = a.seller as unknown as { username: string } | null;
       const bidder = a.bidder as unknown as { username: string } | null;
       return {
@@ -75,6 +78,12 @@ export default async function AuctionsPage() {
         itemName: item.name,
         itemRarity: item.rarity,
         itemType: item.type,
+        itemDamage: item.damage,
+        itemArmor: item.armor,
+        itemPerkType: item.perk_type,
+        itemPerkMagnitude: item.perk_magnitude,
+        itemShieldHp: item.shield_hp,
+        itemShieldCooldown: item.shield_regen_cooldown_sec,
         currentBid: a.current_bid,
         currentBidderName: bidder?.username ?? null,
         listingFee: a.listing_fee,
@@ -88,8 +97,8 @@ export default async function AuctionsPage() {
   const myItems: OwnedItem[] = (myInventory ?? [])
     .filter((row) => row.item && !activelyListedInventoryIds.has(row.id))
     .map((row) => {
-      const item = row.item as unknown as { id: string; name: string; rarity: Rarity; type: string };
-      return { inventoryId: row.id, name: item.name, rarity: item.rarity, type: item.type };
+      const item = row.item as unknown as ItemRow;
+      return { inventoryId: row.id, name: item.name, rarity: item.rarity, type: item.type, damage: item.damage, armor: item.armor, perk_type: item.perk_type, perk_magnitude: item.perk_magnitude, shield_hp: item.shield_hp, shield_regen_cooldown_sec: item.shield_regen_cooldown_sec };
     });
 
   return (

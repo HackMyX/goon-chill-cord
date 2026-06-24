@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Repeat, Plus, Search, Check, X as XIcon, Ban } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
+import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import {
@@ -30,7 +31,26 @@ export interface OwnedItem {
   name: string;
   rarity: Rarity;
   type: string;
+  damage?: number | null;
+  armor?: number | null;
+  perk_type?: string | null;
+  perk_magnitude?: number | null;
+  shield_hp?: number | null;
+  shield_regen_cooldown_sec?: number | null;
 }
+
+type TradeItem = {
+  id: string;
+  name: string;
+  rarity: Rarity;
+  type: string;
+  damage?: number | null;
+  armor?: number | null;
+  perk_type?: string | null;
+  perk_magnitude?: number | null;
+  shield_hp?: number | null;
+  shield_regen_cooldown_sec?: number | null;
+};
 
 export interface TradeListEntry {
   id: string;
@@ -38,8 +58,8 @@ export interface TradeListEntry {
   senderName: string;
   receiverId: string;
   receiverName: string;
-  offeredItems: { id: string; name: string; rarity: Rarity; type: string }[];
-  requestedItems: { id: string; name: string; rarity: Rarity; type: string }[];
+  offeredItems: TradeItem[];
+  requestedItems: TradeItem[];
   offeredCredits: number;
   requestedCredits: number;
   status: "pending" | "accepted" | "declined" | "cancelled";
@@ -67,7 +87,7 @@ function ItemPicker({
   onToggle,
   emptyLabel,
 }: {
-  items: { id: string; name: string; rarity: Rarity }[];
+  items: TradeItem[];
   selected: Set<string>;
   onToggle: (id: string) => void;
   emptyLabel: string;
@@ -102,7 +122,21 @@ function ItemPicker({
                   : "border-white/10 text-zinc-300 hover:border-white/25"
               }`}
             >
-              <span className="truncate">{item.name}</span>
+              <div className="min-w-0 flex-1">
+                <span className="block truncate">{item.name}</span>
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  <ItemStatBadges
+                    damage={item.damage}
+                    armor={item.armor}
+                    perk_type={item.perk_type}
+                    perk_magnitude={item.perk_magnitude}
+                    shield_hp={item.shield_hp}
+                    shield_regen_cooldown_sec={item.shield_regen_cooldown_sec}
+                    itemName={item.name}
+                    itemType={item.type}
+                  />
+                </div>
+              </div>
               <span className="flex shrink-0 items-center gap-1.5">
                 <RarityBadge rarity={item.rarity} />
                 <Plus className={`h-3.5 w-3.5 ${active ? "rotate-45 text-purple-300" : "text-zinc-500"} transition-transform`} />
@@ -177,8 +211,8 @@ function CreateTradeForm({
     }
   }
 
-  const myItemOptions = myItems.map((i) => ({ id: i.inventoryId, name: i.name, rarity: i.rarity }));
-  const theirItemOptions = theirItems.map((i) => ({ id: i.inventoryId, name: i.name, rarity: i.rarity }));
+  const myItemOptions: TradeItem[] = myItems.map((i) => ({ id: i.inventoryId, name: i.name, rarity: i.rarity, type: i.type, damage: i.damage, armor: i.armor, perk_type: i.perk_type, perk_magnitude: i.perk_magnitude, shield_hp: i.shield_hp, shield_regen_cooldown_sec: i.shield_regen_cooldown_sec }));
+  const theirItemOptions: TradeItem[] = theirItems.map((i) => ({ id: i.inventoryId, name: i.name, rarity: i.rarity, type: i.type, damage: i.damage, armor: i.armor, perk_type: i.perk_type, perk_magnitude: i.perk_magnitude, shield_hp: i.shield_hp, shield_regen_cooldown_sec: i.shield_regen_cooldown_sec }));
 
   return (
     <div className="rounded-2xl border border-purple-500/20 bg-[#0f0e18] p-5">
@@ -290,15 +324,30 @@ function CreateTradeForm({
   );
 }
 
-function ItemChips({ items, credits }: { items: { id: string; name: string; rarity: Rarity }[]; credits: number }) {
+function ItemChips({ items, credits }: { items: TradeItem[]; credits: number }) {
   const { currencyName } = useSiteConfig();
   if (items.length === 0 && credits === 0) return <span className="text-xs text-zinc-600">nichts</span>;
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="flex flex-wrap gap-1.5">
       {items.map((i) => (
-        <span key={i.id} className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[11px] text-zinc-300">
-          {i.name}
-        </span>
+        <div key={i.id} className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
+          <div className="flex items-center gap-1.5">
+            <RarityBadge rarity={i.rarity} />
+            <span className="text-[11px] text-zinc-300">{i.name}</span>
+          </div>
+          <div className="mt-0.5 flex flex-wrap gap-1">
+            <ItemStatBadges
+              damage={i.damage}
+              armor={i.armor}
+              perk_type={i.perk_type}
+              perk_magnitude={i.perk_magnitude}
+              shield_hp={i.shield_hp}
+              shield_regen_cooldown_sec={i.shield_regen_cooldown_sec}
+              itemName={i.name}
+              itemType={i.type}
+            />
+          </div>
+        </div>
       ))}
       {credits > 0 && (
         <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2 py-0.5 text-[11px] font-semibold text-purple-300">

@@ -12,6 +12,7 @@ import { createAuction, placeBid, buyAuctionNow, cancelAuction } from "@/lib/act
 import { computeListingFee, MAX_ACTIVE_AUCTIONS_PER_USER } from "@/lib/auctions";
 import type { Rarity } from "@/lib/cases";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 
 export interface OwnedItem {
@@ -19,6 +20,12 @@ export interface OwnedItem {
   name: string;
   rarity: Rarity;
   type: string;
+  damage?: number | null;
+  armor?: number | null;
+  perk_type?: string | null;
+  perk_magnitude?: number | null;
+  shield_hp?: number | null;
+  shield_regen_cooldown_sec?: number | null;
 }
 
 export interface AuctionListEntry {
@@ -29,6 +36,12 @@ export interface AuctionListEntry {
   itemName: string;
   itemRarity: Rarity;
   itemType: string;
+  itemDamage?: number | null;
+  itemArmor?: number | null;
+  itemPerkType?: string | null;
+  itemPerkMagnitude?: number | null;
+  itemShieldHp?: number | null;
+  itemShieldCooldown?: number | null;
   currentBid: number;
   currentBidderName: string | null;
   listingFee: number;
@@ -136,13 +149,27 @@ function CreateAuctionForm({
               sound.click();
               setSelected(item);
             }}
-            className={`flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-sm transition-colors ${
+            className={`flex w-full items-start justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-sm transition-colors ${
               selected?.inventoryId === item.inventoryId
                 ? "border-purple-400/60 bg-purple-500/15 text-purple-200"
                 : "border-white/10 text-zinc-300 hover:border-white/25"
             }`}
           >
-            <span className="truncate">{item.name}</span>
+            <div className="min-w-0 flex-1">
+              <span className="block truncate">{item.name}</span>
+              <div className="mt-0.5 flex flex-wrap gap-1">
+                <ItemStatBadges
+                  damage={item.damage}
+                  armor={item.armor}
+                  perk_type={item.perk_type}
+                  perk_magnitude={item.perk_magnitude}
+                  shield_hp={item.shield_hp}
+                  shield_regen_cooldown_sec={item.shield_regen_cooldown_sec}
+                  itemName={item.name}
+                  itemType={item.type}
+                />
+              </div>
+            </div>
             <RarityBadge rarity={item.rarity} />
           </button>
         ))}
@@ -309,6 +336,18 @@ function AuctionRow({
             {auction.itemName}
             <RarityBadge rarity={auction.itemRarity} />
           </p>
+          <div className="mb-0.5 flex flex-wrap gap-1">
+            <ItemStatBadges
+              damage={auction.itemDamage}
+              armor={auction.itemArmor}
+              perk_type={auction.itemPerkType}
+              perk_magnitude={auction.itemPerkMagnitude}
+              shield_hp={auction.itemShieldHp}
+              shield_regen_cooldown_sec={auction.itemShieldCooldown}
+              itemName={auction.itemName}
+              itemType={auction.itemType}
+            />
+          </div>
           <p className="text-[11px] text-zinc-500">
             von {auction.sellerName}
             {auction.currentBidderName && (

@@ -22,6 +22,12 @@ export interface TradeItemSummary {
   name: string;
   rarity: Rarity;
   type: string;
+  damage?: number | null;
+  armor?: number | null;
+  perk_type?: string | null;
+  perk_magnitude?: number | null;
+  shield_hp?: number | null;
+  shield_regen_cooldown_sec?: number | null;
 }
 
 export interface TradeOffer {
@@ -50,6 +56,12 @@ export interface OwnedItemSummary {
   name: string;
   rarity: Rarity;
   type: string;
+  damage?: number | null;
+  armor?: number | null;
+  perk_type?: string | null;
+  perk_magnitude?: number | null;
+  shield_hp?: number | null;
+  shield_regen_cooldown_sec?: number | null;
 }
 
 /** Fetched on demand when the player picker selects someone — not joined
@@ -67,14 +79,14 @@ export async function getPlayerInventoryForTrade(
   const admin = createAdminClient();
   const { data } = await admin
     .from("inventory")
-    .select("id, item:items(id, name, rarity, type)")
+    .select("id, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)")
     .eq("user_id", targetUserId);
 
   return (data ?? [])
     .filter((row) => row.item)
     .map((row) => {
-      const item = row.item as unknown as { name: string; rarity: Rarity; type: string };
-      return { inventoryId: row.id, name: item.name, rarity: item.rarity, type: item.type };
+      const item = row.item as unknown as { name: string; rarity: Rarity; type: string; damage?: number | null; armor?: number | null; perk_type?: string | null; perk_magnitude?: number | null; shield_hp?: number | null; shield_regen_cooldown_sec?: number | null };
+      return { inventoryId: row.id, name: item.name, rarity: item.rarity, type: item.type, damage: item.damage, armor: item.armor, perk_type: item.perk_type, perk_magnitude: item.perk_magnitude, shield_hp: item.shield_hp, shield_regen_cooldown_sec: item.shield_regen_cooldown_sec };
     });
 }
 

@@ -5,6 +5,10 @@ import { TradingShell, type TradeListEntry, type TradablePlayer, type OwnedItem 
 import type { Rarity } from "@/lib/cases";
 import { isAdmin, isModerator } from "@/lib/admin";
 
+const ITEM_STAT_SELECT = "id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec";
+
+type ItemRow = { id: string; name: string; rarity: Rarity; type: string; damage?: number | null; armor?: number | null; perk_type?: string | null; perk_magnitude?: number | null; shield_hp?: number | null; shield_regen_cooldown_sec?: number | null };
+
 export default async function TradingPage() {
   const supabase = await createClient();
   const {
@@ -24,7 +28,7 @@ export default async function TradingPage() {
     admin.from("profiles").select("id, username, accepts_trades").neq("id", user.id).order("username"),
     admin
       .from("inventory")
-      .select("id, item:items(id, name, rarity, type)")
+      .select(`id, item:items(${ITEM_STAT_SELECT})`)
       .eq("user_id", user.id),
     admin
       .from("trades")
@@ -46,13 +50,13 @@ export default async function TradingPage() {
     allItemIds.size > 0
       ? await admin
           .from("inventory")
-          .select("id, item:items(id, name, rarity, type)")
+          .select(`id, item:items(${ITEM_STAT_SELECT})`)
           .in("id", Array.from(allItemIds))
       : { data: [] as never[] };
 
   const itemById = new Map(
     (referencedInventory ?? []).map((row) => {
-      const item = row.item as unknown as { id: string; name: string; rarity: Rarity; type: string } | null;
+      const item = row.item as unknown as ItemRow | null;
       return [row.id, item];
     })
   );
@@ -61,7 +65,7 @@ export default async function TradingPage() {
     return ids
       .map((id) => itemById.get(id))
       .filter((x): x is NonNullable<typeof x> => Boolean(x))
-      .map((item) => ({ id: item.id, name: item.name, rarity: item.rarity, type: item.type }));
+      .map((item) => ({ id: item.id, name: item.name, rarity: item.rarity, type: item.type, damage: item.damage, armor: item.armor, perk_type: item.perk_type, perk_magnitude: item.perk_magnitude, shield_hp: item.shield_hp, shield_regen_cooldown_sec: item.shield_regen_cooldown_sec }));
   }
 
   const trades: TradeListEntry[] = (tradeRows ?? []).map((t) => ({
@@ -81,8 +85,8 @@ export default async function TradingPage() {
   const myItems: OwnedItem[] = (myInventory ?? [])
     .filter((row) => row.item)
     .map((row) => {
-      const item = row.item as unknown as { id: string; name: string; rarity: Rarity; type: string };
-      return { inventoryId: row.id, name: item.name, rarity: item.rarity, type: item.type };
+      const item = row.item as unknown as ItemRow;
+      return { inventoryId: row.id, name: item.name, rarity: item.rarity, type: item.type, damage: item.damage, armor: item.armor, perk_type: item.perk_type, perk_magnitude: item.perk_magnitude, shield_hp: item.shield_hp, shield_regen_cooldown_sec: item.shield_regen_cooldown_sec };
     });
 
   const tradablePlayers: TradablePlayer[] = (players ?? []).map((p) => ({

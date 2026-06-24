@@ -392,7 +392,7 @@ export async function deleteItem(itemId: string): Promise<AdminActionResult> {
 export interface UserInventoryRow {
   id: string;
   equipped: boolean;
-  item: { id: string; name: string; rarity: Rarity; type: string };
+  item: { id: string; name: string; rarity: Rarity; type: string; damage?: number | null; armor?: number | null; perk_type?: string | null; perk_magnitude?: number | null; shield_hp?: number | null; shield_regen_cooldown_sec?: number | null };
 }
 
 export interface UserDetail {
@@ -429,7 +429,7 @@ export async function getUserDetail(targetUserId: string): Promise<GetUserDetail
   ] = await Promise.all([
     admin
       .from("inventory")
-      .select("id, equipped, item:items(id, name, rarity, type)")
+      .select("id, equipped, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)")
       .eq("user_id", targetUserId)
       .order("obtained_at", { ascending: false }),
     admin

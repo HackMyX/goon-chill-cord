@@ -17,6 +17,7 @@ import {
 } from "@/lib/actions/admin";
 import { ItemRenderer } from "@/components/items/item-renderer";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
+import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { AuditTimeline } from "@/components/admin/audit-timeline";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
@@ -397,13 +398,27 @@ export function UserDetailPanel({ userId }: { userId: string }) {
                 key={row.id}
                 className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-3 py-2"
               >
-                <span className="flex items-center gap-2 text-sm text-zinc-200">
-                  <ItemRenderer type={row.item.type} rarity={row.item.rarity} size="sm" />
-                  {row.item.name}
-                  {row.equipped && (
-                    <span className="text-[10px] font-semibold text-emerald-400">aktiv</span>
-                  )}
-                  <RarityBadge rarity={row.item.rarity} className="ml-1" />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex items-center gap-2 text-sm text-zinc-200">
+                    <ItemRenderer type={row.item.type} rarity={row.item.rarity} size="sm" />
+                    {row.item.name}
+                    {row.equipped && (
+                      <span className="text-[10px] font-semibold text-emerald-400">aktiv</span>
+                    )}
+                    <RarityBadge rarity={row.item.rarity} className="ml-1" />
+                  </span>
+                  <span className="flex flex-wrap gap-1 pl-7">
+                    <ItemStatBadges
+                      damage={row.item.damage}
+                      armor={row.item.armor}
+                      perk_type={row.item.perk_type}
+                      perk_magnitude={row.item.perk_magnitude}
+                      shield_hp={row.item.shield_hp}
+                      shield_regen_cooldown_sec={row.item.shield_regen_cooldown_sec}
+                      itemName={row.item.name}
+                      itemType={row.item.type}
+                    />
+                  </span>
                 </span>
                 <button
                   onMouseEnter={sound.hover}
