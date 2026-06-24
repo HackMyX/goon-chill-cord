@@ -191,6 +191,30 @@ export function WorldShell({
     };
   }, []);
 
+  // iOS Safari URL-bar-hide trick.
+  // The bar only retracts when the page has scrollable overflow and scrollY > 0.
+  // We temporarily make <html> 1px taller than the layout viewport, scroll 1px,
+  // then the bar slides up and stays up. The canvas is position:fixed so nothing
+  // shifts visually. Fires on mount and whenever orientation flips to landscape.
+  useEffect(() => {
+    if (!isMobile || showPortraitGate) return;
+
+    const html = document.documentElement;
+    const prevMinHeight = html.style.minHeight;
+
+    // Make document scrollable by a tiny amount
+    html.style.minHeight = 'calc(100% + 56px)';
+
+    const t = setTimeout(() => {
+      window.scrollTo(0, 1);
+    }, 80);
+
+    return () => {
+      clearTimeout(t);
+      html.style.minHeight = prevMinHeight;
+      window.scrollTo(0, 0);
+    };
+  }, [isMobile, showPortraitGate]);
 
   const cancelDisconnectCountdown = useCallback(() => {
     if (disconnectTimeoutRef.current) {
