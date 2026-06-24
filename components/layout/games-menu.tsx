@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Gamepad2, ChevronDown, Globe, Pickaxe, Joystick } from "lucide-react";
+import { Gamepad2, ChevronDown, Globe, Pickaxe, Joystick, Coins } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 
 const LIVE_GAMES = [
   { icon: Joystick, label: "Snake", href: "/snake" },
   { icon: Pickaxe, label: "Mine", href: "/mine" },
+  { icon: Coins, label: "Double or Nothing", href: "/don" },
 ];
 
 /**
