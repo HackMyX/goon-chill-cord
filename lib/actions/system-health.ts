@@ -111,10 +111,23 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
     { key: "NEXT_PUBLIC_SUPABASE_URL", id: "env_sb_url" },
     { key: "NEXT_PUBLIC_SUPABASE_ANON_KEY", id: "env_sb_anon" },
     { key: "SUPABASE_SERVICE_ROLE_KEY", id: "env_sb_service" },
+    { key: "GEMINI_API_KEY", id: "env_gemini" },
   ];
+  const envDetails: Record<string, string> = {
+    "NEXT_PUBLIC_SUPABASE_URL": "Supabase URL fehlt — App kann nicht verbinden",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "Supabase Anon Key fehlt — App kann nicht verbinden",
+    "SUPABASE_SERVICE_ROLE_KEY": "Service Role Key fehlt — Admin-Operationen schlagen fehl",
+    "GEMINI_API_KEY": "Gemini API-Schlüssel fehlt — KI-Chat nicht funktionsfähig. In .env.local setzen und Server neu starten.",
+  };
   for (const ev of envVars) {
     const present = !!(process.env[ev.key]);
-    results.push({ id: ev.id, category: "Umgebungsvariablen", name: ev.key, status: present ? "ok" : "error", detail: present ? null : `${ev.key} fehlt — App kann nicht mit Supabase verbinden` });
+    results.push({
+      id: ev.id,
+      category: "Umgebungsvariablen",
+      name: ev.key,
+      status: present ? "ok" : (ev.key === "GEMINI_API_KEY" ? "warn" : "error"),
+      detail: present ? null : (envDetails[ev.key] ?? `${ev.key} fehlt`),
+    });
   }
 
   // ── Profiles without usernames ─────────────────────────────────────────────

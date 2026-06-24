@@ -459,7 +459,11 @@ function drawFrame(
   if (renderPx.length >= 2) {
     const N = renderPx.length;
 
-    // Pass 1: Glow aura (wide blur)
+    // Pass 1: Glow aura — detect wrap-around seams in pixel space and draw
+    // each continuous run separately so wall-wraps don't produce a line across
+    // the entire board. A seam occurs when adjacent renderPx points are more
+    // than 1.5 cells apart (normal moves are exactly 1 cell; wraps jump by
+    // (BOARD-1) cells, always >> 1.5).
     ctx.save();
     ctx.shadowColor = theme.snakeGlow;
     ctx.shadowBlur = cell * 0.9;
@@ -467,9 +471,24 @@ function drawFrame(
     ctx.lineWidth = cell * 0.62;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.beginPath();
-    catmullRomPath(ctx, renderPx);
-    ctx.stroke();
+    {
+      let segStart = 0;
+      for (let si = 1; si <= renderPx.length; si++) {
+        const isSeam =
+          si === renderPx.length ||
+          Math.abs(renderPx[si].x - renderPx[si - 1].x) > cell * 1.5 ||
+          Math.abs(renderPx[si].y - renderPx[si - 1].y) > cell * 1.5;
+        if (isSeam) {
+          const seg = renderPx.slice(segStart, si);
+          if (seg.length >= 2) {
+            ctx.beginPath();
+            catmullRomPath(ctx, seg);
+            ctx.stroke();
+          }
+          segStart = si;
+        }
+      }
+    }
     ctx.restore();
 
     // Pass 2: Body segments (tail to head, gradient)

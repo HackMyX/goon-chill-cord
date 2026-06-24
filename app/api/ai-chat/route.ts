@@ -11,8 +11,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { USER_SYSTEM_PROMPT, MOD_SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT } from "@/lib/ai-site-context";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
 // ── Tool declarations ─────────────────────────────────────────────────────────
 
 const USER_TOOLS: Tool = {
@@ -214,6 +212,14 @@ async function executeFunction(
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // Validate API key early — gives a clear error instead of a cryptic runtime crash
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({
+      error: "GEMINI_API_KEY ist nicht konfiguriert. Bitte in .env.local setzen und den Dev-Server neu starten.",
+    }, { status: 500 });
+  }
+
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -245,8 +251,9 @@ export async function POST(req: NextRequest) {
       context === "mod" ? MOD_TOOLS :
       USER_TOOLS;
 
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
       systemInstruction: systemPrompt,
       tools: [tools],
     });
@@ -283,7 +290,8 @@ export async function POST(req: NextRequest) {
     const reply = response.text();
     return NextResponse.json({ reply, actionLog });
   } catch (e) {
-    console.error("AI chat error:", e);
-    return NextResponse.json({ error: "KI-Fehler. Bitte versuche es erneut." }, { status: 500 });
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error("AI chat error:", detail);
+    return NextResponse.json({ error: `KI-Fehler: ${detail}` }, { status: 500 });
   }
 }
