@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
-import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf, Settings } from "lucide-react";
+import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf, Settings, RotateCcw } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { Scene } from "@/components/world/scene";
 import { DeathScreen } from "@/components/world/death-screen";
@@ -32,6 +32,7 @@ import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { WorldSettingsPanel } from "@/components/world/world-settings-panel";
 import { loadWorldSettings, saveWorldSettings, type WorldSettings } from "@/lib/world-settings";
 import { setActiveKeybinds } from "@/components/world/use-keyboard-controls";
+import { MobileControls } from "@/components/world/mobile-controls";
 
 interface WorldShellProps {
   userId: string;
@@ -94,7 +95,7 @@ function StatBar({
   return (
     <div className="flex items-center gap-2">
       {icon}
-      <div className="h-2.5 w-36 overflow-hidden rounded-full bg-black/50 ring-1 ring-white/10">
+      <div className="h-2.5 w-28 overflow-hidden rounded-full bg-black/50 ring-1 ring-white/10 sm:w-36">
         <div
           className={`h-full rounded-full transition-[width] duration-150 ${colorClass}`}
           style={{ width: `${pct}%` }}
@@ -172,6 +173,23 @@ export function WorldShell({
     null
   );
   const disconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Mobile detection — runs only on the client so SSR never reads window/navigator.
+  const [isMobile, setIsMobile] = useState(false);
+  const [showPortraitGate, setShowPortraitGate] = useState(false);
+  useEffect(() => {
+    const checkMobile = () => navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
+    const checkPortrait = () => checkMobile() && window.matchMedia("(orientation: portrait)").matches;
+    setIsMobile(checkMobile());
+    setShowPortraitGate(checkPortrait());
+    const onResize = () => setShowPortraitGate(checkPortrait());
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, []);
 
   const cancelDisconnectCountdown = useCallback(() => {
     if (disconnectTimeoutRef.current) {
@@ -462,6 +480,16 @@ export function WorldShell({
 
   return (
     <div className="flex h-screen flex-col">
+      {/* Portrait-mode gate — only shown on touch devices in portrait */}
+      {showPortraitGate && (
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 bg-black/95 px-6 text-center backdrop-blur">
+          <RotateCcw className="h-16 w-16 animate-spin text-purple-400" style={{ animationDuration: "3s" }} />
+          <div>
+            <h2 className="text-2xl font-extrabold text-white">Gerät drehen</h2>
+            <p className="mt-2 text-sm text-zinc-400">Die 3D-Welt funktioniert nur im Querformat.</p>
+          </div>
+        </div>
+      )}
       <TopBar
         credits={credits}
         streakDays={streakDays}
@@ -581,7 +609,7 @@ export function WorldShell({
             intentionally only drained by sprinting (lib/combat.ts) — never
             by attacking, and jumping no longer costs stamina at all (just
             a flat per-jump cooldown instead, see JUMP_COOLDOWN_SEC). */}
-        <div className="absolute top-16 left-4 z-10 flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/50 px-3 py-2.5 backdrop-blur">
+        <div className="absolute top-16 left-4 z-10 flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/50 px-3 py-2.5 backdrop-blur" style={{ maxWidth: "calc(45vw - 1rem)" }}>
           <StatBar
             icon={<Heart className="h-4 w-4 text-red-400" />}
             value={hp}
@@ -663,24 +691,24 @@ export function WorldShell({
           }}
         />
 
-        {/* Bottom-center HUD: always shows what a punch/swing right now
-            would deal. Flashes green on a landed hit, red on a swing that
-            found nothing in range — the actual damage numbers + monster
-            health bars live in-world, above whatever just got hit (see
-            components/world/monster.tsx), not here. */}
-        <div
-          className={`pointer-events-none absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-2 text-sm backdrop-blur transition-colors ${
-            attackFlash === "hit"
-              ? "border-emerald-400/70 bg-emerald-500/20"
-              : attackFlash === "miss"
-                ? "border-red-400/50 bg-red-500/10"
-                : "border-white/10 bg-black/50"
-          }`}
-        >
-          <Swords className="h-4 w-4 text-emerald-400" />
-          <span className="font-semibold text-zinc-200">{weaponName}</span>
-          <span className="font-bold text-emerald-300">{formatDamage(weaponDamage, damageLabel)}</span>
-        </div>
+        {/* Bottom-center weapon chip — desktop only (hidden on mobile to avoid
+            overlapping the joystick/action-button zone; in-world floating
+            damage numbers give sufficient hit feedback there). */}
+        {!isMobile && (
+          <div
+            className={`pointer-events-none absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-2 text-sm backdrop-blur transition-colors ${
+              attackFlash === "hit"
+                ? "border-emerald-400/70 bg-emerald-500/20"
+                : attackFlash === "miss"
+                  ? "border-red-400/50 bg-red-500/10"
+                  : "border-white/10 bg-black/50"
+            }`}
+          >
+            <Swords className="h-4 w-4 text-emerald-400" />
+            <span className="font-semibold text-zinc-200">{weaponName}</span>
+            <span className="font-bold text-emerald-300">{formatDamage(weaponDamage, damageLabel)}</span>
+          </div>
+        )}
 
         {/* Monster-kill reward toasts — top-center, separate from the
             weapon HUD so a kill reward is never confused with "what a
@@ -696,7 +724,7 @@ export function WorldShell({
           ))}
         </div>
 
-        {!cameraControls.locked && !deathStats && !disconnectSummary && (
+        {!cameraControls.locked && !isMobile && !deathStats && !disconnectSummary && (
           <button
             onClick={engageLock}
             className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-3 bg-black/40 text-center backdrop-blur-[2px]"
@@ -707,6 +735,11 @@ export function WorldShell({
             </span>
             <span className="text-xs text-zinc-400">Maus steuert die Blickrichtung · Esc zum Pausieren</span>
           </button>
+        )}
+
+        {/* Mobile on-screen controls — only rendered on touch devices when actively playing */}
+        {isMobile && !deathStats && !disconnectSummary && (
+          <MobileControls cameraState={cameraControls.state} />
         )}
 
         {deathStats && (
@@ -764,6 +797,7 @@ export function WorldShell({
               onMonsterKilled={handleMonsterKilled}
               onDeath={handleDeath}
               respawnSignal={respawnSignal}
+              mobileMode={isMobile}
             />
           </Suspense>
         </Canvas>

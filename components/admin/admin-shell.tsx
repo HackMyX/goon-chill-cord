@@ -293,7 +293,7 @@ export function AdminShell({
         </div>
         <h1 className="glow-text mb-6 text-2xl font-extrabold text-zinc-50">Admin-Panel</h1>
 
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="mb-6 flex flex-wrap gap-2 overflow-x-auto pb-1 -mx-1 px-1">
           {TABS.map((t) => (
             <button
               key={t.id}

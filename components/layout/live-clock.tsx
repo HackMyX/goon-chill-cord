@@ -113,7 +113,7 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
   return (
     <div className="flex items-center gap-2">
       {showBox && (
-        <div className="flex flex-col items-center rounded-2xl bg-white/5 px-6 py-2">
+        <div className="flex flex-col items-center rounded-2xl bg-white/5 px-3 py-1.5 sm:px-6 sm:py-2">
           {showCountdown && (
             <span className="font-mono text-sm tabular-nums text-zinc-200">{time}</span>
           )}

@@ -294,7 +294,7 @@ function SupportButtonInner() {
   return (
     <>
       {!open && (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-1.5">
+        <div className="fixed bottom-4 right-4 z-50 flex flex-col items-center gap-1.5 sm:bottom-6 sm:right-6">
           <span className="rounded-xl bg-purple-600 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_0_14px_rgba(147,51,234,0.75),0_2px_8px_rgba(0,0,0,0.4)]">
             Hilfe & Chat
           </span>
@@ -312,8 +312,8 @@ function SupportButtonInner() {
         <>
           <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
           <div
-            className="fixed bottom-6 right-6 z-50 flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b0814] shadow-[0_8px_40px_rgba(0,0,0,0.65)]"
-            style={{ width: panelW, height: panelH, maxHeight: "95vh" }}
+            className="fixed bottom-0 right-0 z-50 flex flex-col overflow-hidden border border-white/10 bg-[#0b0814] shadow-[0_8px_40px_rgba(0,0,0,0.65)] sm:bottom-6 sm:right-6 sm:rounded-2xl"
+            style={{ width: panelW, height: panelH, maxHeight: "95vh", maxWidth: "100vw" }}
           >
             {/* Resize handle — drag to expand top-left */}
             <div

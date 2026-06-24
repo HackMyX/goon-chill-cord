@@ -14,6 +14,7 @@ import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/us
 import type { CombatSharedState, MonsterRegistry, RemotePlayerRegistry } from "@/components/world/combat-types";
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { debugLog, debugWarn } from "@/lib/debug";
+import { mobileInput, consumeMobileAttack, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
 import {
   broadcastTransform,
   subscribeToWorldPvpDamage,
@@ -84,6 +85,10 @@ interface PlayerProps {
    * comes from here instead, so the admin Games tab can actually retune
    * any of it live. */
   characterConfig: CharacterConfig;
+  /** True when running on a touch device. Bypasses pointer-lock requirement
+   * (MobileControls writes directly to cameraState) and ORs touch input
+   * from the global mobileInput ref into keyboard state each frame. */
+  mobileMode?: boolean;
 }
 
 // Velocity smoothing rate — governs how quickly horizontal speed tracks the
@@ -217,6 +222,7 @@ export function Player({
   onDeath,
   respawnSignal,
   characterConfig,
+  mobileMode = false,
 }: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const limbs = useRef<CharacterLimbRefs>(null);
@@ -410,8 +416,19 @@ export function Player({
       if (respawnInvulnTimer.current <= 0) combatRef.current.invulnerable = false;
     }
 
-    const locked = cameraControls.locked;
+    const locked = cameraControls.locked || mobileMode;
     const alive = !combatRef.current.dead;
+
+    // On mobile, merge touch joystick state into the keyboard state ref so
+    // all downstream locked && alive movement gates use the same variables
+    // regardless of input source.
+    if (mobileMode) {
+      keys.state.current.forward    = mobileInput.forward;
+      keys.state.current.backward   = mobileInput.backward;
+      keys.state.current.strafeLeft  = mobileInput.strafeLeft;
+      keys.state.current.strafeRight = mobileInput.strafeRight;
+      keys.state.current.sprint      = mobileInput.sprint;
+    }
     const cc = cameraControls.state.current;
 
     // Death-fall/despawn — the character itself collapses and disappears
@@ -507,7 +524,7 @@ export function Player({
     // --- Slide: consume one-shot flag before velocity is computed so we
     // capture the *current* camera forward direction at slide start.
     slideCooldown.current = Math.max(0, slideCooldown.current - delta);
-    const slideRequested = keys.consumeSlide();
+    const slideRequested = keys.consumeSlide() || consumeMobileSlide();
     // Queue slide for up to 500 ms when pressed mid-air so landing into a
     // slide is immediately responsive (press C while airborne → slide on touch-down).
     if (slideRequested && !grounded.current) slideQueuedUntil.current = Date.now() + 500;
@@ -601,7 +618,7 @@ export function Player({
     // `jumpCooldown`, a flat timer, stops Space being mashed into a jump
     // faster than the last one even visibly left the ground.
     jumpCooldown.current = Math.max(0, jumpCooldown.current - delta);
-    const jumpRequested = keys.consumeJump();
+    const jumpRequested = keys.consumeJump() || consumeMobileJump();
     if (locked && alive && jumpRequested && grounded.current && jumpCooldown.current <= 0) {
       verticalVelocity.current = JUMP_VELOCITY * jumpMultiplier;
       grounded.current = false;
@@ -758,7 +775,7 @@ export function Player({
     // allows it to actually swing — same reasoning as jump's
     // `keys.consumeJump()` above, so a click made the instant before dying
     // doesn't linger and fire the moment the player respawns.
-    const attackPressed = attack.consumeAttack();
+    const attackPressed = attack.consumeAttack() || consumeMobileAttack();
     if (locked && alive && attackPressed && attackCooldown.current <= 0) {
       attackCooldown.current = characterConfig.attackCooldown;
       attackProgress.current = 0.0001; // nudge off exactly 0 so the block below picks it up this frame

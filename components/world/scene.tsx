@@ -45,6 +45,7 @@ interface SceneProps {
   onMonsterKilled?: (typeId: string) => void;
   onDeath?: () => void;
   respawnSignal: number;
+  mobileMode?: boolean;
 }
 
 /** Dual border rings + inner halo — keeps the world edge from reading as a
@@ -134,6 +135,7 @@ export function Scene({
   onMonsterKilled,
   onDeath,
   respawnSignal,
+  mobileMode = false,
 }: SceneProps) {
   // Equipped items never change mid-World-session (re-equipping requires
   // the Garderobe, a separate page) — armor/shield are seeded once here
@@ -219,6 +221,7 @@ export function Scene({
         onDeath={onDeath}
         respawnSignal={respawnSignal}
         characterConfig={characterConfig}
+        mobileMode={mobileMode}
       />
 
       <RemotePlayers selfUserId={userId} registryRef={remotePlayerRegistryRef} maxHp={characterConfig.playerMaxHp} />

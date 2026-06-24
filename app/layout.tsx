@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AmbientGlow } from "@/components/layout/ambient-glow";
 import { GlobalErrorLogger } from "@/components/debug/global-error-logger";
@@ -25,6 +25,13 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  minimumScale: 1,
+  themeColor: "#030305",
+};
 
 // `generateMetadata`, not a static `export const metadata` — the browser
 // tab title needs to reflect the admin-configured site name (lib/site-

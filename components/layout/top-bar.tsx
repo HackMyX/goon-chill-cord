@@ -14,7 +14,9 @@ import {
   Shield,
   ClipboardList,
   Coins,
+  Menu,
 } from "lucide-react";
+import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 import { IconButton } from "@/components/layout/icon-button";
 import { GamesMenu } from "@/components/layout/games-menu";
 import { LiveClock } from "@/components/layout/live-clock";
@@ -62,6 +64,7 @@ export function TopBar({
 
   const [liveInventoryCount, setLiveInventoryCount] = useState(inventoryCount);
   const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   useEffect(() => { setLiveInventoryCount(inventoryCount); }, [inventoryCount]);
 
   useEffect(() => {
@@ -235,7 +238,7 @@ export function TopBar({
         >
           <Coins className="h-3.5 w-3.5 shrink-0 text-purple-200" />
           <span className="tabular-nums">{creditsLabel}</span>
-          <span className="text-xs text-purple-200/70">{currencyName}</span>
+          <span className="hidden text-xs text-purple-200/70 sm:inline">{currencyName}</span>
         </motion.div>
 
         {isAdmin && (
@@ -245,14 +248,14 @@ export function TopBar({
               label="Admin-Panel"
               href="/admin"
               showLabel={topbarShowLabels}
-              className="bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border-0"
+              className="hidden md:flex bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border-0"
             />
             <IconButton
               icon={Shield}
               label="Mod-Panel"
               href="/mod"
               showLabel={topbarShowLabels}
-              className="bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
+              className="hidden md:flex bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
             />
           </>
         )}
@@ -262,7 +265,7 @@ export function TopBar({
             label="Mod-Panel"
             href="/mod"
             showLabel={topbarShowLabels}
-            className="bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
+            className="hidden md:flex bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
           />
         )}
       </div>
@@ -272,10 +275,31 @@ export function TopBar({
         <LiveClock streakDays={streakDays} onClaimed={onCreditsChange} />
       </div>
 
-      {/* Right: configurable slots */}
+      {/* Right: configurable slots (desktop) + hamburger (mobile) */}
       <div className="flex items-center gap-1.5 justify-self-end">
         {slots.map((slot) => renderSlot(slot))}
+        {/* Hamburger — only visible on mobile/small screens */}
+        <button
+          onMouseEnter={sound.hover}
+          onClick={() => { sound.click(); setMobileMenuOpen(true); }}
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-zinc-300 transition-colors hover:border-white/20 hover:text-white md:hidden"
+          aria-label="Menü öffnen"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
       </div>
+
+      <MobileNavDrawer
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        isAdmin={isAdmin}
+        isModerator={isModerator}
+        credits={credits}
+        currencyName={currencyName ?? "CR"}
+        slots={slots}
+        pendingTradesCount={pendingTradesCount}
+        inventoryCount={liveInventoryCount}
+      />
     </header>
   );
 }

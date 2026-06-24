@@ -130,6 +130,50 @@
   html {
     @apply font-sans;
   }
+
+  /* Prevent double-tap zoom + faster tap response on all interactive elements */
+  button, a, [role="button"], input, select, textarea, label {
+    touch-action: manipulation;
+  }
+
+  /* Prevent iOS body scroll-bounce from pulling the whole page when interacting
+     with inner-scrollable areas (the overscroll itself is still allowed within
+     those elements via overscroll-behavior-contain). */
+  body {
+    overscroll-behavior: none;
+  }
+
+  /* Smoother scrolling on iOS for overflow-scroll containers */
+  .overflow-y-auto, .overflow-y-scroll, .overflow-auto, .overflow-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Mobile-only utilities — supplement Tailwind's responsive prefixes */
+@media (max-width: 640px) {
+  /* Shrink admin/data tables so they scroll horizontally instead of breaking layout */
+  .mobile-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Tighter padding on small screens */
+  .mobile-px {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+
+/* Portrait-mode overlay for landscape-required pages (3D world) */
+.landscape-only-gate {
+  display: none;
+}
+@media (max-width: 1024px) and (orientation: portrait) {
+  .landscape-only-gate {
+    display: flex;
+  }
+  .landscape-only-content {
+    display: none;
+  }
 }
 
 @keyframes sweep {
