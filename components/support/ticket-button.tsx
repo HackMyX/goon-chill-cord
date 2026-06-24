@@ -119,7 +119,42 @@ function SupportButtonInner() {
 
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  const [newMsgFlash, setNewMsgFlash] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const sound = useSoundManager();
+
+  // Realtime: subscribe to new messages on the currently-open ticket so the
+  // user sees staff replies without having to reload the support widget.
+  useEffect(() => {
+    if (view !== "detail" || !detail?.id) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`ticket-messages:${detail.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "ticket_messages", filter: `ticket_id=eq.${detail.id}` },
+        async () => {
+          const updated = await getTicketDetail(detail.id);
+          if (updated) {
+            setDetail(updated);
+            setNewMsgFlash(true);
+            sound.win();
+            setTimeout(() => setNewMsgFlash(false), 2000);
+            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+          }
+        }
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, detail?.id]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (view === "detail" && detail?.messages.length) {
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+    }
+  }, [view, detail?.messages.length]);
 
   // Resize state
   const [panelW, setPanelW] = useState(352);
@@ -581,6 +616,12 @@ function SupportButtonInner() {
                                 <p className="mt-0.5 text-xs leading-relaxed text-zinc-300">{msg.message}</p>
                               </div>
                             ))}
+                            {newMsgFlash && (
+                              <p className="py-1 text-center text-[10px] font-bold text-purple-300 animate-pulse">
+                                Neue Nachricht
+                              </p>
+                            )}
+                            <div ref={messagesEndRef} />
                           </div>
                           {detail.status !== "closed" && (
                             <form onSubmit={handleReply} className="border-t border-white/10 p-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   MessageCircle,
   Clock,
@@ -136,11 +136,15 @@ function TicketRow({
   onAutoExpanded?: () => void;
 }) {
   const [expanded, setExpanded] = useState(autoExpand);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (autoExpand && !expanded) {
       setExpanded(true);
       onAutoExpanded?.();
+      setTimeout(() => {
+        rowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 250);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoExpand]);
@@ -237,7 +241,7 @@ function TicketRow({
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+    <div ref={rowRef} className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
       <div className="flex items-center">
         {/* Checkbox */}
         <button

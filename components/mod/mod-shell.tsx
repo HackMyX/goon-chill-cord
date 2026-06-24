@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useTransition, useEffect, useMemo, Suspense } from "react";
+import { useState, useTransition, useEffect, useMemo, useRef, Suspense } from "react";
 import {
   Shield, Users, Ticket, Activity, AlertTriangle, Ban, StickyNote,
   ChevronDown, Check, X, Coins, Clock, Search, LogOut, Trash2, Loader2,
   Sparkles, LayoutDashboard, RefreshCw, History, NotepadText, FileText,
-  Trophy, Paperclip, MessageSquare,
+  Trophy, Paperclip, MessageSquare, Bug, Lightbulb,
 } from "lucide-react";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { GlobalChatPanel } from "@/components/global/global-chat-panel";
+import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
@@ -664,6 +665,31 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   const isClosed = t.status === "closed";
   const alreadyRewarded = !!t.rewardGrantedAt;
   const sound = useSoundManager();
+  const itemRef = useRef<HTMLDivElement>(null);
+  const prevDefaultOpen = useRef(defaultOpen ?? false);
+
+  // On mount: if already flagged as "open via deep link", scroll into view.
+  useEffect(() => {
+    if (!defaultOpen) return;
+    const timer = setTimeout(() => {
+      itemRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 250);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Dynamic deep-link: if defaultOpen flips to true after initial mount, open + scroll.
+  useEffect(() => {
+    if (defaultOpen && !prevDefaultOpen.current) {
+      setOpen(true);
+      const timer = setTimeout(() => {
+        itemRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 250);
+      prevDefaultOpen.current = true;
+      return () => clearTimeout(timer);
+    }
+    prevDefaultOpen.current = defaultOpen ?? false;
+  }, [defaultOpen]);
 
   useEffect(() => {
     if (!open || msgs !== null) return;
@@ -704,6 +730,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
         showFlash("Antwort gesendet.", true);
         setReplyText("");
         setMsgs(null);
+        onRefresh();
       } else showFlash(res.error ?? "Fehler.", false);
     });
   }
@@ -765,7 +792,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
     : "bg-zinc-600";
 
   return (
-    <div className={`overflow-hidden rounded-2xl border transition-colors ${statusCls}`}>
+    <div ref={itemRef} className={`overflow-hidden rounded-2xl border transition-colors ${statusCls}`}>
       <button
         className="flex w-full items-center justify-between gap-2 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.02]"
         onClick={() => setOpen((o) => !o)}
@@ -1074,14 +1101,21 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
   openTicketId?: string | null;
   onTicketOpened?: () => void;
 }) {
-  const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>(() => {
-    if (openTicketId) return "all";
-    return "open";
-  });
+  const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>(() =>
+    openTicketId ? "all" : "open"
+  );
 
+  // When a deep-link ticket arrives (even dynamically), ensure it's visible and
+  // delay clearing the id until after the scroll animation has had time to run.
   useEffect(() => {
-    if (openTicketId) onTicketOpened?.();
+    if (!openTicketId) return;
+    setStatusFilter("all");
+    const timer = setTimeout(() => onTicketOpened?.(), 600);
+    return () => clearTimeout(timer);
   }, [openTicketId, onTicketOpened]);
+
+  const bugTickets = tickets.filter((t) => t.category === "bug");
+  const suggestionTickets = tickets.filter((t) => t.category === "suggestion");
 
   const countByStatus = {
     open: tickets.filter((t) => t.status === "open").length,
@@ -1089,7 +1123,6 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
     resolved: tickets.filter((t) => t.status === "resolved").length,
     closed: tickets.filter((t) => t.status === "closed").length,
   };
-  const totalActive = countByStatus.open + countByStatus.in_progress;
 
   const filterButtons: Array<{ key: TicketStatusFilter; label: string; count?: number }> = [
     { key: "all", label: `Alle (${tickets.length})` },
@@ -1099,9 +1132,60 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
     { key: "closed", label: `Geschlossen`, count: countByStatus.closed },
   ];
 
-  const visibleStatuses = statusFilter === "all"
-    ? TICKET_STATUS_CONFIG.map((s) => s.key)
-    : [statusFilter];
+  function renderTicketGroup(group: ModTicket[]) {
+    const filtered = statusFilter === "all" ? group : group.filter((t) => t.status === statusFilter);
+
+    if (filtered.length === 0) {
+      return (
+        <div className="rounded-xl border border-white/5 bg-white/[0.02] py-8 text-center">
+          <Ticket className="mx-auto mb-2 h-6 w-6 text-zinc-700" />
+          <p className="text-sm text-zinc-600">Keine Tickets in diesem Filter.</p>
+        </div>
+      );
+    }
+
+    if (statusFilter === "all") {
+      return (
+        <div className="flex flex-col gap-3">
+          {TICKET_STATUS_CONFIG.map((cfg) => {
+            const statusGroup = filtered.filter((t) => t.status === cfg.key);
+            if (statusGroup.length === 0) return null;
+            return (
+              <div key={cfg.key}>
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <div className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${cfg.heading}`}>{cfg.label}</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${cfg.badge}`}>{statusGroup.length}</span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {(cfg.key === "closed" ? statusGroup.slice(0, 15) : statusGroup).map((t) => (
+                    <TicketItem key={t.id} t={t} perms={perms} onRefresh={onRefresh} defaultOpen={openTicketId === t.id} />
+                  ))}
+                  {cfg.key === "closed" && statusGroup.length > 15 && (
+                    <p className="text-center text-[11px] text-zinc-600">+ {statusGroup.length - 15} weitere</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-2">
+        {(statusFilter === "closed" ? filtered.slice(0, 30) : filtered).map((t) => (
+          <TicketItem key={t.id} t={t} perms={perms} onRefresh={onRefresh} defaultOpen={openTicketId === t.id} />
+        ))}
+        {statusFilter === "closed" && filtered.length > 30 && (
+          <p className="text-center text-[11px] text-zinc-600">+ {filtered.length - 30} weitere</p>
+        )}
+      </div>
+    );
+  }
+
+  const bugOpen = bugTickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
+  const suggestionOpen = suggestionTickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -1130,56 +1214,52 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
             </button>
           );
         })}
-        {totalActive > 0 && statusFilter !== "open" && statusFilter !== "in_progress" && statusFilter !== "all" && (
-          <span className="ml-auto text-[11px] text-amber-400">
-            {totalActive} aktiv
-          </span>
-        )}
       </div>
 
-      {/* Ticket sections per status */}
-      {TICKET_STATUS_CONFIG.filter((s) => visibleStatuses.includes(s.key)).map((cfg) => {
-        const group = tickets.filter((t) => t.status === cfg.key);
-        if (statusFilter !== "all" && group.length === 0 && cfg.empty === "") return null;
-        return (
-          <div key={cfg.key}>
-            <div className="mb-2 flex items-center gap-2">
-              <div className={`h-2 w-2 rounded-full ${cfg.dot}`} />
-              <h3 className={`text-sm font-bold ${cfg.heading}`}>{cfg.label}</h3>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${cfg.badge}`}>
-                {group.length}
-              </span>
-            </div>
-            {group.length === 0 ? (
-              cfg.empty ? (
-                <div className="rounded-2xl border border-white/5 bg-white/[0.02] py-8 text-center">
-                  <Ticket className="mx-auto mb-2 h-7 w-7 text-zinc-700" />
-                  <p className="text-sm text-zinc-600">{cfg.empty}</p>
-                </div>
-              ) : null
-            ) : (
-              <div className="flex flex-col gap-2">
-                {(cfg.key === "closed" ? group.slice(0, 30) : group).map((t) => (
-                  <TicketItem
-                    key={t.id} t={t} perms={perms} onRefresh={onRefresh}
-                    defaultOpen={openTicketId === t.id}
-                  />
-                ))}
-                {cfg.key === "closed" && group.length > 30 && (
-                  <p className="text-center text-[11px] text-zinc-600">
-                    + {group.length - 30} weitere geschlossene Tickets
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      {tickets.length === 0 && (
+      {tickets.length === 0 ? (
         <div className="rounded-2xl border border-white/5 bg-white/[0.02] py-16 text-center">
           <Ticket className="mx-auto mb-3 h-10 w-10 text-zinc-700" />
           <p className="text-sm font-semibold text-zinc-500">Keine Tickets vorhanden.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {/* Left column: Bugs */}
+          <div className="flex flex-col gap-3 rounded-2xl border border-red-500/25 bg-gradient-to-br from-red-950/20 via-transparent to-transparent p-4">
+            <div className="flex items-center gap-2 border-b border-red-500/15 pb-3">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/15">
+                <Bug className="h-3.5 w-3.5 text-red-400" />
+              </div>
+              <h3 className="font-bold text-red-300">Bugs</h3>
+              <span className="rounded-full border border-red-500/30 bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
+                {bugTickets.length}
+              </span>
+              {bugOpen > 0 && (
+                <span className="ml-auto rounded-full bg-orange-500/20 px-2 py-0.5 text-[10px] font-bold text-orange-300">
+                  {bugOpen} aktiv
+                </span>
+              )}
+            </div>
+            {renderTicketGroup(bugTickets)}
+          </div>
+
+          {/* Right column: Verbesserungsvorschläge */}
+          <div className="flex flex-col gap-3 rounded-2xl border border-sky-500/25 bg-gradient-to-br from-sky-950/20 via-transparent to-transparent p-4">
+            <div className="flex items-center gap-2 border-b border-sky-500/15 pb-3">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-sky-500/30 bg-sky-500/15">
+                <Lightbulb className="h-3.5 w-3.5 text-sky-400" />
+              </div>
+              <h3 className="font-bold text-sky-300">Verbesserungsvorschläge</h3>
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold text-sky-300">
+                {suggestionTickets.length}
+              </span>
+              {suggestionOpen > 0 && (
+                <span className="ml-auto rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
+                  {suggestionOpen} aktiv
+                </span>
+              )}
+            </div>
+            {renderTicketGroup(suggestionTickets)}
+          </div>
         </div>
       )}
     </div>
@@ -1399,6 +1479,22 @@ function ModShellInner({
     () => searchParams.get("open")
   );
   const [refreshing, setRefreshing] = useState(false);
+  const [newTicketCount, setNewTicketCount] = useState(0);
+
+  // Realtime: show a "neue Tickets" banner whenever a ticket is inserted while
+  // the mod is on this page — without forcing a full page refresh automatically.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("mod-panel-tickets")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "tickets" },
+        () => setNewTicketCount((n) => n + 1)
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, []);
 
   useEffect(() => {
     const q = searchParams.get("tab");
@@ -1471,6 +1567,17 @@ function ModShellInner({
             </div>
           </div>
         </div>
+
+        {/* Realtime new-ticket banner */}
+        {newTicketCount > 0 && (
+          <button
+            onClick={() => { setNewTicketCount(0); refresh(); setActiveTab("tickets"); }}
+            className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-purple-500/40 bg-purple-500/10 px-4 py-2.5 text-sm font-bold text-purple-200 transition-colors hover:bg-purple-500/20"
+          >
+            <Ticket className="h-4 w-4 animate-pulse" />
+            {newTicketCount} neue{newTicketCount !== 1 ? " Tickets" : "s Ticket"} eingegangen — Klick zum Aktualisieren
+          </button>
+        )}
 
         {/* Tab bar */}
         <div className="mb-6 flex gap-1 rounded-2xl border border-white/8 bg-black/30 p-1">
