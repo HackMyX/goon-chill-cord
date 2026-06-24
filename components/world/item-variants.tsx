@@ -131,11 +131,13 @@ function RarityFX({ rarity, children }: { rarity: Rarity; children: ReactNode })
   );
 }
 
-// --- Pets: 4 distinct low-poly silhouettes ------------------------------
+// --- Pets: 5 distinct low-poly silhouettes (Dog, Dragon, Phoenix, Ghost, Cat)
+//
+// Every pet: diagonal gait (Dog/Cat), wing flap (Dragon/Phoenix), ethereal
+// float (Ghost). Idle breathing, attack squash/flash, lunge, bank-into-turn
+// for flyers. Leg rotation uses Z-axis: rotates in XY plane = forward/backward
+// swing relative to the animal's +X facing direction. ✓
 
-// Hip pivot positions for dog legs: [x, hipY, z]
-// hipY = body bottom (0.22 - 0.10 = 0.12); mesh hangs 0.08 below pivot.
-// Diagonal walking pairs: front-right(0)+rear-left(3) same phase, front-left(1)+rear-right(2) opposite.
 const DOG_LEG_HIPS: [number, number, number][] = [
   [0.16, 0.12, 0.08],
   [0.16, 0.12, -0.08],
@@ -143,32 +145,60 @@ const DOG_LEG_HIPS: [number, number, number][] = [
   [-0.16, 0.12, -0.08],
 ];
 
-function DogPet({ color, walkClockRef, attackPhaseRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
+function DogPet({ color, walkClockRef, attackPhaseRef, isMovingRef: _im }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number }; isMovingRef?: { current: boolean } }) {
   const tailRef = useRef<THREE.Mesh>(null);
   const legGroupRefs = useRef<(THREE.Group | null)[]>([]);
   const bodyGroupRef = useRef<THREE.Group>(null);
+  const headGroupRef = useRef<THREE.Group>(null);
+  const jawRef = useRef<THREE.Mesh>(null);
+  const eyeRefs = useRef<(THREE.Mesh | null)[]>([]);
 
   useFrame(({ clock }) => {
     const t = walkClockRef?.current ?? 0;
     const isMoving = t > 0.01;
     const attack = attackPhaseRef?.current ?? 0;
-    // Tail goes wild on attack; fast wag while moving
+    const elapsed = clock.elapsedTime;
+
+    // Tail: frantic on attack, fast wag while running, lazy idle sway
     if (tailRef.current) {
-      const wagSpeed = attack > 0.1 ? 22 : isMoving ? 10 : 5.5;
-      tailRef.current.rotation.z = 1.1 + Math.sin(clock.elapsedTime * wagSpeed) * 0.72;
+      const wagSpeed = attack > 0.1 ? 22 : isMoving ? 10 : 4.5;
+      const wagAmp  = attack > 0.1 ? 0.85 : isMoving ? 0.65 : 0.32;
+      tailRef.current.rotation.z = 1.0 + Math.sin(elapsed * wagSpeed) * wagAmp;
     }
-    // Subtle body bob in sync with stride; quick scale squash on bite
+
+    // Body: stride bob + idle breathing + squash on bite
     if (bodyGroupRef.current) {
-      bodyGroupRef.current.position.y = isMoving ? Math.abs(Math.sin(t * 0.5)) * 0.055 : 0;
-      const s = attack > 0 ? 1 + attack * 0.18 : 1;
+      const bob     = isMoving ? Math.abs(Math.sin(t * 0.5)) * 0.055 : Math.sin(elapsed * 1.6) * 0.007;
+      bodyGroupRef.current.position.y = bob;
+      const s = 1 + attack * 0.18;
       bodyGroupRef.current.scale.set(s, s, s);
     }
+
+    // Head: nods forward while trotting, snaps up on attack
+    if (headGroupRef.current) {
+      const nod = isMoving ? Math.sin(t * 1.0) * 0.06 : 0;
+      headGroupRef.current.rotation.x = THREE.MathUtils.lerp(headGroupRef.current.rotation.x, nod - attack * 0.12, 0.15);
+    }
+
+    // Jaw: drops open when running (panting), snaps wide on attack
+    if (jawRef.current) {
+      const open = attack > 0.05 ? 0.18 : isMoving ? 0.07 : 0;
+      jawRef.current.rotation.x = THREE.MathUtils.lerp(jawRef.current.rotation.x, open, 0.22);
+    }
+
+    // Eyes: pulse brighter on attack
+    for (const e of eyeRefs.current) {
+      if (!e) continue;
+      (e.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.5 + attack * 1.2;
+    }
+
+    // Legs: diagonal gait — lerp smoothly to rest when stopping
     for (let i = 0; i < legGroupRefs.current.length; i++) {
       const g = legGroupRefs.current[i];
       if (!g) continue;
-      // Diagonal gait: FR(0)+RL(3) together, FL(1)+RR(2) opposite
-      const phase = i === 0 || i === 3 ? t : t + Math.PI;
-      g.rotation.z = Math.sin(phase) * 0.72;
+      const phase = (i === 0 || i === 3) ? t : t + Math.PI;
+      const target = isMoving ? Math.sin(phase) * 0.72 : 0;
+      g.rotation.z = THREE.MathUtils.lerp(g.rotation.z, target, isMoving ? 1 : 0.08);
     }
   });
 
@@ -179,58 +209,69 @@ function DogPet({ color, walkClockRef, attackPhaseRef }: { color: string; walkCl
         <boxGeometry args={[0.44, 0.21, 0.23]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      {/* Legs — each in a group pivoted at the hip; two-segment (thigh + paw) */}
+      {/* Neck */}
+      <mesh position={[0.22, 0.26, 0]}>
+        <boxGeometry args={[0.09, 0.11, 0.16]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      {/* Legs */}
       {DOG_LEG_HIPS.map(([x, y, z], i) => (
-        <group
-          key={i}
-          ref={(el) => { legGroupRefs.current[i] = el; }}
-          position={[x, y, z]}
-        >
-          {/* Thigh */}
+        <group key={i} ref={(el) => { legGroupRefs.current[i] = el; }} position={[x, y, z]}>
           <mesh position={[0, -0.07, 0]}>
             <boxGeometry args={[0.057, 0.14, 0.057]} />
             <meshStandardMaterial color={color} />
           </mesh>
-          {/* Paw */}
-          <mesh position={[0, -0.155, 0.025]}>
-            <boxGeometry args={[0.065, 0.04, 0.08]} />
+          <mesh position={[0, -0.155, 0.028]}>
+            <boxGeometry args={[0.065, 0.04, 0.085]} />
             <meshStandardMaterial color={color} />
           </mesh>
         </group>
       ))}
-      {/* Head */}
-      <mesh position={[0.27, 0.28, 0]}>
-        <sphereGeometry args={[0.14, 14, 14]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      {/* Glowing eyes */}
-      {[0.085, -0.085].map((z) => (
-        <mesh key={z} position={[0.36, 0.31, z]}>
-          <sphereGeometry args={[0.026, 8, 8]} />
-          <meshStandardMaterial color="#0a0a0a" emissive="#1a1a2e" emissiveIntensity={0.5} />
+      {/* Head group — pivots for nodding */}
+      <group ref={headGroupRef} position={[0.27, 0.28, 0]}>
+        <mesh>
+          <sphereGeometry args={[0.14, 14, 14]} />
+          <meshStandardMaterial color={color} />
         </mesh>
-      ))}
-      {/* Nose */}
-      <mesh position={[0.41, 0.24, 0]}>
-        <sphereGeometry args={[0.03, 8, 8]} />
-        <meshStandardMaterial color="#1a0a0a" />
-      </mesh>
-      {/* Snout */}
-      <mesh position={[0.4, 0.23, 0]}>
-        <boxGeometry args={[0.13, 0.09, 0.12]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      {/* Drooping ears */}
-      <mesh position={[0.3, 0.37, 0.09]} rotation={[0.65, 0, -0.18]}>
-        <boxGeometry args={[0.08, 0.15, 0.026]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      <mesh position={[0.3, 0.37, -0.09]} rotation={[-0.65, 0, -0.18]}>
-        <boxGeometry args={[0.08, 0.15, 0.026]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      {/* Tail — angled up, wiggles in useFrame */}
-      <mesh ref={tailRef} position={[-0.26, 0.35, 0]} rotation={[0, 0, Math.PI / 4]}>
+        {/* Glowing eyes */}
+        {[0.085, -0.085].map((z, ei) => (
+          <mesh key={z} ref={(el) => { eyeRefs.current[ei] = el; }} position={[0.1, 0.04, z]}>
+            <sphereGeometry args={[0.027, 8, 8]} />
+            <meshStandardMaterial color="#0a0a1a" emissive="#4040ff" emissiveIntensity={0.5} />
+          </mesh>
+        ))}
+        {/* Upper snout */}
+        <mesh position={[0.13, -0.04, 0]}>
+          <boxGeometry args={[0.14, 0.08, 0.12]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+        {/* Animated lower jaw */}
+        <mesh ref={jawRef} position={[0.13, -0.09, 0]}>
+          <boxGeometry args={[0.11, 0.04, 0.1]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+        {/* Tongue (visible when jaw open) */}
+        <mesh position={[0.13, -0.1, 0]}>
+          <boxGeometry args={[0.07, 0.012, 0.065]} />
+          <meshStandardMaterial color="#f472b6" emissive="#f472b6" emissiveIntensity={0.25} />
+        </mesh>
+        {/* Nose */}
+        <mesh position={[0.14, 0.01, 0]}>
+          <sphereGeometry args={[0.03, 8, 8]} />
+          <meshStandardMaterial color="#1a0808" />
+        </mesh>
+        {/* Drooping ears */}
+        <mesh position={[0.02, 0.1, 0.09]} rotation={[0.7, 0, -0.22]}>
+          <boxGeometry args={[0.075, 0.16, 0.024]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+        <mesh position={[0.02, 0.1, -0.09]} rotation={[-0.7, 0, -0.22]}>
+          <boxGeometry args={[0.075, 0.16, 0.024]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+      </group>
+      {/* Tail */}
+      <mesh ref={tailRef} position={[-0.26, 0.34, 0]} rotation={[0, 0, Math.PI / 4]}>
         <coneGeometry args={[0.038, 0.22, 8]} />
         <meshStandardMaterial color={color} />
       </mesh>
@@ -238,36 +279,47 @@ function DogPet({ color, walkClockRef, attackPhaseRef }: { color: string; walkCl
   );
 }
 
-function DragonPet({ color, attackPhaseRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
-  const wingRefs = useRef<(THREE.Mesh | null)[]>([]);
+function DragonPet({ color, walkClockRef: _wc, attackPhaseRef, isMovingRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number }; isMovingRef?: { current: boolean } }) {
+  const wingRefs    = useRef<(THREE.Mesh | null)[]>([]);
   const wingTipRefs = useRef<(THREE.Mesh | null)[]>([]);
-  const bodyRef = useRef<THREE.Mesh>(null);
+  const bodyRef     = useRef<THREE.Mesh>(null);
+  const headGroupRef = useRef<THREE.Group>(null);
+  const tailSeg1Ref = useRef<THREE.Group>(null);
+  const tailSeg2Ref = useRef<THREE.Group>(null);
 
   useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
+    const t      = clock.elapsedTime;
     const attack = attackPhaseRef?.current ?? 0;
-    const flap = Math.sin(t * 5.2) * 0.62;
-    // Wings flare fully open on attack strike
-    const flapBoost = attack * 0.55;
-    if (wingRefs.current[0]) {
-      wingRefs.current[0].rotation.x = 1.05 + flap + flapBoost;
-      wingRefs.current[0].rotation.z = 0.28;
+    // Flap faster and fuller when actually flying to a target; gentler hover otherwise
+    const isMoving  = isMovingRef?.current ?? false;
+    const flapSpeed = isMoving ? 8.0 : 4.2;
+    const flapAmp   = isMoving ? 0.70 : 0.50;
+    const flap   = Math.sin(t * flapSpeed) * flapAmp;
+    const flapBoost = attack * 0.6;
+
+    if (wingRefs.current[0]) { wingRefs.current[0].rotation.x =  1.05 + flap + flapBoost; wingRefs.current[0].rotation.z = 0.28; }
+    if (wingRefs.current[1]) { wingRefs.current[1].rotation.x = -1.05 - flap - flapBoost; wingRefs.current[1].rotation.z = 0.28; }
+    if (wingTipRefs.current[0]) wingTipRefs.current[0].rotation.x =  1.05 + flap * 1.25 + flapBoost;
+    if (wingTipRefs.current[1]) wingTipRefs.current[1].rotation.x = -1.05 - flap * 1.25 - flapBoost;
+
+    // Body glow flares on fire-breath
+    if (bodyRef.current)
+      (bodyRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.18 + Math.sin(t * 2.1) * 0.11 + attack * 1.5;
+
+    // Head bobs gently, snaps forward on attack
+    if (headGroupRef.current) {
+      const bob = Math.sin(t * 1.8) * 0.025;
+      headGroupRef.current.rotation.x = THREE.MathUtils.lerp(headGroupRef.current.rotation.x, bob - attack * 0.18, 0.1);
     }
-    if (wingRefs.current[1]) {
-      wingRefs.current[1].rotation.x = -1.05 - flap - flapBoost;
-      wingRefs.current[1].rotation.z = 0.28;
+
+    // Tail sways with independent Z + Y oscillation (two-bone snake feel)
+    if (tailSeg1Ref.current) {
+      tailSeg1Ref.current.rotation.z = Math.sin(t * 0.9 + 0.4) * 0.38;
+      tailSeg1Ref.current.rotation.y = Math.sin(t * 0.65) * 0.18;
     }
-    // Wingtip membranes follow main wing with slight lag
-    if (wingTipRefs.current[0]) {
-      wingTipRefs.current[0].rotation.x = 1.05 + flap * 1.2 + flapBoost;
-    }
-    if (wingTipRefs.current[1]) {
-      wingTipRefs.current[1].rotation.x = -1.05 - flap * 1.2 - flapBoost;
-    }
-    // Glow flares bright on attack (fire-breath flash)
-    if (bodyRef.current) {
-      (bodyRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
-        0.18 + Math.sin(t * 2.1) * 0.1 + attack * 1.4;
+    if (tailSeg2Ref.current) {
+      tailSeg2Ref.current.rotation.z = Math.sin(t * 0.9 + 1.1) * 0.55;
+      tailSeg2Ref.current.rotation.y = Math.sin(t * 0.65 + 0.5) * 0.28;
     }
   });
 
@@ -278,172 +330,179 @@ function DragonPet({ color, attackPhaseRef }: { color: string; walkClockRef?: { 
         <sphereGeometry args={[0.21, 14, 14]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.18} />
       </mesh>
-      {/* Head */}
-      <mesh position={[0.21, 0.34, 0]} rotation={[0, 0, 0.35]}>
-        <sphereGeometry args={[0.12, 12, 12]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      {/* Snout */}
-      <mesh position={[0.33, 0.37, 0]} rotation={[0, 0, 0.4]}>
-        <coneGeometry args={[0.046, 0.15, 6]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      {/* Glowing eyes */}
-      {[0.085, -0.085].map((z) => (
-        <mesh key={z} position={[0.24, 0.38, z]}>
-          <sphereGeometry args={[0.027, 8, 8]} />
-          <meshStandardMaterial color="#fde047" emissive="#facc15" emissiveIntensity={1.4} toneMapped={false} />
+      {/* Back spine ridge */}
+      {[0.05, 0.0, -0.06].map((x, i) => (
+        <mesh key={i} position={[x, 0.44, 0]} rotation={[0, 0, x * 0.6]}>
+          <coneGeometry args={[0.018, 0.1 - i * 0.018, 4]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.35} />
         </mesh>
       ))}
-      {/* Horn */}
-      <mesh position={[0.22, 0.48, 0]} rotation={[0, 0, -0.4]}>
-        <coneGeometry args={[0.02, 0.1, 5]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} />
-      </mesh>
-      {/* Left wing */}
-      <mesh
-        ref={(el) => { wingRefs.current[0] = el; }}
-        position={[0.06, 0.3, 0.25]}
-      >
-        <boxGeometry args={[0.025, 0.36, 0.28]} />
-        <meshStandardMaterial color={color} transparent opacity={0.8} emissive={color} emissiveIntensity={0.2} />
-      </mesh>
-      {/* Left wingtip */}
-      <mesh
-        ref={(el) => { wingTipRefs.current[0] = el; }}
-        position={[0.06, 0.3, 0.46]}
-      >
-        <boxGeometry args={[0.018, 0.22, 0.18]} />
-        <meshStandardMaterial color={color} transparent opacity={0.6} emissive={color} emissiveIntensity={0.15} />
-      </mesh>
-      {/* Right wing */}
-      <mesh
-        ref={(el) => { wingRefs.current[1] = el; }}
-        position={[0.06, 0.3, -0.25]}
-      >
-        <boxGeometry args={[0.025, 0.36, 0.28]} />
-        <meshStandardMaterial color={color} transparent opacity={0.8} emissive={color} emissiveIntensity={0.2} />
-      </mesh>
-      {/* Right wingtip */}
-      <mesh
-        ref={(el) => { wingTipRefs.current[1] = el; }}
-        position={[0.06, 0.3, -0.46]}
-      >
-        <boxGeometry args={[0.018, 0.22, 0.18]} />
-        <meshStandardMaterial color={color} transparent opacity={0.6} emissive={color} emissiveIntensity={0.15} />
-      </mesh>
-      {/* Tail */}
-      <mesh position={[-0.22, 0.2, 0]} rotation={[0, 0, 0.5]}>
-        <cylinderGeometry args={[0.04, 0.02, 0.28, 8]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      <mesh position={[-0.36, 0.12, 0]} rotation={[0, 0, 1.1]}>
-        <coneGeometry args={[0.04, 0.12, 5]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
-      </mesh>
+      {/* Head group */}
+      <group ref={headGroupRef} position={[0.21, 0.34, 0]}>
+        <mesh rotation={[0, 0, 0.35]}>
+          <sphereGeometry args={[0.12, 12, 12]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+        {/* Snout */}
+        <mesh position={[0.12, 0.04, 0]} rotation={[0, 0, 0.4]}>
+          <coneGeometry args={[0.046, 0.15, 6]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+        {/* Glowing eyes */}
+        {[0.085, -0.085].map((z) => (
+          <mesh key={z} position={[0.04, 0.06, z]}>
+            <sphereGeometry args={[0.027, 8, 8]} />
+            <meshStandardMaterial color="#fde047" emissive="#facc15" emissiveIntensity={1.4} toneMapped={false} />
+          </mesh>
+        ))}
+        {/* Horn */}
+        <mesh position={[0.01, 0.14, 0]} rotation={[0, 0, -0.38]}>
+          <coneGeometry args={[0.02, 0.12, 5]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
+        </mesh>
+        {/* Second smaller horn */}
+        <mesh position={[-0.02, 0.12, 0.04]} rotation={[0.1, 0, -0.5]}>
+          <coneGeometry args={[0.013, 0.07, 4]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} />
+        </mesh>
+      </group>
+      {/* Wings */}
+      {[1, -1].map((side, si) => (
+        <group key={side}>
+          <mesh ref={(el) => { wingRefs.current[si] = el; }} position={[0.06, 0.3, side * 0.25]}>
+            <boxGeometry args={[0.025, 0.38, 0.30]} />
+            <meshStandardMaterial color={color} transparent opacity={0.82} emissive={color} emissiveIntensity={0.22} />
+          </mesh>
+          <mesh ref={(el) => { wingTipRefs.current[si] = el; }} position={[0.06, 0.3, side * 0.47]}>
+            <boxGeometry args={[0.018, 0.24, 0.20]} />
+            <meshStandardMaterial color={color} transparent opacity={0.62} emissive={color} emissiveIntensity={0.16} />
+          </mesh>
+        </group>
+      ))}
+      {/* Tail — two animated pivot groups chain */}
+      <group ref={tailSeg1Ref} position={[-0.18, 0.22, 0]}>
+        <mesh position={[0, -0.08, 0]} rotation={[0, 0, 0.5]}>
+          <cylinderGeometry args={[0.042, 0.026, 0.22, 8]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+        <group ref={tailSeg2Ref} position={[-0.15, -0.1, 0]}>
+          <mesh rotation={[0, 0, 0.7]}>
+            <cylinderGeometry args={[0.026, 0.016, 0.18, 7]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+          {/* Tail tip spike */}
+          <mesh position={[-0.1, -0.05, 0]} rotation={[0, 0, 1.2]}>
+            <coneGeometry args={[0.035, 0.14, 5]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.55} />
+          </mesh>
+        </group>
+      </group>
     </group>
   );
 }
 
-/** Fire bird — upright flame-body, large swept wings that flap dramatically,
- * glowing ember eyes, and a fanned fire-feather tail. Flies in PetCompanion
- * (isFlyingPet → true) and banks into turns with a whole-body lean. */
-function PhoenixPet({ color, attackPhaseRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
-  const wingRefs = useRef<(THREE.Mesh | null)[]>([]);
-  const wingTipRefs = useRef<(THREE.Mesh | null)[]>([]);
-  const bodyRef = useRef<THREE.Mesh>(null);
+/** Phoenix — upright flame-body, large swept wings, ember eyes, fanned
+ * fire-tail with individually animated feathers. */
+function PhoenixPet({ color, walkClockRef: _wc, attackPhaseRef, isMovingRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number }; isMovingRef?: { current: boolean } }) {
+  const wingRefs        = useRef<(THREE.Mesh | null)[]>([]);
+  const wingTipRefs     = useRef<(THREE.Mesh | null)[]>([]);
+  const bodyRef         = useRef<THREE.Mesh>(null);
+  const tailFeatherRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const crestRef        = useRef<THREE.Mesh>(null);
 
   useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
+    const t      = clock.elapsedTime;
     const attack = attackPhaseRef?.current ?? 0;
-    // Fast, dramatic flap — wings spread to max on attack strike
-    const flap = Math.sin(t * 6.2) * 0.65;
-    const attackSpread = attack * 0.6;
+    // Phoenix flaps hard and fast when in flight; slower ethereal hover otherwise
+    const isMoving  = isMovingRef?.current ?? false;
+    const flapSpeed = isMoving ? 10.0 : 5.0;
+    const flapAmp   = isMoving ? 0.78 : 0.52;
+    const flap   = Math.sin(t * flapSpeed) * flapAmp;
+    const spread = attack * 0.65;
+
     wingRefs.current.forEach((m, i) => {
       if (!m) return;
       const side = i === 0 ? 1 : -1;
       m.rotation.x = 0.18;
-      m.rotation.z = side * (1.0 + flap + attackSpread);
+      m.rotation.z = side * (1.0 + flap + spread);
     });
-    // Wingtip follows with lag and more amplitude
     wingTipRefs.current.forEach((m, i) => {
       if (!m) return;
       const side = i === 0 ? 1 : -1;
       m.rotation.x = 0.1;
-      m.rotation.z = side * (1.3 + flap * 1.35 + attackSpread * 1.2);
+      m.rotation.z = side * (1.32 + flap * 1.4 + spread * 1.2);
     });
-    // Body blazes white-hot on attack
-    if (bodyRef.current) {
+
+    // Body blazes on attack
+    if (bodyRef.current)
       (bodyRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
-        0.55 + Math.abs(Math.sin(t * 6.2)) * 0.35 + attack * 1.2;
-    }
+        0.55 + Math.abs(Math.sin(t * 6.2)) * 0.38 + attack * 1.2;
+
+    // Head crest bobs with flap
+    if (crestRef.current)
+      crestRef.current.rotation.x = 0.2 + Math.sin(t * 6.2) * 0.12 + attack * 0.3;
+
+    // Each tail feather fans individually with phase offset
+    tailFeatherRefs.current.forEach((m, i) => {
+      if (!m) return;
+      const phase = t * 3.2 + i * 0.45;
+      const fanAmp = 0.06 + attack * 0.22;
+      m.rotation.z = (i - 2) * 0.36 + Math.sin(phase) * fanAmp;
+      (m.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.9 + Math.sin(phase * 1.5) * 0.3 + attack * 0.8;
+    });
   });
 
   return (
     <group>
       {/* Fire body */}
-      <mesh ref={bodyRef} position={[0, 0.28, 0]} scale={[0.88, 1.2, 0.88]}>
+      <mesh ref={bodyRef} position={[0, 0.28, 0]} scale={[0.88, 1.22, 0.88]}>
         <sphereGeometry args={[0.14, 14, 14]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.55} toneMapped={false} />
       </mesh>
       {/* Head */}
-      <mesh position={[0, 0.44, 0.06]}>
+      <mesh position={[0, 0.45, 0.06]}>
         <sphereGeometry args={[0.08, 12, 12]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} toneMapped={false} />
       </mesh>
+      {/* Head crest */}
+      <mesh ref={crestRef} position={[0, 0.55, 0.04]} rotation={[0.2, 0, 0]}>
+        <coneGeometry args={[0.018, 0.14, 5]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.95} toneMapped={false} />
+      </mesh>
       {/* Beak */}
-      <mesh position={[0, 0.44, 0.16]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 0.44, 0.17]} rotation={[Math.PI / 2, 0, 0]}>
         <coneGeometry args={[0.022, 0.1, 6]} />
-        <meshStandardMaterial color="#fde68a" emissive="#fbbf24" emissiveIntensity={0.7} toneMapped={false} />
+        <meshStandardMaterial color="#fde68a" emissive="#fbbf24" emissiveIntensity={0.8} toneMapped={false} />
       </mesh>
       {/* Ember eyes */}
       {[0.048, -0.048].map((x) => (
         <mesh key={x} position={[x, 0.46, 0.1]}>
-          <sphereGeometry args={[0.02, 8, 8]} />
-          <meshStandardMaterial color="#fff" emissive="#ff6600" emissiveIntensity={2.5} toneMapped={false} />
+          <sphereGeometry args={[0.021, 8, 8]} />
+          <meshStandardMaterial color="#fff" emissive="#ff6600" emissiveIntensity={2.8} toneMapped={false} />
         </mesh>
       ))}
-      {/* Head crest — small fire spike */}
-      <mesh position={[0, 0.54, 0.04]} rotation={[0.2, 0, 0]}>
-        <coneGeometry args={[0.018, 0.12, 5]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} toneMapped={false} />
-      </mesh>
-      {/* Left wing */}
-      <mesh
-        ref={(el) => { wingRefs.current[0] = el; }}
-        position={[0.13, 0.32, -0.03]}
-      >
-        <coneGeometry args={[0.06, 0.42, 4]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.75} toneMapped={false} />
-      </mesh>
-      {/* Left wingtip */}
-      <mesh
-        ref={(el) => { wingTipRefs.current[0] = el; }}
-        position={[0.22, 0.3, -0.04]}
-      >
-        <coneGeometry args={[0.035, 0.26, 4]} />
-        <meshStandardMaterial color="#fb923c" emissive="#f97316" emissiveIntensity={0.9} toneMapped={false} />
-      </mesh>
-      {/* Right wing */}
-      <mesh
-        ref={(el) => { wingRefs.current[1] = el; }}
-        position={[-0.13, 0.32, -0.03]}
-      >
-        <coneGeometry args={[0.06, 0.42, 4]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.75} toneMapped={false} />
-      </mesh>
-      {/* Right wingtip */}
-      <mesh
-        ref={(el) => { wingTipRefs.current[1] = el; }}
-        position={[-0.22, 0.3, -0.04]}
-      >
-        <coneGeometry args={[0.035, 0.26, 4]} />
-        <meshStandardMaterial color="#fb923c" emissive="#f97316" emissiveIntensity={0.9} toneMapped={false} />
-      </mesh>
-      {/* Fire tail — fanned feather-cones */}
+      {/* Wings */}
+      {([1, -1] as const).map((side, si) => (
+        <group key={side}>
+          <mesh ref={(el) => { wingRefs.current[si] = el; }} position={[side * 0.13, 0.32, -0.03]}>
+            <coneGeometry args={[0.065, 0.44, 4]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.78} toneMapped={false} />
+          </mesh>
+          <mesh ref={(el) => { wingTipRefs.current[si] = el; }} position={[side * 0.23, 0.30, -0.04]}>
+            <coneGeometry args={[0.038, 0.28, 4]} />
+            <meshStandardMaterial color="#fb923c" emissive="#f97316" emissiveIntensity={0.95} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+      {/* Fire tail — 5 individually animated feather-cones */}
       {[-0.07, -0.035, 0, 0.035, 0.07].map((x, i) => (
-        <mesh key={i} position={[x, 0.16, -0.18 - Math.abs(x) * 0.5]} rotation={[1.35, 0, x * 1.8]}>
-          <coneGeometry args={[0.022, 0.3, 5]} />
+        <mesh
+          key={i}
+          ref={(el) => { tailFeatherRefs.current[i] = el; }}
+          position={[x, 0.16, -0.18 - Math.abs(x) * 0.5]}
+          rotation={[1.35, 0, (i - 2) * 0.36]}
+        >
+          <coneGeometry args={[0.023, 0.32, 5]} />
           <meshStandardMaterial
             color={i % 2 === 0 ? "#fb923c" : color}
             emissive={i % 2 === 0 ? "#f97316" : color}
@@ -456,86 +515,124 @@ function PhoenixPet({ color, attackPhaseRef }: { color: string; walkClockRef?: {
   );
 }
 
-function GhostPet({ color, attackPhaseRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
-  const bodyRef = useRef<THREE.Mesh>(null);
-  const glowRef = useRef<THREE.Mesh>(null);
-  const orbitRefs = useRef<(THREE.Mesh | null)[]>([]);
-  const ringRef = useRef<THREE.Mesh>(null);
+/** Ghost — semi-transparent spectral orb with 5 orbiting soul-orbs, dual
+ * counter-rotating rings, animated wispy tendrils, and pulsing opacity. */
+function GhostPet({ color, walkClockRef: _wc, attackPhaseRef, isMovingRef: _im }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number }; isMovingRef?: { current: boolean } }) {
+  const NUM_ORBS = 5;
+  const bodyRef      = useRef<THREE.Mesh>(null);
+  const glowRef      = useRef<THREE.Mesh>(null);
+  const orbitRefs    = useRef<(THREE.Mesh | null)[]>([]);
+  const ringRef      = useRef<THREE.Mesh>(null);
+  const innerRingRef = useRef<THREE.Mesh>(null);
+  const tendrilRefs  = useRef<(THREE.Mesh | null)[]>([]);
+  const ghostGroupRef = useRef<THREE.Group>(null);
+  const eyeRefs      = useRef<(THREE.Mesh | null)[]>([]);
 
   useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
+    const t      = clock.elapsedTime;
     const attack = attackPhaseRef?.current ?? 0;
-    // Main body — flashes fully opaque on attack strike
-    if (bodyRef.current) {
+
+    // Whole ghost slowly rotates around Y and bobs
+    if (ghostGroupRef.current) {
+      ghostGroupRef.current.rotation.y = t * 0.25;
+      ghostGroupRef.current.position.y = Math.sin(t * 1.4) * 0.025;
+    }
+
+    // Body pulses opacity
+    if (bodyRef.current)
       (bodyRef.current.material as THREE.MeshBasicMaterial).opacity =
-        Math.min(1, 0.38 + Math.sin(t * 2.2) * 0.22 + attack * 0.55);
-    }
+        Math.min(1, 0.42 + Math.sin(t * 2.2) * 0.22 + attack * 0.5);
+
     // Outer glow surges on attack
-    if (glowRef.current) {
+    if (glowRef.current)
       (glowRef.current.material as THREE.MeshBasicMaterial).opacity =
-        Math.min(0.8, 0.14 + Math.sin(t * 2.2 + 0.8) * 0.1 + attack * 0.45);
-    }
-    // Ring spins fast during attack
+        Math.min(0.8, 0.16 + Math.sin(t * 2.2 + 0.8) * 0.1 + attack * 0.45);
+
+    // Outer ring spins forward, inner ring counter-rotates
     if (ringRef.current) {
-      ringRef.current.rotation.z = t * (0.6 + attack * 8);
+      ringRef.current.rotation.z = t * (0.65 + attack * 8);
       (ringRef.current.material as THREE.MeshBasicMaterial).opacity =
-        Math.min(0.85, 0.3 + Math.sin(t * 1.5) * 0.15 + attack * 0.45);
+        Math.min(0.85, 0.32 + Math.sin(t * 1.5) * 0.15 + attack * 0.45);
     }
-    // Soul-orbs orbit faster and flare during attack
+    if (innerRingRef.current) {
+      innerRingRef.current.rotation.z = -t * (0.9 + attack * 6);
+      (innerRingRef.current.material as THREE.MeshBasicMaterial).opacity =
+        Math.min(0.7, 0.22 + Math.sin(t * 1.8) * 0.12 + attack * 0.35);
+    }
+
+    // Eyes flare on attack
+    for (const e of eyeRefs.current) {
+      if (!e) continue;
+      (e.material as THREE.MeshBasicMaterial).opacity = Math.min(1, 0.9 + attack * 0.1);
+    }
+
+    // Soul-orbs orbit, each at different radius/height
     const orbitSpeed = 1.4 + attack * 5.5;
     for (let i = 0; i < orbitRefs.current.length; i++) {
       const m = orbitRefs.current[i];
       if (!m) continue;
-      const angle = t * orbitSpeed + (i / 3) * Math.PI * 2;
-      const radius = 0.28 + Math.sin(t * 0.7 + i) * 0.04;
-      m.position.set(
-        Math.cos(angle) * radius,
-        0.22 + Math.sin(t * 2.1 + i * 1.2) * 0.06,
-        Math.sin(angle) * radius
-      );
+      const angle  = t * orbitSpeed + (i / NUM_ORBS) * Math.PI * 2;
+      const radius = 0.26 + Math.sin(t * 0.6 + i * 1.3) * 0.04;
+      const orbY   = 0.22 + Math.sin(t * 1.9 + i * 1.1) * 0.07 + (i % 2 === 0 ? 0.06 : -0.04);
+      m.position.set(Math.cos(angle) * radius, orbY, Math.sin(angle) * radius);
       (m.material as THREE.MeshBasicMaterial).opacity =
         Math.min(1, 0.5 + Math.sin(t * 2.4 + i) * 0.3 + attack * 0.5);
+    }
+
+    // Tendrils wave individually like seaweed
+    for (let i = 0; i < tendrilRefs.current.length; i++) {
+      const m = tendrilRefs.current[i];
+      if (!m) continue;
+      m.rotation.x = Math.sin(t * 2.1 + i * 1.4) * 0.25;
+      m.rotation.z = Math.sin(t * 1.6 + i * 2.0) * 0.18;
     }
   });
 
   return (
-    <group>
-      {/* Outer glow shell — larger, very transparent */}
+    <group ref={ghostGroupRef}>
+      {/* Outer glow shell */}
       <mesh ref={glowRef} position={[0, 0.22, 0]}>
-        <sphereGeometry args={[0.26, 12, 12]} />
-        <meshBasicMaterial color={color} transparent opacity={0.14} toneMapped={false} />
+        <sphereGeometry args={[0.27, 12, 12]} />
+        <meshBasicMaterial color={color} transparent opacity={0.16} toneMapped={false} />
       </mesh>
       {/* Main body */}
       <mesh ref={bodyRef} position={[0, 0.22, 0]}>
         <sphereGeometry args={[0.19, 16, 16]} />
         <meshBasicMaterial color={color} transparent opacity={0.5} toneMapped={false} />
       </mesh>
-      {/* Spectral tendrils (pointed cones at the bottom) */}
-      {[-0.06, 0, 0.06].map((x, i) => (
-        <mesh key={i} position={[x, 0.08 - i * 0.01, 0]} rotation={[Math.PI, 0, x * 0.4]}>
-          <coneGeometry args={[0.025, 0.1 + i * 0.02, 5]} />
-          <meshBasicMaterial color={color} transparent opacity={0.4} toneMapped={false} />
+      {/* Spectral tendrils — 5 animated wispy cones at the bottom */}
+      {[-0.08, -0.04, 0, 0.04, 0.08].map((x, i) => (
+        <mesh
+          key={i}
+          ref={(el) => { tendrilRefs.current[i] = el; }}
+          position={[x, 0.07 - i * 0.006, 0]}
+          rotation={[Math.PI, 0, x * 0.5]}
+        >
+          <coneGeometry args={[0.022, 0.11 + i * 0.015, 5]} />
+          <meshBasicMaterial color={color} transparent opacity={0.38} toneMapped={false} />
         </mesh>
       ))}
       {/* Eerie eyes */}
-      {[0.072, -0.072].map((x) => (
-        <mesh key={x} position={[x, 0.27, 0.14]}>
-          <sphereGeometry args={[0.028, 8, 8]} />
+      {[0.072, -0.072].map((x, ei) => (
+        <mesh key={x} ref={(el) => { eyeRefs.current[ei] = el; }} position={[x, 0.27, 0.14]}>
+          <sphereGeometry args={[0.029, 8, 8]} />
           <meshBasicMaterial color={color} transparent opacity={0.92} toneMapped={false} />
         </mesh>
       ))}
       {/* Outer ring */}
       <mesh ref={ringRef} position={[0, 0.22, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.3, 0.018, 8, 28]} />
+        <torusGeometry args={[0.31, 0.018, 8, 30]} />
         <meshBasicMaterial color={color} transparent opacity={0.35} toneMapped={false} />
       </mesh>
-      {/* Orbiting soul orbs */}
-      {[0, 1, 2].map((i) => (
-        <mesh
-          key={i}
-          ref={(el) => { orbitRefs.current[i] = el; }}
-        >
-          <sphereGeometry args={[0.035, 8, 8]} />
+      {/* Inner counter-rotating ring */}
+      <mesh ref={innerRingRef} position={[0, 0.22, 0]} rotation={[Math.PI / 2.5, 0, 0]}>
+        <torusGeometry args={[0.20, 0.012, 6, 22]} />
+        <meshBasicMaterial color={color} transparent opacity={0.22} toneMapped={false} />
+      </mesh>
+      {/* 5 orbiting soul orbs */}
+      {Array.from({ length: NUM_ORBS }, (_, i) => (
+        <mesh key={i} ref={(el) => { orbitRefs.current[i] = el; }}>
+          <sphereGeometry args={[0.028 + (i % 2) * 0.01, 8, 8]} />
           <meshBasicMaterial color={color} transparent opacity={0.6} toneMapped={false} />
         </mesh>
       ))}
@@ -543,9 +640,6 @@ function GhostPet({ color, attackPhaseRef }: { color: string; walkClockRef?: { c
   );
 }
 
-// Hip pivot positions for cat legs: [x, hipY, z]
-// hipY = body bottom (0.16 - 0.07 = 0.09); mesh center 0.065 below pivot.
-// Same diagonal pairing as dog: front-right(0)+rear-left(3), front-left(1)+rear-right(2).
 const CAT_LEG_HIPS: [number, number, number][] = [
   [0.11, 0.09, 0.05],
   [0.11, 0.09, -0.05],
@@ -553,32 +647,83 @@ const CAT_LEG_HIPS: [number, number, number][] = [
   [-0.11, 0.09, -0.05],
 ];
 
-function CatPet({ color, walkClockRef, attackPhaseRef }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
-  const tailGroupRef = useRef<THREE.Group>(null);
-  const legGroupRefs = useRef<(THREE.Group | null)[]>([]);
-  const bodyGroupRef = useRef<THREE.Group>(null);
+function CatPet({ color, walkClockRef, attackPhaseRef, isMovingRef: _im }: { color: string; walkClockRef?: { current: number }; attackPhaseRef?: { current: number }; isMovingRef?: { current: boolean } }) {
+  const tailGroupRef   = useRef<THREE.Group>(null);
+  const tailTipRef     = useRef<THREE.Mesh>(null);
+  const legGroupRefs   = useRef<(THREE.Group | null)[]>([]);
+  const bodyGroupRef   = useRef<THREE.Group>(null);
+  const headGroupRef   = useRef<THREE.Group>(null);
+  const whiskerRefs    = useRef<(THREE.Mesh | null)[]>([]);
+  const eyeRefs        = useRef<(THREE.Mesh | null)[]>([]);
+  const lookTimer      = useRef(0);
+  const lookTarget     = useRef(0);
 
-  useFrame(({ clock }) => {
-    const t = walkClockRef?.current ?? 0;
+  useFrame(({ clock }, delta) => {
+    const t      = walkClockRef?.current ?? 0;
     const isMoving = t > 0.01;
     const attack = attackPhaseRef?.current ?? 0;
-    // Tail lashes hard during attack swipe
+    const elapsed = clock.elapsedTime;
+
+    // Tail lashes hard on attack; sways lazily idle; swings while walking
     if (tailGroupRef.current) {
-      const swayAmp = attack > 0.1 ? 0.95 : isMoving ? 0.35 : 0.55;
-      const swaySpeed = attack > 0.1 ? 14 : isMoving ? 3.5 : 2.0;
-      tailGroupRef.current.rotation.z = -0.4 + Math.sin(clock.elapsedTime * swaySpeed) * swayAmp;
+      const amp   = attack > 0.1 ? 1.0 : isMoving ? 0.38 : 0.55;
+      const speed = attack > 0.1 ? 15  : isMoving ? 3.8  : 1.8;
+      tailGroupRef.current.rotation.z = -0.4 + Math.sin(elapsed * speed) * amp;
     }
-    // Subtle body bob while prowling; scale pop on attack strike
+    // Tail tip follows with lag and extra curl amplitude
+    if (tailTipRef.current) {
+      const amp   = attack > 0.1 ? 1.2 : isMoving ? 0.55 : 0.75;
+      const speed = attack > 0.1 ? 15  : isMoving ? 3.8  : 1.8;
+      tailTipRef.current.rotation.z = 1.1 + Math.sin(elapsed * speed + 0.4) * amp;
+    }
+
+    // Body bob + breathing + attack pop
     if (bodyGroupRef.current) {
-      bodyGroupRef.current.position.y = isMoving ? Math.abs(Math.sin(t * 0.5)) * 0.04 : 0;
-      const s = attack > 0 ? 1 + attack * 0.15 : 1;
+      bodyGroupRef.current.position.y = isMoving
+        ? Math.abs(Math.sin(t * 0.5)) * 0.04
+        : Math.sin(elapsed * 1.7) * 0.006;
+      const s = 1 + attack * 0.14;
       bodyGroupRef.current.scale.set(s, s, s);
     }
+
+    // Head: idle look-around when not moving
+    if (headGroupRef.current) {
+      lookTimer.current -= delta;
+      if (lookTimer.current <= 0) {
+        lookTimer.current = 2.5 + Math.random() * 3;
+        lookTarget.current = (Math.random() - 0.5) * 0.6;
+      }
+      if (!isMoving) {
+        headGroupRef.current.rotation.y = THREE.MathUtils.lerp(headGroupRef.current.rotation.y, lookTarget.current, 0.04);
+      } else {
+        headGroupRef.current.rotation.y = THREE.MathUtils.lerp(headGroupRef.current.rotation.y, 0, 0.1);
+      }
+    }
+
+    // Eyes dilate on attack (scale x squishes to a slit)
+    for (const e of eyeRefs.current) {
+      if (!e) continue;
+      const pupilX = THREE.MathUtils.lerp((e.scale.x), attack > 0.1 ? 0.3 : 0.8, 0.15);
+      e.scale.setX(pupilX);
+      (e.material as THREE.MeshStandardMaterial).emissiveIntensity =
+        THREE.MathUtils.lerp((e.material as THREE.MeshStandardMaterial).emissiveIntensity, 0.75 + attack * 1.5, 0.15);
+    }
+
+    // Whiskers twitch subtly on attack
+    for (let i = 0; i < whiskerRefs.current.length; i++) {
+      const m = whiskerRefs.current[i];
+      if (!m) continue;
+      const twitch = attack > 0.05 ? Math.sin(elapsed * 18 + i) * 0.08 : 0;
+      m.rotation.z = (i < 4 ? 1 : -1) * (0.06 + twitch);
+    }
+
+    // Leg diagonal gait — lerp smoothly to rest when stopping
     for (let i = 0; i < legGroupRefs.current.length; i++) {
       const g = legGroupRefs.current[i];
       if (!g) continue;
-      const phase = i === 0 || i === 3 ? t : t + Math.PI;
-      g.rotation.z = Math.sin(phase) * 0.65;
+      const phase = (i === 0 || i === 3) ? t : t + Math.PI;
+      const target = isMoving ? Math.sin(phase) * 0.65 : 0;
+      g.rotation.z = THREE.MathUtils.lerp(g.rotation.z, target, isMoving ? 1 : 0.08);
     }
   });
 
@@ -589,64 +734,78 @@ function CatPet({ color, walkClockRef, attackPhaseRef }: { color: string; walkCl
         <boxGeometry args={[0.34, 0.15, 0.14]} />
         <meshStandardMaterial color={color} />
       </mesh>
-      {/* Legs — each in a group pivoted at the hip; paw added */}
+      {/* Legs */}
       {CAT_LEG_HIPS.map(([x, y, z], i) => (
-        <group
-          key={i}
-          ref={(el) => { legGroupRefs.current[i] = el; }}
-          position={[x, y, z]}
-        >
-          {/* Shin */}
+        <group key={i} ref={(el) => { legGroupRefs.current[i] = el; }} position={[x, y, z]}>
           <mesh position={[0, -0.065, 0]}>
             <boxGeometry args={[0.038, 0.13, 0.038]} />
             <meshStandardMaterial color={color} />
           </mesh>
-          {/* Tiny paw */}
           <mesh position={[0, -0.14, 0.02]}>
             <boxGeometry args={[0.046, 0.03, 0.055]} />
             <meshStandardMaterial color={color} />
           </mesh>
         </group>
       ))}
-      {/* Head — rounder and bigger */}
-      <mesh position={[0.2, 0.24, 0]}>
-        <sphereGeometry args={[0.11, 14, 14]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      {/* Glowing slit eyes */}
-      {[0.052, -0.052].map((z) => (
-        <mesh key={z} position={[0.28, 0.26, z]} scale={[0.8, 1.6, 0.55]}>
-          <sphereGeometry args={[0.024, 8, 8]} />
-          <meshStandardMaterial color="#84cc16" emissive="#65a30d" emissiveIntensity={0.75} />
+      {/* Head group — pivots for look-around */}
+      <group ref={headGroupRef} position={[0.2, 0.24, 0]}>
+        <mesh>
+          <sphereGeometry args={[0.11, 14, 14]} />
+          <meshStandardMaterial color={color} />
         </mesh>
-      ))}
-      {/* Pointy ears */}
-      <mesh position={[0.22, 0.35, 0.048]} rotation={[0, 0, -0.18]}>
-        <coneGeometry args={[0.028, 0.1, 5]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      <mesh position={[0.22, 0.35, -0.048]} rotation={[0, 0, -0.18]}>
-        <coneGeometry args={[0.028, 0.1, 5]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      {/* Nose */}
-      <mesh position={[0.3, 0.22, 0]}>
-        <sphereGeometry args={[0.016, 6, 6]} />
-        <meshStandardMaterial color="#e879a0" emissive="#e879a0" emissiveIntensity={0.3} />
-      </mesh>
-      {/* Tail — two segments for a nice curl */}
+        {/* Glowing slit eyes */}
+        {[0.052, -0.052].map((z, ei) => (
+          <mesh key={z} ref={(el) => { eyeRefs.current[ei] = el; }} position={[0.09, 0.02, z]} scale={[0.8, 1.6, 0.55]}>
+            <sphereGeometry args={[0.024, 8, 8]} />
+            <meshStandardMaterial color="#84cc16" emissive="#65a30d" emissiveIntensity={0.75} />
+          </mesh>
+        ))}
+        {/* Pointy ears with inner pink */}
+        {[0.048, -0.048].map((z, ei) => (
+          <group key={ei} position={[0.02, 0.11, z]}>
+            <mesh rotation={[0, 0, -0.18]}>
+              <coneGeometry args={[0.028, 0.1, 5]} />
+              <meshStandardMaterial color={color} />
+            </mesh>
+            {/* Inner ear */}
+            <mesh position={[0, 0.01, Math.sign(z) * 0.002]} rotation={[0, 0, -0.18]} scale={[0.55, 0.7, 0.55]}>
+              <coneGeometry args={[0.018, 0.07, 4]} />
+              <meshStandardMaterial color="#f9a8d4" emissive="#f472b6" emissiveIntensity={0.2} />
+            </mesh>
+          </group>
+        ))}
+        {/* Nose */}
+        <mesh position={[0.1, -0.02, 0]}>
+          <sphereGeometry args={[0.016, 6, 6]} />
+          <meshStandardMaterial color="#e879a0" emissive="#e879a0" emissiveIntensity={0.3} />
+        </mesh>
+        {/* Whiskers — 4 per side, grouped for twitching */}
+        {([1, -1] as const).map((side, si) =>
+          [0, 1, 2, 3].map((wi) => (
+            <mesh
+              key={`${si}-${wi}`}
+              ref={(el) => { whiskerRefs.current[si * 4 + wi] = el; }}
+              position={[0.07, -0.01 - wi * 0.012, side * 0.06]}
+              rotation={[0, side * (0.15 + wi * 0.06), side * 0.06]}
+            >
+              <boxGeometry args={[0.1 - wi * 0.008, 0.005, 0.004]} />
+              <meshStandardMaterial color="#e2e8f0" emissive="#f8fafc" emissiveIntensity={0.15} />
+            </mesh>
+          ))
+        )}
+      </group>
+      {/* Tail — two-segment curl with animated tip */}
       <group ref={tailGroupRef} position={[-0.17, 0.22, 0]}>
         <mesh>
           <cylinderGeometry args={[0.017, 0.023, 0.26, 7]} />
           <meshStandardMaterial color={color} />
         </mesh>
-        <mesh position={[0, 0.16, 0]} rotation={[0, 0, 1.1]}>
-          <cylinderGeometry args={[0.012, 0.017, 0.12, 6]} />
+        <mesh ref={tailTipRef} position={[0, 0.16, 0]} rotation={[0, 0, 1.1]}>
+          <cylinderGeometry args={[0.012, 0.017, 0.14, 6]} />
           <meshStandardMaterial color={color} />
         </mesh>
-        {/* Fluffed tail tip */}
-        <mesh position={[0.1, 0.21, 0]}>
-          <sphereGeometry args={[0.026, 8, 8]} />
+        <mesh position={[0.1, 0.22, 0]}>
+          <sphereGeometry args={[0.028, 8, 8]} />
           <meshStandardMaterial color={color} />
         </mesh>
       </group>
@@ -664,7 +823,7 @@ export function isFlyingPet(name: string): boolean {
   return /Phönix|Drache/.test(name);
 }
 
-export function PetVariant({ item, walkClockRef, attackPhaseRef }: { item: EquippedItem; walkClockRef?: { current: number }; attackPhaseRef?: { current: number } }) {
+export function PetVariant({ item, walkClockRef, attackPhaseRef, isMovingRef }: { item: EquippedItem; walkClockRef?: { current: number }; attackPhaseRef?: { current: number }; isMovingRef?: { current: boolean } }) {
   const color = rarityColorFor(item, "#a855f7");
   // The pet's *noun* always wins over the hash fallback — equip something
   // named "... Hund" and it must look like a dog, not whatever shape the
@@ -691,7 +850,7 @@ export function PetVariant({ item, walkClockRef, attackPhaseRef }: { item: Equip
             : PET_VARIANTS[variantIndex(item.name, PET_VARIANTS.length)];
   return (
     <RarityFX rarity={item.rarity}>
-      <Variant color={color} walkClockRef={walkClockRef} attackPhaseRef={attackPhaseRef} />
+      <Variant color={color} walkClockRef={walkClockRef} attackPhaseRef={attackPhaseRef} isMovingRef={isMovingRef} />
     </RarityFX>
   );
 }

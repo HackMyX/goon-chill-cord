@@ -360,6 +360,10 @@ function makeRng(seed: number) {
  * it stops closing the distance and starts actually attacking. */
 const PET_ATTACK_RANGE = 1.0;
 
+/** Fixed Y lift so ground-pet paws rest ON the ground instead of sinking
+ * ~0.055–0.065 units into it (paw geometry centers are below local y=0). */
+const GROUND_PET_LIFT = 0.06;
+
 /**
  * Pets used to sit frozen at a single fixed offset — equip one and it
  * looked like a decoration bolted to your hip, not a companion. Now it
@@ -420,6 +424,7 @@ function PetCompanion({
   const attackCooldown = useRef(0);
   const attackLungeRef = useRef(0);
   const worldPos = useRef(new THREE.Vector3());
+  const petIsMovingRef = useRef(false);
 
   function pickNewTarget() {
     const angle = rng() * Math.PI * 2;
@@ -514,6 +519,10 @@ function PetCompanion({
       walkClockRef.current += delta * 7;
     }
 
+    // Track movement state so flying pet variants (Dragon/Phoenix) can
+    // ramp their flap speed up when actually travelling to a target.
+    petIsMovingRef.current = petIsMoving;
+
     // Decay attack lunge — fires to 1 on every hit, fades to 0 in ~0.2 s.
     attackLungeRef.current = Math.max(0, attackLungeRef.current - delta * 5.5);
 
@@ -538,7 +547,7 @@ function PetCompanion({
     const lunge = attackLungeRef.current;
     const lungeX = lunge > 0 ? Math.sin(facing.current) * lunge * 0.38 : 0;
     const lungeZ = lunge > 0 ? Math.cos(facing.current) * lunge * 0.38 : 0;
-    g.position.set(pos.current.x + lungeX, pos.current.y + hopY + bob, pos.current.z + lungeZ);
+    g.position.set(pos.current.x + lungeX, pos.current.y + hopY + bob + (flying ? 0 : GROUND_PET_LIFT), pos.current.z + lungeZ);
     g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, facing.current, Math.min(1, delta * 6));
 
     if (bodyRef.current) {
@@ -563,7 +572,7 @@ function PetCompanion({
   return (
     <group ref={groupRef}>
       <group ref={bodyRef}>
-        <PetVariant item={item} walkClockRef={walkClockRef} attackPhaseRef={attackLungeRef} />
+        <PetVariant item={item} walkClockRef={walkClockRef} attackPhaseRef={attackLungeRef} isMovingRef={petIsMovingRef} />
       </group>
     </group>
   );
