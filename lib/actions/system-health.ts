@@ -39,7 +39,7 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
   const tables = [
     "profiles", "notifications", "tickets", "ticket_messages",
     "mod_actions", "mod_permissions", "inventory", "items",
-    "case_tiers", "auction_listings", "trades", "audit_logs",
+    "case_tiers", "auctions", "trades", "audit_logs",
     "patch_notes", "snake_scores", "debug_logs",
     "login_events", "fingerprints",
   ];
@@ -156,10 +156,10 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
   // ── Auction: active listings past end_at ─────────────────────────────────
   try {
     const { data, error } = await admin
-      .from("auction_listings")
+      .from("auctions")
       .select("id")
       .eq("status", "active")
-      .lt("end_at", new Date().toISOString())
+      .lt("ends_at", new Date().toISOString())
       .limit(20);
     const count = data?.length ?? 0;
     results.push({ id: "stale_auctions", category: "Daten-Integrität", name: "Abgelaufene Auktionen (aktiv)", status: error ? "error" : count > 0 ? "warn" : "ok", detail: count > 0 ? `${count} Auktionen nach Ablaufzeit noch aktiv — cron ggf. nicht laufend` : null });
