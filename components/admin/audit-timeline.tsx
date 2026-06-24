@@ -19,6 +19,11 @@ import {
   X,
   RotateCcw,
   ShoppingBag,
+  Pickaxe,
+  Gamepad2,
+  Trophy,
+  UserX,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 
@@ -268,6 +273,52 @@ const ACTION_META: Record<string, ActionMeta> = {
     border: "border-amber-500/30",
     format: (p) => `Pet-Spezies "${str(p.species ?? p.id)}" konfiguriert`,
   },
+  admin_delete_user_completely: {
+    icon: UserX,
+    color: "text-red-300",
+    bg: "bg-red-500/10",
+    border: "border-red-500/30",
+    format: () => `Account dauerhaft gelöscht`,
+  },
+  admin_bulk_reprice: {
+    icon: Tag,
+    color: "text-purple-300",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    format: (p) => `${str(p.updated, "0")} Item-Preise aktualisiert`,
+  },
+  mine_collect: {
+    icon: Pickaxe,
+    color: "text-yellow-300",
+    bg: "bg-yellow-500/10",
+    border: "border-yellow-500/30",
+    format: (p, c) =>
+      `Mining-Ertrag eingesammelt: +${cr(p.earned, c)} (Level ${str(p.level)}, ${str(p.elapsed_hours)} Std.)`,
+  },
+  mine_upgrade: {
+    icon: Pickaxe,
+    color: "text-yellow-300",
+    bg: "bg-yellow-500/10",
+    border: "border-yellow-500/30",
+    format: (p, c) =>
+      `Mine auf Level ${str(p.new_level)} upgegraded (war ${str(p.old_level)}, Kosten: ${cr(p.cost, c)})`,
+  },
+  snake_earn: {
+    icon: Gamepad2,
+    color: "text-emerald-300",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/30",
+    format: (p, c) =>
+      `Snake: Score ${str(p.score)} · +${cr(p.credits_earned, c)} (${str(p.speed_mode)})${p.is_new_record ? " 🏆 Neuer Rekord!" : ""}`,
+  },
+  ticket_reward_granted: {
+    icon: Trophy,
+    color: "text-amber-300",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/30",
+    format: (p, c) =>
+      `Ticket-Belohnung vergeben${p.credits ? `: +${cr(p.credits, c)}` : ""}${p.note ? ` — "${str(p.note)}"` : ""}`,
+  },
 };
 
 const FALLBACK_ICON: ActionMeta = {
@@ -313,14 +364,19 @@ export function AuditTimeline({ entries }: { entries: AuditEntry[] }) {
             >
               <Icon className={`h-4 w-4 ${display.color}`} />
             </div>
-            <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                {entry.actor && (
-                  <span className="text-xs font-semibold text-zinc-400">{entry.actor}</span>
-                )}
-                <span className="ml-auto text-[11px] text-zinc-500">
-                  {new Date(entry.created_at).toLocaleString("de-DE")}
+            <div className={`min-w-0 flex-1 rounded-xl border bg-white/[0.02] px-3 py-2 ${display.border}`}>
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                <span className={`text-[10px] font-bold uppercase tracking-widest ${display.color} opacity-60`}>
+                  {entry.action.replace(/_/g, " ")}
                 </span>
+                <div className="flex items-center gap-2 ml-auto">
+                  {entry.actor && (
+                    <span className="text-[10px] font-semibold text-zinc-400">{entry.actor}</span>
+                  )}
+                  <span className="text-[10px] text-zinc-500">
+                    {new Date(entry.created_at).toLocaleString("de-DE")}
+                  </span>
+                </div>
               </div>
               <p className={`mt-0.5 text-sm leading-relaxed ${display.color}`}>{text}</p>
             </div>

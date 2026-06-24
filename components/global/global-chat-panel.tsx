@@ -329,13 +329,17 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
           if (isSystemMsg) {
             const meta = msg.metadata;
             const rarity = (meta?.rarity as string) ?? "";
-            const isClear = (meta?.type as string) === "chat_clear";
+            const msgType = (meta?.type as string) ?? "";
+            const isClear = msgType === "chat_clear";
+            const isReward = msgType === "ticket_reward";
             return (
               <div
                 key={msg.id}
                 className={`rounded-lg px-3 py-2 text-xs text-center font-semibold my-1 ${
                   isClear
                     ? "bg-zinc-800/60 text-zinc-500 border border-zinc-700/50"
+                    : isReward
+                    ? "bg-amber-500/15 text-amber-200 border border-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
                     : rarity === "ultra"
                     ? "bg-amber-500/15 text-amber-200 border border-amber-500/30"
                     : rarity === "mythisch"

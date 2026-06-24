@@ -294,15 +294,22 @@ function SupportButtonInner() {
   return (
     <>
       {!open && (
-        <div className="fixed bottom-4 right-4 z-50 flex flex-col items-center gap-1.5 sm:bottom-6 sm:right-6">
-          <span className="rounded-xl bg-purple-600 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_0_14px_rgba(147,51,234,0.75),0_2px_8px_rgba(0,0,0,0.4)]">
-            Hilfe & Chat
-          </span>
+        <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-1.5 sm:bottom-6 sm:right-6">
+          {/* Reward teaser chip — rotates between support and reward message */}
+          <div className="flex flex-col items-end gap-1">
+            <span className="rounded-xl bg-purple-600 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_0_14px_rgba(147,51,234,0.75),0_2px_8px_rgba(0,0,0,0.4)]">
+              Hilfe & Chat
+            </span>
+            <span className="rounded-xl border border-amber-400/40 bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.25)]">
+              🏆 Gute Reports = Credits!
+            </span>
+          </div>
           <button
             onClick={handleOpen}
             title="Support, KI-Assistent & Global Chat"
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-purple-600 text-white shadow-[0_4px_20px_rgba(147,51,234,0.55)] transition-all hover:scale-110 hover:bg-purple-500 hover:shadow-[0_4px_30px_rgba(147,51,234,0.8)]"
+            className="relative flex h-14 w-14 items-center justify-center rounded-full bg-purple-600 text-white shadow-[0_4px_20px_rgba(147,51,234,0.55)] transition-all hover:scale-110 hover:bg-purple-500 hover:shadow-[0_4px_30px_rgba(147,51,234,0.8)]"
           >
+            <span className="absolute inset-0 animate-ping rounded-full bg-purple-400 opacity-10" />
             <MessageCircle className="h-6 w-6" />
           </button>
         </div>
@@ -404,6 +411,17 @@ function SupportButtonInner() {
                           </button>
                         );
                       })}
+                      {/* Reward showcase — always visible in list */}
+                      <div className="mx-3 my-3 overflow-hidden rounded-xl border border-amber-400/30 bg-amber-500/10">
+                        <div className="flex items-center gap-2 border-b border-amber-400/20 px-3 py-2">
+                          <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
+                          <span className="text-xs font-bold text-amber-300">Belohnungen für dein Feedback</span>
+                        </div>
+                        <div className="px-3 py-2.5 text-[11px] leading-relaxed text-amber-200/80">
+                          Hilfreiche Problemmeldungen und gute Ideen werden vom Team mit individuellen <span className="font-bold text-amber-300">Credits-Belohnungen</span> honoriert — je detaillierter dein Report, desto größer die Chance!
+                        </div>
+                      </div>
+
                       <div className="flex flex-col gap-3 border-t border-white/10 bg-white/[0.02] p-4">
                         {(Object.entries(CATEGORY_META) as [TicketCategory, typeof CATEGORY_META.bug][]).map(([cat, meta]) => {
                           const CatIcon = meta.icon;
@@ -426,10 +444,17 @@ function SupportButtonInner() {
 
                   {view === "new" && (
                     <form onSubmit={handleCreate} className="flex flex-col gap-3 p-4">
-                      {/* Reward hint */}
-                      <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300">
-                        <Trophy className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>Hilfreiche Meldungen werden mit individuellen Credits-Belohnungen honoriert!</span>
+                      {/* Reward banner — prominent, before the form */}
+                      <div className="overflow-hidden rounded-xl border border-amber-400/35 bg-gradient-to-r from-amber-500/15 to-amber-600/10 shadow-[0_0_16px_rgba(245,158,11,0.1)]">
+                        <div className="flex items-center gap-2.5 px-3 pt-3 pb-1">
+                          <Trophy className="h-5 w-5 text-amber-400 shrink-0" />
+                          <span className="text-sm font-extrabold text-amber-300">Credits-Belohnung möglich!</span>
+                        </div>
+                        <p className="px-3 pb-3 text-[11px] leading-relaxed text-amber-200/75">
+                          {category === "suggestion"
+                            ? "Gute Verbesserungsideen werden vom Team mit individuellen Credits belohnt. Je konkreter dein Vorschlag, desto größer die Chance!"
+                            : "Hilfreiche Bug-Reports helfen uns enorm — als Dankeschön gibt es individuelle Credits-Belohnungen für präzise Meldungen!"}
+                        </p>
                       </div>
                       <label className="flex flex-col gap-1">
                         <span className="text-xs font-semibold text-zinc-400">Betreff</span>
@@ -500,17 +525,22 @@ function SupportButtonInner() {
                               </button>
                             )}
                           </div>
-                          {/* Reward banner */}
+                          {/* Reward celebration banner */}
                           {detail.rewardGrantedAt && (
-                            <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
-                              <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
-                              <div className="flex flex-col">
-                                <span className="text-xs font-bold text-amber-300">
-                                  🏆 Belohnung erhalten{detail.rewardCredits ? ` · +${detail.rewardCredits} Credits` : ""}
-                                </span>
-                                {detail.rewardNote && (
-                                  <span className="text-[10px] text-amber-400/70">{detail.rewardNote}</span>
-                                )}
+                            <div className="relative overflow-hidden border-b border-amber-400/30 bg-gradient-to-r from-amber-500/20 to-amber-600/10 px-4 py-3">
+                              <div className="absolute inset-0 -translate-x-full animate-[mine-shimmer_3s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-amber-400/10 to-transparent" />
+                              <div className="relative flex items-center gap-3">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
+                                  <Trophy className="h-5 w-5 text-amber-400" />
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-extrabold text-amber-300">
+                                    Belohnung erhalten!{detail.rewardCredits ? ` +${detail.rewardCredits} Credits` : ""}
+                                  </span>
+                                  <span className="text-[10px] text-amber-400/70">
+                                    {detail.rewardNote ?? "Danke für dein wertvolles Feedback!"}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           )}

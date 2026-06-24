@@ -397,7 +397,7 @@ export async function adminGrantTicketReward(
   const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
   if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
 
-  const { data: ticket } = await admin.from("tickets").select("user_id, subject").eq("id", ticketId).single();
+  const { data: ticket } = await admin.from("tickets").select("user_id, subject, category").eq("id", ticketId).single();
   if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
 
   const now = new Date().toISOString();
@@ -405,9 +405,12 @@ export async function adminGrantTicketReward(
     reward_granted_at: now, reward_granted_by: user.id, updated_at: now,
   };
   if (opts.note) updatePayload.reward_note = opts.note;
+
+  const { data: targetProfile } = await admin.from("profiles").select("credits, username").eq("id", ticket.user_id).single();
+  const targetUsername: string = (targetProfile?.username as string) ?? "Unbekannt";
+
   if (opts.credits && opts.credits > 0) {
     updatePayload.reward_credits = opts.credits;
-    const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
     const newCredits = (targetProfile?.credits ?? 0) + opts.credits;
     await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
   }
@@ -422,6 +425,19 @@ export async function adminGrantTicketReward(
       ? `Dein hilfreicher Report wurde mit +${opts.credits} Credits belohnt!${opts.note ? ` — ${opts.note}` : ""}`
       : `Dein hilfreicher Report wurde belohnt!${opts.note ? ` — ${opts.note}` : ""}`,
     link: `/?openTicket=${ticketId}`,
+  });
+
+  // Broadcast trophy message to global chat so everyone sees rewards are real
+  const categoryLabel = ticket.category === "suggestion" ? "Vorschlag" : "Problemmeldung";
+  const chatContent = opts.credits
+    ? `🏆 ${targetUsername} wurde für ${categoryLabel === "Vorschlag" ? "einen" : "eine"} ${categoryLabel} mit +${opts.credits} Credits belohnt!`
+    : `🏆 ${targetUsername} wurde für ${categoryLabel === "Vorschlag" ? "einen" : "eine"} ${categoryLabel} belohnt!`;
+  await admin.from("global_chat_messages").insert({
+    username: "System",
+    role: "system",
+    content: chatContent,
+    is_system: true,
+    metadata: { type: "ticket_reward", credits: opts.credits ?? 0, category: ticket.category },
   });
 
   revalidatePath("/admin");
