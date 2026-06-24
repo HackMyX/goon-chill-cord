@@ -256,7 +256,7 @@ export async function POST(req: NextRequest) {
       model: "gemini-1.5-flash",
       systemInstruction: systemPrompt,
       tools: [tools],
-    });
+    }, { apiVersion: "v1" });
 
     const chat = model.startChat({ history });
 

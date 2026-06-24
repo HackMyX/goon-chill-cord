@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { updateSnakeConfig } from "@/lib/actions/snake";
 import {
-  DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG,
+  DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG, DEFAULT_FARM_CONFIG,
   type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig,
 } from "@/lib/snake-config";
 
@@ -218,7 +218,7 @@ function ModeEditor<T extends SnakeModeConfig>({
 
 export function SnakeConfigEditor({ config }: { config: SnakeConfig }) {
   const [form, setForm] = useState<SnakeConfig>(config);
-  const [tab, setTab] = useState<"shared" | "x1" | "x2" | "grind">("shared");
+  const [tab, setTab] = useState<"shared" | "x1" | "x2" | "grind" | "farm">("shared");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
@@ -235,6 +235,7 @@ export function SnakeConfigEditor({ config }: { config: SnakeConfig }) {
     { id: "x1", label: "Classic x1", icon: <span className="text-sm">🌿</span> },
     { id: "x2", label: "Turbo x2", icon: <span className="text-sm">⚡</span> },
     { id: "grind", label: "Grind", icon: <span className="text-sm">🔥</span> },
+    { id: "farm", label: "Farm", icon: <span className="text-sm">🌾</span> },
   ];
 
   return (
@@ -264,6 +265,7 @@ export function SnakeConfigEditor({ config }: { config: SnakeConfig }) {
                 ? t.id === "grind" ? "bg-amber-500/20 text-amber-300"
                 : t.id === "x2" ? "bg-cyan-500/20 text-cyan-300"
                 : t.id === "x1" ? "bg-emerald-500/20 text-emerald-300"
+                : t.id === "farm" ? "bg-violet-500/20 text-violet-300"
                 : "bg-purple-500/20 text-purple-200"
                 : "text-zinc-500 hover:text-zinc-300"
             }`}
@@ -297,7 +299,7 @@ export function SnakeConfigEditor({ config }: { config: SnakeConfig }) {
           </Section>
           <div className="rounded-xl border border-white/8 bg-white/[0.01] px-4 py-3">
             <p className="text-xs text-zinc-500">
-              Klicke auf <span className="text-emerald-300 font-bold">Classic x1</span>, <span className="text-cyan-300 font-bold">Turbo x2</span> oder <span className="text-amber-300 font-bold">Grind</span>, um den jeweiligen Modus einzeln zu konfigurieren — jeder Modus hat eine vollständig getrennte Bestenliste und eigene Einstellungen.
+              Klicke auf <span className="text-emerald-300 font-bold">Classic x1</span>, <span className="text-cyan-300 font-bold">Turbo x2</span>, <span className="text-amber-300 font-bold">Grind</span> oder <span className="text-violet-300 font-bold">Farm</span>, um den jeweiligen Modus einzeln zu konfigurieren — jeder Modus hat eine vollständig getrennte Bestenliste und eigene Einstellungen.
             </p>
           </div>
         </div>
@@ -325,6 +327,14 @@ export function SnakeConfigEditor({ config }: { config: SnakeConfig }) {
           def={DEFAULT_GRIND_CONFIG}
           onChange={(updated) => setForm((f) => ({ ...f, grind: updated }))}
           isGrind
+        />
+      )}
+
+      {tab === "farm" && (
+        <ModeEditor<SnakeModeConfig>
+          cfg={form.farm}
+          def={DEFAULT_FARM_CONFIG}
+          onChange={(updated) => setForm((f) => ({ ...f, farm: updated }))}
         />
       )}
 

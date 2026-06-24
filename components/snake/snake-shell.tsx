@@ -1293,7 +1293,7 @@ export function SnakeShell({
                   mode={m}
                   selected={activeMode === m}
                   disabled={false}
-                  modeCfg={config[m === "grind" ? "grind" : m === "x2" ? "x2" : "x1"]}
+                  modeCfg={config[m === "grind" ? "grind" : m === "x2" ? "x2" : m === "farm" ? "farm" : "x1"]}
                   onClick={() => {
                     setActiveMode(m);
                     activeModeRef.current = m;
