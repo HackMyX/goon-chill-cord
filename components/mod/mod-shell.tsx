@@ -3,8 +3,9 @@
 import { useState, useTransition, useEffect, Suspense } from "react";
 import {
   Shield, Users, Ticket, Activity, AlertTriangle, Ban, StickyNote,
-  ChevronDown, Check, X, Coins, Clock, Search, Info, LogOut, Trash2, Loader2,
+  ChevronDown, Check, X, Coins, Clock, Search, Info, LogOut, Trash2, Loader2, Sparkles,
 } from "lucide-react";
+import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
@@ -545,7 +546,7 @@ function OverviewTab({ users, tickets, perms, myActions }: {
 // Main shell
 // ---------------------------------------------------------------------------
 
-type ModTab = "overview" | "users" | "tickets" | "actions";
+type ModTab = "overview" | "users" | "tickets" | "actions" | "ki";
 
 interface ModShellProps {
   modUsername: string;
@@ -603,6 +604,7 @@ function ModShellInner({
     { id: "users", label: "Nutzer", icon: Users, show: permissions.canViewUserDetails || permissions.canWarnUsers || permissions.canTempBanUsers },
     { id: "tickets", label: "Tickets", icon: Ticket, show: permissions.canViewTickets },
     { id: "actions", label: "Aktionen", icon: Activity, show: permissions.canViewAuditLog || true },
+    { id: "ki", label: "KI-Assistent", icon: Sparkles, show: true },
   ];
 
   function refresh() { router.refresh(); }
@@ -649,6 +651,11 @@ function ModShellInner({
           <div className="flex flex-col gap-4">
             <h3 className="text-sm font-bold text-zinc-300">Alle Moderations-Aktionen</h3>
             <ActionLog actions={recentActions} />
+          </div>
+        )}
+        {activeTab === "ki" && (
+          <div className="mx-auto max-w-3xl" style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}>
+            <AdminAiChat context={isAdminUser ? "admin" : "mod"} />
           </div>
         )}
       </div>

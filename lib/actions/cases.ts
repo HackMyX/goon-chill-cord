@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { findCaseTier, pickRarity, RARITY_LABELS } from "@/lib/cases";
 import { getCaseConfig } from "@/lib/cases-config";
 import { notifyUser } from "@/lib/notifications-internal";
+import { broadcastSystemWin } from "@/lib/actions/global-chat";
 
 export interface WonItem {
   id: string;
@@ -202,6 +203,18 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
     link: "/garderobe",
   });
 
+  // Broadcast ultra/mythisch wins globally
+  if (wonItem.rarity === "ultra" || wonItem.rarity === "mythisch") {
+    const { data: p } = await (await import("@/lib/supabase/server")).createClient()
+      .then((c) => c.from("profiles").select("username").eq("id", user.id).single());
+    await broadcastSystemWin({
+      username: p?.username ?? "Jemand",
+      itemName: wonItem.name,
+      rarity: wonItem.rarity,
+      caseName: tier.label,
+    });
+  }
+
   return {
     success: true,
     item: wonItem,
@@ -349,6 +362,19 @@ export async function openCaseBatch(tierId: string, count: number): Promise<Open
     message: `Du hast ${safeCount} ${tier.label}-Cases geöffnet. Bestes Item: ${bestRarity === "ultra" || bestRarity === "mythisch" ? `„${wonItems.find((i) => i.rarity === bestRarity)?.name}" (${bestLabel})` : `${bestLabel}`}.`,
     link: "/garderobe",
   });
+
+  // Broadcast ultra/mythisch wins from batch
+  if (bestRarity === "ultra" || bestRarity === "mythisch") {
+    const bestItem = wonItems.find((i) => i.rarity === bestRarity);
+    const { data: p } = await (await import("@/lib/supabase/server")).createClient()
+      .then((c) => c.from("profiles").select("username").eq("id", user.id).single());
+    await broadcastSystemWin({
+      username: p?.username ?? "Jemand",
+      itemName: bestItem?.name ?? "Unbekanntes Item",
+      rarity: bestRarity,
+      caseName: tier.label,
+    });
+  }
 
   return {
     success: true,

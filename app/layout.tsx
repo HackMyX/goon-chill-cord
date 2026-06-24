@@ -13,6 +13,7 @@ import { getSiteConfig } from "@/lib/actions/site-config";
 import { getPetConfigs } from "@/lib/actions/pets";
 import { getActivePopupNote } from "@/lib/actions/patchnotes";
 import { PatchnotePopup } from "@/components/layout/patchnote-popup";
+import { GlobalBroadcast } from "@/components/global/global-broadcast";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -64,6 +65,7 @@ export default async function RootLayout({
             <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
           </PetConfigProvider>
         </SiteConfigProvider>
+        <GlobalBroadcast />
         <SupportButton />
         {popupNote && <PatchnotePopup note={popupNote} />}
       </body>
