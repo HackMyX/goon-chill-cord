@@ -1429,13 +1429,18 @@ export function SnakeShell({
             )}
           </div>
 
-          {/* Canvas */}
-          <div className={`relative overflow-hidden rounded-2xl border ${modeBorderColor} ${modeRingColor}`}>
+          {/* Canvas — width capped so it never exceeds viewport height minus UI chrome,
+               preventing any need to scroll while playing. The container is kept square
+               via aspect-square; the canvas fills it with w-full h-full. */}
+          <div
+            className={`relative mx-auto aspect-square overflow-hidden rounded-2xl border ${modeBorderColor} ${modeRingColor}`}
+            style={{ width: "min(100%, calc(100dvh - 320px))" }}
+          >
             <canvas
               ref={canvasRef}
               width={CANVAS_SIZE}
               height={CANVAS_SIZE}
-              className="block aspect-square w-full touch-none"
+              className="block h-full w-full touch-none"
             />
 
             {/* Idle overlay */}
