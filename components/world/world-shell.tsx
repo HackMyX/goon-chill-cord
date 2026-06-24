@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
@@ -193,6 +194,11 @@ export function WorldShell({
 
   // Track fullscreen state so the button hides once active
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Portal must only mount client-side (createPortal needs document.body)
+  const [portalMounted, setPortalMounted] = useState(false);
+  // iOS doesn't support requestFullscreen — dismiss after scroll-trick tap
+  const [iosDismissed, setIosDismissed] = useState(false);
+  useEffect(() => { setPortalMounted(true); }, []);
   useEffect(() => {
     const onChange = () => {
       setIsFullscreen(
@@ -441,6 +447,23 @@ export function WorldShell({
     };
   }, [disconnectCountdown]);
 
+  const handleFullscreen = useCallback(() => {
+    const el = document.documentElement;
+    if (el.requestFullscreen) {
+      el.requestFullscreen().catch(() => {});
+    } else {
+      const webkit = (el as unknown as Record<string, unknown>)["webkitRequestFullscreen"];
+      if (typeof webkit === "function") {
+        (webkit as () => void).call(el);
+      } else {
+        // iOS Safari: scroll trick — extends page height so scrollTo(0,1) retracts URL bar
+        el.style.minHeight = "calc(100% + 56px)";
+        setTimeout(() => window.scrollTo(0, 1), 80);
+      }
+    }
+    setIosDismissed(true);
+  }, []);
+
   function handleSettingsChange(s: WorldSettings) {
     setWorldSettings(s);
     cameraControls.state.current.sensitivityXMult = s.sensitivityX;
@@ -554,24 +577,6 @@ export function WorldShell({
         ref={canvasWrapRef}
         className={isMobile && !showPortraitGate ? "absolute inset-0" : "relative min-h-0 flex-1"}
       >
-        {/* Fullscreen button — Android Chrome supports requestFullscreen(), iOS uses scroll trick */}
-        {isMobile && !isFullscreen && !showPortraitGate && (
-          <button
-            onClick={() => {
-              const el = document.documentElement;
-              // Direct onClick = user gesture — browsers allow fullscreen here
-              if (el.requestFullscreen) {
-                el.requestFullscreen().catch(() => {});
-              } else {
-                (el as unknown as { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen?.();
-              }
-            }}
-            className="absolute top-1/2 left-1/2 z-30 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 rounded-2xl border border-white/30 bg-black/75 px-5 py-3 text-sm font-bold text-white backdrop-blur-sm shadow-lg animate-pulse"
-          >
-            <Maximize2 className="h-4 w-4" />
-            Vollbild aktivieren
-          </button>
-        )}
 
         {/* Settings button — only visible in ESC/pause mode, not during active play */}
         {!cameraControls.locked && (
@@ -875,6 +880,35 @@ export function WorldShell({
           </Suspense>
         </Canvas>
       </div>
+
+      {/* Fullscreen portal — lives in document.body, completely outside the canvas DOM tree.
+          No canvas pointer-event handler, R3F listener, or MobileControls touch handler
+          can ever intercept a tap on this element. */}
+      {portalMounted && isMobile && !showPortraitGate && !isFullscreen && !iosDismissed &&
+        createPortal(
+          <div
+            onClick={handleFullscreen}
+            className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-black/50"
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent", cursor: "pointer" }}
+          >
+            <div className="pointer-events-none flex flex-col items-center gap-2">
+              <div className="flex animate-pulse items-center gap-2 rounded-2xl border border-white/30 bg-black/80 px-6 py-3.5 text-[15px] font-bold text-white shadow-2xl backdrop-blur-sm">
+                <Maximize2 className="h-5 w-5" />
+                Vollbild aktivieren
+              </div>
+              <span className="text-[11px] text-white/40">Tippe irgendwo zum Fortfahren</span>
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); setIosDismissed(true); }}
+              className="absolute bottom-7 right-5 rounded-xl border border-white/20 bg-white/10 px-3.5 py-2 text-xs text-white/50"
+              style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+            >
+              Nicht jetzt
+            </button>
+          </div>,
+          document.body
+        )
+      }
     </div>
   );
 }
