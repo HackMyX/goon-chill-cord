@@ -440,7 +440,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   const showPremium  = !inFlight || activeTier?.id === group.premium.id;
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-4 py-10">
+    <section className="mx-auto w-full max-w-4xl px-3 py-5 sm:px-4 sm:py-10">
       <div className="text-center">
         <h2 className="flex items-center justify-center gap-2 text-2xl font-extrabold">
           {createElement(Icon, { className: "heading-icon-bob h-6 w-6 text-orange-400" })}

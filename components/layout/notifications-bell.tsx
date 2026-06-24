@@ -147,7 +147,11 @@ export function NotificationsBell() {
     sound.click();
     if (!open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      setCoords({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+      const panelWidth = Math.min(320, window.innerWidth - 16);
+      const rightOffset = window.innerWidth - rect.right;
+      // Clamp so panel never extends off the left edge of the screen
+      const clampedRight = Math.min(rightOffset, window.innerWidth - panelWidth - 8);
+      setCoords({ top: rect.bottom + 8, right: Math.max(8, clampedRight) });
     }
     setOpen((o) => !o);
   }
@@ -205,7 +209,7 @@ export function NotificationsBell() {
           <div
             ref={panelRef}
             style={{ top: coords.top, right: coords.right }}
-            className="fixed z-[100] w-80 overflow-hidden rounded-xl border border-white/10 bg-[#0b0814] shadow-[0_8px_30px_rgba(0,0,0,0.5)]"
+            className="fixed z-[100] w-[calc(100vw-2rem)] max-w-80 overflow-hidden rounded-xl border border-white/10 bg-[#0b0814] shadow-[0_8px_30px_rgba(0,0,0,0.5)]"
           >
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
               <span className="text-sm font-bold text-zinc-200">Benachrichtigungen</span>
@@ -273,7 +277,7 @@ export function NotificationsBell() {
                       <button
                         onClick={(e) => handleDelete(e, n.id)}
                         title="Löschen"
-                        className="absolute right-2 top-2.5 rounded-full p-1 text-zinc-600 opacity-0 transition-opacity hover:bg-white/10 hover:text-red-400 group-hover:opacity-100"
+                        className="absolute right-2 top-2.5 rounded-full p-1 text-zinc-600 opacity-0 transition-opacity hover:bg-white/10 hover:text-red-400 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-40 [@media(pointer:coarse)]:group-hover:opacity-100"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>

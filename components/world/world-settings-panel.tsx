@@ -199,7 +199,7 @@ export function WorldSettingsPanel({ settings, onChange, onClose, userId, userna
           {/* === Mouse section === */}
           <div className="flex items-center gap-2">
             <MousePointer2 className="h-4 w-4 text-cyan-400" />
-            <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Mausbewegung</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Bewegung</span>
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 

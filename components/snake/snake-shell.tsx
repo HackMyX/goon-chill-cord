@@ -893,6 +893,11 @@ export function SnakeShell({
   const [shrinkWarning, setShrinkWarning] = useState(false);
   const [shrinkLastApple, setShrinkLastApple] = useState(false);
 
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  useEffect(() => {
+    setIsMobileDevice(navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches);
+  }, []);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameState>({
     snake: [], prevSnake: [], apple: { x: 5, y: 5 }, goldenApple: null, goldenAppleMovesLeft: 0,
@@ -1189,6 +1194,19 @@ export function SnakeShell({
     };
   }, []);
 
+  function pushDir(d: Dir) {
+    if (gameRef.current.phase !== "playing") return;
+    const iq = inputQueueRef.current;
+    const refDir = iq.length > 0 ? iq[iq.length - 1] : gameRef.current.dir;
+    if (d === OPP[refDir] || d === refDir) return;
+    if (iq.length >= 3) {
+      const prev2 = iq.length >= 2 ? iq[iq.length - 2] : gameRef.current.dir;
+      if (d !== OPP[prev2] && d !== prev2) iq[iq.length - 1] = d;
+    } else {
+      iq.push(d);
+    }
+  }
+
   function startGame() {
     inputQueueRef.current = []; // flush any buffered inputs from prev game
     const mode = activeModeRef.current;
@@ -1246,12 +1264,12 @@ export function SnakeShell({
     : "border-emerald-500/20";
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#030305]">
+    <div className="flex min-h-dvh flex-col bg-[#030305]">
       <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} isModerator={isModerator} />
 
       {/* Header */}
       <div className="border-b border-white/5 bg-[#05040e]">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-3 py-2 sm:px-4 sm:py-3">
           <div className="flex items-center gap-3">
             <Link href="/" onMouseEnter={sound.hover} onClick={sound.click}
               className="flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-300">
@@ -1260,7 +1278,7 @@ export function SnakeShell({
             <div className="h-5 w-px bg-white/10" />
             <div className="flex items-center gap-2">
               <span className="text-2xl" style={{ filter: "drop-shadow(0 0 8px rgba(52,211,153,0.6))" }}>🐍</span>
-              <span className="text-lg font-extrabold tracking-tight text-zinc-50">{config.sectionTitle}</span>
+              <span className="text-base font-extrabold tracking-tight text-zinc-50 sm:text-lg">{config.sectionTitle}</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -1304,9 +1322,9 @@ export function SnakeShell({
         </div>
       )}
 
-      <main className="mx-auto flex w-full max-w-5xl flex-1 gap-4 px-4 py-5">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 gap-4 px-2 py-2 sm:px-4 sm:py-5">
         {/* Game area */}
-        <div className="flex flex-1 flex-col gap-3">
+        <div className="flex flex-1 flex-col gap-2 sm:gap-3">
           {/* Mode selector (only when idle/dead) */}
           {phase !== "playing" && (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -1409,11 +1427,11 @@ export function SnakeShell({
 
             {/* Idle overlay */}
             {phase === "idle" && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-black/65 backdrop-blur-[2px]">
-                <div className="text-7xl drop-shadow-[0_0_30px_rgba(52,211,153,0.8)]">🐍</div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 sm:gap-5 bg-black/65 backdrop-blur-[2px]">
+                <div className="text-5xl sm:text-7xl drop-shadow-[0_0_30px_rgba(52,211,153,0.8)]">🐍</div>
                 <div className="text-center">
-                  <h2 className="text-3xl font-extrabold text-zinc-50">{config.sectionTitle}</h2>
-                  <p className="mt-1 text-sm text-zinc-400">{config.sectionSubtitle}</p>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-zinc-50">{config.sectionTitle}</h2>
+                  <p className="mt-1 text-xs sm:text-sm text-zinc-400">{config.sectionSubtitle}</p>
                 </div>
                 <div className="flex flex-wrap justify-center gap-2 text-xs">
                   <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 font-bold text-emerald-300">
@@ -1435,7 +1453,8 @@ export function SnakeShell({
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-zinc-600">← → ↑ ↓ oder WASD · Swipe auf Handy</p>
+                <p className="hidden sm:block text-xs text-zinc-600">← → ↑ ↓ oder WASD · Swipe auf Handy</p>
+                <p className="sm:hidden text-xs text-zinc-500">Swipe oder D-Pad zum Steuern</p>
                 {dailyLimitReached ? (
                   <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-3 text-sm font-bold text-red-400">CR-Tageslimit erreicht</div>
                 ) : dailyGameLimitReached ? (
@@ -1444,7 +1463,7 @@ export function SnakeShell({
                   </div>
                 ) : (
                   <button onClick={startGame} onMouseEnter={sound.hover}
-                    className={`group relative overflow-hidden rounded-2xl px-12 py-4 text-xl font-extrabold shadow-lg transition-all active:scale-95 ${
+                    className={`group relative overflow-hidden rounded-2xl px-8 py-3 text-lg font-extrabold shadow-lg transition-all active:scale-95 sm:px-12 sm:py-4 sm:text-xl ${
                       activeMode === "grind" ? "bg-amber-500 text-black shadow-amber-500/30 hover:bg-amber-400 hover:shadow-amber-400/60"
                       : activeMode === "x2" ? "bg-cyan-500 text-black shadow-cyan-500/30 hover:bg-cyan-400 hover:shadow-cyan-400/60"
                       : activeMode === "farm" ? "bg-violet-600 text-white shadow-violet-500/30 hover:bg-violet-500 hover:shadow-violet-400/60"
@@ -1461,10 +1480,10 @@ export function SnakeShell({
 
             {/* Dead overlay */}
             {phase === "dead" && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 backdrop-blur-sm">
-                <Skull className="h-14 w-14 text-red-400 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)]" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 sm:gap-4 bg-black/80 backdrop-blur-sm">
+                <Skull className="h-10 w-10 sm:h-14 sm:w-14 text-red-400 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)]" />
                 <div className="text-center">
-                  <h2 className="text-3xl font-extrabold text-zinc-50">Game Over</h2>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-zinc-50">Game Over</h2>
                   <p className="mt-1 text-zinc-400">
                     {score} Äpfel · {creditsEarned.toLocaleString("de-DE")} CR
                   </p>
@@ -1502,8 +1521,36 @@ export function SnakeShell({
             )}
           </div>
 
+          {/* Mobile D-pad — only shown on touch devices */}
+          {isMobileDevice && (
+            <div className="flex flex-col items-center gap-1 pb-1 sm:hidden">
+              <button
+                onTouchStart={() => pushDir("UP")}
+                className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/5 text-2xl font-bold text-zinc-200 active:bg-white/15 active:scale-95 transition-transform touch-none select-none"
+                aria-label="Hoch"
+              >↑</button>
+              <div className="flex gap-1">
+                <button
+                  onTouchStart={() => pushDir("LEFT")}
+                  className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/5 text-2xl font-bold text-zinc-200 active:bg-white/15 active:scale-95 transition-transform touch-none select-none"
+                  aria-label="Links"
+                >←</button>
+                <button
+                  onTouchStart={() => pushDir("DOWN")}
+                  className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/5 text-2xl font-bold text-zinc-200 active:bg-white/15 active:scale-95 transition-transform touch-none select-none"
+                  aria-label="Runter"
+                >↓</button>
+                <button
+                  onTouchStart={() => pushDir("RIGHT")}
+                  className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/5 text-2xl font-bold text-zinc-200 active:bg-white/15 active:scale-95 transition-transform touch-none select-none"
+                  aria-label="Rechts"
+                >→</button>
+              </div>
+            </div>
+          )}
+
           {/* Footer */}
-          <div className="flex items-center justify-between text-[11px] text-zinc-600">
+          <div className="hidden sm:flex items-center justify-between text-[11px] text-zinc-600">
             <span>← → ↑ ↓ oder WASD</span>
             <span>
               {activeMode === "grind"

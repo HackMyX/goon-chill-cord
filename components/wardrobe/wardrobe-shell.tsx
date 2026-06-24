@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -63,13 +63,33 @@ interface StatRowDef {
 }
 
 function StatRow({ label, value, color, tooltip }: StatRowDef) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = () => setOpen(false);
+    document.addEventListener("touchstart", dismiss, { once: true, passive: true });
+    document.addEventListener("mousedown", dismiss, { once: true });
+    return () => {
+      document.removeEventListener("touchstart", dismiss);
+      document.removeEventListener("mousedown", dismiss);
+    };
+  }, [open]);
   return (
     <div className="group relative flex items-center justify-between gap-3">
       <span className="text-[11px] text-zinc-500">{label}</span>
-      <span className={`cursor-help text-[11px] font-bold tabular-nums ${color}`}>{value}</span>
-      <div className="pointer-events-none absolute right-0 bottom-full z-50 mb-1.5 w-56 rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-2 text-[11px] leading-relaxed text-zinc-300 opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100">
-        {tooltip}
-      </div>
+      <span
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onTouchStart={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        className={`cursor-help text-[11px] font-bold tabular-nums ${color}`}
+      >
+        {value}
+      </span>
+      {open && (
+        <div className="pointer-events-none absolute right-0 bottom-full z-50 mb-1.5 w-56 rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-2 text-[11px] leading-relaxed text-zinc-300 shadow-xl">
+          {tooltip}
+        </div>
+      )}
     </div>
   );
 }

@@ -115,7 +115,7 @@ export function AccountShell({
     <div className="flex flex-1 flex-col">
       <TopBar credits={liveCredits} streakDays={streakDays} inventoryCount={inventoryCount} isAdmin={isAdmin({ role: liveRole })} isModerator={isModerator({ role: liveRole })} />
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-3 py-4 sm:px-4 sm:py-8">
         <Link
           href="/"
           onMouseEnter={sound.hover}

@@ -192,7 +192,8 @@ function ShopCard({
           viewIndex={viewIndex}
         />
         {/* "Full view" hint on hover */}
-        <div className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-zinc-300 opacity-0 transition-opacity group-hover/thumb:opacity-100">
+        {/* Show hint always on touch devices, hover-only on desktop */}
+        <div className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-zinc-300 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover/thumb:opacity-100">
           <Eye className="h-3 w-3" /> Vollansicht
         </div>
       </div>
@@ -357,7 +358,7 @@ function FeaturedHero({
                 visible={i === active}
               />
             ))}
-            <div className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-zinc-300 opacity-0 transition-opacity group-hover/fhero:opacity-100">
+            <div className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-zinc-300 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover/fhero:opacity-100">
               <Eye className="h-3 w-3" /> Vollansicht
             </div>
           </div>
@@ -661,7 +662,7 @@ export function ShopShell({
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-8">
         {/* MOTD Banner */}
         <AnimatePresence>
           {motd && !motdDismissed && (

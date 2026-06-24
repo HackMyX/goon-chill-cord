@@ -93,7 +93,7 @@ export function PlayerListShell({ players: initialPlayers, credits: initialCredi
     <div className="flex flex-1 flex-col">
       <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} isModerator={isModerator} />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-8">
         <Link
           href="/"
           onMouseEnter={sound.hover}

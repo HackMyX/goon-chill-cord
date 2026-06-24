@@ -459,8 +459,10 @@ export function WorldShell({
   // `min-height: 0` can collapse to its content's *intrinsic* size instead
   // of actually stretching — and an R3F <Canvas> sized at 100% of a
   // collapsed (effectively auto-height) parent resolves to ~0px. Forcing
-  // `h-screen` on this component's own root sidesteps the whole ancestor
+  // `h-dvh` on this component's own root sidesteps the whole ancestor
   // chain instead of trying to fix `min-h-0` at every level above it.
+  // `dvh` (dynamic viewport height) correctly shrinks when the mobile browser
+  // URL bar is visible, preventing overflow and the bar from sitting over the canvas.
   useEffect(() => {
     const el = canvasWrapRef.current;
     if (!el) return;
@@ -479,7 +481,7 @@ export function WorldShell({
   }, []);
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-dvh flex-col">
       {/* Portrait-mode gate — only shown on touch devices in portrait */}
       {showPortraitGate && (
         <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 bg-black/95 px-6 text-center backdrop-blur">

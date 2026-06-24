@@ -112,15 +112,17 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
 
   return (
     <div className="flex items-center gap-2">
+      {/* Clock/streak box — hidden on small screens to prevent TopBar overflow */}
       {showBox && (
-        <div className="flex flex-col items-center rounded-2xl bg-white/5 px-3 py-1.5 sm:px-6 sm:py-2">
+        <div className="hidden sm:flex flex-col items-center rounded-2xl bg-white/5 px-3 py-1.5 sm:px-6 sm:py-2">
           {showCountdown && (
             <span className="font-mono text-sm tabular-nums text-zinc-200">{time}</span>
           )}
           {showStreakCounter && (
             <span className="flex items-center gap-1 text-xs text-orange-400">
               <Flame className="h-3 w-3" />
-              Streak: {streakDays} Tage
+              <span className="hidden sm:inline">Streak:</span> {streakDays}
+              <span className="hidden sm:inline"> Tage</span>
               {hydrated && (
                 <StreakInfoPopover streakDays={streakDays} bestStreakDays={bestStreakDays} config={streakConfig} />
               )}
@@ -135,16 +137,18 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
           onClick={handleClaim}
           disabled={claiming}
           title={`Tägliche Belohnung abholen (+${previewReward.toLocaleString("de-DE")} ${currencyName})`}
-          className="flex items-center gap-1.5 rounded-2xl border border-emerald-400/50 bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-300 shadow-[0_0_16px_rgba(52,211,153,0.35)] transition-all hover:bg-emerald-500/25 disabled:opacity-60"
+          className="flex items-center gap-1.5 rounded-xl border border-emerald-400/50 bg-emerald-500/15 px-2.5 py-1.5 text-xs font-bold text-emerald-300 shadow-[0_0_16px_rgba(52,211,153,0.35)] transition-all hover:bg-emerald-500/25 disabled:opacity-60 sm:rounded-2xl sm:px-3 sm:py-2"
         >
           {claiming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Gift className="h-3.5 w-3.5" />}
-          +{previewReward.toLocaleString("de-DE")} {currencyName}
+          <span className="hidden sm:inline">+{previewReward.toLocaleString("de-DE")} {currencyName}</span>
+          <span className="sm:hidden">+{previewReward >= 1000 ? `${Math.round(previewReward / 1000)}K` : previewReward}</span>
         </button>
       )}
 
       {justClaimed !== null && (
-        <span className="animate-pulse rounded-2xl bg-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-300">
-          +{justClaimed.toLocaleString("de-DE")} {currencyName} erhalten!
+        <span className="animate-pulse rounded-xl bg-emerald-500/20 px-2.5 py-1.5 text-xs font-bold text-emerald-300 sm:rounded-2xl sm:px-3 sm:py-2">
+          <span className="hidden sm:inline">+{justClaimed.toLocaleString("de-DE")} {currencyName} erhalten!</span>
+          <span className="sm:hidden">+{justClaimed >= 1000 ? `${Math.round(justClaimed / 1000)}K` : justClaimed} ✓</span>
         </span>
       )}
     </div>

@@ -273,7 +273,7 @@ export function MineShell({
   const nextLevelCfg = config.levels.find((l) => l.level === progress.level + 1);
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#030305]">
+    <div className="flex min-h-dvh flex-col bg-[#030305]">
       <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} isModerator={isModerator} />
 
       {/* Header */}
@@ -301,7 +301,7 @@ export function MineShell({
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
+      <main className="mx-auto w-full max-w-4xl flex-1 px-3 py-4 sm:px-4 sm:py-8">
         {/* Flash message */}
         {flashMsg && (
           <div className={`mb-5 rounded-xl border px-4 py-3 text-center text-sm font-bold transition-all ${

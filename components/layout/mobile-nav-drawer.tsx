@@ -93,7 +93,10 @@ export function MobileNavDrawer({
       />
 
       {/* Drawer panel — slides in from the right */}
-      <div className="fixed right-0 top-0 bottom-0 z-[61] flex w-72 flex-col bg-[#0d0b18] border-l border-white/[0.08] shadow-2xl overflow-y-auto">
+      <div
+        className="fixed right-0 top-0 bottom-0 z-[61] flex w-72 flex-col bg-[#0d0b18] border-l border-white/[0.08] shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-200"
+        style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
           <span className="text-sm font-bold text-zinc-200">Navigation</span>

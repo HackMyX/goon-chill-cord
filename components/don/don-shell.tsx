@@ -108,10 +108,16 @@ export function DonShell({
 
     setPhase("flipping");
 
-    // Accumulate rotations so we never reset and the animation always
-    // continues from the previous landing position.
+    // Compute the next rotation so the coin always lands on the correct face.
+    // Each win must land at (n × 360°), each loss at (n × 360° + 180°).
+    // We accumulate totals to avoid resets, and add ≥ 1440° of spin each time.
     const prev = coinYRef.current;
-    const next = prev + 1440 + (res.won ? 0 : 180);
+    const targetMod = res.won ? 0 : 180;
+    const prevMod = ((prev % 360) + 360) % 360; // normalise to 0–359
+    let delta = ((targetMod - prevMod) + 360) % 360; // shortest forward step
+    if (delta === 0) delta = 360; // always spin at least one full turn
+    const padding = Math.ceil(Math.max(0, 1440 - delta) / 360) * 360;
+    const next = prev + delta + padding;
     coinYRef.current = next;
 
     await coinControls.start({
@@ -150,7 +156,7 @@ export function DonShell({
       : "linear-gradient(90deg,#a78bfa,#7c3aed)";
 
   return (
-    <div className="flex min-h-screen flex-col" style={{ background: "#060409" }}>
+    <div className="flex min-h-dvh flex-col" style={{ background: "#060409" }}>
       <TopBar
         credits={credits}
         inventoryCount={inventoryCount}
@@ -176,9 +182,9 @@ export function DonShell({
         />
       </div>
 
-      <main className="relative z-10 flex flex-1 flex-col items-center px-4 pb-16 pt-10">
+      <main className="relative z-10 flex flex-1 flex-col items-center px-4 pb-8 pt-4 sm:pb-16 sm:pt-10">
         {/* Back link */}
-        <div className="mb-8 w-full max-w-lg">
+        <div className="mb-4 sm:mb-8 w-full max-w-lg">
           <Link
             href="/"
             className="inline-flex items-center gap-2 text-sm text-zinc-600 transition-colors hover:text-zinc-300"
@@ -193,10 +199,10 @@ export function DonShell({
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45 }}
-          className="mb-10 text-center"
+          className="mb-5 sm:mb-10 text-center"
         >
           <h1
-            className="text-4xl font-black tracking-widest text-zinc-100 sm:text-5xl"
+            className="text-2xl font-black tracking-widest text-zinc-100 sm:text-4xl lg:text-5xl"
             style={{ textShadow: "0 0 48px rgba(245,158,11,0.35)" }}
           >
             DOUBLE{" "}
@@ -216,7 +222,7 @@ export function DonShell({
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="w-full max-w-lg rounded-3xl border border-amber-500/10 p-8"
+          className="w-full max-w-lg rounded-3xl border border-amber-500/10 p-4 sm:p-8"
           style={{
             background: "linear-gradient(160deg,#0e0a18 0%,#0a0810 100%)",
             boxShadow: "0 0 80px rgba(245,158,11,0.04), 0 1px 0 rgba(255,255,255,0.04) inset",
@@ -288,9 +294,9 @@ export function DonShell({
           )}
 
           {/* Coin */}
-          <div className="flex flex-col items-center pb-8 pt-2">
+          <div className="flex flex-col items-center pb-4 pt-1 sm:pb-8 sm:pt-2">
             <div style={{ perspective: "900px" }}>
-              <div className="relative" style={{ width: 148, height: 148 }}>
+              <div className="relative" style={{ width: 128, height: 128 }}>
                 {/* Phase glow ring */}
                 <AnimatePresence>
                   {phase === "won" && (
@@ -338,8 +344,8 @@ export function DonShell({
                   initial={{ rotateY: 0 }}
                   style={{
                     transformStyle: "preserve-3d",
-                    width: 148,
-                    height: 148,
+                    width: 128,
+                    height: 128,
                     position: "relative",
                   }}
                 >
@@ -356,13 +362,13 @@ export function DonShell({
                     }}
                   >
                     <span
-                      className="text-5xl font-black leading-none"
+                      className="text-4xl font-black leading-none"
                       style={{ color: "#451a03", textShadow: "0 1px 2px rgba(255,255,255,0.2)" }}
                     >
                       2×
                     </span>
                     <span
-                      className="mt-0.5 text-[10px] font-black tracking-[0.2em]"
+                      className="mt-0.5 text-[9px] font-black tracking-[0.2em]"
                       style={{ color: "rgba(69,26,3,0.7)" }}
                     >
                       DOUBLE
@@ -383,12 +389,11 @@ export function DonShell({
                     }}
                   >
                     <span
-                      className="text-5xl font-black leading-none text-zinc-400"
-                      style={{ textShadow: "0 0 0" }}
+                      className="text-4xl font-black leading-none text-zinc-400"
                     >
                       ✕
                     </span>
-                    <span className="mt-0.5 text-[10px] font-black tracking-[0.2em] text-zinc-600">
+                    <span className="mt-0.5 text-[9px] font-black tracking-[0.2em] text-zinc-600">
                       NOTHING
                     </span>
                   </div>
@@ -397,7 +402,7 @@ export function DonShell({
             </div>
 
             {/* Result text below the coin */}
-            <div className="mt-7 flex h-12 items-center justify-center">
+            <div className="mt-4 sm:mt-7 flex h-12 items-center justify-center">
               <AnimatePresence mode="wait">
                 {phase === "won" && lastResult && (
                   <motion.div
@@ -478,7 +483,7 @@ export function DonShell({
             </div>
 
             {/* Quick bet grid */}
-            <div className={`grid gap-2 ${donConfig.quickAmounts.length <= 4 ? "grid-cols-4" : "grid-cols-5"}`}>
+            <div className={`grid gap-2 ${donConfig.quickAmounts.length <= 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3 sm:grid-cols-5"}`}>
               {donConfig.quickAmounts.map((amount) => {
                 const active = !customBet && selectedQuick === amount;
                 return (
@@ -614,29 +619,29 @@ export function DonShell({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
-          className="mt-5 grid w-full max-w-lg grid-cols-3 gap-3"
+          className="mt-4 sm:mt-5 grid w-full max-w-lg grid-cols-3 gap-2 sm:gap-3"
         >
-          <div className="rounded-2xl border border-white/6 bg-[#0d0a15]/70 p-4 text-center">
+          <div className="rounded-2xl border border-white/6 bg-[#0d0a15]/70 p-3 sm:p-4 text-center">
             <div className="mb-1 flex items-center justify-center gap-1.5">
               <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
               <span className="text-xs text-zinc-600">Gewonnen</span>
             </div>
-            <p className="text-2xl font-black text-emerald-400">{sessionWins}</p>
+            <p className="text-xl sm:text-2xl font-black text-emerald-400">{sessionWins}</p>
           </div>
-          <div className="rounded-2xl border border-white/6 bg-[#0d0a15]/70 p-4 text-center">
+          <div className="rounded-2xl border border-white/6 bg-[#0d0a15]/70 p-3 sm:p-4 text-center">
             <div className="mb-1 flex items-center justify-center gap-1.5">
               <TrendingDown className="h-3.5 w-3.5 text-red-500" />
               <span className="text-xs text-zinc-600">Verloren</span>
             </div>
-            <p className="text-2xl font-black text-red-400">{sessionLosses}</p>
+            <p className="text-xl sm:text-2xl font-black text-red-400">{sessionLosses}</p>
           </div>
-          <div className="rounded-2xl border border-white/6 bg-[#0d0a15]/70 p-4 text-center">
+          <div className="rounded-2xl border border-white/6 bg-[#0d0a15]/70 p-3 sm:p-4 text-center">
             <div className="mb-1 flex items-center justify-center gap-1.5">
               <Coins className="h-3.5 w-3.5 text-zinc-500" />
               <span className="text-xs text-zinc-600">Netto</span>
             </div>
             <p
-              className={`text-2xl font-black ${
+              className={`text-xl sm:text-2xl font-black ${
                 sessionNet > 0
                   ? "text-emerald-400"
                   : sessionNet < 0

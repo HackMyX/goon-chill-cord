@@ -118,10 +118,8 @@ export function MobileControls({ cameraState }: MobileControlsProps) {
           top: 0,
           left: "45%",
           right: 0,
-          bottom: "180px",
+          bottom: "calc(180px + env(safe-area-inset-bottom))",
           pointerEvents: "auto",
-          // Debug: very faint to confirm placement without obscuring world
-          // background: "rgba(255,0,0,0.04)",
         }}
       />
 
@@ -131,7 +129,10 @@ export function MobileControls({ cameraState }: MobileControlsProps) {
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "space-between",
-          padding: "0 20px 24px",
+          paddingLeft: 20,
+          paddingRight: 20,
+          // Safe-area-inset-bottom so controls clear iOS home indicator
+          paddingBottom: "max(24px, calc(16px + env(safe-area-inset-bottom)))",
           pointerEvents: "none",
         }}
       >

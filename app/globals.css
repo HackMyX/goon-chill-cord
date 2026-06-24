@@ -129,6 +129,8 @@
   }
   html {
     @apply font-sans;
+    /* iOS Safari fill-available fallback so children can use height:100% */
+    height: -webkit-fill-available;
   }
 
   /* Prevent double-tap zoom + faster tap response on all interactive elements */
@@ -141,6 +143,10 @@
      those elements via overscroll-behavior-contain). */
   body {
     overscroll-behavior: none;
+    /* Dynamic viewport height — correctly accounts for browser toolbars (URL bar,
+       tab bar) on mobile Safari/Chrome. Falls back to 100vh on older browsers. */
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
   }
 
   /* Smoother scrolling on iOS for overflow-scroll containers */

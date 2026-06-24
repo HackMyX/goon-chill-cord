@@ -236,7 +236,7 @@ export function PatchNotesShell({ notes: initialNotes, credits, streakDays, isAd
   const usedTypes = Array.from(new Set(notes.map((n) => n.noteType)));
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#030305]">
+    <div className="flex min-h-dvh flex-col bg-[#030305]">
       <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} isModerator={isModerator} />
 
       {/* Hero */}
@@ -276,7 +276,7 @@ export function PatchNotesShell({ notes: initialNotes, credits, streakDays, isAd
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-3 py-5 sm:px-4 sm:py-10">
         {/* Back */}
         <Link
           href="/"

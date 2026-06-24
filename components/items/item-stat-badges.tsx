@@ -53,17 +53,40 @@ function StatBadge({
     setMounted(true);
   }, []);
 
+  function computePos() {
+    if (!spanRef.current) return;
+    const rect = spanRef.current.getBoundingClientRect();
+    // Clamp tooltip so it never overflows the viewport horizontally
+    const panelW = 224; // w-56
+    const left = Math.min(
+      Math.max(panelW / 2 + 8, rect.left + rect.width / 2),
+      window.innerWidth - panelW / 2 - 8
+    );
+    setPos({ top: rect.top - 8, left });
+  }
+
   function handleMouseEnter() {
-    if (spanRef.current) {
-      const rect = spanRef.current.getBoundingClientRect();
-      setPos({
-        // 8px above the badge top, centered horizontally — fixed so scroll doesn't shift it
-        top: rect.top - 8,
-        left: rect.left + rect.width / 2,
-      });
-    }
+    computePos();
     setVisible(true);
   }
+
+  function handleTap(e: React.TouchEvent) {
+    e.stopPropagation();
+    if (!visible) {
+      computePos();
+      setVisible(true);
+    } else {
+      setVisible(false);
+    }
+  }
+
+  // Dismiss on outside tap
+  useEffect(() => {
+    if (!visible) return;
+    const dismiss = () => setVisible(false);
+    document.addEventListener("touchstart", dismiss, { once: true, passive: true });
+    return () => document.removeEventListener("touchstart", dismiss);
+  }, [visible]);
 
   return (
     <div
@@ -73,6 +96,7 @@ function StatBadge({
     >
       <span
         ref={spanRef}
+        onTouchStart={handleTap}
         className={`cursor-help rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${badgeClass}`}
       >
         {children}

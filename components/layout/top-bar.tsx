@@ -172,6 +172,7 @@ export function TopBar({
             href="/garderobe"
             badge={liveInventoryCount > 0 ? liveInventoryCount : undefined}
             showLabel={topbarShowLabels}
+            className="hidden md:flex"
           />
         );
       case "notifications":
@@ -184,17 +185,25 @@ export function TopBar({
             label="Profil"
             href="/account"
             showLabel={topbarShowLabels}
+            className="hidden md:flex"
           />
         );
       case "logout":
-        return <LogoutButton key="logout" />;
+        return (
+          <span key="logout" className="hidden md:flex">
+            <LogoutButton />
+          </span>
+        );
       default:
         return null;
     }
   }
 
   return (
-    <header className="sticky top-0 z-50 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-b border-white/[0.06] bg-[#030305]/95 px-4 py-2 backdrop-blur-md">
+    <header
+      className="sticky top-0 z-50 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:gap-4 border-b border-white/[0.06] bg-[#030305]/95 px-3 sm:px-4 py-2 backdrop-blur-md"
+      style={{ paddingLeft: "max(0.75rem, calc(0.75rem + env(safe-area-inset-left)))", paddingRight: "max(0.75rem, calc(0.75rem + env(safe-area-inset-right)))" }}
+    >
       {/* Left: version + logo + credits + admin buttons */}
       <div className="flex items-center gap-2.5 justify-self-start">
         <Link

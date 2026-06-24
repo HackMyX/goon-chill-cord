@@ -23,32 +23,38 @@ export function GlobalBroadcast() {
 
   useEffect(() => {
     const client = supabase.current;
-    const channel = client
-      .channel("global-broadcast")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "global_chat_messages",
-          filter: "is_system=eq.true",
-        },
-        (payload) => {
-          const row = payload.new as {
-            id: string;
-            content: string;
-            metadata: { rarity?: string } | null;
-          };
-          const rarity = row.metadata?.rarity ?? "normal";
-          setPopups((prev) => [...prev, { id: row.id, content: row.content, rarity }]);
-          setTimeout(() => {
-            setPopups((prev) => prev.filter((p) => p.id !== row.id));
-          }, 7000);
-        }
-      )
-      .subscribe();
+    let channel: ReturnType<typeof client.channel> | null = null;
 
-    return () => { client.removeChannel(channel); };
+    // Only subscribe for authenticated users — no popups for logged-out visitors
+    client.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      channel = client
+        .channel("global-broadcast")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "global_chat_messages",
+            filter: "is_system=eq.true",
+          },
+          (payload) => {
+            const row = payload.new as {
+              id: string;
+              content: string;
+              metadata: { rarity?: string } | null;
+            };
+            const rarity = row.metadata?.rarity ?? "normal";
+            setPopups((prev) => [...prev, { id: row.id, content: row.content, rarity }]);
+            setTimeout(() => {
+              setPopups((prev) => prev.filter((p) => p.id !== row.id));
+            }, 7000);
+          }
+        )
+        .subscribe();
+    });
+
+    return () => { if (channel) client.removeChannel(channel); };
   }, []);
 
   if (popups.length === 0) return null;

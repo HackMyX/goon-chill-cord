@@ -31,6 +31,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   minimumScale: 1,
   themeColor: "#030305",
+  viewportFit: "cover",
 };
 
 // `generateMetadata`, not a static `export const metadata` — the browser

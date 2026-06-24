@@ -31,7 +31,7 @@ export function SurveysShell({
   const done = surveys.filter((s) => localResponded.has(s.id));
 
   return (
-    <div className="min-h-screen bg-[#070611] text-zinc-100">
+    <div className="min-h-dvh bg-[#070611] text-zinc-100">
       <TopBar
         credits={credits}
         streakDays={streakDays}
@@ -39,7 +39,7 @@ export function SurveysShell({
         isModerator={isModerator}
       />
 
-      <main className="mx-auto max-w-2xl px-4 py-10">
+      <main className="mx-auto max-w-2xl px-3 py-5 sm:px-4 sm:py-10">
         {/* Header */}
         <div className="mb-8 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-500/15 border border-purple-500/20">

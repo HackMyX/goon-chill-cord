@@ -165,7 +165,7 @@ export function CasesShell({
             <div className="animate-particle-f absolute bottom-4 left-[88%] h-1.5 w-1.5 rounded-full bg-fuchsia-300/40" />
           </div>
 
-          <div className="relative z-10 mx-auto max-w-3xl px-4 pt-14 pb-12 text-center">
+          <div className="relative z-10 mx-auto max-w-3xl px-4 pt-8 pb-8 text-center sm:pt-14 sm:pb-12">
             {/* Ultra RGB badge */}
             <motion.div
               initial={{ opacity: 0, scale: 0.7, y: -8 }}
@@ -186,7 +186,7 @@ export function CasesShell({
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45, delay: 0.08 }}
-              className="text-5xl font-black tracking-tight sm:text-6xl leading-none"
+              className="text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl leading-none"
             >
               <span className="bg-gradient-to-r from-purple-300 via-fuchsia-300 to-rose-300 bg-clip-text text-transparent drop-shadow-[0_0_40px_rgba(217,70,239,0.5)]">
                 Cases öffnen
