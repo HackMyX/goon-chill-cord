@@ -13,7 +13,12 @@ export interface PatchNote {
   version: string;
   title: string;
   summary: string | null;
+  /** Legacy structured "Neu/Geändert/Behoben…" sections — kept only for
+   * notes created before the free-form rich-text editor existed. */
   content: PatchNoteSection[];
+  /** Free-form rich-text body (sanitized HTML from the admin editor). This
+   * is the canonical body for every note created going forward. */
+  bodyHtml: string | null;
   noteType: PatchNoteType;
   status: PatchNoteStatus;
   isPinned: boolean;
@@ -21,6 +26,19 @@ export interface PatchNote {
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** One-time fallback so editing a pre-rich-text note doesn't lose its
+ * existing sections — renders them as plain HTML to seed the new editor. */
+export function legacySectionsToHtml(sections: PatchNoteSection[]): string {
+  return sections
+    .map((s) => {
+      const meta = SECTION_TYPE_META[s.type];
+      const heading = s.title || meta?.label || s.type;
+      const items = s.items.filter((i) => i.trim()).map((i) => `<li>${i}</li>`).join("");
+      return `<h3>${heading}</h3><ul>${items}</ul>`;
+    })
+    .join("");
 }
 
 export const NOTE_TYPE_META: Record<PatchNoteType, { label: string; color: string; bg: string; border: string; glow: string }> = {

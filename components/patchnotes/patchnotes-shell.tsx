@@ -104,21 +104,30 @@ function NoteCard({ note, expanded, onToggle }: { note: PatchNote; expanded: boo
           <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{note.summary}</p>
         )}
 
-        {note.content.length > 0 && (
+        {(note.bodyHtml || note.content.length > 0) && (
           <div className="mt-3 flex items-center gap-2">
-            <div className="flex gap-1">
-              {note.content.slice(0, 5).map((s, i) => (
-                <span key={i} className={`text-xs ${SECTION_TYPE_META[s.type]?.color ?? "text-zinc-400"}`}>
-                  {SECTION_ICONS[s.type]}
+            {!note.bodyHtml && (
+              <>
+                <div className="flex gap-1">
+                  {note.content.slice(0, 5).map((s, i) => (
+                    <span key={i} className={`text-xs ${SECTION_TYPE_META[s.type]?.color ?? "text-zinc-400"}`}>
+                      {SECTION_ICONS[s.type]}
+                    </span>
+                  ))}
+                  {note.content.length > 5 && (
+                    <span className="text-xs text-zinc-600">+{note.content.length - 5}</span>
+                  )}
+                </div>
+                <span className="text-[11px] text-zinc-600">
+                  {note.content.reduce((a, s) => a + s.items.length, 0)} Einträge
                 </span>
-              ))}
-              {note.content.length > 5 && (
-                <span className="text-xs text-zinc-600">+{note.content.length - 5}</span>
-              )}
-            </div>
-            <span className="text-[11px] text-zinc-600">
-              {note.content.reduce((a, s) => a + s.items.length, 0)} Einträge
-            </span>
+              </>
+            )}
+            {note.bodyHtml && (
+              <span className="text-[11px] text-zinc-500">
+                {expanded ? "Weniger anzeigen" : "Vollständige Note lesen"}
+              </span>
+            )}
             <ChevronDown
               className={`ml-auto h-4 w-4 text-zinc-500 transition-transform duration-300 ${expanded ? "rotate-180" : ""}`}
             />
@@ -127,32 +136,39 @@ function NoteCard({ note, expanded, onToggle }: { note: PatchNote; expanded: boo
       </button>
 
       {/* Expanded content */}
-      {expanded && note.content.length > 0 && (
+      {expanded && (note.bodyHtml || note.content.length > 0) && (
         <div className="border-t border-white/8 px-6 pb-6 pt-5">
-          <div className="flex flex-col gap-5">
-            {note.content.map((section, si) => {
-              const sm = SECTION_TYPE_META[section.type];
-              return (
-                <div key={si}>
-                  <div className="mb-2.5 flex items-center gap-2">
-                    <span className={`text-base ${sm?.color ?? "text-zinc-400"}`}>{SECTION_ICONS[section.type]}</span>
-                    <span className={`text-sm font-bold uppercase tracking-wider ${sm?.color ?? "text-zinc-400"}`}>
-                      {section.title || sm?.label}
-                    </span>
-                    <div className={`h-px flex-1 opacity-20 ${sm?.color ?? "bg-zinc-600"}`} style={{ background: "currentColor" }} />
+          {note.bodyHtml ? (
+            <div
+              className="patchnote-richtext"
+              dangerouslySetInnerHTML={{ __html: note.bodyHtml }}
+            />
+          ) : (
+            <div className="flex flex-col gap-5">
+              {note.content.map((section, si) => {
+                const sm = SECTION_TYPE_META[section.type];
+                return (
+                  <div key={si}>
+                    <div className="mb-2.5 flex items-center gap-2">
+                      <span className={`text-base ${sm?.color ?? "text-zinc-400"}`}>{SECTION_ICONS[section.type]}</span>
+                      <span className={`text-sm font-bold uppercase tracking-wider ${sm?.color ?? "text-zinc-400"}`}>
+                        {section.title || sm?.label}
+                      </span>
+                      <div className={`h-px flex-1 opacity-20 ${sm?.color ?? "bg-zinc-600"}`} style={{ background: "currentColor" }} />
+                    </div>
+                    <ul className="space-y-1.5 pl-5">
+                      {section.items.map((item, ii) => (
+                        <li key={ii} className="relative text-sm text-zinc-300">
+                          <span className={`absolute -left-4 select-none ${sm?.color ?? "text-zinc-500"}`}>·</span>
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="space-y-1.5 pl-5">
-                    {section.items.map((item, ii) => (
-                      <li key={ii} className="relative text-sm text-zinc-300">
-                        <span className={`absolute -left-4 select-none ${sm?.color ?? "text-zinc-500"}`}>·</span>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

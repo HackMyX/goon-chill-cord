@@ -557,3 +557,93 @@
     transform: translateY(-28px);
   }
 }
+
+/* ── Rich-text rendered output (patch notes, admin editor, popup) ────────── */
+.patchnote-richtext {
+  color: #e4e4e7;
+  line-height: 1.72;
+  word-break: break-word;
+}
+.patchnote-richtext > * + * { margin-top: 0.55em; }
+.patchnote-richtext h1 {
+  font-size: 1.45rem; font-weight: 800; color: #fafafa;
+  letter-spacing: -0.02em; margin: 1.1em 0 0.35em;
+}
+.patchnote-richtext h2 {
+  font-size: 1.2rem; font-weight: 700; color: #fafafa;
+  letter-spacing: -0.015em; margin: 0.9em 0 0.3em;
+}
+.patchnote-richtext h3 {
+  font-size: 1.05rem; font-weight: 700; color: #d4d4d8;
+  margin: 0.8em 0 0.25em;
+}
+.patchnote-richtext p { margin: 0.3em 0; }
+.patchnote-richtext ul {
+  list-style: disc; padding-left: 1.5em; margin: 0.45em 0;
+}
+.patchnote-richtext ol {
+  list-style: decimal; padding-left: 1.5em; margin: 0.45em 0;
+}
+.patchnote-richtext li { margin: 0.2em 0; }
+.patchnote-richtext li p { margin: 0; }
+.patchnote-richtext blockquote {
+  border-left: 3px solid rgba(168, 85, 247, 0.55);
+  padding-left: 0.9em;
+  color: #a1a1aa;
+  font-style: italic;
+  margin: 0.7em 0;
+  border-radius: 0 4px 4px 0;
+}
+.patchnote-richtext code {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  padding: 0.1em 0.38em;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.845em;
+  color: #c084fc;
+}
+.patchnote-richtext pre {
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.85em 1em;
+  overflow-x: auto;
+  margin: 0.7em 0;
+}
+.patchnote-richtext pre code {
+  background: transparent;
+  padding: 0;
+  color: #e4e4e7;
+  font-size: 0.87em;
+}
+.patchnote-richtext a {
+  color: #a78bfa;
+  text-decoration: underline;
+  text-decoration-color: rgba(167, 139, 250, 0.45);
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+.patchnote-richtext a:hover { color: #c4b5fd; }
+.patchnote-richtext hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  margin: 0.85em 0;
+}
+.patchnote-richtext strong { font-weight: 700; color: #fff; }
+.patchnote-richtext em { font-style: italic; color: #d4d4d8; }
+.patchnote-richtext u { text-decoration: underline; text-underline-offset: 2px; }
+.patchnote-richtext s { text-decoration: line-through; opacity: 0.6; }
+.patchnote-richtext mark {
+  border-radius: 3px;
+  padding: 0.08em 0.22em;
+}
+
+/* Tiptap placeholder (editable mode only) */
+.patchnote-richtext-editable .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: rgba(113, 113, 122, 0.55);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+.patchnote-richtext-editable .ProseMirror-focused { outline: none; }

@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useMemo } from "react";
 import {
   Plus, Trash2, Save, Eye, EyeOff, Pin, PinOff, Loader2,
-  ChevronDown, ChevronUp, ArrowUp, ArrowDown, Pencil, Check,
+  ChevronDown, ChevronUp, Pencil, Check,
   X, FileText, Rocket, Globe, AlertTriangle, Copy, Bell, BellOff,
 } from "lucide-react";
 import {
@@ -15,12 +15,12 @@ import {
   deletePatchNote,
   togglePatchNotePopup,
 } from "@/lib/actions/patchnotes";
-import type { PatchNote, PatchNoteType, SectionType, PatchNoteSection } from "@/lib/patchnotes";
-import { NOTE_TYPE_META, SECTION_TYPE_META } from "@/lib/patchnotes";
+import type { PatchNote, PatchNoteType } from "@/lib/patchnotes";
+import { NOTE_TYPE_META, legacySectionsToHtml } from "@/lib/patchnotes";
 import { useSoundManager } from "@/lib/sound-manager";
+import { RichTextEditor } from "@/components/admin/rich-text-editor";
 
 const ALL_NOTE_TYPES: PatchNoteType[] = ["update", "hotfix", "event", "balance", "season", "maintenance"];
-const ALL_SECTION_TYPES: SectionType[] = ["added", "changed", "fixed", "removed", "balance", "event", "note", "warning"];
 
 function TypeBadge({ type }: { type: PatchNoteType }) {
   const m = NOTE_TYPE_META[type];
@@ -44,157 +44,13 @@ function StatusBadge({ status }: { status: "draft" | "published" }) {
   );
 }
 
-// ---- Section builder ----
-interface SectionEditorProps {
-  sections: PatchNoteSection[];
-  onChange: (sections: PatchNoteSection[]) => void;
-}
-
-function SectionEditor({ sections, onChange }: SectionEditorProps) {
-  function addSection() {
-    onChange([...sections, { type: "added", title: "", items: [""] }]);
-  }
-
-  function removeSection(idx: number) {
-    onChange(sections.filter((_, i) => i !== idx));
-  }
-
-  function moveSection(idx: number, dir: -1 | 1) {
-    const arr = [...sections];
-    const target = idx + dir;
-    if (target < 0 || target >= arr.length) return;
-    [arr[idx], arr[target]] = [arr[target], arr[idx]];
-    onChange(arr);
-  }
-
-  function updateSection(idx: number, patch: Partial<PatchNoteSection>) {
-    onChange(sections.map((s, i) => i === idx ? { ...s, ...patch } : s));
-  }
-
-  function addItem(si: number) {
-    const s = sections[si];
-    updateSection(si, { items: [...s.items, ""] });
-  }
-
-  function removeItem(si: number, ii: number) {
-    const s = sections[si];
-    if (s.items.length <= 1) return;
-    updateSection(si, { items: s.items.filter((_, i) => i !== ii) });
-  }
-
-  function updateItem(si: number, ii: number, val: string) {
-    const s = sections[si];
-    updateSection(si, { items: s.items.map((v, i) => i === ii ? val : v) });
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {sections.map((section, si) => {
-        const sm = SECTION_TYPE_META[section.type];
-        return (
-          <div key={si} className={`rounded-xl border bg-black/30 p-3 ${sm?.color ? "border-white/10" : "border-white/10"}`}>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              {/* Section type selector */}
-              <select
-                value={section.type}
-                onChange={(e) => updateSection(si, { type: e.target.value as SectionType })}
-                className="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-purple-400/60"
-              >
-                {ALL_SECTION_TYPES.map((t) => (
-                  <option key={t} value={t}>{SECTION_TYPE_META[t]?.label ?? t}</option>
-                ))}
-              </select>
-              {/* Section title */}
-              <input
-                type="text"
-                placeholder="Abschnittstitel (optional)"
-                value={section.title}
-                onChange={(e) => updateSection(si, { title: e.target.value })}
-                className="flex-1 rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-purple-400/60"
-              />
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  title="Nach oben"
-                  onClick={() => moveSection(si, -1)}
-                  disabled={si === 0}
-                  className="rounded p-1 text-zinc-600 hover:text-zinc-300 disabled:opacity-30"
-                >
-                  <ArrowUp className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="Nach unten"
-                  onClick={() => moveSection(si, 1)}
-                  disabled={si === sections.length - 1}
-                  className="rounded p-1 text-zinc-600 hover:text-zinc-300 disabled:opacity-30"
-                >
-                  <ArrowDown className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="Abschnitt entfernen"
-                  onClick={() => removeSection(si)}
-                  className="rounded p-1 text-zinc-600 hover:text-red-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Items */}
-            <div className="flex flex-col gap-1.5 pl-2">
-              {section.items.map((item, ii) => (
-                <div key={ii} className="flex items-center gap-1.5">
-                  <span className={`shrink-0 text-sm ${sm?.color ?? "text-zinc-500"}`}>·</span>
-                  <input
-                    type="text"
-                    placeholder={`Eintrag ${ii + 1}…`}
-                    value={item}
-                    onChange={(e) => updateItem(si, ii, e.target.value)}
-                    className="flex-1 rounded-lg border border-white/8 bg-black/30 px-2.5 py-1 text-xs text-zinc-200 outline-none focus:border-purple-400/40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeItem(si, ii)}
-                    disabled={section.items.length <= 1}
-                    className="shrink-0 rounded p-0.5 text-zinc-700 hover:text-red-400 disabled:opacity-20"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => addItem(si)}
-              className="mt-2 flex items-center gap-1 pl-4 text-[11px] text-zinc-600 hover:text-zinc-400"
-            >
-              <Plus className="h-3 w-3" />
-              Eintrag hinzufügen
-            </button>
-          </div>
-        );
-      })}
-      <button
-        type="button"
-        onClick={addSection}
-        className="flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/15 py-2.5 text-xs text-zinc-500 transition-colors hover:border-white/30 hover:text-zinc-300"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Abschnitt hinzufügen
-      </button>
-    </div>
-  );
-}
-
 // ---- Note form (create/edit) ----
 interface NoteFormValues {
   version: string;
   title: string;
   summary: string;
   noteType: PatchNoteType;
-  content: PatchNoteSection[];
+  bodyHtml: string;
   isPinned: boolean;
 }
 
@@ -203,7 +59,7 @@ const DEFAULT_FORM: NoteFormValues = {
   title: "",
   summary: "",
   noteType: "update",
-  content: [],
+  bodyHtml: "",
   isPinned: false,
 };
 
@@ -213,7 +69,8 @@ function noteToForm(n: PatchNote): NoteFormValues {
     title: n.title,
     summary: n.summary ?? "",
     noteType: n.noteType,
-    content: n.content,
+    // Seed legacy notes with HTML converted from their old sections
+    bodyHtml: n.bodyHtml ?? (n.content.length > 0 ? legacySectionsToHtml(n.content) : ""),
     isPinned: n.isPinned,
   };
 }
@@ -432,7 +289,8 @@ export function PatchNotesEditor({ initialNotes }: { initialNotes: PatchNote[] }
         title: form.title,
         summary: form.summary || undefined,
         noteType: form.noteType,
-        content: form.content,
+        content: [],
+        bodyHtml: form.bodyHtml || undefined,
       });
       if (!res.success || !res.id) {
         setSaving(false);
@@ -448,7 +306,8 @@ export function PatchNotesEditor({ initialNotes }: { initialNotes: PatchNote[] }
         title: form.title,
         summary: form.summary || null,
         noteType: form.noteType,
-        content: form.content,
+        content: [],
+        bodyHtml: form.bodyHtml || null,
         isPinned: form.isPinned,
       });
       if (!res.success) {
@@ -639,10 +498,10 @@ export function PatchNotesEditor({ initialNotes }: { initialNotes: PatchNote[] }
           </div>
 
           <div className="mt-4 border-t border-white/8 pt-4">
-            <span className="mb-2 block text-xs font-semibold text-zinc-400">Inhalt (Abschnitte)</span>
-            <SectionEditor
-              sections={form.content}
-              onChange={(c) => setForm((f) => ({ ...f, content: c }))}
+            <span className="mb-2 block text-xs font-semibold text-zinc-400">Inhalt</span>
+            <RichTextEditor
+              value={form.bodyHtml}
+              onChange={(html) => setForm((f) => ({ ...f, bodyHtml: html }))}
             />
           </div>
 

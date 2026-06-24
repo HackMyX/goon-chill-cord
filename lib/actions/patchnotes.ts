@@ -21,6 +21,7 @@ function rowToNote(r: Record<string, unknown>): PatchNote {
     title: r.title as string,
     summary: r.summary as string | null,
     content: (r.content as PatchNoteSection[]) ?? [],
+    bodyHtml: (r.body_html as string | null) ?? null,
     noteType: (r.note_type as PatchNoteType) ?? "update",
     status: (r.status as PatchNoteStatus) ?? "draft",
     isPinned: (r.is_pinned as boolean) ?? false,
@@ -80,6 +81,7 @@ export async function createPatchNote(input: {
   summary?: string;
   noteType: PatchNoteType;
   content?: PatchNoteSection[];
+  bodyHtml?: string;
 }): Promise<{ success: boolean; error?: string; id?: string }> {
   const user = await requireAdmin();
   if (!user) return { success: false, error: "Kein Zugriff." };
@@ -92,6 +94,7 @@ export async function createPatchNote(input: {
       summary: input.summary?.trim() || null,
       note_type: input.noteType,
       content: input.content ?? [],
+      body_html: input.bodyHtml?.trim() || null,
       status: "draft",
     })
     .select("id")
@@ -109,6 +112,7 @@ export async function updatePatchNote(
     summary?: string | null;
     noteType?: PatchNoteType;
     content?: PatchNoteSection[];
+    bodyHtml?: string | null;
     isPinned?: boolean;
   }
 ): Promise<{ success: boolean; error?: string }> {
@@ -121,6 +125,7 @@ export async function updatePatchNote(
   if ("summary" in input) patch.summary = input.summary?.trim() || null;
   if (input.noteType !== undefined) patch.note_type = input.noteType;
   if (input.content !== undefined) patch.content = input.content;
+  if ("bodyHtml" in input) patch.body_html = input.bodyHtml?.trim() || null;
   if (input.isPinned !== undefined) patch.is_pinned = input.isPinned;
 
   const { error } = await admin.from("patch_notes").update(patch).eq("id", id);
