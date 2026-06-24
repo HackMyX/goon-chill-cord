@@ -37,6 +37,7 @@ export default async function Home() {
     { data: profile },
     { count: inventoryCount },
     { data: topProfiles },
+    { data: streakProfiles },
     { count: userCount },
     siteConfig,
   ] = await Promise.all([
@@ -57,6 +58,13 @@ export default async function Home() {
       .limit(10),
     supabase
       .from("profiles")
+      .select("id, username, streak_days")
+      .or(`profile_visible.eq.true,id.eq.${user.id}`)
+      .gt("streak_days", 0)
+      .order("streak_days", { ascending: false })
+      .limit(10),
+    supabase
+      .from("profiles")
       .select("*", { count: "exact", head: true }),
     getSiteConfig(),
   ]);
@@ -67,6 +75,11 @@ export default async function Home() {
       inventoryCount={inventoryCount ?? 0}
       streakDays={profile?.streak_days ?? 0}
       leaderboard={topProfiles ?? []}
+      streakLeaderboard={(streakProfiles ?? []).map((p) => ({
+        id: p.id,
+        username: p.username,
+        streak_days: p.streak_days ?? 0,
+      }))}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}
       username={profile?.username ?? undefined}

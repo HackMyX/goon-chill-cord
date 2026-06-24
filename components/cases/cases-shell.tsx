@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Package, Coins, Sparkles } from "lucide-react";
-import { motion } from "framer-motion";
+import { Package, Coins, Sparkles, Star, Zap } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseOpeningSection } from "@/components/dashboard/case-opening-section";
 import { createClient } from "@/lib/supabase/client";
@@ -27,6 +27,70 @@ interface CasesShellProps {
   isModerator?: boolean;
 }
 
+const RARITY_DEFS = [
+  {
+    key: "normal" as Rarity,
+    label: "Normal",
+    description: "Solide Items für den Alltag",
+    iconClass: "text-zinc-300",
+    border: "border-zinc-500/25",
+    bg: "bg-zinc-500/5",
+    glow: "shadow-[0_0_20px_rgba(161,161,170,0.08)]",
+    hoverGlow: "hover:shadow-[0_0_32px_rgba(161,161,170,0.2)]",
+    dotColor: "bg-zinc-400",
+    textColor: "text-zinc-300",
+    barColor: "bg-zinc-400",
+    icon: Star,
+    sparkColor: "text-zinc-400",
+  },
+  {
+    key: "selten" as Rarity,
+    label: "Selten",
+    description: "Seltene Cosmetics & Waffen",
+    iconClass: "text-blue-300",
+    border: "border-blue-500/30",
+    bg: "bg-blue-500/5",
+    glow: "shadow-[0_0_20px_rgba(59,130,246,0.1)]",
+    hoverGlow: "hover:shadow-[0_0_32px_rgba(59,130,246,0.25)]",
+    dotColor: "bg-blue-400",
+    textColor: "text-blue-300",
+    barColor: "bg-blue-500",
+    icon: Sparkles,
+    sparkColor: "text-blue-400",
+  },
+  {
+    key: "mythisch" as Rarity,
+    label: "Mythisch",
+    description: "Begehrte mythische Ausrüstung",
+    iconClass: "text-purple-300",
+    border: "border-purple-500/35",
+    bg: "bg-purple-500/6",
+    glow: "shadow-[0_0_20px_rgba(168,85,247,0.12)]",
+    hoverGlow: "hover:shadow-[0_0_36px_rgba(168,85,247,0.3)]",
+    dotColor: "bg-purple-400",
+    textColor: "text-purple-300",
+    barColor: "bg-purple-500",
+    icon: Zap,
+    sparkColor: "text-purple-400",
+  },
+  {
+    key: "ultra" as Rarity,
+    label: "Ultra",
+    description: "Extremst seltene RGB-Schätze",
+    iconClass: "rainbow-text",
+    border: "border-fuchsia-500/40",
+    bg: "bg-gradient-to-br from-fuchsia-500/5 to-rose-500/5",
+    glow: "shadow-[0_0_24px_rgba(217,70,239,0.15)]",
+    hoverGlow: "hover:shadow-[0_0_48px_rgba(217,70,239,0.35)]",
+    dotColor: "bg-fuchsia-400",
+    textColor: "rainbow-text",
+    barColor: "bg-gradient-to-r from-fuchsia-500 via-purple-500 to-rose-500",
+    icon: Sparkles,
+    sparkColor: "rainbow-text",
+    isUltra: true,
+  },
+];
+
 export function CasesShell({
   initialCredits,
   inventoryCount,
@@ -41,7 +105,7 @@ export function CasesShell({
     if (typeof row.credits === "number") setCredits(row.credits);
   });
   const router = useRouter();
-  const { currencyName } = useSiteConfig();
+  const { currencyName, rarityLabels } = useSiteConfig();
 
   useEffect(() => {
     const supabase = createClient();
@@ -59,7 +123,14 @@ export function CasesShell({
     router.refresh();
   }
 
-  const creditsFormatted = new Intl.NumberFormat("de-DE").format(credits);
+  // Map rarity keys to admin-configured labels
+  const resolvedRarities = RARITY_DEFS.map((r) => ({
+    ...r,
+    label: r.key === "normal" ? rarityLabels.normal
+      : r.key === "selten" ? rarityLabels.selten
+      : r.key === "mythisch" ? rarityLabels.mythisch
+      : rarityLabels.ultra,
+  }));
 
   return (
     <div className="flex flex-1 flex-col">
@@ -73,109 +144,159 @@ export function CasesShell({
       />
 
       <main className="flex-1">
-        {/* Hero */}
-        <section className="relative overflow-hidden border-b border-white/5">
-          {/* Atmospheric background */}
+        {/* ── HERO ─────────────────────────────────────────────────── */}
+        <section className="relative overflow-hidden border-b border-white/[0.04]">
+          {/* Layered atmospheric blobs */}
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 h-80 w-[700px] rounded-full bg-purple-600/12 blur-[100px]" />
-            <div className="absolute top-0 left-1/4 h-64 w-64 rounded-full bg-fuchsia-600/8 blur-[80px]" />
-            <div className="absolute top-0 right-1/4 h-56 w-56 rounded-full bg-indigo-600/8 blur-[70px]" />
+            <div className="animate-mesh-a absolute -top-20 left-1/2 -translate-x-1/2 h-[500px] w-[900px] rounded-full bg-purple-600/14 blur-[120px]" />
+            <div className="animate-mesh-b absolute top-0 left-1/4 h-72 w-72 rounded-full bg-fuchsia-600/10 blur-[90px]" />
+            <div className="animate-mesh-c absolute top-0 right-1/4 h-64 w-64 rounded-full bg-rose-600/8 blur-[80px]" />
+            <div className="animate-mesh-a absolute bottom-0 left-0 h-40 w-full bg-gradient-to-t from-black/50 to-transparent" />
+            {/* Subtle grid */}
+            <div className="absolute inset-0 opacity-[0.02]"
+              style={{ backgroundImage: "repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,0.5) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,0.5) 40px)" }}
+            />
+            {/* Particles */}
+            <div className="animate-particle-a absolute bottom-8 left-[12%] h-1 w-1 rounded-full bg-purple-400/60" />
+            <div className="animate-particle-b absolute bottom-6 left-[35%] h-1.5 w-1.5 rounded-full bg-fuchsia-400/50" />
+            <div className="animate-particle-c absolute bottom-12 left-[58%] h-1 w-1 rounded-full bg-rose-400/60" />
+            <div className="animate-particle-d absolute bottom-5 left-[75%] h-1 w-1 rounded-full bg-indigo-400/50" />
+            <div className="animate-particle-e absolute bottom-10 left-[22%] h-0.5 w-0.5 rounded-full bg-purple-300/70" />
+            <div className="animate-particle-f absolute bottom-4 left-[88%] h-1.5 w-1.5 rounded-full bg-fuchsia-300/40" />
           </div>
 
-          <div className="relative z-10 mx-auto max-w-3xl px-4 pt-12 pb-10 text-center">
+          <div className="relative z-10 mx-auto max-w-3xl px-4 pt-14 pb-12 text-center">
+            {/* Ultra RGB badge */}
             <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
+              initial={{ opacity: 0, scale: 0.7, y: -8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 20 }}
+              className="mb-6 flex justify-center"
             >
-              <span className="inline-flex items-center gap-2 rounded-full border border-purple-500/30 bg-purple-500/10 px-4 py-1.5 text-xs font-bold tracking-widest text-purple-300">
-                <Package className="h-3.5 w-3.5" />
-                CASES
-              </span>
+              <div className="ultra-border-animated inline-flex items-center gap-2.5 rounded-full px-5 py-2 text-xs font-black tracking-widest text-white">
+                <div className="flex h-full w-full items-center gap-2.5 rounded-full bg-[#0d0c18] px-5 py-2">
+                  <Package className="h-4 w-4 animate-crown-bob" />
+                  <span className="rainbow-text">CASES</span>
+                </div>
+              </div>
             </motion.div>
 
+            {/* Title */}
             <motion.h1
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.08 }}
-              className="mt-4 text-4xl font-black tracking-tight sm:text-5xl"
+              transition={{ duration: 0.45, delay: 0.08 }}
+              className="text-5xl font-black tracking-tight sm:text-6xl leading-none"
             >
-              <span className="bg-gradient-to-r from-purple-400 via-fuchsia-400 to-rose-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-purple-300 via-fuchsia-300 to-rose-300 bg-clip-text text-transparent drop-shadow-[0_0_40px_rgba(217,70,239,0.5)]">
                 Cases öffnen
               </span>
             </motion.h1>
 
+            {/* Subtitle */}
             <motion.p
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.14 }}
-              className="mx-auto mt-3 max-w-md text-sm text-zinc-400"
+              className="mx-auto mt-4 max-w-md text-sm text-zinc-400 leading-relaxed"
             >
-              Öffne Cases und gewinne exklusive Cosmetics &amp; Waffen — von Normal bis Ultra RGB.
+              Öffne Cases und gewinne exklusive Cosmetics &amp; Waffen — von {rarityLabels.normal} bis{" "}
+              <span className="rainbow-text font-bold">{rarityLabels.ultra} RGB</span>.
             </motion.p>
 
+            {/* Credits pill */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, delay: 0.2 }}
-              className="mt-5 inline-flex items-center gap-2 rounded-full border border-purple-500/30 bg-purple-600/80 px-5 py-2 text-sm font-bold text-white shadow-[0_0_20px_rgba(147,51,234,0.35)]"
+              transition={{ type: "spring", stiffness: 220, damping: 18, delay: 0.2 }}
+              className="mt-6 inline-flex items-center gap-2.5 rounded-full border border-amber-500/30 bg-amber-500/8 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_24px_rgba(245,158,11,0.2)] backdrop-blur-sm"
             >
-              <Coins className="h-4 w-4 text-purple-200" />
-              <span className="tabular-nums">{creditsFormatted}</span>
-              <span className="text-purple-200/80">{currencyName}</span>
+              <Coins className="h-4 w-4 text-amber-400 animate-stat-pop" />
+              <span className="tabular-nums text-amber-200">
+                {new Intl.NumberFormat("de-DE").format(credits)}
+              </span>
+              <span className="text-amber-400/70">{currencyName}</span>
             </motion.div>
 
-            {/* Rarity legend */}
+            {/* Rarity showcase cards */}
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="mt-5 flex flex-wrap justify-center gap-2"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.28 }}
+              className="mt-8 grid grid-cols-2 gap-2.5 sm:grid-cols-4"
             >
-              {[
-                { label: "Normal", color: "bg-zinc-400/20 text-zinc-400 border-zinc-400/20" },
-                { label: "Selten", color: "bg-blue-400/20 text-blue-400 border-blue-400/20" },
-                { label: "Mythisch", color: "bg-purple-400/20 text-purple-400 border-purple-400/20" },
-                { label: "Ultra", color: "bg-gradient-to-r from-fuchsia-400 to-rose-400 text-transparent bg-clip-text border-fuchsia-400/30" },
-              ].map(({ label, color }) => (
-                <span
-                  key={label}
-                  className={`flex items-center gap-1 rounded-full border px-3 py-0.5 text-[11px] font-semibold ${color}`}
+              {resolvedRarities.map((r, i) => (
+                <motion.div
+                  key={r.key}
+                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ delay: 0.3 + i * 0.07, type: "spring", stiffness: 240, damping: 22 }}
+                  whileHover={{ y: -4, scale: 1.04 }}
+                  className={`relative overflow-hidden rounded-2xl border p-4 text-center transition-all duration-300 ${r.border} ${r.bg} ${r.glow} ${r.hoverGlow} ${r.isUltra ? "ultra-border-animated" : ""}`}
                 >
-                  <Sparkles className="h-3 w-3 opacity-70" />
-                  {label}
-                </span>
+                  {/* Shimmer overlay */}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.05] to-transparent" />
+
+                  {/* Icon */}
+                  <div className="mb-2 flex justify-center">
+                    {r.isUltra ? (
+                      <Sparkles className={`h-7 w-7 rainbow-text animate-crown-bob drop-shadow-[0_0_12px_rgba(217,70,239,0.8)]`} />
+                    ) : (
+                      <r.icon className={`h-6 w-6 ${r.iconClass} drop-shadow-[0_0_8px_currentColor]`} />
+                    )}
+                  </div>
+
+                  {/* Label */}
+                  <p className={`text-xs font-black uppercase tracking-wider ${r.isUltra ? "rainbow-text" : r.textColor}`}>
+                    {r.label}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-zinc-600 leading-tight">{r.description}</p>
+
+                  {/* Bottom bar */}
+                  <div className={`absolute bottom-0 left-0 right-0 h-[2px] ${r.isUltra ? "" : r.barColor} opacity-60`}>
+                    {r.isUltra && (
+                      <div className="h-full w-full rainbow-fill" />
+                    )}
+                  </div>
+                </motion.div>
               ))}
             </motion.div>
           </div>
         </section>
 
-        {/* Case sections */}
+        {/* ── CASE SECTIONS ────────────────────────────────────────── */}
         {caseGroups.length === 0 ? (
-          <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-            <Package className="mx-auto mb-4 h-12 w-12 text-zinc-700" />
-            <p className="text-zinc-500">Noch keine Cases konfiguriert. Admins können Cases im Admin-Panel einrichten.</p>
+          <div className="mx-auto max-w-2xl px-4 py-20 text-center">
+            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02]">
+              <Package className="h-10 w-10 text-zinc-700" />
+            </div>
+            <p className="text-base font-semibold text-zinc-500">Noch keine Cases konfiguriert.</p>
+            <p className="mt-1 text-sm text-zinc-600">Admins können Cases im Admin-Panel einrichten.</p>
           </div>
         ) : (
-          caseGroups.map((group, i) => {
-            const preview = caseGroupPreviews.find((p) => p.groupId === group.id);
-            return (
-              <motion.div
-                key={group.id}
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 + i * 0.08 }}
-              >
-                <CaseOpeningSection
-                  group={group}
-                  credits={credits}
-                  previewPool={preview?.previewPool ?? []}
-                  poolSize={preview?.poolSize ?? 0}
-                  onCreditsChange={handleCreditsChange}
-                />
-              </motion.div>
-            );
-          })
+          <AnimatePresence>
+            <div className="pb-10">
+              {caseGroups.map((group, i) => {
+                const preview = caseGroupPreviews.find((p) => p.groupId === group.id);
+                return (
+                  <motion.div
+                    key={group.id}
+                    initial={{ opacity: 0, y: 28 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.12 + i * 0.09, type: "spring", stiffness: 180, damping: 22 }}
+                  >
+                    <CaseOpeningSection
+                      group={group}
+                      credits={credits}
+                      previewPool={preview?.previewPool ?? []}
+                      poolSize={preview?.poolSize ?? 0}
+                      onCreditsChange={handleCreditsChange}
+                    />
+                  </motion.div>
+                );
+              })}
+            </div>
+          </AnimatePresence>
         )}
       </main>
     </div>

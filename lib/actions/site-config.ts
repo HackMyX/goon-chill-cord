@@ -54,6 +54,8 @@ function parseHomepageConfig(raw: Record<string, unknown> | null): HomepageConfi
     announcementColor: (["purple", "amber", "sky", "emerald", "red"] as const).includes(raw.announcementColor as never)
       ? (raw.announcementColor as typeof def.announcementColor)
       : def.announcementColor,
+    showStreakLeaderboard: typeof raw.showStreakLeaderboard === "boolean" ? raw.showStreakLeaderboard : def.showStreakLeaderboard,
+    leaderboardStyle: raw.leaderboardStyle === "list" ? "list" : "podium",
   };
 }
 
@@ -162,6 +164,8 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
     announcementColor: (["purple", "amber", "sky", "emerald", "red"] as const).includes(input.homepageConfig?.announcementColor as never)
       ? (input.homepageConfig!.announcementColor)
       : "purple",
+    showStreakLeaderboard: input.homepageConfig?.showStreakLeaderboard ?? true,
+    leaderboardStyle: input.homepageConfig?.leaderboardStyle === "list" ? "list" : "podium",
   };
 
   const admin = createAdminClient();

@@ -17,6 +17,10 @@ export interface HomepageConfig {
   announcementEnabled: boolean;
   announcementText: string;
   announcementColor: "purple" | "amber" | "sky" | "emerald" | "red";
+  /** Show streak leaderboard tab alongside credits leaderboard */
+  showStreakLeaderboard: boolean;
+  /** Visual style for leaderboards: "podium" = top-3 podium + list, "list" = compact list only */
+  leaderboardStyle: "podium" | "list";
 }
 
 export const ALL_HOMEPAGE_CARDS: HomepageCardId[] = [
@@ -35,6 +39,8 @@ export const DEFAULT_HOMEPAGE_CONFIG: HomepageConfig = {
   announcementEnabled: false,
   announcementText: "",
   announcementColor: "purple",
+  showStreakLeaderboard: true,
+  leaderboardStyle: "podium",
 };
 
 export interface SiteConfig {

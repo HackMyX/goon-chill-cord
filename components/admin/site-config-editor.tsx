@@ -343,6 +343,8 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
         onAnnouncementEnabled={(v) => setHp("announcementEnabled", v)}
         onAnnouncementText={(v) => setHp("announcementText", v)}
         onAnnouncementColor={(v) => setHp("announcementColor", v)}
+        onShowStreakLeaderboard={(v) => setHp("showStreakLeaderboard", v)}
+        onLeaderboardStyle={(v) => setHp("leaderboardStyle", v)}
         onSave={handleSave}
         saving={saving}
         message={message}
@@ -544,6 +546,8 @@ function HomepageConfigEditor({
   onAnnouncementEnabled,
   onAnnouncementText,
   onAnnouncementColor,
+  onShowStreakLeaderboard,
+  onLeaderboardStyle,
   onSave,
   saving,
   message,
@@ -560,6 +564,8 @@ function HomepageConfigEditor({
   onAnnouncementEnabled: (v: boolean) => void;
   onAnnouncementText: (v: string) => void;
   onAnnouncementColor: (v: SiteConfig["homepageConfig"]["announcementColor"]) => void;
+  onShowStreakLeaderboard: (v: boolean) => void;
+  onLeaderboardStyle: (v: "podium" | "list") => void;
   onSave: () => void;
   saving: boolean;
   message: string | null;
@@ -717,6 +723,49 @@ function HomepageConfigEditor({
               </button>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Leaderboard options */}
+      <div className="mb-5 rounded-xl border border-white/8 bg-white/[0.02] p-4">
+        <p className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-500">
+          Bestenliste — Optionen
+        </p>
+
+        {/* Streak tab toggle */}
+        <div className="mb-3 flex items-center justify-between rounded-lg border border-white/6 bg-black/20 px-3 py-2.5">
+          <span className="text-xs font-semibold text-zinc-300">Streak-Tab anzeigen</span>
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => { sound.click(); onShowStreakLeaderboard(!cfg.showStreakLeaderboard); }}
+          >
+            {cfg.showStreakLeaderboard ? (
+              <ToggleRight className="h-6 w-6 text-purple-400" />
+            ) : (
+              <ToggleLeft className="h-6 w-6 text-zinc-600" />
+            )}
+          </button>
+        </div>
+
+        {/* Style picker */}
+        <div>
+          <p className="mb-2 text-[11px] font-semibold text-zinc-400">Darstellungsstil</p>
+          <div className="flex gap-2">
+            {(["podium", "list"] as const).map((s) => (
+              <button
+                key={s}
+                onMouseEnter={sound.hover}
+                onClick={() => { sound.click(); onLeaderboardStyle(s); }}
+                className={`flex-1 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  cfg.leaderboardStyle === s
+                    ? "border-purple-400/60 bg-purple-500/20 text-purple-200"
+                    : "border-white/10 text-zinc-500 hover:border-white/20 hover:text-zinc-300"
+                }`}
+              >
+                {s === "podium" ? "🏆 Podium (Top 3 + Liste)" : "📋 Kompakte Liste"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
