@@ -25,6 +25,7 @@ import { ChatConfigEditor } from "@/components/admin/chat-config-editor";
 import { PatchNotesEditor } from "@/components/admin/patchnotes-editor";
 import { SurveysTab } from "@/components/admin/surveys-tab";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
+import { AiConfigEditor } from "@/components/admin/ai-config-editor";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
 import type { SnakeConfig } from "@/lib/snake-config";
@@ -436,8 +437,11 @@ export function AdminShell({
         {tab === "patchnotes" && <PatchNotesEditor initialNotes={patchNotes} />}
 
         {tab === "ki" && (
-          <div className="mx-auto max-w-3xl" style={{ height: "calc(100vh - 260px)", minHeight: "500px" }}>
-            <AdminAiChat context="admin" />
+          <div className="mx-auto flex max-w-3xl flex-col gap-4">
+            <AiConfigEditor />
+            <div style={{ height: "calc(100vh - 420px)", minHeight: "460px" }}>
+              <AdminAiChat context="admin" />
+            </div>
           </div>
         )}
       </main>

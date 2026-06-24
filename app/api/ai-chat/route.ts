@@ -10,13 +10,16 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { USER_SYSTEM_PROMPT, MOD_SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT } from "@/lib/ai-site-context";
+import { getAiApiKey } from "@/lib/actions/ai-config";
 
 // ── Model priority list ───────────────────────────────────────────────────
-// Stabile Modelle zuerst — 2.5-flash als letzter Ausweg (Thinking kann
-// bei Function Calling zu unerwarteten Formaten führen).
+// Stable Flash models first — 2.0-flash is the most reliable for function
+// calling; 1.5-flash as fallback; 2.5-flash last (Thinking can produce
+// unexpected formats for multi-turn function calling).
 const MODEL_PRIORITY = [
-  "gemini-1.5-flash",
   "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-2.0-flash-lite",
   "gemini-1.5-flash-8b",
   "gemini-2.5-flash",
 ] as const;
@@ -156,7 +159,7 @@ const ADMIN_TOOLS: Tool = {
     },
     {
       name: "set_role",
-      description: "Benutzerrolle setzen: 'user', 'moderator' oder 'admin'. Admin-Rollen können NICHT entfernt werden. Übergib username ODER userId.",
+      description: "Benutzerrolle setzen: 'user', 'moderator' oder 'admin'. Admin-Rolle kann NICHT entfernt werden (Sicherheitssperre). Übergib username ODER userId.",
       parameters: {
         type: SchemaType.OBJECT,
         properties: {
@@ -222,7 +225,6 @@ async function resolveUser(args: Record<string, unknown>): Promise<
 
   if (args.username) {
     const name = (args.username as string).trim();
-    // Exact match first, then fuzzy
     const { data: exact } = await admin.from("profiles").select("id, username").ilike("username", name).limit(1);
     if (exact && exact.length > 0) return { userId: exact[0].id as string, resolvedUsername: exact[0].username as string };
     const { data: fuzzy } = await admin.from("profiles").select("id, username").ilike("username", `%${name}%`).limit(1);
@@ -279,13 +281,13 @@ async function executeFunction(
       case "warn_user": {
         if (context === "user") return { error: "Keine Berechtigung." };
         const { modWarnUser } = await import("@/lib/actions/mod");
-        const res = await modWarnUser(args.userId as string, args.reason as string ?? "");
+        const res = await modWarnUser(args.userId as string, (args.reason as string) ?? "");
         return res as Record<string, unknown>;
       }
       case "temp_ban_user": {
         if (context === "user") return { error: "Keine Berechtigung." };
         const { modTempBan } = await import("@/lib/actions/mod");
-        const res = await modTempBan(args.userId as string, args.hours as number, args.reason as string ?? "");
+        const res = await modTempBan(args.userId as string, args.hours as number, (args.reason as string) ?? "");
         return res as Record<string, unknown>;
       }
       case "lift_ban": {
@@ -297,7 +299,7 @@ async function executeFunction(
       case "close_ticket": {
         if (context === "user") return { error: "Keine Berechtigung." };
         const { modCloseTicket } = await import("@/lib/actions/mod");
-        const res = await modCloseTicket(args.ticketId as string, args.reason as string ?? "");
+        const res = await modCloseTicket(args.ticketId as string, (args.reason as string) ?? "");
         return res as Record<string, unknown>;
       }
       case "add_credits": {
@@ -329,7 +331,7 @@ async function executeFunction(
         if (context !== "admin") return { error: "Keine Berechtigung." };
         const resolved2 = await resolveUser(args);
         if ("error" in resolved2) return { success: false, error: resolved2.error };
-        const { userId: targetId2 } = resolved2;
+        const { userId: targetId2, resolvedUsername: rUser2 } = resolved2;
         const newRole = (args.role as string).toLowerCase();
         const validRoles = ["user", "moderator", "admin"];
         if (!validRoles.includes(newRole)) return { error: `Ungültige Rolle. Erlaubt: ${validRoles.join(", ")}` };
@@ -337,7 +339,10 @@ async function executeFunction(
         const { data: target2 } = await adminDb2.from("profiles").select("role, username").eq("id", targetId2).single();
         if (!target2) return { success: false, error: "Nutzer nicht gefunden." };
         if ((target2.role as string) === "admin" && newRole !== "admin") {
-          return { success: false, error: "Admin-Berechtigungen können nicht durch die KI entfernt werden. Bitte manuell im Admin-Panel ändern." };
+          return {
+            success: false,
+            error: `Admin-Berechtigung von "${rUser2}" kann nicht durch die KI entfernt werden. Bitte manuell im Admin-Panel → User-Management ändern.`,
+          };
         }
         const { error: roleErr } = await adminDb2.from("profiles").update({ role: newRole }).eq("id", targetId2);
         if (roleErr) return { success: false, error: roleErr.message };
@@ -352,17 +357,21 @@ async function executeFunction(
         const { data: target3 } = await adminDb3.from("profiles").select("role, username, credits, streak_days").eq("id", targetId3).single();
         if (!target3) return { success: false, error: "Nutzer nicht gefunden." };
         const wasAdmin3 = (target3.role as string) === "admin";
+        // Build patch — always preserve Admin role, always reset streak + ban
         const patch: Record<string, unknown> = { streak_days: 0, temp_banned_until: null };
         if (args.resetCredits === true) patch.credits = 0;
-        if (wasAdmin3) patch.role = "admin";
+        if (wasAdmin3) patch.role = "admin"; // explicit: role stays admin
         const { error: resetErr } = await adminDb3.from("profiles").update(patch).eq("id", targetId3);
         if (resetErr) return { success: false, error: resetErr.message };
+        // Delete warnings and active bans from mod_actions
         await adminDb3.from("mod_actions").delete().eq("target_user_id", targetId3).eq("action_type", "warning");
         await adminDb3.from("mod_actions").delete().eq("target_user_id", targetId3).eq("action_type", "temp_ban");
         return {
-          success: true, username: target3.username as string,
-          wasAdmin: wasAdmin3, creditsReset: args.resetCredits === true,
-          message: `${target3.username} wurde zurückgesetzt${wasAdmin3 ? " (Admin-Rolle beibehalten)" : ""}.`,
+          success: true,
+          username: target3.username as string,
+          wasAdmin: wasAdmin3,
+          creditsReset: args.resetCredits === true,
+          message: `${target3.username} wurde zurückgesetzt${wasAdmin3 ? " — Admin-Rolle bleibt erhalten" : ""}${args.resetCredits ? ", Credits auf 0 gesetzt" : ""}.`,
         };
       }
       case "remove_warnings": {
@@ -373,7 +382,7 @@ async function executeFunction(
         const adminDb4 = createAdminClient();
         const { error: warnErr } = await adminDb4.from("mod_actions").delete().eq("target_user_id", targetId4).eq("action_type", "warning");
         if (warnErr) return { success: false, error: warnErr.message };
-        return { success: true, username: rUser4 };
+        return { success: true, username: rUser4, message: `Alle Verwarnungen von ${rUser4} wurden gelöscht.` };
       }
       case "get_user_history": {
         if (context === "user") return { error: "Keine Berechtigung." };
@@ -401,33 +410,35 @@ async function executeFunction(
 
 // ── Helper: error classification ──────────────────────────────────────────
 
-function isQuotaError(e: unknown): boolean {
-  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
-  return (
+function classifyGeminiError(e: unknown): "expired" | "invalid_key" | "quota" | "transient" | "safety" | "other" {
+  const raw = (e instanceof Error ? e.message : String(e));
+  const msg = raw.toLowerCase();
+
+  if (msg.includes("expired") || msg.includes("api key expired")) return "expired";
+  if (
+    msg.includes("api_key_invalid") ||
+    msg.includes("api key not valid") ||
+    msg.includes("invalid api key") ||
+    msg.includes("permission_denied") ||
+    (msg.includes("api key") && msg.includes("invalid")) ||
+    msg.includes("401") ||
+    msg.includes("403")
+  ) return "invalid_key";
+  if (
     msg.includes("429") ||
     msg.includes("too many requests") ||
     msg.includes("resource_exhausted") ||
     msg.includes("quota")
-  );
-}
-
-function isTransientError(e: unknown): boolean {
-  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
-  return (
+  ) return "quota";
+  if (
     msg.includes("503") ||
     msg.includes("502") ||
     msg.includes("service unavailable") ||
     msg.includes("high demand") ||
     msg.includes("overloaded")
-  );
-}
-
-function isAuthError(e: unknown): boolean {
-  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
-  return (
-    msg.includes("permission_denied") ||
-    (msg.includes("api key") && (msg.includes("not valid") || msg.includes("invalid")))
-  );
+  ) return "transient";
+  if (msg.includes("safety") || msg.includes("blocked")) return "safety";
+  return "other";
 }
 
 // ── Helper: sleep ─────────────────────────────────────────────────────────
@@ -455,7 +466,6 @@ async function callGemini(opts: {
   let lastError: unknown = null;
 
   for (const modelName of MODEL_PRIORITY) {
-    // 2 attempts per model (1 quick retry), then immediately move to next model
     for (let attempt = 0; attempt <= 1; attempt++) {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
@@ -470,7 +480,7 @@ async function callGemini(opts: {
         let response = result.response;
         const actionLog: Array<{ fn: string; result: Record<string, unknown> }> = [];
 
-        // Function-call loop
+        // Function-call loop (max 6 iterations)
         let iterations = 0;
         while (response.functionCalls()?.length && iterations < 6) {
           iterations++;
@@ -501,32 +511,37 @@ async function callGemini(opts: {
         return { reply: replyText, actionLog };
       } catch (e) {
         lastError = e;
+        const kind = classifyGeminiError(e);
 
-        // Auth errors (bad API key, permission denied) — no point trying other models
-        if (isAuthError(e)) throw e;
+        // Key errors (expired, invalid) — no point trying other models with same key
+        if (kind === "expired" || kind === "invalid_key") throw e;
 
-        // Quota exhausted — skip remaining attempts on this model, try next immediately
-        if (isQuotaError(e)) break;
+        // Quota exhausted — skip remaining attempts on this model, try next
+        if (kind === "quota") break;
 
-        // All other errors (503, 502, 400, 404, network, model format issues…):
-        // one quick retry, then fall through to next model
+        // Transient / other: one quick retry, then next model
         if (attempt < 1) await sleep(600);
       }
     }
   }
 
-  // All models exhausted
   throw lastError ?? new Error("Alle KI-Modelle nicht verfügbar.");
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  // Fetch key from DB (with env fallback)
+  const apiKey = await getAiApiKey();
+
   if (!apiKey) {
     return NextResponse.json(
-      { error: "KI-Assistent ist nicht konfiguriert (fehlender API-Key)." },
-      { status: 500 }
+      {
+        error:
+          "Kein Gemini API-Schlüssel konfiguriert. " +
+          "Bitte im Admin-Panel → KI-Assistent einen gültigen Schlüssel eintragen.",
+      },
+      { status: 503 }
     );
   }
 
@@ -535,10 +550,9 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Nicht eingeloggt." }, { status: 401 });
 
-    // Per-user rate limit
     if (!allowRequest(user.id)) {
       return NextResponse.json(
-        { error: "Zu viele Anfragen — bitte warte kurz und versuche es erneut." },
+        { error: "Zu viele Anfragen — bitte warte eine Minute und versuche es erneut." },
         { status: 429 }
       );
     }
@@ -554,20 +568,20 @@ export async function POST(req: NextRequest) {
     const { message, history = [], context: rawContext } = body;
     if (!message?.trim()) return NextResponse.json({ error: "Keine Nachricht." }, { status: 400 });
 
-    // Determine actual context based on role
+    // Enforce role-based context: users can't escalate to admin/mod via the request body
     let context: "user" | "mod" | "admin" = "user";
     if (rawContext === "admin" && isAdmin(profile)) context = "admin";
     else if ((rawContext === "mod" || rawContext === "admin") && isModerator(profile)) context = "mod";
 
     const systemPrompt =
       context === "admin" ? ADMIN_SYSTEM_PROMPT :
-      context === "mod" ? MOD_SYSTEM_PROMPT :
-      USER_SYSTEM_PROMPT;
+      context === "mod"   ? MOD_SYSTEM_PROMPT :
+                            USER_SYSTEM_PROMPT;
 
     const tools: Tool =
       context === "admin" ? ADMIN_TOOLS :
-      context === "mod" ? MOD_TOOLS :
-      USER_TOOLS;
+      context === "mod"   ? MOD_TOOLS :
+                            USER_TOOLS;
 
     const { reply, actionLog } = await callGemini({
       apiKey,
@@ -583,17 +597,33 @@ export async function POST(req: NextRequest) {
     const raw = e instanceof Error ? e.message : String(e);
     console.error("AI chat error:", raw);
 
-    // User-friendly error messages — never expose raw API errors
-    let userMsg = "Der KI-Assistent ist gerade nicht verfügbar. Bitte versuche es in einer Minute erneut.";
+    const kind = classifyGeminiError(e);
+    let userMsg: string;
 
-    if (isQuotaError(e)) {
-      userMsg = "Der KI-Assistent hat sein Tageslimit erreicht. Bitte versuche es in einigen Stunden erneut.";
-    } else if (isTransientError(e)) {
-      userMsg = "Der KI-Assistent ist momentan überlastet. Bitte versuche es in 30 Sekunden erneut.";
-    } else if (isAuthError(e) || raw.includes("401") || raw.includes("403")) {
-      userMsg = "KI-Konfigurationsfehler — bitte Administrator kontaktieren.";
-    } else if (raw.toLowerCase().includes("safety") || raw.toLowerCase().includes("blocked")) {
-      userMsg = "Diese Anfrage konnte aus Sicherheitsgründen nicht verarbeitet werden.";
+    switch (kind) {
+      case "expired":
+        userMsg =
+          "Der Gemini API-Schlüssel ist abgelaufen. " +
+          "Bitte im Admin-Panel → KI-Assistent einen neuen Schlüssel eintragen.";
+        break;
+      case "invalid_key":
+        userMsg =
+          "Der Gemini API-Schlüssel ist ungültig. " +
+          "Bitte im Admin-Panel → KI-Assistent einen gültigen Schlüssel eintragen.";
+        break;
+      case "quota":
+        userMsg =
+          "Das KI-Tageslimit ist erreicht. " +
+          "Bitte versuche es in einigen Stunden erneut oder nutze einen API-Schlüssel mit größerem Kontingent.";
+        break;
+      case "transient":
+        userMsg = "Der KI-Dienst ist momentan überlastet. Bitte versuche es in 30 Sekunden erneut.";
+        break;
+      case "safety":
+        userMsg = "Diese Anfrage wurde aus Sicherheitsgründen blockiert. Bitte formuliere sie anders.";
+        break;
+      default:
+        userMsg = "Der KI-Assistent ist gerade nicht erreichbar. Bitte versuche es in einer Minute erneut.";
     }
 
     return NextResponse.json({ error: userMsg }, { status: 500 });

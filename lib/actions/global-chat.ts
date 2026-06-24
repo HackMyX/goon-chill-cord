@@ -5,8 +5,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { type ChatConfig, DEFAULT_CHAT_CONFIG } from "@/lib/mod";
 
-export type { ChatConfig };
-
 export interface GlobalChatMessage {
   id: string;
   userId: string | null;

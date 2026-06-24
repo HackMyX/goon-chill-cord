@@ -6,7 +6,8 @@ import {
   Shield, Zap, Clock, Hash, AlertTriangle,
 } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
-import { updateChatConfig, type ChatConfig } from "@/lib/actions/global-chat";
+import { updateChatConfig } from "@/lib/actions/global-chat";
+import type { ChatConfig } from "@/lib/mod";
 
 interface Props {
   initialConfig: ChatConfig;
