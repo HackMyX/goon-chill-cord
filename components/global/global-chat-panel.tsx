@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Send, Loader2, MessageSquare, Crown, Shield, Zap } from "lucide-react";
+import { Send, Loader2, MessageSquare, Crown, Shield, Zap, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { getGlobalChatMessages, sendGlobalChatMessage, type GlobalChatMessage } from "@/lib/actions/global-chat";
+import { getGlobalChatMessages, sendGlobalChatMessage, clearGlobalChat, type GlobalChatMessage } from "@/lib/actions/global-chat";
 import { useSoundManager } from "@/lib/sound-manager";
 
 const ROLE_BADGE: Record<string, { label: string; color: string } | undefined> = {
@@ -62,13 +62,16 @@ function UserAvatar({ avatarUrl, username, role, size = 22 }: {
 
 interface GlobalChatPanelProps {
   panelHeight?: number;
+  isStaff?: boolean;
 }
 
-export function GlobalChatPanel({ panelHeight }: GlobalChatPanelProps) {
+export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPanelProps) {
   const [messages, setMessages] = useState<GlobalChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const supabase = useRef(createClient());
@@ -121,6 +124,17 @@ export function GlobalChatPanel({ panelHeight }: GlobalChatPanelProps) {
         { event: "INSERT", schema: "public", table: "global_chat_messages" },
         (payload) => appendMessage(payload.new as Record<string, unknown>)
       )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "global_chat_messages" },
+        () => {
+          // Chat was cleared — reload all messages
+          getGlobalChatMessages(60).then((msgs) => {
+            setMessages(msgs);
+            if (msgs.length > 0) latestIdRef.current = msgs[msgs.length - 1].id;
+          });
+        }
+      )
       .subscribe();
     return () => { client.removeChannel(channel); };
   }, [appendMessage]);
@@ -129,12 +143,20 @@ export function GlobalChatPanel({ panelHeight }: GlobalChatPanelProps) {
   useEffect(() => {
     const poll = setInterval(async () => {
       const fresh = await getGlobalChatMessages(60);
-      if (fresh.length === 0) return;
+      if (fresh.length === 0) {
+        setMessages([]);
+        return;
+      }
       const newestId = fresh[fresh.length - 1].id;
       if (newestId === latestIdRef.current) return;
       setMessages((prev) => {
         const existingIds = new Set(prev.map((m) => m.id));
         const added = fresh.filter((m) => !existingIds.has(m.id));
+        if (added.length === 0 && fresh.length < prev.length) {
+          // Messages were deleted (chat clear)
+          latestIdRef.current = newestId;
+          return fresh;
+        }
         if (added.length === 0) return prev;
         latestIdRef.current = newestId;
         return [...prev, ...added];
@@ -160,9 +182,29 @@ export function GlobalChatPanel({ panelHeight }: GlobalChatPanelProps) {
     }
   }
 
-  // Compute available height for message list
+  async function handleClear() {
+    if (!clearConfirm) {
+      setClearConfirm(true);
+      setTimeout(() => setClearConfirm(false), 4000);
+      return;
+    }
+    setClearing(true);
+    setClearConfirm(false);
+    sound.click();
+    const res = await clearGlobalChat();
+    setClearing(false);
+    if (res.success) {
+      sound.win?.();
+      setMessages([]);
+    } else {
+      sound.error();
+      setError(res.error ?? "Fehler beim Leeren.");
+      setTimeout(() => setError(null), 3000);
+    }
+  }
+
   const msgAreaStyle = panelHeight
-    ? { height: panelHeight - 44 - 40 - 56 } // subtract header, tabs, input
+    ? { height: panelHeight - 44 - 40 - 56 }
     : undefined;
 
   return (
@@ -172,6 +214,21 @@ export function GlobalChatPanel({ panelHeight }: GlobalChatPanelProps) {
         <MessageSquare className="h-3.5 w-3.5 text-purple-400" />
         <span className="text-xs font-bold text-zinc-300">Global Chat</span>
         <span className="ml-auto h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+        {isStaff && (
+          <button
+            onClick={handleClear}
+            disabled={clearing}
+            title={clearConfirm ? "Wirklich leeren?" : "Chat leeren"}
+            className={`ml-2 flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors ${
+              clearConfirm
+                ? "border-red-500/60 bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                : "border-white/10 text-zinc-500 hover:border-red-500/40 hover:text-red-400"
+            } disabled:opacity-50`}
+          >
+            {clearing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+            {clearConfirm ? "Wirklich?" : ""}
+          </button>
+        )}
       </div>
 
       {/* Messages */}
@@ -195,11 +252,14 @@ export function GlobalChatPanel({ panelHeight }: GlobalChatPanelProps) {
           if (isSystemMsg) {
             const meta = msg.metadata;
             const rarity = (meta?.rarity as string) ?? "";
+            const isClear = (meta?.type as string) === "chat_clear";
             return (
               <div
                 key={msg.id}
                 className={`rounded-lg px-3 py-2 text-xs text-center font-semibold my-1 ${
-                  rarity === "ultra"
+                  isClear
+                    ? "bg-zinc-800/60 text-zinc-500 border border-zinc-700/50"
+                    : rarity === "ultra"
                     ? "bg-amber-500/15 text-amber-200 border border-amber-500/30"
                     : rarity === "mythisch"
                     ? "bg-purple-500/15 text-purple-200 border border-purple-500/30"
@@ -218,17 +278,9 @@ export function GlobalChatPanel({ panelHeight }: GlobalChatPanelProps) {
               key={msg.id}
               className={`group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.025] ${isSpecial ? "hover:bg-amber-500/[0.03]" : ""}`}
             >
-              {/* Avatar */}
               <div className="mt-0.5">
-                <UserAvatar
-                  avatarUrl={msg.avatarUrl}
-                  username={msg.username}
-                  role={msg.role}
-                  size={22}
-                />
+                <UserAvatar avatarUrl={msg.avatarUrl} username={msg.username} role={msg.role} size={22} />
               </div>
-
-              {/* Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {RoleIcon && (

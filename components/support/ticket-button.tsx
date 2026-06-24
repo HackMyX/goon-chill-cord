@@ -17,6 +17,8 @@ import {
   Bot,
   Globe,
   GripHorizontal,
+  Paperclip,
+  Trophy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -105,9 +107,12 @@ function SupportButtonInner() {
   const [category, setCategory] = useState<TicketCategory>("bug");
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState(false);
+  const [userRole, setUserRole] = useState<string>("user");
 
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
@@ -142,8 +147,9 @@ function SupportButtonInner() {
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { setVisible(false); return; }
-      const { data: profile } = await supabase.from("profiles").select("support_banned").eq("id", user.id).single();
+      const { data: profile } = await supabase.from("profiles").select("support_banned, role").eq("id", user.id).single();
       setVisible(!profile?.support_banned);
+      if (profile?.role) setUserRole(profile.role);
     });
   }, []);
 
@@ -196,17 +202,53 @@ function SupportButtonInner() {
     setLoading(false);
   }
 
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setAttachmentFile(file);
+    if (file && file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setAttachmentPreview(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setAttachmentPreview(null);
+    }
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!subject.trim() || !description.trim()) return;
     setSubmitting(true);
     setFormError(null);
-    const res = await createTicket({ subject: subject.trim(), description: description.trim(), category });
+
+    let attachmentUrl: string | undefined;
+    if (attachmentFile) {
+      try {
+        const supabase = createClient();
+        const ext = attachmentFile.name.split(".").pop() ?? "bin";
+        const path = `ticket-${Date.now()}.${ext}`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from("ticket-attachments")
+          .upload(path, attachmentFile, { upsert: false });
+        if (!uploadErr && uploadData) {
+          const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(uploadData.path);
+          attachmentUrl = urlData.publicUrl;
+        }
+      } catch { /* ignore upload errors — ticket still created without attachment */ }
+    }
+
+    const res = await createTicket({
+      subject: subject.trim(),
+      description: description.trim(),
+      category,
+      attachmentUrl,
+    });
     setSubmitting(false);
     if (res.success) {
       setFormSuccess(true);
       setSubject("");
       setDescription("");
+      setAttachmentFile(null);
+      setAttachmentPreview(null);
       setTimeout(() => { setFormSuccess(false); setView("list"); loadTickets(); }, 2000);
     } else {
       setFormError(res.error ?? "Fehler beim Erstellen.");
@@ -375,6 +417,11 @@ function SupportButtonInner() {
 
                   {view === "new" && (
                     <form onSubmit={handleCreate} className="flex flex-col gap-3 p-4">
+                      {/* Reward hint */}
+                      <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300">
+                        <Trophy className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>Hilfreiche Meldungen werden mit individuellen Credits-Belohnungen honoriert!</span>
+                      </div>
                       <label className="flex flex-col gap-1">
                         <span className="text-xs font-semibold text-zinc-400">Betreff</span>
                         <input
@@ -396,6 +443,23 @@ function SupportButtonInner() {
                           className="resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-purple-400/60"
                         />
                       </label>
+                      {/* File attachment */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs font-semibold text-zinc-400">Screenshot / Anhang (optional)</span>
+                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-white/15 bg-black/20 px-3 py-2 text-xs text-zinc-500 hover:border-purple-400/40 hover:text-zinc-300 transition-colors">
+                          <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                          {attachmentFile ? attachmentFile.name : "Datei auswählen…"}
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            onChange={handleFileChange}
+                            className="sr-only"
+                          />
+                        </label>
+                        {attachmentPreview && (
+                          <img src={attachmentPreview} alt="Vorschau" className="max-h-28 rounded-lg object-cover" />
+                        )}
+                      </div>
                       {formError && <p className="text-xs text-red-400">{formError}</p>}
                       {formSuccess && (
                         <p className="flex items-center gap-1.5 text-xs text-emerald-400">
@@ -427,9 +491,34 @@ function SupportButtonInner() {
                               </button>
                             )}
                           </div>
+                          {/* Reward banner */}
+                          {detail.rewardGrantedAt && (
+                            <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
+                              <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-amber-300">
+                                  🏆 Belohnung erhalten{detail.rewardCredits ? ` · +${detail.rewardCredits} Credits` : ""}
+                                </span>
+                                {detail.rewardNote && (
+                                  <span className="text-[10px] text-amber-400/70">{detail.rewardNote}</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                           <div className="border-b border-white/[0.05] bg-white/[0.02] px-4 py-3">
                             <p className="text-xs text-zinc-500">Deine Beschreibung:</p>
                             <p className="mt-1 text-sm leading-relaxed text-zinc-300">{detail.description}</p>
+                            {detail.attachmentUrl && (
+                              <a
+                                href={detail.attachmentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 flex items-center gap-1.5 text-[11px] text-purple-400 hover:text-purple-300"
+                              >
+                                <Paperclip className="h-3 w-3" />
+                                Anhang ansehen
+                              </a>
+                            )}
                           </div>
                           <div className="flex flex-col gap-0.5 px-3 py-2">
                             {detail.messages.length === 0 && (
@@ -489,7 +578,7 @@ function SupportButtonInner() {
               {/* ── Chat tab ── */}
               {tab === "chat" && (
                 <div className="h-full w-full">
-                  <GlobalChatPanel panelHeight={panelH} />
+                  <GlobalChatPanel panelHeight={panelH} isStaff={userRole === "admin" || userRole === "moderator"} />
                 </div>
               )}
             </div>

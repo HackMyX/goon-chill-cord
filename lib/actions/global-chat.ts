@@ -2,6 +2,10 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
+import { type ChatConfig, DEFAULT_CHAT_CONFIG } from "@/lib/mod";
+
+export type { ChatConfig };
 
 export interface GlobalChatMessage {
   id: string;
@@ -29,6 +33,121 @@ function rowToMsg(r: Record<string, unknown>): GlobalChatMessage {
   };
 }
 
+// ── Auto-detection patterns for common offensive content ──────────────────────
+// Covers basic l33t-speak evasions without full ML. Used when autoFilter=true.
+const AUTO_BLOCK_PATTERNS: RegExp[] = [
+  /\bn[i1!][g9][g9][e3]r\b/gi,
+  /\bn[i1!][g9][g9][a4]\b/gi,
+  /\bf[a4@][g9][g9][o0]t\b/gi,
+  /\bk[i1][k1][e3]\b/gi,
+  /\bch[i1]nk\b/gi,
+];
+
+const AUTO_CENSOR_PATTERNS: RegExp[] = [
+  /(.)\1{9,}/g,   // 10+ repeated characters
+];
+
+function checkAutoFilter(content: string): { blocked: boolean; censored: string } {
+  for (const pat of AUTO_BLOCK_PATTERNS) {
+    if (pat.test(content)) {
+      pat.lastIndex = 0;
+      return { blocked: true, censored: content };
+    }
+    pat.lastIndex = 0;
+  }
+  let censored = content;
+  for (const pat of AUTO_CENSOR_PATTERNS) {
+    censored = censored.replace(pat, (m) => m[0].repeat(5) + "…");
+    pat.lastIndex = 0;
+  }
+  return { blocked: false, censored };
+}
+
+function checkBannedWords(content: string, bannedWords: string[]): boolean {
+  if (bannedWords.length === 0) return false;
+  const lower = content.toLowerCase();
+  return bannedWords.some((w) => w && lower.includes(w.toLowerCase()));
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
+
+export async function getChatConfig(): Promise<ChatConfig> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin.from("global_chat_config").select("*").eq("id", "default").single();
+    if (!data) return DEFAULT_CHAT_CONFIG;
+    return {
+      enabled: data.enabled ?? true,
+      messageCooldownSec: data.message_cooldown_sec ?? 2,
+      maxMessageLength: data.max_message_length ?? 300,
+      bannedWords: (data.banned_words as string[]) ?? [],
+      autoFilter: data.auto_filter ?? true,
+      modsCanClear: data.mods_can_clear ?? true,
+    };
+  } catch {
+    return DEFAULT_CHAT_CONFIG;
+  }
+}
+
+export async function updateChatConfig(
+  config: ChatConfig
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Nicht eingeloggt." };
+    const admin = createAdminClient();
+    const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+    if (!isAdmin(profile)) return { success: false, error: "Nur Admins können Chat-Einstellungen ändern." };
+    const { error } = await admin.from("global_chat_config").upsert({
+      id: "default",
+      enabled: config.enabled,
+      message_cooldown_sec: Math.max(0, Math.min(60, config.messageCooldownSec)),
+      max_message_length: Math.max(50, Math.min(2000, config.maxMessageLength)),
+      banned_words: config.bannedWords.filter(Boolean),
+      auto_filter: config.autoFilter,
+      mods_can_clear: config.modsCanClear,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
+
+// ── Clear chat ────────────────────────────────────────────────────────────────
+
+export async function clearGlobalChat(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Nicht eingeloggt." };
+    const admin = createAdminClient();
+    const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
+    if (!isModerator(profile)) return { success: false, error: "Keine Berechtigung." };
+    if (!isAdmin(profile)) {
+      const cfg = await getChatConfig();
+      if (!cfg.modsCanClear) return { success: false, error: "Mods dürfen den Chat nicht leeren (Admin-Einstellung)." };
+    }
+    const { error } = await admin.from("global_chat_messages").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) return { success: false, error: error.message };
+    await admin.from("global_chat_messages").insert({
+      user_id: null,
+      username: "System",
+      role: "system",
+      content: `💬 Chat wurde von ${(profile as Record<string, unknown>).username ?? "einem Moderator"} geleert.`,
+      is_system: true,
+      metadata: { type: "chat_clear", by: (profile as Record<string, unknown>).username },
+    });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
+
+// ── Read messages ─────────────────────────────────────────────────────────────
+
 export async function getGlobalChatMessages(limit = 60): Promise<GlobalChatMessage[]> {
   const admin = createAdminClient();
   const { data } = await admin
@@ -39,9 +158,10 @@ export async function getGlobalChatMessages(limit = 60): Promise<GlobalChatMessa
   return ((data ?? []) as Record<string, unknown>[]).map(rowToMsg).reverse();
 }
 
+// ── Send message ──────────────────────────────────────────────────────────────
+
 export async function sendGlobalChatMessage(content: string): Promise<{ success: boolean; error?: string }> {
   if (!content?.trim()) return { success: false, error: "Leere Nachricht." };
-  const trimmed = content.trim().slice(0, 500);
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -54,9 +174,28 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
     return { success: false, error: "Du bist temporär gesperrt." };
   }
 
-  // Rate limit: check last message in the last 2 seconds
+  // Load chat config (graceful fallback to defaults if table doesn't exist yet)
+  const cfg = await getChatConfig();
+
+  if (!cfg.enabled && !isModerator(profile)) {
+    return { success: false, error: "Der Chat ist derzeit deaktiviert." };
+  }
+
+  const maxLen = cfg.maxMessageLength;
+  const trimmed = content.trim().slice(0, maxLen);
+
+  if (cfg.autoFilter) {
+    const { blocked } = checkAutoFilter(trimmed);
+    if (blocked) return { success: false, error: "Nachricht enthält nicht erlaubte Inhalte." };
+  }
+
+  if (checkBannedWords(trimmed, cfg.bannedWords)) {
+    return { success: false, error: "Nachricht enthält verbotene Wörter." };
+  }
+
   const admin = createAdminClient();
-  const since = new Date(Date.now() - 2000).toISOString();
+  const cooldownMs = cfg.messageCooldownSec * 1000;
+  const since = new Date(Date.now() - cooldownMs).toISOString();
   const { data: recent } = await admin
     .from("global_chat_messages")
     .select("id")
@@ -64,7 +203,7 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
     .gte("created_at", since)
     .limit(1);
   if (recent && recent.length > 0) {
-    return { success: false, error: "Zu schnell! Warte kurz bevor du die nächste Nachricht sendest." };
+    return { success: false, error: `Zu schnell! Warte ${cfg.messageCooldownSec}s bevor du die nächste Nachricht sendest.` };
   }
 
   const { error } = await admin.from("global_chat_messages").insert({

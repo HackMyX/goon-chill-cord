@@ -53,6 +53,11 @@ export async function getModPermissions(): Promise<ModPermissions> {
     canAddCredits: data.can_add_credits ?? false,
     maxTempBanHours: data.max_temp_ban_hours ?? 24,
     warnRequiresReason: data.warn_requires_reason ?? true,
+    canClearChat: data.can_clear_chat ?? false,
+    canDeleteTickets: data.can_delete_tickets ?? false,
+    canSetTicketPriority: data.can_set_ticket_priority ?? false,
+    canUpdateTicketStatus: data.can_update_ticket_status ?? false,
+    canRewardTickets: data.can_reward_tickets ?? false,
   };
 }
 
@@ -73,6 +78,11 @@ export async function updateModPermissions(
       can_add_credits: perms.canAddCredits,
       max_temp_ban_hours: perms.maxTempBanHours,
       warn_requires_reason: perms.warnRequiresReason,
+      can_clear_chat: perms.canClearChat,
+      can_delete_tickets: perms.canDeleteTickets,
+      can_set_ticket_priority: perms.canSetTicketPriority,
+      can_update_ticket_status: perms.canUpdateTicketStatus,
+      can_reward_tickets: perms.canRewardTickets,
       updated_at: new Date().toISOString(),
     });
     if (error) return { success: false, error: error.message };
@@ -200,10 +210,9 @@ export async function getModUsers(): Promise<ModUserSummary[]> {
 export async function getModTickets(): Promise<ModTicket[]> {
   await requireMod();
   const admin = createAdminClient();
-  // NOTE: tickets table uses "description" not "message" for the body
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, created_at, closed_at, closed_by")
+    .select("id, user_id, subject, description, status, category, priority, created_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -223,13 +232,17 @@ export async function getModTickets(): Promise<ModTicket[]> {
     userId: t.user_id,
     username: byId.get(t.user_id) ?? "?",
     subject: t.subject ?? "(kein Betreff)",
-    message: t.description ?? "",   // DB column is "description"
+    message: t.description ?? "",
     status: t.status ?? "open",
     category: t.category ?? "other",
     priority: t.priority ?? "normal",
     createdAt: t.created_at,
     closedAt: t.closed_at,
     closedByUsername: t.closed_by ? (byId.get(t.closed_by) ?? null) : null,
+    attachmentUrl: (t as Record<string, unknown>).attachment_url as string | null ?? null,
+    rewardCredits: (t as Record<string, unknown>).reward_credits as number | null ?? null,
+    rewardNote: (t as Record<string, unknown>).reward_note as string | null ?? null,
+    rewardGrantedAt: (t as Record<string, unknown>).reward_granted_at as string | null ?? null,
   }));
 }
 
@@ -555,6 +568,119 @@ export async function modAddCredits(
         ? `${amount > 0 ? "+" : ""}${amount} CR ${reason.trim()}`
         : `${amount > 0 ? "+" : ""}${amount} Credits durch Mod-Aktion.`,
       link: "/account",
+    });
+    return { success: true };
+  } catch (e) { return { success: false, error: String(e) }; }
+}
+
+// ---------------------------------------------------------------------------
+// Ticket v2: delete, priority, status, reward — gated by extended permissions
+// ---------------------------------------------------------------------------
+
+export async function modDeleteTicket(
+  ticketId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user } = await requireMod();
+    const perms = await getModPermissions();
+    if (!perms.canDeleteTickets) return { success: false, error: "Keine Berechtigung zum Löschen." };
+    const admin = createAdminClient();
+    await admin.from("ticket_messages").delete().eq("ticket_id", ticketId);
+    const { error } = await admin.from("tickets").delete().eq("id", ticketId);
+    if (error) return { success: false, error: error.message };
+    await admin.from("mod_actions").insert({
+      mod_id: user.id, target_user_id: null,
+      action_type: "note", reason: `Ticket gelöscht (ID: ${ticketId.slice(0, 8)})`,
+      details: { ticket_id: ticketId },
+    });
+    return { success: true };
+  } catch (e) { return { success: false, error: String(e) }; }
+}
+
+export async function modSetTicketPriority(
+  ticketId: string,
+  priority: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireMod();
+    const perms = await getModPermissions();
+    if (!perms.canSetTicketPriority) return { success: false, error: "Keine Berechtigung." };
+    const admin = createAdminClient();
+    const { error } = await admin.from("tickets").update({ priority, updated_at: new Date().toISOString() }).eq("id", ticketId);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (e) { return { success: false, error: String(e) }; }
+}
+
+export async function modUpdateTicketStatus(
+  ticketId: string,
+  status: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user } = await requireMod();
+    const perms = await getModPermissions();
+    if (!perms.canUpdateTicketStatus) return { success: false, error: "Keine Berechtigung." };
+    const admin = createAdminClient();
+    const isClosing = status === "closed" || status === "resolved";
+    const now = new Date().toISOString();
+    const { error } = await admin.from("tickets").update({
+      status, updated_at: now,
+      ...(isClosing ? { closed_at: now, closed_by: user.id } : {}),
+    }).eq("id", ticketId);
+    if (error) return { success: false, error: error.message };
+    const { data: ticket } = await admin.from("tickets").select("user_id, subject").eq("id", ticketId).single();
+    if (ticket?.user_id) {
+      const LABELS: Record<string, string> = { open: "Offen", in_progress: "In Bearbeitung", resolved: "Gelöst", closed: "Geschlossen" };
+      await notifyUser({
+        userId: ticket.user_id,
+        type: "ticket_status",
+        title: "Ticket-Status geändert",
+        message: `Dein Ticket „${ticket.subject}" ist jetzt: ${LABELS[status] ?? status}`,
+        link: `/?openTicket=${ticketId}`,
+      });
+    }
+    return { success: true };
+  } catch (e) { return { success: false, error: String(e) }; }
+}
+
+export async function modGrantTicketReward(
+  ticketId: string,
+  opts: { credits?: number; note?: string }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user } = await requireMod();
+    const perms = await getModPermissions();
+    if (!perms.canRewardTickets) return { success: false, error: "Keine Berechtigung für Ticketbelohnungen." };
+    const admin = createAdminClient();
+    const { data: ticket } = await admin.from("tickets").select("user_id, subject").eq("id", ticketId).single();
+    if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
+
+    const now = new Date().toISOString();
+    const updatePayload: Record<string, unknown> = {
+      reward_granted_at: now, reward_granted_by: user.id, updated_at: now,
+    };
+    if (opts.note) updatePayload.reward_note = opts.note;
+    if (opts.credits && opts.credits > 0) {
+      updatePayload.reward_credits = opts.credits;
+      const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
+      const newCredits = (targetProfile?.credits ?? 0) + opts.credits;
+      await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
+    }
+    const { error } = await admin.from("tickets").update(updatePayload).eq("id", ticketId);
+    if (error) return { success: false, error: error.message };
+    await admin.from("mod_actions").insert({
+      mod_id: user.id, target_user_id: ticket.user_id,
+      action_type: "credits_add", reason: `Ticketbelohnung: ${opts.note ?? ticket.subject}`,
+      details: { ticket_id: ticketId, credits: opts.credits ?? 0 },
+    });
+    await notifyUser({
+      userId: ticket.user_id,
+      type: "admin_credits",
+      title: "🏆 Belohnung erhalten!",
+      message: opts.credits
+        ? `Dein hilfreicher Report wurde mit +${opts.credits} Credits belohnt!${opts.note ? ` — ${opts.note}` : ""}`
+        : `Dein hilfreicher Report wurde belohnt!${opts.note ? ` — ${opts.note}` : ""}`,
+      link: `/?openTicket=${ticketId}`,
     });
     return { success: true };
   } catch (e) { return { success: false, error: String(e) }; }

@@ -21,6 +21,7 @@ import { DebugLogTab } from "@/components/admin/debug-log-tab";
 import { BackupTab } from "@/components/admin/backup-tab";
 import { SecurityTab } from "@/components/admin/security-tab";
 import { ModConfigEditor } from "@/components/admin/mod-config-editor";
+import { ChatConfigEditor } from "@/components/admin/chat-config-editor";
 import { PatchNotesEditor } from "@/components/admin/patchnotes-editor";
 import { SurveysTab } from "@/components/admin/surveys-tab";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
@@ -28,7 +29,7 @@ import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
 import type { SnakeConfig } from "@/lib/snake-config";
 import type { MineConfig } from "@/lib/mine-config";
-import type { ModPermissions } from "@/lib/mod";
+import type { ModPermissions, ChatConfig } from "@/lib/mod";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { Rarity } from "@/lib/cases";
 import type { StreakConfig } from "@/lib/streak";
@@ -110,13 +111,14 @@ interface AdminShellProps {
   worldSpawnConfig: WorldSpawnConfig;
   siteConfig: SiteConfig;
   modPermissions: ModPermissions;
+  chatConfig: ChatConfig;
   patchNotes: PatchNote[];
   donConfig: DonConfig;
   snakeConfig: SnakeConfig;
   mineConfig: MineConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -131,6 +133,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "audit", label: "Audit-Log", icon: ScrollText },
   { id: "tickets", label: "Tickets", icon: MessageCircle },
   { id: "moderators", label: "Moderatoren", icon: Shield },
+  { id: "chat", label: "Chat", icon: MessageCircle },
   { id: "surveys", label: "Umfragen", icon: BarChart3 },
   { id: "ki", label: "KI-Assistent", icon: Sparkles },
   { id: "debug", label: "Debug Log", icon: Bug },
@@ -158,6 +161,7 @@ export function AdminShell({
   worldSpawnConfig,
   siteConfig,
   modPermissions,
+  chatConfig,
   patchNotes,
   donConfig,
   snakeConfig,
@@ -418,6 +422,8 @@ export function AdminShell({
         )}
 
         {tab === "moderators" && <ModConfigEditor permissions={modPermissions} />}
+
+        {tab === "chat" && <ChatConfigEditor initialConfig={chatConfig} />}
 
         {tab === "debug" && <DebugLogTab />}
 

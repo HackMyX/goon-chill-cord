@@ -18,6 +18,8 @@ import {
   Square,
   CalendarRange,
   X,
+  Trophy,
+  Coins,
 } from "lucide-react";
 import {
   getAdminTickets,
@@ -28,6 +30,7 @@ import {
   deleteTicket,
   deleteTicketsBulk,
   deleteTicketsByDateRange,
+  adminGrantTicketReward,
   type Ticket,
   type TicketDetail,
   type TicketStatus,
@@ -149,6 +152,11 @@ function TicketRow({
   const [priorityChanging, setPriorityChanging] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showReward, setShowReward] = useState(false);
+  const [rewardCredits, setRewardCredits] = useState(500);
+  const [rewardNote, setRewardNote] = useState("");
+  const [rewarding, setRewarding] = useState(false);
+  const [rewardMessage, setRewardMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const sound = useSoundManager();
 
   async function handleExpand() {
@@ -206,6 +214,26 @@ function TicketRow({
     await deleteTicket(ticket.id);
     setDeleting(false);
     onUpdated();
+  }
+
+  async function handleGrantReward() {
+    setRewarding(true);
+    sound.click();
+    const res = await adminGrantTicketReward(ticket.id, {
+      credits: rewardCredits > 0 ? rewardCredits : undefined,
+      note: rewardNote.trim() || undefined,
+    });
+    setRewarding(false);
+    if (res.success) {
+      sound.win?.();
+      setRewardMessage({ text: `+${rewardCredits} Credits vergeben!`, ok: true });
+      setShowReward(false);
+      onUpdated();
+    } else {
+      sound.error();
+      setRewardMessage({ text: res.error ?? "Fehler.", ok: false });
+    }
+    setTimeout(() => setRewardMessage(null), 4000);
   }
 
   return (
@@ -377,6 +405,90 @@ function TicketRow({
                   </div>
                 </form>
               )}
+
+              {/* Attachment link */}
+              {detail.attachmentUrl && (
+                <div className="border-t border-white/[0.06] px-4 py-2">
+                  <a
+                    href={detail.attachmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-[11px] text-purple-400 hover:text-purple-300"
+                  >
+                    📎 Anhang ansehen
+                  </a>
+                </div>
+              )}
+
+              {/* Reward section */}
+              <div className="border-t border-white/[0.06] px-4 py-3">
+                {detail.rewardGrantedAt ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+                    <Trophy className="h-3.5 w-3.5 shrink-0" />
+                    Belohnt{detail.rewardCredits ? ` · +${detail.rewardCredits} Credits` : ""}
+                    {detail.rewardNote && (
+                      <span className="text-amber-400/70"> — {detail.rewardNote}</span>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setShowReward((v) => !v)}
+                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors ${
+                        showReward
+                          ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                          : "border-white/10 text-zinc-500 hover:border-amber-500/30 hover:text-amber-400"
+                      }`}
+                    >
+                      <Trophy className="h-3.5 w-3.5" />
+                      Belohnung vergeben
+                    </button>
+                    {showReward && (
+                      <div className="mt-3 flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                        <p className="text-[11px] font-bold text-amber-300">Belohnung für hilfreichen Report:</p>
+                        <div className="flex flex-wrap gap-3">
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[10px] text-zinc-500 flex items-center gap-1"><Coins className="h-3 w-3" /> Credits</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={rewardCredits}
+                              onChange={(e) => setRewardCredits(Math.max(0, Number(e.target.value)))}
+                              className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-amber-400/40"
+                            />
+                          </label>
+                          <label className="flex flex-1 flex-col gap-1">
+                            <span className="text-[10px] text-zinc-500">Notiz (optional)</span>
+                            <input
+                              type="text"
+                              value={rewardNote}
+                              onChange={(e) => setRewardNote(e.target.value)}
+                              maxLength={100}
+                              placeholder="z.B. Super Bug-Report!"
+                              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
+                            />
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleGrantReward}
+                            disabled={rewarding || rewardCredits < 1}
+                            className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 transition-colors"
+                          >
+                            {rewarding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trophy className="h-3.5 w-3.5" />}
+                            Belohnung vergeben
+                          </button>
+                          {rewardMessage && (
+                            <span className={`text-[11px] ${rewardMessage.ok ? "text-emerald-400" : "text-red-400"}`}>
+                              {rewardMessage.text}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>

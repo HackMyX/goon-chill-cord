@@ -5,8 +5,10 @@ import {
   Shield, Users, Ticket, Activity, AlertTriangle, Ban, StickyNote,
   ChevronDown, Check, X, Coins, Clock, Search, LogOut, Trash2, Loader2,
   Sparkles, LayoutDashboard, RefreshCw, History, NotepadText, FileText,
+  Trophy, Paperclip, MessageSquare,
 } from "lucide-react";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
+import { GlobalChatPanel } from "@/components/global/global-chat-panel";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
@@ -15,6 +17,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import {
   modWarnUser, modAddNote, modTempBan, modLiftBan, modCloseTicket, modAddCredits,
   modRemoveWarning, getModUserHistory, getTicketMessages, modMarkInProgress, modReplyToTicket,
+  modDeleteTicket, modSetTicketPriority, modUpdateTicketStatus, modGrantTicketReward,
 } from "@/lib/actions/mod";
 import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage } from "@/lib/mod";
 
@@ -633,6 +636,11 @@ function PriorityBadge({ priority }: { priority: string }) {
 // Ticket Item — own state, thread messages, category/priority, in_progress
 // ---------------------------------------------------------------------------
 
+const ALL_TICKET_STATUSES = ["open", "in_progress", "resolved", "closed"] as const;
+const ALL_TICKET_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+const STATUS_LABEL: Record<string, string> = { open: "Offen", in_progress: "In Bearb.", resolved: "Gelöst", closed: "Geschlossen" };
+const PRIORITY_LABEL: Record<string, string> = { low: "Niedrig", normal: "Normal", high: "Hoch", urgent: "Dringend" };
+
 function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   t: ModTicket;
   perms: ModPermissions;
@@ -646,9 +654,14 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [pending, startTransition] = useTransition();
   const [flash, setFlash] = useState<{ text: string; ok: boolean } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [showReward, setShowReward] = useState(false);
+  const [rewardCredits, setRewardCredits] = useState(500);
+  const [rewardNote, setRewardNote] = useState("");
   const isActionable = t.status === "open" || t.status === "in_progress";
   const isInProgress = t.status === "in_progress";
   const isClosed = t.status === "closed";
+  const alreadyRewarded = !!t.rewardGrantedAt;
   const sound = useSoundManager();
 
   useEffect(() => {
@@ -660,7 +673,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   function showFlash(text: string, ok: boolean) {
     setFlash({ text, ok });
     if (ok) sound.win(); else sound.error();
-    setTimeout(() => setFlash(null), 3000);
+    setTimeout(() => setFlash(null), 3500);
   }
 
   function handleClose() {
@@ -689,7 +702,51 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
       if (res.success) {
         showFlash("Antwort gesendet.", true);
         setReplyText("");
-        setMsgs(null); // trigger reload
+        setMsgs(null);
+      } else showFlash(res.error ?? "Fehler.", false);
+    });
+  }
+
+  function handleDelete() {
+    if (!deleteConfirm) { setDeleteConfirm(true); setTimeout(() => setDeleteConfirm(false), 4000); return; }
+    sound.click();
+    setDeleteConfirm(false);
+    startTransition(async () => {
+      const res = await modDeleteTicket(t.id);
+      if (res.success) { showFlash("Ticket gelöscht.", true); onRefresh(); }
+      else showFlash(res.error ?? "Fehler.", false);
+    });
+  }
+
+  function handleStatusChange(status: string) {
+    sound.click();
+    startTransition(async () => {
+      const res = await modUpdateTicketStatus(t.id, status);
+      if (res.success) { showFlash(`Status: ${STATUS_LABEL[status] ?? status}`, true); onRefresh(); }
+      else showFlash(res.error ?? "Fehler.", false);
+    });
+  }
+
+  function handlePriorityChange(priority: string) {
+    sound.click();
+    startTransition(async () => {
+      const res = await modSetTicketPriority(t.id, priority);
+      if (res.success) { showFlash(`Priorität: ${PRIORITY_LABEL[priority] ?? priority}`, true); onRefresh(); }
+      else showFlash(res.error ?? "Fehler.", false);
+    });
+  }
+
+  function handleGrantReward() {
+    sound.click();
+    startTransition(async () => {
+      const res = await modGrantTicketReward(t.id, {
+        credits: rewardCredits > 0 ? rewardCredits : undefined,
+        note: rewardNote.trim() || undefined,
+      });
+      if (res.success) {
+        showFlash(`+${rewardCredits} Credits vergeben!`, true);
+        setShowReward(false);
+        onRefresh();
       } else showFlash(res.error ?? "Fehler.", false);
     });
   }
@@ -716,17 +773,15 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           <div className={`h-2 w-2 shrink-0 rounded-full ${dotCls}`} />
           <span className="truncate font-semibold text-zinc-100">{t.subject}</span>
           <span className="hidden text-[11px] text-zinc-500 sm:block">von {t.username}</span>
+          {alreadyRewarded && <Trophy className="h-3 w-3 shrink-0 text-amber-400" aria-label="Bereits belohnt" />}
+          {t.attachmentUrl && <Paperclip className="h-3 w-3 shrink-0 text-zinc-500" aria-label="Hat Anhang" />}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {isInProgress && (
-            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-              In Bearb.
-            </span>
+            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">In Bearb.</span>
           )}
           {t.status === "open" && (
-            <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
-              Offen
-            </span>
+            <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">Offen</span>
           )}
           <span className="text-[10px] text-zinc-600">{timeAgo(t.createdAt)}</span>
           <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
@@ -745,9 +800,64 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
             <PriorityBadge priority={t.priority} />
           </div>
 
+          {/* Status + priority controls (if permitted) */}
+          {(perms.canUpdateTicketStatus || perms.canSetTicketPriority) && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
+              {perms.canUpdateTicketStatus && (
+                <>
+                  <span className="text-[10px] text-zinc-600">Status:</span>
+                  {ALL_TICKET_STATUSES.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => handleStatusChange(s)}
+                      disabled={pending || t.status === s}
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition-colors disabled:opacity-50 ${
+                        t.status === s
+                          ? "border-sky-500/40 bg-sky-500/20 text-sky-300"
+                          : "border-white/10 text-zinc-500 hover:border-white/30 hover:text-zinc-300"
+                      }`}
+                    >
+                      {STATUS_LABEL[s]}
+                    </button>
+                  ))}
+                </>
+              )}
+              {perms.canSetTicketPriority && (
+                <>
+                  <span className="ml-2 text-[10px] text-zinc-600">Prio:</span>
+                  {ALL_TICKET_PRIORITIES.map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => handlePriorityChange(p)}
+                      disabled={pending || t.priority === p}
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition-colors disabled:opacity-50 ${
+                        t.priority === p
+                          ? "border-orange-500/40 bg-orange-500/20 text-orange-300"
+                          : "border-white/10 text-zinc-500 hover:border-white/30 hover:text-zinc-300"
+                      }`}
+                    >
+                      {PRIORITY_LABEL[p]}
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Original message */}
           <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-3">
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{t.message}</p>
+            {t.attachmentUrl && (
+              <a
+                href={t.attachmentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 flex items-center gap-1.5 text-[11px] text-purple-400 hover:text-purple-300"
+              >
+                <Paperclip className="h-3 w-3" />
+                Anhang ansehen
+              </a>
+            )}
           </div>
 
           {/* Thread messages */}
@@ -759,14 +869,9 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           {msgs && msgs.length > 0 && (
             <div className="mt-3 flex flex-col gap-2">
               {msgs.map((m) => (
-                <div
-                  key={m.id}
-                  className={`flex gap-2.5 ${m.isStaff ? "flex-row-reverse" : "flex-row"}`}
-                >
+                <div key={m.id} className={`flex gap-2.5 ${m.isStaff ? "flex-row-reverse" : "flex-row"}`}>
                   <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                    m.isStaff
-                      ? "rounded-tr-sm bg-sky-500/20 text-sky-100"
-                      : "rounded-tl-sm bg-white/5 text-zinc-300"
+                    m.isStaff ? "rounded-tr-sm bg-sky-500/20 text-sky-100" : "rounded-tl-sm bg-white/5 text-zinc-300"
                   }`}>
                     <p className="whitespace-pre-wrap">{m.message}</p>
                     <p className={`mt-1 text-[10px] ${m.isStaff ? "text-sky-400/70 text-right" : "text-zinc-600"}`}>
@@ -775,6 +880,15 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Reward banner if already granted */}
+          {alreadyRewarded && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+              <Trophy className="h-3.5 w-3.5 shrink-0" />
+              Belohnt{t.rewardCredits ? ` · +${t.rewardCredits} Credits` : ""}
+              {t.rewardNote && <span className="text-amber-400/70"> — {t.rewardNote}</span>}
             </div>
           )}
 
@@ -787,10 +901,9 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
             </div>
           )}
 
-          {/* Actions for open/in_progress tickets */}
+          {/* Actions */}
           {isActionable && perms.canCloseTickets && (
             <div className="mt-4 space-y-2">
-              {/* Reply */}
               <div className="flex gap-2">
                 <textarea
                   value={replyText}
@@ -808,7 +921,6 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                 </button>
               </div>
 
-              {/* Close + In Progress */}
               <div className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
                 <textarea
                   value={closeReason}
@@ -817,7 +929,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                   placeholder="Abschluss-Notiz (optional)…"
                   className="flex-1 resize-none rounded-xl border border-white/8 bg-black/20 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/40 placeholder:text-zinc-600"
                 />
-                {!isInProgress && (
+                {!isInProgress && !perms.canUpdateTicketStatus && (
                   <button
                     onClick={handleInProgress} disabled={pending}
                     className="flex shrink-0 items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/25 disabled:opacity-50"
@@ -833,13 +945,79 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                   Schließen
                 </button>
               </div>
+            </div>
+          )}
 
-              {flash && (
-                <p className={`text-xs font-medium ${flash.ok ? "text-emerald-400" : "text-red-400"}`}>
-                  {flash.text}
-                </p>
+          {/* Extended actions row */}
+          {(perms.canDeleteTickets || perms.canRewardTickets) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/5 pt-3">
+              {perms.canRewardTickets && !alreadyRewarded && (
+                <button
+                  onClick={() => setShowReward((v) => !v)}
+                  className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
+                    showReward
+                      ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                      : "border-white/10 text-zinc-500 hover:border-amber-500/30 hover:text-amber-400"
+                  }`}
+                >
+                  <Trophy className="h-3.5 w-3.5" />
+                  Belohnung vergeben
+                </button>
+              )}
+              {perms.canDeleteTickets && (
+                <button
+                  onClick={handleDelete}
+                  disabled={pending}
+                  className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-50 ${
+                    deleteConfirm
+                      ? "border-red-500/50 bg-red-500/20 text-red-300"
+                      : "border-white/10 text-zinc-600 hover:border-red-500/30 hover:text-red-400"
+                  }`}
+                >
+                  {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  {deleteConfirm ? "Wirklich löschen?" : "Löschen"}
+                </button>
               )}
             </div>
+          )}
+
+          {/* Reward form */}
+          {showReward && perms.canRewardTickets && (
+            <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+              <p className="mb-2 text-[11px] font-bold text-amber-300">Belohnung vergeben:</p>
+              <div className="flex flex-wrap gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] text-zinc-500">Credits</span>
+                  <input
+                    type="number" min={0} value={rewardCredits}
+                    onChange={(e) => setRewardCredits(Math.max(0, Number(e.target.value)))}
+                    className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-amber-400/40"
+                  />
+                </label>
+                <label className="flex flex-1 flex-col gap-1">
+                  <span className="text-[10px] text-zinc-500">Notiz (optional)</span>
+                  <input
+                    type="text" value={rewardNote} onChange={(e) => setRewardNote(e.target.value)}
+                    maxLength={100} placeholder="z.B. Super Bug-Report!"
+                    className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
+                  />
+                </label>
+              </div>
+              <button
+                onClick={handleGrantReward}
+                disabled={pending || rewardCredits < 1}
+                className="mt-2 flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 transition-colors"
+              >
+                {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trophy className="h-3.5 w-3.5" />}
+                Belohnung senden
+              </button>
+            </div>
+          )}
+
+          {flash && (
+            <p className={`mt-2 text-xs font-medium ${flash.ok ? "text-emerald-400" : "text-red-400"}`}>
+              {flash.text}
+            </p>
           )}
         </div>
       )}
@@ -1094,7 +1272,7 @@ function ActionLog({ actions }: { actions: ModActionRow[] }) {
 // Main Shell
 // ---------------------------------------------------------------------------
 
-type ModTab = "overview" | "users" | "tickets" | "actions" | "ki";
+type ModTab = "overview" | "users" | "tickets" | "actions" | "chat" | "ki";
 
 interface ModShellProps {
   modUsername: string;
@@ -1118,6 +1296,11 @@ const ADMIN_PERMS: ModPermissions = {
   canAddCredits: true,
   warnRequiresReason: false,
   maxTempBanHours: 8760,
+  canClearChat: true,
+  canDeleteTickets: true,
+  canSetTicketPriority: true,
+  canUpdateTicketStatus: true,
+  canRewardTickets: true,
 };
 
 function ModShellInner({
@@ -1131,7 +1314,7 @@ function ModShellInner({
 
   const [activeTab, setActiveTab] = useState<ModTab>(() => {
     const q = searchParams.get("tab");
-    return (q === "tickets" || q === "users" || q === "actions" || q === "ki") ? q : "overview";
+    return (q === "tickets" || q === "users" || q === "actions" || q === "chat" || q === "ki") ? q : "overview";
   });
   const [deepOpenTicketId, setDeepOpenTicketId] = useState<string | null>(
     () => searchParams.get("open")
@@ -1140,7 +1323,7 @@ function ModShellInner({
 
   useEffect(() => {
     const q = searchParams.get("tab");
-    if (q === "tickets" || q === "users" || q === "actions" || q === "ki") setActiveTab(q);
+    if (q === "tickets" || q === "users" || q === "actions" || q === "chat" || q === "ki") setActiveTab(q);
     const open = searchParams.get("open");
     if (open) setDeepOpenTicketId(open);
   }, [searchParams]);
@@ -1154,6 +1337,7 @@ function ModShellInner({
     { id: "tickets",  label: "Tickets",        Icon: Ticket,          badge: openTicketsCount,
       show: permissions.canViewTickets },
     { id: "actions",  label: "Aktionen",       Icon: History,         show: true },
+    { id: "chat",     label: "Chat",           Icon: MessageSquare,   show: true },
     { id: "ki",       label: "KI-Assistent",   Icon: Sparkles,        show: true },
   ];
 
@@ -1256,6 +1440,22 @@ function ModShellInner({
               </span>
             </div>
             <ActionLog actions={recentActions} />
+          </div>
+        )}
+        {activeTab === "chat" && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-purple-400" />
+              <h3 className="text-sm font-bold text-zinc-300">Global Chat</h3>
+              {!permissions.canClearChat && !isAdminUser && (
+                <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">
+                  Kein Lösch-Recht
+                </span>
+              )}
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-white/8 bg-black/30" style={{ height: "calc(100vh - 340px)", minHeight: "500px" }}>
+              <GlobalChatPanel isStaff={permissions.canClearChat || isAdminUser} />
+            </div>
           </div>
         )}
         {activeTab === "ki" && (

@@ -125,6 +125,48 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
           />
         </div>
 
+        <h3 className="mt-5 mb-3 flex items-center gap-2 text-sm font-bold text-zinc-300">
+          Erweiterte Ticket-Berechtigungen
+        </h3>
+        <div className="flex flex-col gap-2">
+          <Toggle
+            label="Tickets löschen"
+            description="Moderatoren können Tickets permanent löschen"
+            value={perms.canDeleteTickets}
+            onChange={(v) => set("canDeleteTickets", v)}
+          />
+          <Toggle
+            label="Ticket-Priorität setzen"
+            description="Moderatoren können Priorität (Niedrig / Normal / Hoch / Dringend) ändern"
+            value={perms.canSetTicketPriority}
+            onChange={(v) => set("canSetTicketPriority", v)}
+          />
+          <Toggle
+            label="Ticket-Status ändern"
+            description="Moderatoren können Status (Offen / In Bearbeitung / Gelöst / Geschlossen) setzen"
+            value={perms.canUpdateTicketStatus}
+            onChange={(v) => set("canUpdateTicketStatus", v)}
+          />
+          <Toggle
+            label="Ticketbelohnungen vergeben"
+            description="Moderatoren können Credits-Belohnungen für hilfreiche Reports vergeben"
+            value={perms.canRewardTickets}
+            onChange={(v) => set("canRewardTickets", v)}
+          />
+        </div>
+
+        <h3 className="mt-5 mb-3 flex items-center gap-2 text-sm font-bold text-zinc-300">
+          Chat-Berechtigungen
+        </h3>
+        <div className="flex flex-col gap-2">
+          <Toggle
+            label="Global Chat leeren"
+            description="Moderatoren können den gesamten Chat mit einem Klick löschen (muss auch in Chat-Einstellungen aktiviert sein)"
+            value={perms.canClearChat}
+            onChange={(v) => set("canClearChat", v)}
+          />
+        </div>
+
         {perms.canTempBanUsers && (
           <div className="mt-4">
             <label className="flex flex-col gap-1">

@@ -38,6 +38,10 @@ export interface TicketMessage {
 
 export interface TicketDetail extends Ticket {
   messages: TicketMessage[];
+  attachmentUrl?: string | null;
+  rewardCredits?: number | null;
+  rewardNote?: string | null;
+  rewardGrantedAt?: string | null;
 }
 
 // ─── User actions ─────────────────────────────────────────────────────────────
@@ -46,6 +50,7 @@ export async function createTicket(input: {
   subject: string;
   description: string;
   category?: TicketCategory;
+  attachmentUrl?: string;
 }): Promise<{ success: boolean; error?: string; ticketId?: string }> {
   const supabase = await createClient();
   const {
@@ -64,9 +69,12 @@ export async function createTicket(input: {
     return { success: false, error: "Du hast aktuell keinen Zugriff auf den Support." };
   }
 
+  const insertPayload: Record<string, unknown> = { user_id: user.id, subject, description, status: "open", category, priority: "normal" };
+  if (input.attachmentUrl) insertPayload.attachment_url = input.attachmentUrl;
+
   const { data, error } = await admin
     .from("tickets")
-    .insert({ user_id: user.id, subject, description, status: "open", category, priority: "normal" })
+    .insert(insertPayload)
     .select("id")
     .single();
 
@@ -119,7 +127,7 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
   // Users can only view their own tickets; staff can view all
   const query = admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, attachment_url, reward_credits, reward_note, reward_granted_at, ticket_messages(count)")
     .eq("id", ticketId);
 
   if (!isModerator(profile)) {
@@ -141,6 +149,10 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
 
   return {
     ...ticket,
+    attachmentUrl: (data as Record<string, unknown>).attachment_url as string | null ?? null,
+    rewardCredits: (data as Record<string, unknown>).reward_credits as number | null ?? null,
+    rewardNote: (data as Record<string, unknown>).reward_note as string | null ?? null,
+    rewardGrantedAt: (data as Record<string, unknown>).reward_granted_at as string | null ?? null,
     messages: (messages ?? []).map((m) => ({
       id: m.id,
       ticketId: m.ticket_id,
@@ -370,6 +382,50 @@ export async function deleteTicketsBulk(ticketIds: string[]): Promise<{ success:
 
   revalidatePath("/admin");
   return { success: true, deleted: data?.length ?? 0 };
+}
+
+/** Grant a reward for a helpful ticket — admin only. */
+export async function adminGrantTicketReward(
+  ticketId: string,
+  opts: { credits?: number; note?: string }
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
+  if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
+
+  const { data: ticket } = await admin.from("tickets").select("user_id, subject").eq("id", ticketId).single();
+  if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
+
+  const now = new Date().toISOString();
+  const updatePayload: Record<string, unknown> = {
+    reward_granted_at: now, reward_granted_by: user.id, updated_at: now,
+  };
+  if (opts.note) updatePayload.reward_note = opts.note;
+  if (opts.credits && opts.credits > 0) {
+    updatePayload.reward_credits = opts.credits;
+    const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
+    const newCredits = (targetProfile?.credits ?? 0) + opts.credits;
+    await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
+  }
+  const { error } = await admin.from("tickets").update(updatePayload).eq("id", ticketId);
+  if (error) return { success: false, error: error.message };
+
+  await notifyUser({
+    userId: ticket.user_id,
+    type: "admin_credits",
+    title: "🏆 Belohnung erhalten!",
+    message: opts.credits
+      ? `Dein hilfreicher Report wurde mit +${opts.credits} Credits belohnt!${opts.note ? ` — ${opts.note}` : ""}`
+      : `Dein hilfreicher Report wurde belohnt!${opts.note ? ` — ${opts.note}` : ""}`,
+    link: `/?openTicket=${ticketId}`,
+  });
+
+  revalidatePath("/admin");
+  return { success: true };
 }
 
 /** Delete tickets by creation date range — admin/mod only. */

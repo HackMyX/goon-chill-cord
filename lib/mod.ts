@@ -15,6 +15,12 @@ export interface ModPermissions {
   canAddCredits: boolean;
   maxTempBanHours: number;
   warnRequiresReason: boolean;
+  // v2 extended permissions
+  canClearChat: boolean;
+  canDeleteTickets: boolean;
+  canSetTicketPriority: boolean;
+  canUpdateTicketStatus: boolean;
+  canRewardTickets: boolean;
 }
 
 export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
@@ -27,6 +33,29 @@ export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
   canAddCredits: false,
   maxTempBanHours: 24,
   warnRequiresReason: true,
+  canClearChat: false,
+  canDeleteTickets: false,
+  canSetTicketPriority: false,
+  canUpdateTicketStatus: false,
+  canRewardTickets: false,
+};
+
+export interface ChatConfig {
+  enabled: boolean;
+  messageCooldownSec: number;
+  maxMessageLength: number;
+  bannedWords: string[];
+  autoFilter: boolean;
+  modsCanClear: boolean;
+}
+
+export const DEFAULT_CHAT_CONFIG: ChatConfig = {
+  enabled: true,
+  messageCooldownSec: 2,
+  maxMessageLength: 300,
+  bannedWords: [],
+  autoFilter: true,
+  modsCanClear: true,
 };
 
 export interface ModActionRow {
@@ -66,6 +95,10 @@ export interface ModTicket {
   createdAt: string;
   closedAt: string | null;
   closedByUsername: string | null;
+  attachmentUrl: string | null;
+  rewardCredits: number | null;
+  rewardNote: string | null;
+  rewardGrantedAt: string | null;
 }
 
 export interface TicketMessage {

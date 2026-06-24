@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS global_chat_messages (
   content     text        NOT NULL,
   is_system   boolean     NOT NULL DEFAULT false,
   metadata    jsonb,
+  avatar_url  text,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 

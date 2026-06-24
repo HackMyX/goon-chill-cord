@@ -13,6 +13,7 @@ import { getCharacterConfig } from "@/lib/actions/character-config";
 import { getWorldSpawnConfig } from "@/lib/actions/world-spawn";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getModPermissions } from "@/lib/actions/mod";
+import { getChatConfig } from "@/lib/actions/global-chat";
 import { getAllNotes } from "@/lib/actions/patchnotes";
 import { getDonConfig } from "@/lib/actions/don-config";
 import { getSnakeConfig } from "@/lib/actions/snake";
@@ -132,6 +133,7 @@ export default async function AdminPage() {
     characterConfig,
     siteConfig,
     modPermissions,
+    chatConfig,
     worldSpawnConfig,
     allPatchNotes,
     adminDonConfig,
@@ -161,6 +163,7 @@ export default async function AdminPage() {
     getCharacterConfig(),
     getSiteConfig(),
     getModPermissions(),
+    getChatConfig(),
     getWorldSpawnConfig(),
     getAllNotes(),
     getDonConfig(),
@@ -202,6 +205,7 @@ export default async function AdminPage() {
       worldSpawnConfig={worldSpawnConfig}
       siteConfig={siteConfig}
       modPermissions={modPermissions}
+      chatConfig={chatConfig}
       patchNotes={allPatchNotes}
       donConfig={adminDonConfig}
       snakeConfig={adminSnakeConfig}
