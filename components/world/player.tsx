@@ -5,7 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { rarityColorFor, type EquippedItem } from "@/lib/rarity-colors";
 import { SlashEffect, SLASH_EFFECT_LIFETIME_MS } from "@/components/world/hit-fx";
-import { getEquippedDamage, capsuleHitTest, momentumMultiplier, getPerkMultiplier, applyIncomingDamage } from "@/lib/combat";
+import { getEquippedDamage, capsuleHitTest, momentumMultiplier, getPerkMultiplier, applyIncomingDamage, computePvpDamage } from "@/lib/combat";
 import type { CharacterConfig } from "@/lib/character-config";
 import { CharacterModel, type CharacterLimbRefs } from "@/components/world/character-model";
 import { useKeyboardControls } from "@/components/world/use-keyboard-controls";
@@ -13,7 +13,7 @@ import { useAttackInput } from "@/components/world/use-attack-input";
 import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
 import type { CombatSharedState, MonsterRegistry, RemotePlayerRegistry } from "@/components/world/combat-types";
 import { WORLD_RADIUS } from "@/lib/world-config";
-import { debugLog, debugWarn } from "@/lib/debug";
+import { debugLog } from "@/lib/debug";
 import { mobileInput, consumeMobileAttack, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
 import {
   broadcastTransform,
@@ -22,7 +22,6 @@ import {
   broadcastPvpDamage,
   subscribeToMonsterCrossAttack,
 } from "@/lib/world-realtime";
-import { attemptPvpHit } from "@/lib/actions/pvp";
 import type { PetTypeConfig } from "@/lib/pets";
 
 /** Everything world-shell.tsx's HUD needs from a single throttled tick —
@@ -89,6 +88,10 @@ interface PlayerProps {
    * (MobileControls writes directly to cameraState) and ORs touch input
    * from the global mobileInput ref into keyboard state each frame. */
   mobileMode?: boolean;
+  /** Admin kill-switch for player-vs-player combat. Defaults to true (enabled)
+   * when not passed. Enforced here so that disabling it in the admin panel
+   * takes effect immediately without a server-action round trip. */
+  pvpEnabled?: boolean;
 }
 
 // Velocity smoothing rate — governs how quickly horizontal speed tracks the
@@ -223,6 +226,7 @@ export function Player({
   respawnSignal,
   characterConfig,
   mobileMode = false,
+  pvpEnabled = true,
 }: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const limbs = useRef<CharacterLimbRefs>(null);
@@ -844,33 +848,25 @@ export function Player({
             attackerZ: g.position.z,
           });
         }
-      } else if (nearestPlayerId && nearestPlayerPos) {
+      } else if (pvpEnabled && nearestPlayerId && nearestPlayerPos) {
         cameraShake.current = 1;
-        // Server validates the hit and computes the damage number from the
-        // attacker's actually-equipped weapon. On success, the attacker's
-        // client broadcasts pvp_damage via WebSocket (same httpSend path as
-        // every other game event) so all tabs receive it reliably — the old
-        // approach of broadcasting from a Server Action via the Supabase REST
-        // endpoint was silently dropping messages.
-        const capturedTargetId = nearestPlayerId;
-        attemptPvpHit({
-          targetUserId: capturedTargetId,
-          attackerX: g.position.x,
-          attackerZ: g.position.z,
-          attackerHeading: cc.yaw,
-          targetX: nearestPlayerPos.x,
-          targetZ: nearestPlayerPos.z,
+        // Client-authoritative PvP: compute damage locally (same formula as
+        // the old server action, including the PvP dampener) and broadcast
+        // immediately — no server round trip, no 300-800ms latency per hit.
+        // The hit test already passed above (capsuleHitTest), and damage is
+        // computed from the locally-loaded characterConfig, which matches
+        // what the server would have used anyway.
+        const pvpDmg = computePvpDamage(
+          baseDmg,
           sprinting,
           airborne,
-        }).then((result) => {
-          if (!result.hit || result.damage === undefined) return;
-          // Relay the server-computed damage to all peers via WebSocket.
-          broadcastPvpDamage({ targetUserId: capturedTargetId, attackerId: userId, amount: result.damage });
-          // Show blood burst on the target avatar on the attacker's own screen
-          // (self: false prevents the attacker from receiving their own broadcast).
-          const targetHandle = remotePlayerRegistryRef.current.find((h) => h.id === capturedTargetId);
-          targetHandle?.triggerBloodBurst();
-        }).catch((err) => debugWarn("World", "attemptPvpHit failed", err));
+          characterConfig.sprintDamageMultiplier,
+          characterConfig.airborneDamageMultiplier,
+          characterConfig.pvpDamageMultiplier
+        );
+        broadcastPvpDamage({ targetUserId: nearestPlayerId, attackerId: userId, amount: pvpDmg });
+        const targetHandle = remotePlayerRegistryRef.current.find((h) => h.id === nearestPlayerId);
+        targetHandle?.triggerBloodBurst();
       }
       debugLog("World", "attack", {
         damage: dmg,

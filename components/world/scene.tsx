@@ -46,6 +46,8 @@ interface SceneProps {
   onDeath?: () => void;
   respawnSignal: number;
   mobileMode?: boolean;
+  /** Passed through to Player.tsx for client-side PvP gate. */
+  pvpEnabled?: boolean;
 }
 
 /** Dual border rings + inner halo — keeps the world edge from reading as a
@@ -136,6 +138,7 @@ export function Scene({
   onDeath,
   respawnSignal,
   mobileMode = false,
+  pvpEnabled = true,
 }: SceneProps) {
   // Equipped items never change mid-World-session (re-equipping requires
   // the Garderobe, a separate page) — armor/shield are seeded once here
@@ -222,6 +225,7 @@ export function Scene({
         respawnSignal={respawnSignal}
         characterConfig={characterConfig}
         mobileMode={mobileMode}
+        pvpEnabled={pvpEnabled}
       />
 
       <RemotePlayers selfUserId={userId} registryRef={remotePlayerRegistryRef} maxHp={characterConfig.playerMaxHp} />

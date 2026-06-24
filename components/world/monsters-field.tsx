@@ -112,6 +112,9 @@ export function MonstersField({
   // Tracks which remote attacker last hit a given own monster id — used to
   // route kill-streak credit to the correct player on a cross-player kill.
   const lastRemoteHitterRef = useRef<Map<string, string>>(new Map());
+  // Tracks whether the player was dead last frame so we can fire the
+  // despawn exactly once on the transition, not every frame while dead.
+  const wasDeadRef = useRef(false);
 
   // Cross-player aggro: when a remote attacker hits one of our monsters,
   // all our monsters temporarily chase the attacker's last known position.
@@ -229,16 +232,27 @@ export function MonstersField({
   }, []);
 
   useFrame((_, delta) => {
-    // Monsters/spawning are *not* paused or cleared while the player is
-    // dead — the World keeps running normally in the background (an
-    // earlier version despawned everything on death, which wasn't what
-    // was actually wanted: the player's own character is what falls over
-    // and disappears on death — components/world/player.tsx's death-pose
-    // animation — not the rest of the world around it). Monster.tsx's own
-    // `combatRef.current.dead` check still stops monsters from chasing/
-    // attacking a dead, no-longer-present player; that's the only
-    // death-related behavior this field needs to care about, and it
-    // already lives entirely in Monster.tsx.
+    const isDead = combatRef.current.dead;
+
+    // When the local player dies, instantly despawn all their mobs and
+    // broadcast an empty list so every peer's remote-monster renderer
+    // clears them immediately — no need to wait for the next 8Hz sync tick.
+    if (isDead && !wasDeadRef.current) {
+      wasDeadRef.current = true;
+      spawnsRef.current = []; // sync update so the setInterval broadcast sends [] next tick
+      broadcastMonsterSync({ ownerId: userId, monsters: [] });
+      setSpawns([]);
+      setProjectiles([]);
+    }
+    // When the player respawns, add a short delay before the first mob appears.
+    if (!isDead && wasDeadRef.current) {
+      wasDeadRef.current = false;
+      spawnTimer.current = 3.0;
+    }
+
+    // No spawning while dead.
+    if (isDead) return;
+
     spawnTimer.current -= delta;
     if (spawnTimer.current > 0) return;
     const extra = Math.max(0, playerCount.current - 1);

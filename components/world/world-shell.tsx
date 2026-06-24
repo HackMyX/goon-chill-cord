@@ -119,6 +119,7 @@ export function WorldShell({
   petTypes,
   killStreakConfig,
   disconnectCountdownSec = 10,
+  pvpEnabled = true,
   characterConfig,
   spawnConfig,
   isAdmin = false,
@@ -876,6 +877,7 @@ export function WorldShell({
               onDeath={handleDeath}
               respawnSignal={respawnSignal}
               mobileMode={isMobile}
+              pvpEnabled={pvpEnabled}
             />
           </Suspense>
         </Canvas>
