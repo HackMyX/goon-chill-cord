@@ -212,7 +212,7 @@ export function TopBar({
           onMouseEnter={sound.hover}
           onClick={sound.click}
           title="Patch Notes"
-          className="hidden items-center rounded-md border border-purple-500/40 bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold tracking-widest text-purple-300 transition-colors hover:border-purple-400/70 hover:bg-purple-500/20 hover:text-purple-200 sm:flex"
+          className="hidden items-center rounded-md border border-purple-500/40 bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold tracking-widest text-purple-300 transition-colors hover:border-purple-400/70 hover:bg-purple-500/20 hover:text-purple-200 sm:flex [@media(max-height:600px)]:hidden"
         >
           {siteVersion}
         </Link>
@@ -235,7 +235,7 @@ export function TopBar({
               <LogoIcon className="relative h-6 w-6 text-purple-400 transition-transform duration-300 group-hover:rotate-[-8deg] group-hover:scale-110" />
             )}
           </span>
-          <span className="logo-text hidden font-extrabold tracking-tight sm:inline">{siteName}</span>
+          <span className="logo-text hidden font-extrabold tracking-tight sm:inline [@media(max-height:600px)]:hidden">{siteName}</span>
         </Link>
 
         {/* Credits pill — animates on change */}
@@ -248,7 +248,7 @@ export function TopBar({
         >
           <Coins className="h-3.5 w-3.5 shrink-0 text-purple-200" />
           <span className="tabular-nums">{creditsLabel}</span>
-          <span className="hidden text-xs text-purple-200/70 sm:inline">{currencyName}</span>
+          <span className="hidden text-xs text-purple-200/70 sm:inline [@media(max-height:600px)]:hidden">{currencyName}</span>
         </motion.div>
 
         {isAdmin && (
@@ -258,14 +258,14 @@ export function TopBar({
               label="Admin-Panel"
               href="/admin"
               showLabel={topbarShowLabels}
-              className="hidden md:flex bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border-0"
+              className="hidden md:flex [@media(max-height:600px)]:hidden bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border-0"
             />
             <IconButton
               icon={Shield}
               label="Mod-Panel"
               href="/mod"
               showLabel={topbarShowLabels}
-              className="hidden md:flex bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
+              className="hidden md:flex [@media(max-height:600px)]:hidden bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
             />
           </>
         )}
@@ -275,7 +275,7 @@ export function TopBar({
             label="Mod-Panel"
             href="/mod"
             showLabel={topbarShowLabels}
-            className="hidden md:flex bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
+            className="hidden md:flex [@media(max-height:600px)]:hidden bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
           />
         )}
       </div>
@@ -287,12 +287,15 @@ export function TopBar({
 
       {/* Right: configurable slots (desktop) + hamburger (mobile) */}
       <div className="flex items-center gap-1.5 justify-self-end">
-        {slots.map((slot) => renderSlot(slot))}
-        {/* Hamburger — only visible on mobile/small screens */}
+        {/* Nav slots — hidden entirely in mobile landscape (short viewport) */}
+        <div className="[@media(max-height:600px)]:hidden contents">
+          {slots.map((slot) => renderSlot(slot))}
+        </div>
+        {/* Hamburger — visible on mobile + always visible in landscape regardless of md: breakpoint */}
         <button
           onMouseEnter={sound.hover}
           onClick={() => { sound.click(); setMobileMenuOpen(true); }}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-zinc-300 transition-colors hover:border-white/20 hover:text-white md:hidden"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-zinc-300 transition-colors hover:border-white/20 hover:text-white md:hidden [@media(max-height:600px)]:flex"
           aria-label="Menü öffnen"
         >
           <Menu className="h-5 w-5" />

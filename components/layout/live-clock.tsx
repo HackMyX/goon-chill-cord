@@ -114,7 +114,7 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
     <div className="flex items-center gap-2">
       {/* Clock/streak box — hidden on small screens to prevent TopBar overflow */}
       {showBox && (
-        <div className="hidden sm:flex flex-col items-center rounded-2xl bg-white/5 px-3 py-1.5 sm:px-6 sm:py-2">
+        <div className="hidden sm:flex [@media(max-height:600px)]:hidden flex-col items-center rounded-2xl bg-white/5 px-3 py-1.5 sm:px-6 sm:py-2">
           {showCountdown && (
             <span className="font-mono text-sm tabular-nums text-zinc-200">{time}</span>
           )}

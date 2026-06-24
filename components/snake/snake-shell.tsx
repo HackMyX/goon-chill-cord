@@ -1050,7 +1050,13 @@ export function SnakeShell({
           const gMin = g.mode === "grind" ? g.shrinkCount : 0;
           const gMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
           const gMargin = (g.mode === "grind" && g.applesUntilShrink === 1) ? 1 : 0;
-          g.goldenApple = randomPos(BOARD, [...g.snake, g.apple], gMin + gMargin, gMax - gMargin, gMin + gMargin, gMax - gMargin);
+          // Spawn within 5 cells of the current head so fast reactions are rewarded
+          const GOLDEN_RADIUS = 5;
+          const gRminX = Math.max(gMin + gMargin, newHead.x - GOLDEN_RADIUS);
+          const gRmaxX = Math.min(gMax - gMargin, newHead.x + GOLDEN_RADIUS);
+          const gRminY = Math.max(gMin + gMargin, newHead.y - GOLDEN_RADIUS);
+          const gRmaxY = Math.min(gMax - gMargin, newHead.y + GOLDEN_RADIUS);
+          g.goldenApple = randomPos(BOARD, [newHead, ...g.snake, g.apple], gRminX, gRmaxX, gRminY, gRmaxY);
           g.goldenAppleMovesLeft = modeCfg.goldenAppleLifeApples;
         }
 
@@ -1144,8 +1150,14 @@ export function SnakeShell({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Touch swipe support — uses touchmove for real-time detection (doesn't wait for lift).
+  // Touch swipe support — attached to the canvas element (not window) so
+  // e.preventDefault() can actually cancel browser scroll. passive:false is
+  // required for preventDefault() to work; attaching to the canvas (not
+  // window) means only swipes that START on the game field are captured.
   useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
     let touchStartX = 0, touchStartY = 0, swiped = false;
     const onTouchStart = (e: TouchEvent) => {
       touchStartX = e.touches[0].clientX;
@@ -1168,6 +1180,7 @@ export function SnakeShell({
       const dx = e.touches[0].clientX - touchStartX;
       const dy = e.touches[0].clientY - touchStartY;
       if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;
+      e.preventDefault(); // stop page from scrolling while playing
       swiped = true;
       let d: Dir;
       if (Math.abs(dx) > Math.abs(dy)) d = dx > 0 ? "RIGHT" : "LEFT";
@@ -1184,13 +1197,13 @@ export function SnakeShell({
       else d = dy > 0 ? "DOWN" : "UP";
       pushSwipeDir(d);
     };
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: true });
-    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
     return () => {
-      window.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("touchend", onTouchEnd);
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", onTouchEnd);
     };
   }, []);
 
@@ -1422,7 +1435,7 @@ export function SnakeShell({
               ref={canvasRef}
               width={CANVAS_SIZE}
               height={CANVAS_SIZE}
-              className="block aspect-square w-full"
+              className="block aspect-square w-full touch-none"
             />
 
             {/* Idle overlay */}
