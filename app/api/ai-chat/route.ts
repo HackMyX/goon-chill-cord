@@ -12,12 +12,13 @@ import { isAdmin, isModerator } from "@/lib/admin";
 import { USER_SYSTEM_PROMPT, MOD_SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT } from "@/lib/ai-site-context";
 
 // ── Model priority list ───────────────────────────────────────────────────
-// Falls eines überlastet ist, wird sofort das nächste versucht.
+// Stabile Modelle zuerst — 2.5-flash als letzter Ausweg (Thinking kann
+// bei Function Calling zu unerwarteten Formaten führen).
 const MODEL_PRIORITY = [
+  "gemini-1.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash-8b",
   "gemini-2.5-flash",
-  "gemini-1.5-flash",       // stable fallback
-  "gemini-2.5-flash-lite",
-  "gemini-1.5-flash-8b",    // fastest / lightest last resort
 ] as const;
 
 // ── Per-user in-memory rate limiter (max 12 req/min) ─────────────────────
@@ -401,23 +402,31 @@ async function executeFunction(
 // ── Helper: error classification ──────────────────────────────────────────
 
 function isQuotaError(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e);
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
   return (
     msg.includes("429") ||
-    msg.includes("Too Many Requests") ||
-    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("too many requests") ||
+    msg.includes("resource_exhausted") ||
     msg.includes("quota")
   );
 }
 
 function isTransientError(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e);
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
   return (
     msg.includes("503") ||
     msg.includes("502") ||
-    msg.includes("Service Unavailable") ||
+    msg.includes("service unavailable") ||
     msg.includes("high demand") ||
     msg.includes("overloaded")
+  );
+}
+
+function isAuthError(e: unknown): boolean {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    msg.includes("permission_denied") ||
+    (msg.includes("api key") && (msg.includes("not valid") || msg.includes("invalid")))
   );
 }
 
@@ -482,28 +491,26 @@ async function callGemini(opts: {
           response = result.response;
         }
 
-        return { reply: response.text(), actionLog };
+        let replyText: string;
+        try {
+          replyText = response.text();
+        } catch {
+          replyText = actionLog.length > 0 ? "Aktion erfolgreich ausgeführt." : "";
+        }
+
+        return { reply: replyText, actionLog };
       } catch (e) {
         lastError = e;
 
-        const quota = isQuotaError(e);
-        const transient = isTransientError(e);
+        // Auth errors (bad API key, permission denied) — no point trying other models
+        if (isAuthError(e)) throw e;
 
-        if (!quota && !transient) {
-          // Hard error (auth, bad request…) — don't retry at all
-          throw e;
-        }
+        // Quota exhausted — skip remaining attempts on this model, try next immediately
+        if (isQuotaError(e)) break;
 
-        if (quota) {
-          // Daily/minute quota exhausted → skip remaining attempts on this model, try next
-          break;
-        }
-
-        // Transient: 1 quick retry, then move to next model
-        if (attempt < 1) {
-          await sleep(600);
-        }
-        // After 2 attempts on transient → fall through to next model
+        // All other errors (503, 502, 400, 404, network, model format issues…):
+        // one quick retry, then fall through to next model
+        if (attempt < 1) await sleep(600);
       }
     }
   }
@@ -580,12 +587,12 @@ export async function POST(req: NextRequest) {
     let userMsg = "Der KI-Assistent ist gerade nicht verfügbar. Bitte versuche es in einer Minute erneut.";
 
     if (isQuotaError(e)) {
-      userMsg = "Der KI-Assistent hat sein Tageslimit erreicht. Bitte versuche es morgen oder in einigen Stunden erneut.";
+      userMsg = "Der KI-Assistent hat sein Tageslimit erreicht. Bitte versuche es in einigen Stunden erneut.";
     } else if (isTransientError(e)) {
-      userMsg = "Der KI-Assistent ist gerade überlastet. Bitte warte 30 Sekunden und versuche es erneut.";
-    } else if (raw.includes("API_KEY") || raw.includes("API key") || raw.includes("401") || raw.includes("403")) {
+      userMsg = "Der KI-Assistent ist momentan überlastet. Bitte versuche es in 30 Sekunden erneut.";
+    } else if (isAuthError(e) || raw.includes("401") || raw.includes("403")) {
       userMsg = "KI-Konfigurationsfehler — bitte Administrator kontaktieren.";
-    } else if (raw.includes("SAFETY") || raw.includes("blocked")) {
+    } else if (raw.toLowerCase().includes("safety") || raw.toLowerCase().includes("blocked")) {
       userMsg = "Diese Anfrage konnte aus Sicherheitsgründen nicht verarbeitet werden.";
     }
 
