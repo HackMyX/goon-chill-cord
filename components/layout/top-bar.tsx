@@ -103,7 +103,7 @@ export function TopBar({
     switch (slot) {
       case "games":
         return (
-          <div key="games" className="hidden md:block">
+          <div key="games" className="hidden lg:block">
             <GamesMenu />
           </div>
         );
@@ -172,7 +172,7 @@ export function TopBar({
             href="/garderobe"
             badge={liveInventoryCount > 0 ? liveInventoryCount : undefined}
             showLabel={topbarShowLabels}
-            className="hidden md:flex"
+            className="hidden lg:flex"
           />
         );
       case "notifications":
@@ -185,12 +185,12 @@ export function TopBar({
             label="Profil"
             href="/account"
             showLabel={topbarShowLabels}
-            className="hidden md:flex"
+            className="hidden lg:flex"
           />
         );
       case "logout":
         return (
-          <span key="logout" className="hidden md:flex">
+          <span key="logout" className="hidden lg:flex">
             <LogoutButton />
           </span>
         );
@@ -258,14 +258,14 @@ export function TopBar({
               label="Admin-Panel"
               href="/admin"
               showLabel={topbarShowLabels}
-              className="hidden md:flex [@media(max-height:600px)]:hidden bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border-0"
+              className="hidden lg:flex [@media(max-height:600px)]:hidden bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border-0"
             />
             <IconButton
               icon={Shield}
               label="Mod-Panel"
               href="/mod"
               showLabel={topbarShowLabels}
-              className="hidden md:flex [@media(max-height:600px)]:hidden bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
+              className="hidden lg:flex [@media(max-height:600px)]:hidden bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
             />
           </>
         )}
@@ -275,7 +275,7 @@ export function TopBar({
             label="Mod-Panel"
             href="/mod"
             showLabel={topbarShowLabels}
-            className="hidden md:flex [@media(max-height:600px)]:hidden bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
+            className="hidden lg:flex [@media(max-height:600px)]:hidden bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
           />
         )}
       </div>
@@ -295,7 +295,7 @@ export function TopBar({
         <button
           onMouseEnter={sound.hover}
           onClick={() => { sound.click(); setMobileMenuOpen(true); }}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-zinc-300 transition-colors hover:border-white/20 hover:text-white md:hidden [@media(max-height:600px)]:flex"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-zinc-300 transition-colors hover:border-white/20 hover:text-white lg:hidden [@media(max-height:600px)]:flex"
           aria-label="Menü öffnen"
         >
           <Menu className="h-5 w-5" />

@@ -1466,8 +1466,10 @@ export function SnakeShell({
                     </span>
                   )}
                 </div>
-                <p className="hidden sm:block text-xs text-zinc-600">← → ↑ ↓ oder WASD · Swipe auf Handy</p>
-                <p className="sm:hidden text-xs text-zinc-500">Swipe oder D-Pad zum Steuern</p>
+                {isMobileDevice
+                  ? <p className="text-xs text-zinc-500">Swipe oder D-Pad zum Steuern</p>
+                  : <p className="text-xs text-zinc-600">← → ↑ ↓ oder WASD · Swipe auf Handy</p>
+                }
                 {dailyLimitReached ? (
                   <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-3 text-sm font-bold text-red-400">CR-Tageslimit erreicht</div>
                 ) : dailyGameLimitReached ? (
@@ -1534,9 +1536,9 @@ export function SnakeShell({
             )}
           </div>
 
-          {/* Mobile D-pad — only shown on touch devices */}
+          {/* Mobile D-pad — shown on all touch devices (phones and tablets) */}
           {isMobileDevice && (
-            <div className="flex flex-col items-center gap-1 pb-1 sm:hidden">
+            <div className="flex flex-col items-center gap-1 pb-1">
               <button
                 onTouchStart={() => pushDir("UP")}
                 className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/5 text-2xl font-bold text-zinc-200 active:bg-white/15 active:scale-95 transition-transform touch-none select-none"
@@ -1562,8 +1564,8 @@ export function SnakeShell({
             </div>
           )}
 
-          {/* Footer */}
-          <div className="hidden sm:flex items-center justify-between text-[11px] text-zinc-600">
+          {/* Footer — keyboard shortcut reminder, only for non-touch devices */}
+          {!isMobileDevice && <div className="hidden sm:flex items-center justify-between text-[11px] text-zinc-600">
             <span>← → ↑ ↓ oder WASD</span>
             <span>
               {activeMode === "grind"
@@ -1573,7 +1575,7 @@ export function SnakeShell({
                 : `🌿 Classic: ${modeCfg.wallWrap ? "Wand = Wrap" : "Wand = Tod"}`}
               {modeCfg.bonusEveryN > 0 ? ` · Bonus alle ${modeCfg.bonusEveryN} Äpfel` : ""}
             </span>
-          </div>
+          </div>}
         </div>
 
         {/* Leaderboard sidebar */}
