@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
-import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf, Settings, RotateCcw } from "lucide-react";
+import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf, Settings, RotateCcw, Maximize2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { Scene } from "@/components/world/scene";
 import { DeathScreen } from "@/components/world/death-screen";
@@ -191,27 +191,47 @@ export function WorldShell({
     };
   }, []);
 
-  // iOS Safari URL-bar-hide trick.
-  // The bar only retracts when the page has scrollable overflow and scrollY > 0.
-  // We temporarily make <html> 1px taller than the layout viewport, scroll 1px,
-  // then the bar slides up and stays up. The canvas is position:fixed so nothing
-  // shifts visually. Fires on mount and whenever orientation flips to landscape.
+  // Track fullscreen state so the button hides once active
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = () => {
+      setIsFullscreen(
+        !!document.fullscreenElement ||
+        !!(document as unknown as Record<string, unknown>)["webkitFullscreenElement"]
+      );
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+    };
+  }, []);
+
+  // Exit fullscreen when navigating away
+  useEffect(() => {
+    return () => {
+      if (
+        document.fullscreenElement ||
+        (document as unknown as Record<string, unknown>)["webkitFullscreenElement"]
+      ) {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    };
+  }, []);
+
+  // iOS Safari scroll-trick: scroll 1px so the URL bar retracts.
+  // On iOS, requestFullscreen is blocked; scrolling is the only option.
+  // On Android this is harmless — Chrome will use the fullscreen button.
   useEffect(() => {
     if (!isMobile || showPortraitGate) return;
-
     const html = document.documentElement;
-    const prevMinHeight = html.style.minHeight;
-
-    // Make document scrollable by a tiny amount
+    const prev = html.style.minHeight;
     html.style.minHeight = 'calc(100% + 56px)';
-
-    const t = setTimeout(() => {
-      window.scrollTo(0, 1);
-    }, 80);
-
+    const t = setTimeout(() => window.scrollTo(0, 1), 80);
     return () => {
       clearTimeout(t);
-      html.style.minHeight = prevMinHeight;
+      html.style.minHeight = prev;
       window.scrollTo(0, 0);
     };
   }, [isMobile, showPortraitGate]);
@@ -534,6 +554,25 @@ export function WorldShell({
         ref={canvasWrapRef}
         className={isMobile && !showPortraitGate ? "absolute inset-0" : "relative min-h-0 flex-1"}
       >
+        {/* Fullscreen button — Android Chrome supports requestFullscreen(), iOS uses scroll trick */}
+        {isMobile && !isFullscreen && !showPortraitGate && (
+          <button
+            onClick={() => {
+              const el = document.documentElement;
+              // Direct onClick = user gesture — browsers allow fullscreen here
+              if (el.requestFullscreen) {
+                el.requestFullscreen().catch(() => {});
+              } else {
+                (el as unknown as { webkitRequestFullscreen?: () => void }).webkitRequestFullscreen?.();
+              }
+            }}
+            className="absolute top-1/2 left-1/2 z-30 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 rounded-2xl border border-white/30 bg-black/75 px-5 py-3 text-sm font-bold text-white backdrop-blur-sm shadow-lg animate-pulse"
+          >
+            <Maximize2 className="h-4 w-4" />
+            Vollbild aktivieren
+          </button>
+        )}
+
         {/* Settings button — only visible in ESC/pause mode, not during active play */}
         {!cameraControls.locked && (
           <button
