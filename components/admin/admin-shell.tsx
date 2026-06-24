@@ -21,6 +21,7 @@ import { DebugLogTab } from "@/components/admin/debug-log-tab";
 import { BackupTab } from "@/components/admin/backup-tab";
 import { SecurityTab } from "@/components/admin/security-tab";
 import { ModConfigEditor } from "@/components/admin/mod-config-editor";
+import { ModUserPermissionsEditor } from "@/components/admin/mod-user-permissions-editor";
 import { ChatConfigEditor } from "@/components/admin/chat-config-editor";
 import { PatchNotesEditor } from "@/components/admin/patchnotes-editor";
 import { SurveysTab } from "@/components/admin/surveys-tab";
@@ -422,7 +423,21 @@ export function AdminShell({
           />
         )}
 
-        {tab === "moderators" && <ModConfigEditor permissions={modPermissions} />}
+        {tab === "moderators" && (
+          <div className="flex flex-col gap-6">
+            <ModConfigEditor permissions={modPermissions} />
+            <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
+              <h3 className="mb-1 flex items-center gap-2 text-base font-bold text-zinc-100">
+                <Shield className="h-5 w-5 text-purple-400" />
+                Individuelle Mod-Berechtigungen
+              </h3>
+              <p className="mb-4 text-xs text-zinc-500">
+                Überschreibe die globalen Einstellungen pro Moderator. Ohne Override gelten die globalen Rechte oben.
+              </p>
+              <ModUserPermissionsEditor globalPerms={modPermissions} />
+            </div>
+          </div>
+        )}
 
         {tab === "chat" && <ChatConfigEditor initialConfig={chatConfig} />}
 

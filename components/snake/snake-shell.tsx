@@ -319,16 +319,16 @@ function drawFrame(
     const arenaMin = sc;
     const arenaMax = BOARD - 1 - sc;
 
-    // Shrink flash overlay
+    // Shrink flash overlay — 20 frames (≈ 3s at default speed), fades to zero
     if (g.shrinkFlashFrames > 0) {
-      const alpha = (g.shrinkFlashFrames / 45) * 0.5;
+      const alpha = (g.shrinkFlashFrames / 20) * 0.5;
       ctx.fillStyle = `rgba(239,68,68,${alpha})`;
       ctx.fillRect(0, 0, W, W);
     }
 
     // Danger ring pulsing
     if (danger || g.shrinkFlashFrames > 0) {
-      const pAlpha = danger ? 0.3 + Math.sin(t * 0.2) * 0.25 : (g.shrinkFlashFrames / 45) * 0.9;
+      const pAlpha = danger ? 0.3 + Math.sin(t * 0.2) * 0.25 : (g.shrinkFlashFrames / 20) * 0.9;
       const bx = arenaMin * cell;
       const by = arenaMin * cell;
       const bw = (arenaMax - arenaMin + 1) * cell;
@@ -891,6 +891,7 @@ export function SnakeShell({
   const [scorePopKey, setScorePopKey] = useState(0);
   const [comboActive, setComboActive] = useState(false);
   const [shrinkWarning, setShrinkWarning] = useState(false);
+  const [shrinkLastApple, setShrinkLastApple] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameState>({
@@ -1013,14 +1014,16 @@ export function SnakeShell({
           const grindCfg = modeCfg as unknown as SnakeGrindConfig;
           g.applesUntilShrink--;
           setShrinkWarning(g.applesUntilShrink <= 3 && g.applesUntilShrink > 0);
+          setShrinkLastApple(g.applesUntilShrink === 1);
           if (g.applesUntilShrink <= 0) {
             const nMin = g.shrinkCount + 1, nMax = BOARD - 2 - g.shrinkCount;
             if (nMin >= nMax || (nMax - nMin + 1) < grindCfg.minBoardSize) { doEndGame(g); return; }
             g.shrinkCount++;
             g.applesUntilShrink = grindCfg.shrinkEveryN;
-            g.shrinkFlashFrames = 45;
+            g.shrinkFlashFrames = 20;
             g.creditsEarned += grindCfg.bonusCrPerShrink;
             setShrinkWarning(false);
+            setShrinkLastApple(false);
             if (modeCfg.particlesEnabled) spawnShrinkBurst(g, W, theme);
             g.floatingTexts.push({ x: W / 2, y: W / 2 - cell * 2, vy: -0.7, text: `⚠ SHRINK! +${grindCfg.bonusCrPerShrink} CR`, life: 1, decay: 0.010, color: "#ef4444", size: Math.max(12, cell * 0.7) });
             const aMin2 = g.shrinkCount, aMax2 = BOARD - 1 - g.shrinkCount;
@@ -1028,7 +1031,9 @@ export function SnakeShell({
           }
           const aMin = g.shrinkCount, aMax = BOARD - 1 - g.shrinkCount;
           if (g.apple.x < aMin || g.apple.x > aMax || g.apple.y < aMin || g.apple.y > aMax) {
-            g.apple = randomPos(BOARD, [newHead, ...g.snake], aMin, aMax, aMin, aMax);
+            // Margin of 1 when next eat triggers shrink — so player head at apple pos stays in new arena
+            const safeMargin = g.applesUntilShrink === 1 ? 1 : 0;
+            g.apple = randomPos(BOARD, [newHead, ...g.snake], aMin + safeMargin, aMax - safeMargin, aMin + safeMargin, aMax - safeMargin);
           }
         }
 
@@ -1039,7 +1044,8 @@ export function SnakeShell({
           && g.score % modeCfg.bonusEveryN !== 0) {
           const gMin = g.mode === "grind" ? g.shrinkCount : 0;
           const gMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
-          g.goldenApple = randomPos(BOARD, [...g.snake, g.apple], gMin, gMax, gMin, gMax);
+          const gMargin = (g.mode === "grind" && g.applesUntilShrink === 1) ? 1 : 0;
+          g.goldenApple = randomPos(BOARD, [...g.snake, g.apple], gMin + gMargin, gMax - gMargin, gMin + gMargin, gMax - gMargin);
           g.goldenAppleMovesLeft = modeCfg.goldenAppleLifeApples;
         }
 
@@ -1051,7 +1057,10 @@ export function SnakeShell({
         }
         const aMin = g.mode === "grind" ? g.shrinkCount : 0;
         const aMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
-        g.apple = randomPos(BOARD, [newHead, ...g.snake, ...(g.goldenApple ? [g.goldenApple] : [])], aMin, aMax, aMin, aMax);
+        // Safe margin: if THIS apple will trigger the next shrink, keep 1 cell away from wall
+        // so the player's head position (at the apple) stays inside the post-shrink arena.
+        const spawnMargin = (g.mode === "grind" && g.applesUntilShrink === 1) ? 1 : 0;
+        g.apple = randomPos(BOARD, [newHead, ...g.snake, ...(g.goldenApple ? [g.goldenApple] : [])], aMin + spawnMargin, aMax - spawnMargin, aMin + spawnMargin, aMax - spawnMargin);
         setScore(g.score);
         setCreditsEarned(g.creditsEarned);
         setScorePopKey((k) => k + 1);
@@ -1271,10 +1280,17 @@ export function SnakeShell({
 
       {/* Shrink warning banner */}
       {shrinkWarning && phase === "playing" && (
-        <div className="relative overflow-hidden border-b border-red-500/30 bg-red-500/10 py-1.5 text-center text-xs font-extrabold text-red-400"
-          style={{ animation: "snake-banner-in 0.3s ease forwards" }}>
-          ⚠ ACHTUNG — Wände schließen sich in {gameRef.current.applesUntilShrink} Apfel{gameRef.current.applesUntilShrink !== 1 ? "n" : ""}!
-        </div>
+        shrinkLastApple ? (
+          <div className="relative overflow-hidden border-b border-red-600/60 bg-red-600/20 py-2 text-center text-sm font-black text-red-300"
+            style={{ animation: "snake-banner-in 0.2s ease forwards" }}>
+            <span className="animate-pulse">🔴 LETZTE WARNUNG — NÄCHSTER APFEL SHRINK!</span>
+          </div>
+        ) : (
+          <div className="relative overflow-hidden border-b border-red-500/30 bg-red-500/10 py-1.5 text-center text-xs font-extrabold text-red-400"
+            style={{ animation: "snake-banner-in 0.3s ease forwards" }}>
+            ⚠ ACHTUNG — Wände schließen sich in {gameRef.current.applesUntilShrink} Apfel{gameRef.current.applesUntilShrink !== 1 ? "n" : ""}!
+          </div>
+        )
       )}
 
       {/* Bonus banner */}

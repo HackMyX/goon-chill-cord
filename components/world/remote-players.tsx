@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { Html } from "@react-three/drei";
 import { CharacterModel, type CharacterLimbRefs } from "@/components/world/character-model";
 import { angleDelta } from "@/components/world/player";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
@@ -35,6 +36,9 @@ interface RemotePlayersProps {
    * monsters. See combat-types.ts' RemotePlayerHandle for why there's no
    * `takeDamage` on it. */
   registryRef: RemotePlayerRegistry;
+  /** Max HP from admin character config — used to scale the remote player's
+   * HP bar. Defaults to 100 if not passed. */
+  maxHp?: number;
 }
 
 /**
@@ -46,7 +50,7 @@ interface RemotePlayersProps {
  * happens on that peer's own tab, not here — this is purely the visual
  * "I just watched someone else land a hit" cue for every other observer).
  */
-export function RemotePlayers({ selfUserId, registryRef }: RemotePlayersProps) {
+export function RemotePlayers({ selfUserId, registryRef, maxHp = 100 }: RemotePlayersProps) {
   const [peerIds, setPeerIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -59,7 +63,7 @@ export function RemotePlayers({ selfUserId, registryRef }: RemotePlayersProps) {
   return (
     <>
       {peerIds.map((id) => (
-        <RemotePlayerAvatar key={id} userId={id} registryRef={registryRef} />
+        <RemotePlayerAvatar key={id} userId={id} registryRef={registryRef} maxHp={maxHp} />
       ))}
     </>
   );
@@ -92,17 +96,15 @@ function useRemoteLoadout(userId: string): RemoteLoadout | null {
 function RemotePlayerAvatar({
   userId,
   registryRef,
+  maxHp,
 }: {
   userId: string;
   registryRef: RemotePlayerRegistry;
+  maxHp: number;
 }) {
   const loadout = useRemoteLoadout(userId);
   const group = useRef<THREE.Group>(null);
   const limbs = useRef<CharacterLimbRefs>(null);
-  // Mutable target, not React state — updated up to 10×/sec by the
-  // broadcast subscription below, read every render frame by useFrame.
-  // Same "ref for hot data, state for what actually needs a re-render"
-  // split Player.tsx uses throughout.
   const target = useRef({ x: 0, z: 0, yaw: 0 });
   const velocity = useRef({ vx: 0, vz: 0 });
   const lastSyncTime = useRef(0);
@@ -113,6 +115,10 @@ function RemotePlayerAvatar({
   const movingRef = useRef(false);
   const sprintingRef = useRef(false);
   const [bloodBursts, setBloodBursts] = useState<{ id: number }[]>([]);
+  // HP bar: updated from transform broadcasts (10Hz). Using state so the
+  // Html overlay re-renders when HP changes, but only at 10Hz max.
+  const [displayHp, setDisplayHp] = useState(maxHp);
+  const [isDead, setIsDead] = useState(false);
 
   // Registers this avatar into the shared registry Player.tsx's melee scan
   // reads — and into the bargain, gives the scan a live `getPosition()`
@@ -177,6 +183,8 @@ function RemotePlayerAvatar({
 
       movingRef.current = payload.moving;
       sprintingRef.current = payload.sprinting;
+      setDisplayHp(Math.max(0, Math.round(payload.hp)));
+      setIsDead(payload.hp <= 0);
     });
   }, [userId]);
 
@@ -222,6 +230,9 @@ function RemotePlayerAvatar({
 
   if (!loadout) return null;
 
+  const hpPct = Math.max(0, Math.min(100, (displayHp / maxHp) * 100));
+  const hpColor = hpPct > 50 ? "#4ade80" : hpPct > 20 ? "#facc15" : "#ef4444";
+
   return (
     <group ref={group} position={[0, 0, 0]}>
       <CharacterModel
@@ -235,6 +246,65 @@ function RemotePlayerAvatar({
           <BloodBurst />
         </group>
       ))}
+      {/* HP bar + name tag — HTML overlay in 3D space, always faces camera */}
+      <Html
+        position={[0, 2.6, 0]}
+        center
+        occlude={false}
+        distanceFactor={8}
+        style={{ pointerEvents: "none", userSelect: "none" }}
+      >
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "3px",
+          minWidth: "80px",
+          opacity: isDead ? 0.4 : 1,
+          transition: "opacity 0.3s",
+        }}>
+          {/* Username */}
+          <div style={{
+            color: "#e4e4e7",
+            fontSize: "11px",
+            fontWeight: 700,
+            fontFamily: "system-ui, sans-serif",
+            textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+            whiteSpace: "nowrap",
+            letterSpacing: "0.02em",
+          }}>
+            {loadout.username}
+          </div>
+          {/* HP bar */}
+          <div style={{
+            width: "72px",
+            height: "5px",
+            borderRadius: "3px",
+            background: "rgba(0,0,0,0.6)",
+            overflow: "hidden",
+            boxShadow: "0 0 0 1px rgba(255,255,255,0.12)",
+          }}>
+            <div style={{
+              width: `${hpPct}%`,
+              height: "100%",
+              background: hpColor,
+              borderRadius: "3px",
+              transition: "width 0.15s ease, background 0.3s ease",
+              boxShadow: `0 0 6px ${hpColor}88`,
+            }} />
+          </div>
+          {/* HP text */}
+          <div style={{
+            color: hpColor,
+            fontSize: "9px",
+            fontWeight: 700,
+            fontFamily: "monospace",
+            textShadow: "0 1px 3px rgba(0,0,0,0.9)",
+          }}>
+            {isDead ? "☠ TOT" : `${displayHp}/${maxHp}`}
+          </div>
+        </div>
+      </Html>
     </group>
   );
 }

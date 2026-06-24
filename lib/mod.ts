@@ -75,6 +75,14 @@ export const DEFAULT_CHAT_CONFIG: ChatConfig = {
   modsCanClear: true,
 };
 
+export interface ModeratorWithPermissions {
+  id: string;
+  username: string;
+  role: string;
+  override: Partial<ModPermissions> | null;
+  effective: ModPermissions;
+}
+
 export interface ModActionRow {
   id: string;
   modId: string;

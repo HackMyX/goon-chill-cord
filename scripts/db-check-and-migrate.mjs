@@ -109,6 +109,7 @@ async function main() {
   await addColumn("profiles", "support_banned", "boolean", "false");
   await addColumn("profiles", "temp_banned_until", "timestamptz", "NULL");
   await addColumn("profiles", "gender", "text", "'m'");
+  await addColumn("profiles", "mod_permissions_override", "jsonb", "NULL");
 
   // ── 3. world_config ───────────────────────────────────────────────────────
   console.log("\n=== world_config ===");

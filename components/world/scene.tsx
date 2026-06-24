@@ -221,7 +221,7 @@ export function Scene({
         characterConfig={characterConfig}
       />
 
-      <RemotePlayers selfUserId={userId} registryRef={remotePlayerRegistryRef} />
+      <RemotePlayers selfUserId={userId} registryRef={remotePlayerRegistryRef} maxHp={characterConfig.playerMaxHp} />
 
       <MonstersField
         userId={userId}
