@@ -4,11 +4,16 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
-import { DEFAULT_SITE_CONFIG, DEFAULT_TOPBAR_RIGHT_SLOTS, type SiteConfig } from "@/lib/site-config";
+import {
+  DEFAULT_SITE_CONFIG,
+  DEFAULT_TOPBAR_RIGHT_SLOTS,
+  DEFAULT_HOMEPAGE_CONFIG,
+  type SiteConfig,
+  type HomepageConfig,
+  ALL_HOMEPAGE_CARDS,
+} from "@/lib/site-config";
 // Import only server-safe name validation — NOT lib/site-logo-icons.ts, which
-// imports lucide-react "use client" components. When Next.js bundles this server
-// action into the /icon metadata route, that "use client" import triggers a hard
-// runtime error ("Attempted to call the default export of Icon.mjs from the server").
+// imports lucide-react "use client" components.
 import { VALID_ICON_NAMES, DEFAULT_ICON_NAME } from "@/lib/icon-svg-paths";
 
 interface SiteConfigRow {
@@ -28,18 +33,37 @@ interface SiteConfigRow {
   perk_regen_label: string | null;
   topbar_right_slots: string[] | null;
   site_version: string | null;
+  topbar_show_labels: boolean | null;
+  topbar_button_style: string | null;
+  homepage_config: Record<string, unknown> | null;
 }
 
-/** Falls back to the code defaults whenever the table doesn't exist yet or
- * is empty — same defensive pattern as every other config getter in this
- * project. Called from the root layout (app/layout.tsx) on every request,
- * so a brand-new install with no row yet still renders the default name/
- * icon instead of erroring out the entire site. */
+function parseHomepageConfig(raw: Record<string, unknown> | null): HomepageConfig {
+  const def = DEFAULT_HOMEPAGE_CONFIG;
+  if (!raw) return { ...def };
+  return {
+    heroTitle: typeof raw.heroTitle === "string" ? raw.heroTitle : def.heroTitle,
+    heroSubtitle: typeof raw.heroSubtitle === "string" ? raw.heroSubtitle : def.heroSubtitle,
+    showStats: typeof raw.showStats === "boolean" ? raw.showStats : def.showStats,
+    showLeaderboard: typeof raw.showLeaderboard === "boolean" ? raw.showLeaderboard : def.showLeaderboard,
+    showFeatureCards: typeof raw.showFeatureCards === "boolean" ? raw.showFeatureCards : def.showFeatureCards,
+    cardOrder: Array.isArray(raw.cardOrder) ? (raw.cardOrder as string[]).filter((id) => ALL_HOMEPAGE_CARDS.includes(id as never)) as typeof def.cardOrder : [...def.cardOrder],
+    disabledCards: Array.isArray(raw.disabledCards) ? (raw.disabledCards as string[]).filter((id) => ALL_HOMEPAGE_CARDS.includes(id as never)) as typeof def.disabledCards : [...def.disabledCards],
+    announcementEnabled: typeof raw.announcementEnabled === "boolean" ? raw.announcementEnabled : def.announcementEnabled,
+    announcementText: typeof raw.announcementText === "string" ? raw.announcementText : def.announcementText,
+    announcementColor: (["purple", "amber", "sky", "emerald", "red"] as const).includes(raw.announcementColor as never)
+      ? (raw.announcementColor as typeof def.announcementColor)
+      : def.announcementColor,
+  };
+}
+
 export async function getSiteConfig(): Promise<SiteConfig> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("site_config")
-    .select("site_name, logo_url, logo_icon_name, starting_credits, currency_name, damage_label, armor_label, rarity_normal_label, rarity_selten_label, rarity_mythisch_label, rarity_ultra_label, perk_speed_label, perk_jump_label, perk_regen_label, topbar_right_slots, site_version")
+    .select(
+      "site_name, logo_url, logo_icon_name, starting_credits, currency_name, damage_label, armor_label, rarity_normal_label, rarity_selten_label, rarity_mythisch_label, rarity_ultra_label, perk_speed_label, perk_jump_label, perk_regen_label, topbar_right_slots, site_version, topbar_show_labels, topbar_button_style, homepage_config"
+    )
     .eq("id", "default")
     .maybeSingle();
 
@@ -69,6 +93,9 @@ export async function getSiteConfig(): Promise<SiteConfig> {
       ? row.topbar_right_slots
       : [...DEFAULT_TOPBAR_RIGHT_SLOTS],
     siteVersion: row.site_version?.trim() || "v1.0.0",
+    topbarShowLabels: typeof row.topbar_show_labels === "boolean" ? row.topbar_show_labels : false,
+    topbarButtonStyle: row.topbar_button_style === "pill" ? "pill" : "icon",
+    homepageConfig: parseHomepageConfig(row.homepage_config),
   };
 }
 
@@ -118,6 +145,25 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
   const perkJump  = (input.perkLabels?.jump  ?? "").trim().slice(0, 20) || DEFAULT_SITE_CONFIG.perkLabels.jump;
   const perkRegen = (input.perkLabels?.regen ?? "").trim().slice(0, 20) || DEFAULT_SITE_CONFIG.perkLabels.regen;
 
+  const hpCfg: HomepageConfig = {
+    heroTitle: (input.homepageConfig?.heroTitle ?? "").trim().slice(0, 80),
+    heroSubtitle: (input.homepageConfig?.heroSubtitle ?? "").trim().slice(0, 200) || DEFAULT_HOMEPAGE_CONFIG.heroSubtitle,
+    showStats: input.homepageConfig?.showStats ?? true,
+    showLeaderboard: input.homepageConfig?.showLeaderboard ?? true,
+    showFeatureCards: input.homepageConfig?.showFeatureCards ?? true,
+    cardOrder: Array.isArray(input.homepageConfig?.cardOrder)
+      ? input.homepageConfig.cardOrder.filter((id) => ALL_HOMEPAGE_CARDS.includes(id as never))
+      : [...ALL_HOMEPAGE_CARDS],
+    disabledCards: Array.isArray(input.homepageConfig?.disabledCards)
+      ? input.homepageConfig.disabledCards.filter((id) => ALL_HOMEPAGE_CARDS.includes(id as never))
+      : [],
+    announcementEnabled: input.homepageConfig?.announcementEnabled ?? false,
+    announcementText: (input.homepageConfig?.announcementText ?? "").trim().slice(0, 300),
+    announcementColor: (["purple", "amber", "sky", "emerald", "red"] as const).includes(input.homepageConfig?.announcementColor as never)
+      ? (input.homepageConfig!.announcementColor)
+      : "purple",
+  };
+
   const admin = createAdminClient();
   const { error } = await admin.from("site_config").upsert({
     id: "default",
@@ -139,6 +185,9 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
       ? input.topbarRightSlots
       : null,
     site_version: input.siteVersion?.trim() || "v1.0.0",
+    topbar_show_labels: input.topbarShowLabels ?? false,
+    topbar_button_style: input.topbarButtonStyle ?? "icon",
+    homepage_config: hpCfg,
     updated_at: new Date().toISOString(),
   });
 
@@ -146,12 +195,6 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
     return { success: false, error: "Speichern fehlgeschlagen — ist die site_config-Migration eingespielt?" };
   }
 
-  // Every page on the site renders TopBar (fed by the root layout's
-  // SiteConfigProvider) — revalidating just "/" wouldn't be enough since
-  // Next.js path revalidation isn't recursive across unrelated routes.
-  // The layout itself isn't a path Next lets you revalidate directly, but
-  // revalidating "/" with layout: "layout" busts the shared root layout's
-  // cache for every route under it in one call.
   revalidatePath("/", "layout");
   return { success: true };
 }

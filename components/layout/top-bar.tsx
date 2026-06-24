@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import {
   ShoppingBag,
   Gavel,
@@ -12,6 +13,7 @@ import {
   ShieldAlert,
   Shield,
   ClipboardList,
+  Coins,
 } from "lucide-react";
 import { IconButton } from "@/components/layout/icon-button";
 import { GamesMenu } from "@/components/layout/games-menu";
@@ -28,13 +30,10 @@ interface TopBarProps {
   credits: number;
   inventoryCount?: number;
   streakDays?: number;
-  /** Forwarded to LiveClock — see its own docs for why this is optional. */
   onCreditsChange?: (newCredits: number) => void;
   isAdmin?: boolean;
   isModerator?: boolean;
-  /** Passed to enable realtime inventory-badge updates. */
   userId?: string;
-  /** Pending incoming/active trades — shown as badge on Trading button. */
   pendingTradesCount?: number;
 }
 
@@ -50,17 +49,21 @@ export function TopBar({
 }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
-  const { siteName, logoUrl, logoIconName, currencyName, topbarRightSlots, siteVersion } = useSiteConfig();
+  const {
+    siteName,
+    logoUrl,
+    logoIconName,
+    currencyName,
+    topbarRightSlots,
+    siteVersion,
+    topbarShowLabels,
+  } = useSiteConfig();
   const LogoIcon = resolveSiteLogoIcon(logoIconName);
 
-  // Realtime inventory count — starts from the server-fetched prop and stays
-  // in sync without a full page reload via a lightweight Supabase channel.
   const [liveInventoryCount, setLiveInventoryCount] = useState(inventoryCount);
   const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
   useEffect(() => { setLiveInventoryCount(inventoryCount); }, [inventoryCount]);
 
-  // Self-resolve userId when not provided — avoids threading it through
-  // every page/shell prop just to keep the inventory badge realtime.
   useEffect(() => {
     if (userId) { setResolvedUserId(userId); return; }
     const supabase = createClient();
@@ -88,14 +91,10 @@ export function TopBar({
     return () => { supabase.removeChannel(channel); };
   }, [resolvedUserId]);
 
-  // Active slots — fall back to defaults if config is empty or null
   const slots: string[] =
     Array.isArray(topbarRightSlots) && topbarRightSlots.length > 0
       ? topbarRightSlots
       : [...DEFAULT_TOPBAR_RIGHT_SLOTS];
-
-  // Separate "wide-only" slots (hidden on small screens) from "always" slots
-  const wideOnlySlots = new Set(["shop", "auctions", "trading", "community"]);
 
   function renderSlot(slot: string) {
     switch (slot) {
@@ -106,9 +105,27 @@ export function TopBar({
           </div>
         );
       case "shop":
-        return <IconButton key="shop" icon={ShoppingBag} label="Shop" href="/shop" className="hidden lg:flex" />;
+        return (
+          <IconButton
+            key="shop"
+            icon={ShoppingBag}
+            label="Shop"
+            href="/shop"
+            showLabel={topbarShowLabels}
+            className="hidden lg:flex"
+          />
+        );
       case "auctions":
-        return <IconButton key="auctions" icon={Gavel} label="Auktionshaus" href="/auctions" className="hidden lg:flex" />;
+        return (
+          <IconButton
+            key="auctions"
+            icon={Gavel}
+            label="Auktionen"
+            href="/auctions"
+            showLabel={topbarShowLabels}
+            className="hidden lg:flex"
+          />
+        );
       case "trading":
         return (
           <IconButton
@@ -117,13 +134,32 @@ export function TopBar({
             label="Trading"
             href="/trading"
             badge={pendingTradesCount > 0 ? pendingTradesCount : undefined}
+            showLabel={topbarShowLabels}
             className="hidden lg:flex"
           />
         );
       case "community":
-        return <IconButton key="community" icon={Users} label="Community" href="/community" className="hidden lg:flex" />;
+        return (
+          <IconButton
+            key="community"
+            icon={Users}
+            label="Community"
+            href="/community"
+            showLabel={topbarShowLabels}
+            className="hidden lg:flex"
+          />
+        );
       case "surveys":
-        return <IconButton key="surveys" icon={ClipboardList} label="Umfragen" href="/surveys" className="hidden lg:flex" />;
+        return (
+          <IconButton
+            key="surveys"
+            icon={ClipboardList}
+            label="Umfragen"
+            href="/surveys"
+            showLabel={topbarShowLabels}
+            className="hidden lg:flex"
+          />
+        );
       case "wardrobe":
         return (
           <IconButton
@@ -132,12 +168,21 @@ export function TopBar({
             label="Garderobe"
             href="/garderobe"
             badge={liveInventoryCount > 0 ? liveInventoryCount : undefined}
+            showLabel={topbarShowLabels}
           />
         );
       case "notifications":
         return <NotificationsBell key="notifications" />;
       case "profile":
-        return <IconButton key="profile" icon={UserRound} label="Profil" href="/account" />;
+        return (
+          <IconButton
+            key="profile"
+            icon={UserRound}
+            label="Profil"
+            href="/account"
+            showLabel={topbarShowLabels}
+          />
+        );
       case "logout":
         return <LogoutButton key="logout" />;
       default:
@@ -145,16 +190,10 @@ export function TopBar({
     }
   }
 
-  // Wide-only slots that aren't "games" get grouped so they share the
-  // `hidden lg:flex` wrapper and the gap between them stays consistent.
-  // We render them individually now (each slot has its own hidden class),
-  // so grouping is handled per slot above.
-  void wideOnlySlots; // referenced in renderSlot
-
   return (
-    <header className="sticky top-0 z-50 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-b border-white/5 bg-[#030305]/95 px-4 py-2 backdrop-blur">
-      {/* Left: version badge + logo + credits */}
-      <div className="flex items-center gap-3 justify-self-start">
+    <header className="sticky top-0 z-50 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-b border-white/[0.06] bg-[#030305]/95 px-4 py-2 backdrop-blur-md">
+      {/* Left: version + logo + credits + admin buttons */}
+      <div className="flex items-center gap-2.5 justify-self-start">
         <Link
           href="/patchnotes"
           onMouseEnter={sound.hover}
@@ -185,22 +224,35 @@ export function TopBar({
           </span>
           <span className="logo-text hidden font-extrabold tracking-tight sm:inline">{siteName}</span>
         </Link>
-        <div className="flex items-center gap-1 rounded-full bg-purple-600/90 px-3 py-1 text-sm font-semibold text-white">
-          <span>{creditsLabel} {currencyName}</span>
-        </div>
+
+        {/* Credits pill — animates on change */}
+        <motion.div
+          key={credits}
+          initial={{ scale: 1.1 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", stiffness: 400, damping: 20 }}
+          className="flex items-center gap-1.5 rounded-full bg-purple-600/90 px-3 py-1 text-sm font-semibold text-white shadow-[0_0_10px_rgba(147,51,234,0.25)]"
+        >
+          <Coins className="h-3.5 w-3.5 shrink-0 text-purple-200" />
+          <span className="tabular-nums">{creditsLabel}</span>
+          <span className="text-xs text-purple-200/70">{currencyName}</span>
+        </motion.div>
+
         {isAdmin && (
           <>
             <IconButton
               icon={ShieldAlert}
               label="Admin-Panel"
               href="/admin"
-              className="bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200"
+              showLabel={topbarShowLabels}
+              className="bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border-0"
             />
             <IconButton
               icon={Shield}
               label="Mod-Panel"
               href="/mod"
-              className="bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200"
+              showLabel={topbarShowLabels}
+              className="bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
             />
           </>
         )}
@@ -209,17 +261,18 @@ export function TopBar({
             icon={Shield}
             label="Mod-Panel"
             href="/mod"
-            className="bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200"
+            showLabel={topbarShowLabels}
+            className="bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
           />
         )}
       </div>
 
-      {/* Center: clock + streak — always its own column, never overlapped */}
+      {/* Center: clock + streak */}
       <div className="justify-self-center">
         <LiveClock streakDays={streakDays} onClaimed={onCreditsChange} />
       </div>
 
-      {/* Right: configurable slot order */}
+      {/* Right: configurable slots */}
       <div className="flex items-center gap-1.5 justify-self-end">
         {slots.map((slot) => renderSlot(slot))}
       </div>

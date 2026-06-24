@@ -1,58 +1,70 @@
 import { DEFAULT_SITE_LOGO_ICON } from "@/lib/site-logo-icons";
 
-/**
- * Sitewide branding — the name shown top-left in components/layout/top-
- * bar.tsx (and as the browser tab title, app/layout.tsx's generateMetadata,
- * and the logged-out homepage app/page.tsx) plus a logo, either a custom
- * image or one of lib/site-logo-icons.ts' curated icon choices. Same "code
- * defaults, DB override" shape as every other admin config in this
- * project; see lib/actions/site-config.ts for the fetch-and-fallback.
- */
+export type HomepageCardId =
+  | "shop" | "cases" | "garderobe" | "world" | "snake" | "mine"
+  | "don" | "community" | "trading" | "auctions" | "surveys";
+
+export interface HomepageConfig {
+  heroTitle: string;
+  heroSubtitle: string;
+  showStats: boolean;
+  showLeaderboard: boolean;
+  showFeatureCards: boolean;
+  /** Ordered list of ALL card IDs — both enabled and disabled. */
+  cardOrder: HomepageCardId[];
+  /** IDs that are currently hidden from the homepage. */
+  disabledCards: HomepageCardId[];
+  announcementEnabled: boolean;
+  announcementText: string;
+  announcementColor: "purple" | "amber" | "sky" | "emerald" | "red";
+}
+
+export const ALL_HOMEPAGE_CARDS: HomepageCardId[] = [
+  "shop", "cases", "garderobe", "world", "snake", "mine",
+  "don", "community", "trading", "auctions", "surveys",
+];
+
+export const DEFAULT_HOMEPAGE_CONFIG: HomepageConfig = {
+  heroTitle: "",
+  heroSubtitle: "Tritt der Community bei, sammle Credits, öffne Cases und levele deinen Charakter hoch.",
+  showStats: true,
+  showLeaderboard: true,
+  showFeatureCards: true,
+  cardOrder: [...ALL_HOMEPAGE_CARDS],
+  disabledCards: [],
+  announcementEnabled: false,
+  announcementText: "",
+  announcementColor: "purple",
+};
+
 export interface SiteConfig {
   siteName: string;
-  /** Takes priority over `logoIconName` when set — a custom hosted image
-   * URL (this project has no file-upload/storage pipeline, so the admin
-   * editor takes a URL rather than a file picker). Null/empty = use the
-   * icon below instead. */
+  /** Takes priority over `logoIconName` when set — a custom hosted image URL. */
   logoUrl: string | null;
-  /** One of lib/site-logo-icons.ts' SITE_LOGO_ICONS keys — the "choose
-   * from many" logo option when there's no custom image URL. Always a
-   * valid fallback (defaults to the original Gamepad2), so the logo
-   * never has a genuinely empty state. */
+  /** One of lib/site-logo-icons.ts' SITE_LOGO_ICONS keys. */
   logoIconName: string;
-  /** Credits awarded to a new user upon first signup. Read by the
-   * handle_new_user PostgreSQL trigger — run scripts/add-starting-credits.mjs
-   * once to add the column and update the trigger. */
+  /** Credits awarded to a new user upon first signup. */
   startingCredits: number;
-  /** Currency label shown after every credit amount sitewide (TopBar,
-   * shop prices, notifications, audit log, ...) — e.g. "CR", "Coins",
-   * "Gold". Every formatted-amount call site reads this instead of a
-   * hardcoded string, both client (useSiteConfig()) and server (action
-   * functions call getSiteConfig() directly since they build persisted
-   * notification/audit text outside any React tree). */
+  /** Currency label shown after every credit amount sitewide — e.g. "CR", "Coins". */
   currencyName: string;
-  /** Weapon-damage stat abbreviation shown in item badges/tooltips
-   * (components/items/item-stat-badges.tsx, lib/combat.ts's
-   * formatDamage()) — e.g. "DMG", "ATK". */
+  /** Weapon-damage stat abbreviation — e.g. "DMG", "ATK". */
   damageLabel: string;
-  /** Armor stat abbreviation shown the same places — e.g. "AP", "DEF",
-   * "AD". */
+  /** Armor stat abbreviation — e.g. "AP", "DEF". */
   armorLabel: string;
-  /** Custom display names for the four rarity tiers. When set via the
-   * admin panel, every badge, tooltip and label sitewide switches to
-   * these names — useful for themes or alternative naming schemes. */
+  /** Custom display names for the four rarity tiers. */
   rarityLabels: { normal: string; selten: string; mythisch: string; ultra: string };
-  /** Display labels for the three perk types that items can have. */
+  /** Display labels for the three perk types. */
   perkLabels: { speed: string; jump: string; regen: string };
-  /** Ordered list of right-side TopBar slot keys. Controls which buttons
-   * appear on the right side of the TopBar and in what order.
-   * Keys: 'games' | 'shop' | 'auctions' | 'trading' | 'community' | 'surveys' |
-   *       'wardrobe' | 'notifications' | 'profile' | 'logout'
-   * null/empty = use DEFAULT_TOPBAR_RIGHT_SLOTS. */
+  /** Ordered list of right-side TopBar slot keys. */
   topbarRightSlots: string[];
-  /** Current site version string shown as badge in the TopBar (e.g. "v1.2.0").
-   * Clicking it navigates to /patchnotes. Set manually via Admin → Branding. */
+  /** Current site version string shown as badge in the TopBar. */
   siteVersion: string;
+  /** Whether to show button labels in the TopBar (icon + text vs icon only). */
+  topbarShowLabels: boolean;
+  /** Visual style of TopBar buttons: 'icon' = circle icon only, 'pill' = icon + label. */
+  topbarButtonStyle: "icon" | "pill";
+  /** Full homepage / landing page configuration. */
+  homepageConfig: HomepageConfig;
 }
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
@@ -67,10 +79,13 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   perkLabels: { speed: "Tempo", jump: "Sprung", regen: "Regen" },
   topbarRightSlots: ["games", "shop", "auctions", "trading", "community", "wardrobe", "notifications", "profile", "logout"],
   siteVersion: "v1.0.0",
+  topbarShowLabels: false,
+  topbarButtonStyle: "icon",
+  homepageConfig: DEFAULT_HOMEPAGE_CONFIG,
 };
 
 export const DEFAULT_TOPBAR_RIGHT_SLOTS = [
-  "games", "shop", "auctions", "trading", "community", "wardrobe", "notifications", "profile", "logout",
+  "games", "shop", "auctions", "trading", "community", "surveys", "wardrobe", "notifications", "profile", "logout",
 ] as const;
 
 export type TopbarSlotKey = typeof DEFAULT_TOPBAR_RIGHT_SLOTS[number];
