@@ -7,6 +7,7 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import type { PatchNote, PatchNoteType } from "@/lib/patchnotes";
 import { NOTE_TYPE_META, SECTION_TYPE_META } from "@/lib/patchnotes";
+import { dismissPatchnote } from "@/lib/actions/patchnotes";
 
 const LS_KEY_PREFIX = "patchnote_dismissed_";
 
@@ -32,10 +33,11 @@ export function PatchnotePopup({ note }: { note: PatchNote }) {
     setVisible(false);
   }
 
-  // "Gelesen" = dauerhaft nicht mehr anzeigen
+  // "Gelesen" = dauerhaft nicht mehr anzeigen (DB + localStorage)
   function dismissPermanently() {
     localStorage.setItem(`${LS_KEY_PREFIX}${note.id}`, "1");
     setVisible(false);
+    dismissPatchnote(note.id);
   }
 
   const meta = NOTE_TYPE_META[note.noteType];

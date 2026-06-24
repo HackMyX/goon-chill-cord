@@ -32,7 +32,8 @@ function rowToNote(r: Record<string, unknown>): PatchNote {
   };
 }
 
-/** Returns the latest published note with show_popup=true, or null. */
+/** Returns the latest published note with show_popup=true, or null.
+ *  Returns null if the current user has already permanently dismissed it. */
 export async function getActivePopupNote(): Promise<PatchNote | null> {
   unstable_noStore(); // never serve stale popup data from cache
   const admin = createAdminClient();
@@ -46,8 +47,36 @@ export async function getActivePopupNote(): Promise<PatchNote | null> {
       .order("published_at", { ascending: false })
       .limit(1)
       .single();
-    return data ? rowToNote(data as Record<string, unknown>) : null;
+    if (!data) return null;
+    const note = rowToNote(data as Record<string, unknown>);
+
+    // Check if this user has already permanently dismissed this exact note
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("dismissed_patchnote_id")
+        .eq("id", user.id)
+        .single();
+      if ((profile as unknown as { dismissed_patchnote_id?: string | null })?.dismissed_patchnote_id === note.id) {
+        return null;
+      }
+    }
+
+    return note;
   } catch { return null; }
+}
+
+/** Permanently dismisses the active patchnote popup for the current user. */
+export async function dismissPatchnote(noteId: string): Promise<void> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase
+    .from("profiles")
+    .update({ dismissed_patchnote_id: noteId })
+    .eq("id", user.id);
 }
 
 /** Public — returns only published notes, newest first, pinned first. */
