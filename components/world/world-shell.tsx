@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
-import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf, Settings, RotateCcw, Maximize2 } from "lucide-react";
+import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf, Settings, RotateCcw } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { Scene } from "@/components/world/scene";
 import { DeathScreen } from "@/components/world/death-screen";
@@ -191,45 +191,6 @@ export function WorldShell({
     };
   }, []);
 
-  // Fullscreen — required to hide the browser URL bar in landscape mobile.
-  // requestFullscreen() must be called inside a user-gesture handler.
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const fullscreenRequestedRef = useRef(false);
-
-  const enterFullscreen = useCallback(async () => {
-    const el = document.documentElement;
-    try {
-      if (el.requestFullscreen) await el.requestFullscreen();
-      else if ((el as unknown as { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen)
-        await (el as unknown as { webkitRequestFullscreen: () => Promise<void> }).webkitRequestFullscreen();
-    } catch {
-      // Safari < 16.4 and some browsers deny fullscreen for non-video — ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    const onFsChange = () => {
-      const fs = !!(document.fullscreenElement ||
-        (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement);
-      setIsFullscreen(fs);
-    };
-    document.addEventListener("fullscreenchange", onFsChange);
-    document.addEventListener("webkitfullscreenchange", onFsChange);
-    return () => {
-      document.removeEventListener("fullscreenchange", onFsChange);
-      document.removeEventListener("webkitfullscreenchange", onFsChange);
-    };
-  }, []);
-
-  // Exit fullscreen when leaving the world page
-  useEffect(() => {
-    return () => {
-      if (document.fullscreenElement ||
-          (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement) {
-        document.exitFullscreen?.().catch(() => {});
-      }
-    };
-  }, []);
 
   const cancelDisconnectCountdown = useCallback(() => {
     if (disconnectTimeoutRef.current) {
@@ -521,7 +482,7 @@ export function WorldShell({
   }, []);
 
   return (
-    <div className="flex h-dvh flex-col">
+    <div className={isMobile && !showPortraitGate ? "fixed inset-0 z-40 bg-black" : "flex h-dvh flex-col"}>
       {/* Portrait-mode gate — only shown on touch devices in portrait */}
       {showPortraitGate && (
         <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 bg-black/95 px-6 text-center backdrop-blur">
@@ -532,38 +493,23 @@ export function WorldShell({
           </div>
         </div>
       )}
-      <TopBar
-        credits={credits}
-        streakDays={streakDays}
-        inventoryCount={inventoryCount}
-        onCreditsChange={setCredits}
-        isAdmin={isAdmin}
-        isModerator={isModerator}
-      />
+
+      {/* TopBar — hidden on mobile landscape so the full screen is usable */}
+      {(!isMobile || showPortraitGate) && (
+        <TopBar
+          credits={credits}
+          streakDays={streakDays}
+          inventoryCount={inventoryCount}
+          onCreditsChange={setCredits}
+          isAdmin={isAdmin}
+          isModerator={isModerator}
+        />
+      )}
 
       <div
         ref={canvasWrapRef}
-        className="relative min-h-0 flex-1"
-        onTouchStart={() => {
-          // Auto-enter fullscreen on first touch in landscape so the URL bar
-          // disappears. requestFullscreen() is only allowed inside a user gesture.
-          if (isMobile && !fullscreenRequestedRef.current) {
-            fullscreenRequestedRef.current = true;
-            enterFullscreen();
-          }
-        }}
+        className={isMobile && !showPortraitGate ? "absolute inset-0" : "relative min-h-0 flex-1"}
       >
-        {/* Fullscreen button — shown on mobile landscape until fullscreen is active */}
-        {isMobile && !isFullscreen && !showPortraitGate && (
-          <button
-            onClick={enterFullscreen}
-            className="absolute top-3 left-1/2 z-30 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-white/20 bg-black/60 px-3 py-1 text-[11px] font-semibold text-zinc-300 backdrop-blur-sm animate-pulse"
-          >
-            <Maximize2 className="h-3 w-3" />
-            Tippen für Vollbild
-          </button>
-        )}
-
         {/* Settings button — only visible in ESC/pause mode, not during active play */}
         {!cameraControls.locked && (
           <button
