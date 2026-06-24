@@ -186,12 +186,20 @@ export function TopBar({
           <span>{creditsLabel} {currencyName}</span>
         </div>
         {isAdmin && (
-          <IconButton
-            icon={ShieldAlert}
-            label="Admin-Panel"
-            href="/admin"
-            className="bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200"
-          />
+          <>
+            <IconButton
+              icon={ShieldAlert}
+              label="Admin-Panel"
+              href="/admin"
+              className="bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200"
+            />
+            <IconButton
+              icon={Shield}
+              label="Mod-Panel"
+              href="/mod"
+              className="bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200"
+            />
+          </>
         )}
         {isModerator && !isAdmin && (
           <IconButton

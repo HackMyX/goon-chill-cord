@@ -275,10 +275,10 @@ export function AdminShell({
             href="/mod"
             onMouseEnter={sound.hover}
             onClick={sound.click}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300 hover:bg-sky-500/20"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/40 bg-sky-500/15 px-4 py-1.5 text-sm font-bold text-sky-300 shadow-[0_0_12px_rgba(14,165,233,0.15)] transition-all hover:border-sky-400/70 hover:bg-sky-500/25 hover:shadow-[0_0_18px_rgba(14,165,233,0.3)] hover:text-sky-200"
           >
-            <Shield className="h-3.5 w-3.5" />
-            Mod-Panel
+            <Shield className="h-4 w-4" />
+            Mod-Panel — Verwarnungen, Bans &amp; mehr
           </Link>
         </div>
         <h1 className="glow-text mb-6 text-2xl font-extrabold text-zinc-50">Admin-Panel</h1>
