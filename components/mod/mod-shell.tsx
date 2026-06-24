@@ -14,9 +14,9 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { TopBar } from "@/components/layout/top-bar";
 import {
   modWarnUser, modAddNote, modTempBan, modLiftBan, modCloseTicket, modAddCredits,
-  modRemoveWarning, getModUserHistory,
+  modRemoveWarning, getModUserHistory, getTicketMessages, modMarkInProgress, modReplyToTicket,
 } from "@/lib/actions/mod";
-import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket } from "@/lib/mod";
+import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage } from "@/lib/mod";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -601,7 +601,36 @@ function UsersTab({ users: initialUsers, perms, onRefresh }: {
 }
 
 // ---------------------------------------------------------------------------
-// Ticket Item — own state so multiple tickets don't share reason input
+// Category + Priority badges
+// ---------------------------------------------------------------------------
+
+function CategoryBadge({ category }: { category: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    bug:        { label: "Bug",        cls: "bg-red-500/20 text-red-300 border-red-500/30" },
+    suggestion: { label: "Vorschlag",  cls: "bg-sky-500/20 text-sky-300 border-sky-500/30" },
+    other:      { label: "Sonstiges",  cls: "bg-zinc-700/50 text-zinc-400 border-zinc-600/40" },
+  };
+  const { label, cls } = map[category] ?? { label: category, cls: "bg-zinc-700/50 text-zinc-400 border-zinc-600/40" };
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${cls}`}>{label}</span>
+  );
+}
+
+function PriorityBadge({ priority }: { priority: string }) {
+  if (!priority || priority === "normal") return null;
+  const map: Record<string, { label: string; cls: string }> = {
+    low:    { label: "Niedrig", cls: "bg-zinc-700/50 text-zinc-500 border-zinc-600/40" },
+    high:   { label: "Hoch",    cls: "bg-orange-500/20 text-orange-300 border-orange-500/30" },
+    urgent: { label: "Dringend", cls: "bg-red-500/25 text-red-300 border-red-500/40" },
+  };
+  const { label, cls } = map[priority] ?? { label: priority, cls: "bg-zinc-700/50 text-zinc-400 border-zinc-600/40" };
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${cls}`}>{label}</span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ticket Item — own state, thread messages, category/priority, in_progress
 // ---------------------------------------------------------------------------
 
 function TicketItem({ t, perms, onRefresh, defaultOpen }: {
@@ -611,46 +640,90 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
-  const [reason, setReason] = useState("");
+  const [closeReason, setCloseReason] = useState("");
+  const [replyText, setReplyText] = useState("");
+  const [msgs, setMsgs] = useState<TicketMessage[] | null>(null);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
-  const isOpen = t.status === "open";
+  const [flash, setFlash] = useState<{ text: string; ok: boolean } | null>(null);
+  const isActionable = t.status === "open" || t.status === "in_progress";
+  const isInProgress = t.status === "in_progress";
+  const isClosed = t.status === "closed";
   const sound = useSoundManager();
+
+  useEffect(() => {
+    if (!open || msgs !== null) return;
+    setLoadingMsgs(true);
+    getTicketMessages(t.id).then((list) => { setMsgs(list); setLoadingMsgs(false); });
+  }, [open, t.id, msgs]);
+
+  function showFlash(text: string, ok: boolean) {
+    setFlash({ text, ok });
+    if (ok) sound.win(); else sound.error();
+    setTimeout(() => setFlash(null), 3000);
+  }
 
   function handleClose() {
     sound.click();
     startTransition(async () => {
-      const res = await modCloseTicket(t.id, reason);
-      if (res.success) {
-        setMessage({ text: "Ticket geschlossen.", ok: true });
-        sound.win();
-        setReason("");
-        onRefresh();
-      } else {
-        setMessage({ text: res.error ?? "Fehler.", ok: false });
-        sound.error();
-      }
-      setTimeout(() => setMessage(null), 3000);
+      const res = await modCloseTicket(t.id, closeReason);
+      if (res.success) { showFlash("Ticket geschlossen.", true); setCloseReason(""); onRefresh(); }
+      else showFlash(res.error ?? "Fehler.", false);
     });
   }
 
+  function handleInProgress() {
+    sound.click();
+    startTransition(async () => {
+      const res = await modMarkInProgress(t.id);
+      if (res.success) { showFlash("Als 'In Bearbeitung' markiert.", true); onRefresh(); }
+      else showFlash(res.error ?? "Fehler.", false);
+    });
+  }
+
+  function handleReply() {
+    if (!replyText.trim()) return;
+    sound.click();
+    startTransition(async () => {
+      const res = await modReplyToTicket(t.id, replyText);
+      if (res.success) {
+        showFlash("Antwort gesendet.", true);
+        setReplyText("");
+        setMsgs(null); // trigger reload
+      } else showFlash(res.error ?? "Fehler.", false);
+    });
+  }
+
+  const statusCls = isActionable
+    ? isInProgress
+      ? "border-amber-500/20 bg-amber-500/5"
+      : "border-purple-500/20 bg-purple-500/5"
+    : "border-white/8 bg-white/[0.02]";
+
+  const dotCls = isActionable
+    ? isInProgress
+      ? "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]"
+      : "bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]"
+    : "bg-zinc-600";
+
   return (
-    <div className={`overflow-hidden rounded-2xl border transition-colors ${
-      isOpen ? "border-purple-500/20 bg-purple-500/5" : "border-white/8 bg-white/[0.02]"
-    }`}>
+    <div className={`overflow-hidden rounded-2xl border transition-colors ${statusCls}`}>
       <button
         className="flex w-full items-center justify-between gap-2 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.02]"
         onClick={() => setOpen((o) => !o)}
       >
         <div className="flex min-w-0 items-center gap-2.5">
-          <div className={`h-2 w-2 shrink-0 rounded-full ${
-            isOpen ? "bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]" : "bg-zinc-600"
-          }`} />
+          <div className={`h-2 w-2 shrink-0 rounded-full ${dotCls}`} />
           <span className="truncate font-semibold text-zinc-100">{t.subject}</span>
           <span className="hidden text-[11px] text-zinc-500 sm:block">von {t.username}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {isOpen && (
+          {isInProgress && (
+            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+              In Bearb.
+            </span>
+          )}
+          {t.status === "open" && (
             <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
               Offen
             </span>
@@ -662,15 +735,51 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
 
       {open && (
         <div className="border-t border-white/5 px-4 pb-4 pt-3">
-          <p className="mb-2 text-[11px] text-zinc-500">
-            von <strong className="text-zinc-300">{t.username}</strong>
-            {" · "}{new Date(t.createdAt).toLocaleString("de-DE")}
-          </p>
+          {/* Meta */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-zinc-500">
+              von <strong className="text-zinc-300">{t.username}</strong>
+              {" · "}{new Date(t.createdAt).toLocaleString("de-DE")}
+            </span>
+            <CategoryBadge category={t.category} />
+            <PriorityBadge priority={t.priority} />
+          </div>
+
+          {/* Original message */}
           <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-3">
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{t.message}</p>
           </div>
 
-          {!isOpen && t.closedByUsername && (
+          {/* Thread messages */}
+          {loadingMsgs && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-zinc-600">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />Lade Nachrichten…
+            </div>
+          )}
+          {msgs && msgs.length > 0 && (
+            <div className="mt-3 flex flex-col gap-2">
+              {msgs.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex gap-2.5 ${m.isStaff ? "flex-row-reverse" : "flex-row"}`}
+                >
+                  <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                    m.isStaff
+                      ? "rounded-tr-sm bg-sky-500/20 text-sky-100"
+                      : "rounded-tl-sm bg-white/5 text-zinc-300"
+                  }`}>
+                    <p className="whitespace-pre-wrap">{m.message}</p>
+                    <p className={`mt-1 text-[10px] ${m.isStaff ? "text-sky-400/70 text-right" : "text-zinc-600"}`}>
+                      {m.isStaff ? "Staff" : m.username} · {timeAgo(m.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Closed status */}
+          {isClosed && t.closedByUsername && (
             <div className="mt-3 flex items-center gap-2 rounded-xl border border-zinc-700/50 bg-zinc-800/30 px-3 py-2 text-[11px] text-zinc-500">
               <Check className="h-3 w-3 shrink-0 text-emerald-500" />
               Geschlossen von <strong className="text-zinc-300">{t.closedByUsername}</strong>
@@ -678,29 +787,58 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
             </div>
           )}
 
-          {isOpen && perms.canCloseTickets && (
-            <div className="mt-3 flex flex-col gap-2">
-              <textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                rows={2}
-                placeholder="Abschluss-Notiz (optional)…"
-                className="resize-none rounded-xl border border-white/8 bg-black/30 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-purple-400/40 placeholder:text-zinc-600"
-              />
-              <div className="flex items-center gap-2">
+          {/* Actions for open/in_progress tickets */}
+          {isActionable && perms.canCloseTickets && (
+            <div className="mt-4 space-y-2">
+              {/* Reply */}
+              <div className="flex gap-2">
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  rows={2}
+                  placeholder="Antwort an den Nutzer…"
+                  className="flex-1 resize-none rounded-xl border border-white/8 bg-black/20 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-sky-400/40 placeholder:text-zinc-600"
+                />
                 <button
-                  onClick={handleClose} disabled={pending}
-                  className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
+                  onClick={handleReply} disabled={pending || !replyText.trim()}
+                  className="flex shrink-0 items-center gap-1.5 self-end rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-sky-500 disabled:opacity-50"
                 >
                   {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                  Ticket schließen
+                  Antworten
                 </button>
-                {message && (
-                  <span className={`text-xs font-medium ${message.ok ? "text-emerald-400" : "text-red-400"}`}>
-                    {message.text}
-                  </span>
-                )}
               </div>
+
+              {/* Close + In Progress */}
+              <div className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
+                <textarea
+                  value={closeReason}
+                  onChange={(e) => setCloseReason(e.target.value)}
+                  rows={1}
+                  placeholder="Abschluss-Notiz (optional)…"
+                  className="flex-1 resize-none rounded-xl border border-white/8 bg-black/20 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/40 placeholder:text-zinc-600"
+                />
+                {!isInProgress && (
+                  <button
+                    onClick={handleInProgress} disabled={pending}
+                    className="flex shrink-0 items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/25 disabled:opacity-50"
+                  >
+                    In Bearbeitung
+                  </button>
+                )}
+                <button
+                  onClick={handleClose} disabled={pending}
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl bg-purple-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
+                >
+                  {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                  Schließen
+                </button>
+              </div>
+
+              {flash && (
+                <p className={`text-xs font-medium ${flash.ok ? "text-emerald-400" : "text-red-400"}`}>
+                  {flash.text}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -724,8 +862,8 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
     if (openTicketId) onTicketOpened?.();
   }, [openTicketId, onTicketOpened]);
 
-  const open = tickets.filter((t) => t.status === "open");
-  const closed = tickets.filter((t) => t.status !== "open");
+  const open = tickets.filter((t) => t.status === "open" || t.status === "in_progress");
+  const closed = tickets.filter((t) => t.status === "closed");
 
   return (
     <div className="flex flex-col gap-6">
@@ -787,7 +925,7 @@ function OverviewTab({ users, tickets, perms, myActions }: {
   myActions: ModActionRow[];
 }) {
   const bannedCount = users.filter((u) => u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date()).length;
-  const openTickets = tickets.filter((t) => t.status === "open").length;
+  const openTickets = tickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
   const totalWarnings = users.reduce((s, u) => s + u.warningCount, 0);
   const totalNotes = users.reduce((s, u) => s + u.noteCount, 0);
 
@@ -1007,7 +1145,7 @@ function ModShellInner({
     if (open) setDeepOpenTicketId(open);
   }, [searchParams]);
 
-  const openTicketsCount = tickets.filter((t) => t.status === "open").length;
+  const openTicketsCount = tickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
 
   const tabs: { id: ModTab; label: string; Icon: typeof Shield; badge?: number; show: boolean }[] = [
     { id: "overview", label: "Übersicht",     Icon: LayoutDashboard, show: true },

@@ -10,6 +10,7 @@ import {
   type ModActionRow,
   type ModUserSummary,
   type ModTicket,
+  type TicketMessage,
 } from "@/lib/mod";
 
 // ---------------------------------------------------------------------------
@@ -199,9 +200,10 @@ export async function getModUsers(): Promise<ModUserSummary[]> {
 export async function getModTickets(): Promise<ModTicket[]> {
   await requireMod();
   const admin = createAdminClient();
+  // NOTE: tickets table uses "description" not "message" for the body
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, message, status, created_at, closed_at, closed_by")
+    .select("id, user_id, subject, description, status, category, priority, created_at, closed_at, closed_by")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -221,12 +223,94 @@ export async function getModTickets(): Promise<ModTicket[]> {
     userId: t.user_id,
     username: byId.get(t.user_id) ?? "?",
     subject: t.subject ?? "(kein Betreff)",
-    message: t.message ?? "",
+    message: t.description ?? "",   // DB column is "description"
     status: t.status ?? "open",
+    category: t.category ?? "other",
+    priority: t.priority ?? "normal",
     createdAt: t.created_at,
     closedAt: t.closed_at,
     closedByUsername: t.closed_by ? (byId.get(t.closed_by) ?? null) : null,
   }));
+}
+
+export async function getTicketMessages(ticketId: string): Promise<TicketMessage[]> {
+  await requireMod();
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("ticket_messages")
+    .select("id, ticket_id, user_id, message, is_staff, created_at")
+    .eq("ticket_id", ticketId)
+    .order("created_at", { ascending: true });
+
+  if (!data || data.length === 0) return [];
+
+  const userIds = Array.from(new Set(data.map((m) => m.user_id)));
+  const { data: profiles } = await admin.from("profiles").select("id, username").in("id", userIds);
+  const byId = new Map((profiles ?? []).map((p) => [p.id, p.username as string | null]));
+
+  return data.map((m) => ({
+    id: m.id,
+    ticketId: m.ticket_id,
+    userId: m.user_id,
+    username: byId.get(m.user_id) ?? "?",
+    message: m.message ?? "",
+    isStaff: m.is_staff ?? false,
+    createdAt: m.created_at,
+  }));
+}
+
+export async function modMarkInProgress(
+  ticketId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user } = await requireMod();
+    const perms = await getModPermissions();
+    if (!perms.canCloseTickets) return { success: false, error: "Keine Berechtigung." };
+    const admin = createAdminClient();
+    const [ticketRes] = await Promise.all([
+      admin.from("tickets").update({ status: "in_progress", updated_at: new Date().toISOString() }).eq("id", ticketId),
+    ]);
+    if (ticketRes.error) return { success: false, error: ticketRes.error.message };
+    const { data: ticket } = await admin.from("tickets").select("user_id").eq("id", ticketId).single();
+    await admin.from("mod_actions").insert({
+      mod_id: user.id, target_user_id: ticket?.user_id ?? null,
+      action_type: "note", reason: "Ticket als 'In Bearbeitung' markiert",
+      details: { ticket_id: ticketId },
+    });
+    return { success: true };
+  } catch (e) { return { success: false, error: String(e) }; }
+}
+
+export async function modReplyToTicket(
+  ticketId: string,
+  message: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user } = await requireMod();
+    const perms = await getModPermissions();
+    if (!perms.canCloseTickets) return { success: false, error: "Keine Berechtigung." };
+    if (!message.trim()) return { success: false, error: "Nachricht darf nicht leer sein." };
+    const admin = createAdminClient();
+    const { error } = await admin.from("ticket_messages").insert({
+      ticket_id: ticketId,
+      user_id: user.id,
+      message: message.trim(),
+      is_staff: true,
+    });
+    if (error) return { success: false, error: error.message };
+    await admin.from("tickets").update({ updated_at: new Date().toISOString() }).eq("id", ticketId);
+    const { data: ticket } = await admin.from("tickets").select("user_id").eq("id", ticketId).single();
+    if (ticket?.user_id) {
+      await notifyUser({
+        userId: ticket.user_id,
+        type: "ticket_status",
+        title: "Mod hat geantwortet",
+        message: message.trim().slice(0, 100),
+        link: "/support",
+      });
+    }
+    return { success: true };
+  } catch (e) { return { success: false, error: String(e) }; }
 }
 
 // ---------------------------------------------------------------------------

@@ -60,8 +60,20 @@ export interface ModTicket {
   username: string;
   subject: string;
   message: string;
-  status: string;
+  status: "open" | "in_progress" | "closed" | string;
+  category: string;
+  priority: string;
   createdAt: string;
   closedAt: string | null;
   closedByUsername: string | null;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  userId: string;
+  username: string;
+  message: string;
+  isStaff: boolean;
+  createdAt: string;
 }
