@@ -943,21 +943,74 @@ function HelmetHat({ color }: { color: string }) {
   );
 }
 
+// Three distinct shapes for the colour-matrix catalogue plain helms
+// ("Roter Helm", "Cyan Helm", etc.) — each has a clearly different
+// silhouette so no two catalogue helms look the same.
+
+function CombatHelm({ color }: { color: string }) {
+  return (
+    <group>
+      <mesh>
+        <boxGeometry args={[0.64, 0.42, 0.66]} />
+        <meshStandardMaterial color={color} metalness={0.55} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, 0.07, 0.35]}>
+        <boxGeometry args={[0.58, 0.07, 0.08]} />
+        <meshStandardMaterial color={color} metalness={0.65} roughness={0.22} emissive={color} emissiveIntensity={0.12} />
+      </mesh>
+      <mesh position={[0, -0.1, 0.36]}>
+        <boxGeometry args={[0.1, 0.22, 0.07]} />
+        <meshStandardMaterial color={color} metalness={0.65} roughness={0.25} />
+      </mesh>
+    </group>
+  );
+}
+
+function SpartanHelm({ color }: { color: string }) {
+  return (
+    <group>
+      <mesh position={[0, -0.02, 0]}>
+        <sphereGeometry args={[0.35, 16, 12, 0, Math.PI * 2, 0, Math.PI / 1.55]} />
+        <meshStandardMaterial color={color} metalness={0.6} roughness={0.28} />
+      </mesh>
+      <mesh position={[0, 0.33, -0.02]}>
+        <boxGeometry args={[0.09, 0.24, 0.54]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.22} metalness={0.5} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, -0.22, -0.3]} rotation={[0.3, 0, 0]}>
+        <boxGeometry args={[0.52, 0.07, 0.18]} />
+        <meshStandardMaterial color={color} metalness={0.55} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+function TechHelm({ color }: { color: string }) {
+  return (
+    <group>
+      <mesh>
+        <boxGeometry args={[0.64, 0.44, 0.66]} />
+        <meshStandardMaterial color={color} metalness={0.5} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, -0.01, 0.35]}>
+        <boxGeometry args={[0.52, 0.09, 0.04]} />
+        <meshStandardMaterial color="#111122" emissive={color} emissiveIntensity={0.85} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0.25, 0]}>
+        <boxGeometry args={[0.14, 0.06, 0.62]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} metalness={0.7} roughness={0.2} />
+      </mesh>
+    </group>
+  );
+}
+
+const CATALOG_HELM_VARIANTS = [CombatHelm, SpartanHelm, TechHelm];
+
 export function HatVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#6d28d9");
-  // Keyword-first, hash-last, written as a plain ternary chain (same
-  // reasoning as PetVariant above) so the React Compiler can statically
-  // see this only ever selects among the fixed components below — a name
-  // that actually says what kind of hat it is (Krone/Zylinder/Kappe, or a
-  // *fused/compound* "helm" word like "Sternenhelm"/"Voidhelm") always
-  // gets the shape that word means, regardless of anything else in the
-  // name. The color-matrix catalogue's generic word is now also "Helm"
-  // (renamed from "Mütze"), always appearing as its own trailing word
-  // preceded by a space ("Roter Helm") — that plain form is excluded from
-  // the curated-helmet match below so the entire catalogue doesn't
-  // collapse onto one shape just because its generic noun happens to be
-  // the same word a few curated uniques use as a name *component*; it
-  // falls back to BeanieHat instead, same as the old "Mütze" behavior.
+  // Keyword-first routing: named special shapes take priority, then the
+  // catalogue-plain-helm pool (which now uses 3 real helmet shapes instead
+  // of a beanie sphere), then fall back to BeanieHat for generic beanies.
   const isPlainCatalogHelm = /\sHelm$/.test(item.name);
   const Variant = /Kronen?/.test(item.name)
     ? CrownHat
@@ -967,7 +1020,9 @@ export function HatVariant({ item }: { item: EquippedItem }) {
         ? CapHat
         : !isPlainCatalogHelm && /helm/i.test(item.name)
           ? HelmetHat
-          : BeanieHat;
+          : isPlainCatalogHelm
+            ? CATALOG_HELM_VARIANTS[variantIndex(item.name, CATALOG_HELM_VARIANTS.length)]
+            : BeanieHat;
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
@@ -1764,8 +1819,12 @@ const EXACT_PANTS_SHAPE: Record<string, typeof SkinnyPants> = {
 
 export function PantsVariant({ item }: { item: EquippedItem }) {
   const color = rarityColorFor(item, "#1e3a8a");
-  const Variant =
+  const isExplicitlyShorts = /\b(Short|Kurz)\b/i.test(item.name);
+  let Variant =
     EXACT_PANTS_SHAPE[item.name] ?? PANTS_VARIANTS[variantIndex(item.name, PANTS_VARIANTS.length)];
+  // Guard: anything called "Hose" (full-length trousers) must never land on
+  // ShortsPants via the hash — use BaggyPants as the safe fallback instead.
+  if (Variant === ShortsPants && !isExplicitlyShorts) Variant = BaggyPants;
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} />
