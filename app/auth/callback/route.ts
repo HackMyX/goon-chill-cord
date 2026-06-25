@@ -48,6 +48,13 @@ export async function GET(request: Request) {
     if (!error && data.user) {
       const userId = data.user.id;
       const admin = createAdminClient();
+      const meta = data.user.user_metadata ?? {};
+
+      // Discord avatar URL — keep in sync with profiles on every login
+      const discordAvatarUrl: string | null =
+        (meta.avatar_url as string | undefined) ??
+        (meta.picture as string | undefined) ??
+        null;
 
       // Ensure a profile row exists — guards against the trigger failing silently
       // (e.g. username uniqueness race) or the user being deleted+re-created.
@@ -58,7 +65,6 @@ export async function GET(request: Request) {
         .maybeSingle();
 
       if (!existing) {
-        const meta = data.user.user_metadata ?? {};
         const baseName = (meta.username ?? meta.full_name ?? meta.name ?? data.user.email?.split("@")[0] ?? "Spieler").slice(0, 28);
 
         const { data: siteConf } = await admin
@@ -77,9 +83,12 @@ export async function GET(request: Request) {
         const username = nameTaken ? `${baseName}_${userId.slice(0, 5)}` : baseName;
 
         await admin.from("profiles").upsert(
-          { id: userId, username, credits: startingCredits, cases_opened: 0, role: "user" },
+          { id: userId, username, credits: startingCredits, cases_opened: 0, role: "user", avatar_url: discordAvatarUrl },
           { onConflict: "id", ignoreDuplicates: true }
         );
+      } else if (discordAvatarUrl) {
+        // Sync the Discord avatar on every login so it stays up-to-date
+        await admin.from("profiles").update({ avatar_url: discordAvatarUrl }).eq("id", userId);
       }
 
       // Log the login event for IP-tracking (security section), include fingerprint
