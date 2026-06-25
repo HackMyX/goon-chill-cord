@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Zap, Volume2 } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Zap, Volume2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CasesAdminTab } from "@/components/admin/case-group-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -35,6 +35,7 @@ import { BalanceStudioTab } from "@/components/admin/balance-studio-tab";
 import { LevelConfigEditor } from "@/components/admin/level-config-editor";
 import { AbilityAdminTab } from "@/components/admin/ability-admin-tab";
 import { SoundConfigEditor } from "@/components/admin/sound-config-editor";
+import HomepageChatConfigEditor from "@/components/admin/homepage-chat-config-editor";
 import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
@@ -160,7 +161,42 @@ interface AdminShellProps {
   soundConfig: SoundConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "sounds";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "sounds";
+
+const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string }[] = [
+  { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
+  { label: "Case-Preise & Gruppen", tab: "economy", keywords: ["cases", "preis", "gruppe", "rarity", "items", "öffnen"], description: "Case-Konfiguration und Preise" },
+  { label: "Shop MOTD", tab: "shop", keywords: ["shop", "motd", "banner", "listing", "verkauf"], description: "Shop-Artikel und Tages-Rotation" },
+  { label: "Monster-Konfiguration", tab: "monsters", keywords: ["monster", "zombie", "hp", "schaden", "spawn", "belohnung"], description: "Monster-HP, Schaden, Belohnungen" },
+  { label: "Kill-Streak", tab: "monsters", keywords: ["killstreak", "streak", "kills", "multiplikator", "welt"], description: "Kill-Streak Multiplikator und Cap" },
+  { label: "Snake Speed & Credits", tab: "games", keywords: ["snake", "geschwindigkeit", "credits", "mode", "apfel"], description: "Snake-Spielmodi und Credit-Limits" },
+  { label: "Plinko Einsatz & Limits", tab: "games", keywords: ["plinko", "einsatz", "kugel", "risk", "multiplier", "limit"], description: "Plinko-Konfiguration und Multiplikatoren" },
+  { label: "Mine Levels", tab: "games", keywords: ["mine", "level", "upgrade", "abbau", "lager"], description: "Mine-Konfiguration und Level-Kosten" },
+  { label: "DON Konfiguration", tab: "games", keywords: ["don", "double", "nothing", "münze", "limit", "flip"], description: "Double or Nothing Flip-Limits" },
+  { label: "Welt-Session", tab: "games", keywords: ["welt", "pvp", "respawn", "session", "farnwelt"], description: "PvP, Spawn, World-Session" },
+  { label: "Charakter-Werte", tab: "games", keywords: ["charakter", "speed", "jump", "angriff", "rüstung", "hp"], description: "Charakter-Werte und Combat" },
+  { label: "Battle Pass", tab: "battlepass", keywords: ["battlepass", "bp", "tier", "premium", "elite", "quest", "xp"], description: "Battle Pass Tiers und Quests" },
+  { label: "Level & XP Quellen", tab: "level_xp", keywords: ["level", "xp", "erfahrung", "aufstieg", "quellen"], description: "XP-Quellen und Level-Definitionen" },
+  { label: "Fähigkeiten", tab: "abilities", keywords: ["fähigkeit", "ability", "mine", "speed", "boost", "rüstung"], description: "Fähigkeiten-Definitionen und Grants" },
+  { label: "Sound-Einstellungen", tab: "sounds", keywords: ["sound", "ton", "lautstärke", "audio", "musik"], description: "Sound-Events und Lautstärken" },
+  { label: "Name-Styles", tab: "namestyles", keywords: ["namestyle", "name", "animation", "shimmer", "rainbow", "glitch"], description: "Name-Stil Katalog und Shop" },
+  { label: "Badges & Sondertags", tab: "badges", keywords: ["badge", "tag", "sondertag", "vergabe", "farbe"], description: "Badge-Definitionen und Vergaben" },
+  { label: "Chat-Einstellungen", tab: "chat", keywords: ["chat", "nachrichten", "filter", "rate", "limit", "global"], description: "Chat-Konfiguration und Moderation" },
+  { label: "Homepage Chat Sidebar", tab: "homepage_chat", keywords: ["homepage", "sidebar", "chat", "startseite", "glassmorphism", "offen"], description: "Chat-Sidebar auf der Startseite konfigurieren" },
+  { label: "Startseite Konfiguration", tab: "branding", keywords: ["branding", "logo", "startseite", "homepage", "karten", "topbar"], description: "Site-Konfiguration und Homepage-Design" },
+  { label: "Patchnotes", tab: "patchnotes", keywords: ["patch", "notes", "update", "popup", "changelog"], description: "Patchnotes und Update-Popups" },
+  { label: "Umfragen", tab: "surveys", keywords: ["umfrage", "survey", "frage", "antwort", "abstimmung"], description: "Umfragen erstellen und auswerten" },
+  { label: "Tickets", tab: "tickets", keywords: ["ticket", "support", "bug", "anfrage", "status"], description: "Support-Tickets verwalten" },
+  { label: "Moderatoren", tab: "moderators", keywords: ["mod", "moderator", "berechtigung", "ban", "warn", "pause"], description: "Moderatoren-Berechtigungen" },
+  { label: "Nutzer-Verwaltung", tab: "users", keywords: ["user", "nutzer", "profil", "credits", "rolle", "ban"], description: "Nutzer bearbeiten, Credits, Rollen" },
+  { label: "Sicherheit", tab: "security", keywords: ["sicherheit", "login", "ip", "duplicate", "ban"], description: "Login-Logs und IP-Duplikate" },
+  { label: "Backup", tab: "backup", keywords: ["backup", "export", "sicherung", "daten"], description: "Backups erstellen und verwalten" },
+  { label: "Audit-Log", tab: "audit", keywords: ["audit", "log", "verlauf", "aktionen", "history"], description: "Alle Admin-Aktionen im Verlauf" },
+  { label: "KI-Assistent", tab: "ki", keywords: ["ki", "ai", "assistent", "gpt", "groq", "chat", "admin"], description: "KI-Assistent und API-Schlüssel" },
+  { label: "Verlaufs-Bereinigung", tab: "cleanup", keywords: ["cleanup", "bereinigung", "löschen", "retention", "logs", "chat"], description: "Automatische Bereinigung alter Daten" },
+  { label: "Items", tab: "items", keywords: ["item", "waffe", "rüstung", "schild", "perk", "preis", "selten"], description: "Item-Katalog und Preise" },
+  { label: "Pets", tab: "pets", keywords: ["pet", "tier", "haustier", "hund", "katze", "drache"], description: "Pet-Spezies und Stats" },
+];
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "balance", label: "⚡ Balance Studio", icon: SlidersHorizontal },
@@ -177,6 +213,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "tickets", label: "Tickets", icon: MessageCircle },
   { id: "moderators", label: "Moderatoren", icon: Shield },
   { id: "chat", label: "Chat", icon: MessageCircle },
+  { id: "homepage_chat", label: "Startseite Chat", icon: MessageSquare },
   { id: "surveys", label: "Umfragen", icon: BarChart3 },
   { id: "ki", label: "KI-Assistent", icon: Sparkles },
   { id: "debug", label: "Debug Log", icon: Bug },
@@ -235,6 +272,7 @@ export function AdminShell({
   const [profiles, setProfiles] = useState(initialProfiles);
   const [auditLog, setAuditLog] = useState(initialAuditLog);
   const [userSearch, setUserSearch] = useState("");
+  const [adminSearch, setAdminSearch] = useState("");
   const profilesRef = useRef(profiles);
   profilesRef.current = profiles;
 
@@ -321,6 +359,20 @@ export function AdminShell({
         )
       : profiles;
 
+  const activeSearchQuery = adminSearch.trim().toLowerCase();
+  const filteredSearch = activeSearchQuery
+    ? SEARCH_INDEX.filter(
+        (entry) =>
+          entry.label.toLowerCase().includes(activeSearchQuery) ||
+          entry.description.toLowerCase().includes(activeSearchQuery) ||
+          entry.keywords.some((kw) => kw.toLowerCase().includes(activeSearchQuery))
+      )
+    : [];
+  const matchingTabIds = new Set(filteredSearch.map((r) => r.tab));
+  const displayedTabs = activeSearchQuery
+    ? TABS.filter((t) => matchingTabIds.has(t.id))
+    : TABS;
+
   return (
     <div className="flex flex-1 flex-col">
       <TopBar credits={credits} streakDays={streakDays} isAdmin={true} />
@@ -348,8 +400,42 @@ export function AdminShell({
         </div>
         <h1 className="glow-text mb-6 text-2xl font-extrabold text-zinc-50">Admin-Panel</h1>
 
+        {/* ── Global Admin Search ─────────────────────────────── */}
+        <div className="relative mb-4">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+          <input
+            type="text"
+            placeholder="Admin suchen… (z.B. 'Sound', 'Credits', 'Ban'…)"
+            value={adminSearch}
+            onChange={(e) => setAdminSearch(e.target.value)}
+            className="w-full rounded-xl border border-white/10 bg-black/30 py-2 pl-9 pr-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-purple-400/60"
+          />
+          {adminSearch.trim() && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-white/10 bg-zinc-900 shadow-2xl">
+              {filteredSearch.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-zinc-500">Kein Ergebnis für „{adminSearch}"</p>
+              ) : (
+                filteredSearch.slice(0, 8).map((result, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setTab(result.tab); setAdminSearch(""); sound.click(); }}
+                    onMouseEnter={sound.hover}
+                    className="flex w-full flex-col gap-0.5 px-4 py-2.5 text-left transition-colors hover:bg-white/5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-zinc-100">{result.label}</span>
+                      <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-300">{result.tab}</span>
+                    </div>
+                    <span className="text-xs text-zinc-500">{result.description}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="mb-6 flex flex-wrap gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-          {TABS.map((t) => (
+          {displayedTabs.map((t) => (
             <button
               key={t.id}
               onMouseEnter={sound.hover}
@@ -486,6 +572,8 @@ export function AdminShell({
         )}
 
         {tab === "chat" && <ChatConfigEditor initialConfig={chatConfig} />}
+
+        {tab === "homepage_chat" && <HomepageChatConfigEditor />}
 
         {tab === "debug" && <DebugLogTab />}
 

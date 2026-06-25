@@ -11,6 +11,9 @@ export interface RemoteLoadout {
   role: "user" | "moderator" | "admin";
   nameStyleKey: string | null;
   equippedByCategory: Record<string, EquippedItem>;
+  /** Badge keys granted to this peer — fetched once on join, used by
+   * remote-players.tsx to render up to 3 badge dots below the nametag. */
+  badges: string[];
 }
 
 export interface GetPublicLoadoutResult {
@@ -38,7 +41,7 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
 
   const admin = createAdminClient();
 
-  const [{ data: profile }, { data: inventory }] = await Promise.all([
+  const [{ data: profile }, { data: inventory }, { data: badgeRows }] = await Promise.all([
     admin.from("profiles").select("username, gender, verified, role, active_name_style_key").eq("id", targetUserId).single(),
     admin
       .from("inventory")
@@ -48,6 +51,11 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
       .eq("user_id", targetUserId)
       .eq("equipped", true)
       .order("obtained_at", { ascending: true }),
+    admin
+      .from("user_badges")
+      .select("badge_key")
+      .eq("user_id", targetUserId)
+      .order("granted_at", { ascending: true }),
   ]);
 
   if (!profile) return { success: false, error: "Profil nicht gefunden." };
@@ -64,6 +72,8 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
     }
   }
 
+  const badges = (badgeRows ?? []).map((r) => (r as { badge_key: string }).badge_key);
+
   return {
     success: true,
     loadout: {
@@ -73,6 +83,7 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
       role: (profile.role as "user" | "moderator" | "admin") ?? "user",
       nameStyleKey: (profile.active_name_style_key as string | null) ?? null,
       equippedByCategory,
+      badges,
     },
   };
 }

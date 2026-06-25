@@ -25,6 +25,9 @@ import { BpBanner } from "@/components/battlepass/bp-banner";
 import { getActiveBattlePass } from "@/lib/actions/battle-pass";
 import type { ActiveBpView } from "@/lib/battle-pass";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { HomepageChatSidebar } from "@/components/global/homepage-chat-sidebar";
+import type { HomepageChatConfig } from "@/lib/actions/homepage-chat-config";
+import { DEFAULT_HOMEPAGE_CHAT_CONFIG } from "@/lib/actions/homepage-chat-config";
 
 // Animated number that counts up when the value changes
 function AnimatedNumber({ value, className }: { value: number; className?: string }) {
@@ -170,6 +173,7 @@ interface DashboardShellProps {
   nameStyleKey?: string;
   userCount?: number;
   homepageConfig?: HomepageConfig;
+  chatSidebarConfig?: HomepageChatConfig;
   snakeX1?: SnakeLeaderboardEntry[];
   snakeX2?: SnakeLeaderboardEntry[];
   snakeGrind?: SnakeLeaderboardEntry[];
@@ -189,6 +193,7 @@ export function DashboardShell({
   nameStyleKey,
   userCount = 0,
   homepageConfig,
+  chatSidebarConfig,
   snakeX1 = [],
   snakeX2 = [],
   snakeGrind = [],
@@ -241,8 +246,12 @@ export function DashboardShell({
     .map((id) => CARD_DEFS[id])
     .filter(Boolean);
 
+  const resolvedChatConfig = chatSidebarConfig ?? DEFAULT_HOMEPAGE_CHAT_CONFIG;
+
   return (
     <div className="flex flex-1 flex-col">
+      {/* Glassmorphism global chat sidebar — fixed/overlay, does not push content */}
+      <HomepageChatSidebar config={resolvedChatConfig} />
       <TopBar
         credits={credits}
         inventoryCount={inventoryCount}

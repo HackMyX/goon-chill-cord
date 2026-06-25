@@ -337,6 +337,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
     const after = buildFiller(8, "after", previewPool, group.itemTypes);
     setReel([...before, target, ...after]);
     setTargetIndex(before.length);
+    sound.caseOpen();
     setPhase("spinning");
     setSpinToken((t) => t + 1);
   }
@@ -504,6 +505,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
             onSpinComplete={() => {
               setPhase((p) => (p === "spinning" ? "result" : p));
               if (!wonItem) return;
+              sound.caseReveal();
               if (wonItem.rarity === "ultra") sound.ultraWin?.();
               else sound.win?.();
               fireWinCelebration(wonItem.rarity as Rarity);

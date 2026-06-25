@@ -13,6 +13,7 @@ import { BP_THEMES, type BattlePass, type BattlePassTier, type UserBpStatus, typ
 import { purchaseBattlePass, purchaseEliteBattlePass, claimBpTier } from "@/lib/actions/battle-pass";
 import { getBpQuestsWithProgress } from "@/lib/actions/bp-quests";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { useSoundManager } from "@/lib/sound-manager";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -989,6 +990,10 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
   const accent = pass.accentColor || theme.accent;
   const glow = theme.glow.replace(/[\d.]+\)$/, "0.5)");
 
+  const sound = useSoundManager();
+  const soundRef = useRef(sound);
+  soundRef.current = sound;
+
   const [userStatus, setUserStatus] = useState(initialStatus);
   const [isPending, startTransition] = useTransition();
   const [claimingId, setClaimingId] = useState<string | null>(null);
@@ -1017,6 +1022,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
       const res = await claimBpTier(tierId);
       setClaimingId(null);
       if (res.success) {
+        soundRef.current.bpTierClaim();
         showToast(res.reward ? `✦ ${res.reward}` : "Reward abgeholt!", true);
         setUserStatus((prev) =>
           prev ? { ...prev, claimedTierIds: [...prev.claimedTierIds, tierId] } : prev

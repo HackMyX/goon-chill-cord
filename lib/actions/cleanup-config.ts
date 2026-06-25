@@ -347,7 +347,7 @@ async function deleteSource(key: CleanupSourceKey, cutoffIso: string): Promise<n
     case "trade_offers_done": {
       try {
         const { data, error } = await admin
-          .from("trade_offers")
+          .from("trades")
           .delete()
           .lt("created_at", cutoffIso)
           .in("status", ["accepted", "declined", "cancelled"])

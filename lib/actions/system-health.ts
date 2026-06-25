@@ -51,7 +51,7 @@ const REQUIRED_TABLES = [
   // Community features
   "patch_notes", "debug_logs",
   // Chat
-  "global_chat_messages", "global_chat_config",
+  "global_chat_messages", "global_chat_config", "homepage_chat_config",
   // Config & system
   "cleanup_config", "ai_config",
   // Shop
@@ -81,6 +81,10 @@ const REQUIRED_TABLES = [
   "xp_config", "xp_events", "ability_definitions", "user_abilities",
   // Sound
   "sound_config",
+  // Mine (used by mine.ts, balance-studio.ts — was missing from full-db-sync.cjs)
+  "mine_config",
+  // Backup system (used by backup.ts — was missing from full-db-sync.cjs)
+  "backups",
 ] as const;
 
 /** Tables that are optional (future features, not yet fully live). WARNUNG if missing. */
@@ -105,6 +109,8 @@ const SINGLETON_CONFIGS: Array<{ id: string; table: string; name: string; catego
   { id: "cfg_killstreak",  table: "kill_streak_config", name: "kill_streak_config (default)",category: "World" },
   { id: "cfg_xp",          table: "xp_config",          name: "xp_config (default)",         category: "Level & XP" },
   { id: "cfg_sound",       table: "sound_config",        name: "sound_config (default)",      category: "Sound Manager" },
+  { id: "cfg_mine",        table: "mine_config",         name: "mine_config (default)",        category: "Mine" },
+  { id: "cfg_homepage_chat", table: "homepage_chat_config", name: "homepage_chat_config (default)", category: "Homepage Chat Sidebar" },
 ];
 
 /**
@@ -131,8 +137,12 @@ const COLUMN_CHECKS: Array<{
   // Login events — fingerprint (security)
   { id: "col_login_fingerprint",  category: "Security",           table: "login_events",        col: "fingerprint",             detail: "ALTER TABLE login_events ADD COLUMN fingerprint text;" },
   // Site config — homepage & topbar
-  { id: "col_site_homepage",      category: "Konfiguration",      table: "site_config",         col: "homepage_config",         detail: "ALTER TABLE site_config ADD COLUMN homepage_config jsonb;" },
-  { id: "col_site_topbarlabels",  category: "Konfiguration",      table: "site_config",         col: "topbar_show_labels",      detail: "ALTER TABLE site_config ADD COLUMN topbar_show_labels boolean DEFAULT false;" },
+  { id: "col_site_homepage",        category: "Konfiguration", table: "site_config", col: "homepage_config",         detail: "ALTER TABLE site_config ADD COLUMN IF NOT EXISTS homepage_config jsonb;" },
+  { id: "col_site_topbarlabels",    category: "Konfiguration", table: "site_config", col: "topbar_show_labels",      detail: "ALTER TABLE site_config ADD COLUMN IF NOT EXISTS topbar_show_labels boolean DEFAULT false;" },
+  // Site config — topbar slots, button style, version (2026-06-25 audit — node scripts/db-audit-fix.cjs)
+  { id: "col_site_topbarslots",     category: "Konfiguration", table: "site_config", col: "topbar_right_slots",      detail: "node scripts/db-audit-fix.cjs" },
+  { id: "col_site_topbarbtnstyle",  category: "Konfiguration", table: "site_config", col: "topbar_button_style",     detail: "node scripts/db-audit-fix.cjs" },
+  { id: "col_site_version",         category: "Konfiguration", table: "site_config", col: "site_version",            detail: "node scripts/db-audit-fix.cjs" },
   // Patch notes — popup toggle
   { id: "col_patch_popup",        category: "Patch Notes",        table: "patch_notes",         col: "show_popup",              detail: "ALTER TABLE patch_notes ADD COLUMN show_popup boolean NOT NULL DEFAULT false;" },
   // Case tiers — extended
@@ -961,6 +971,75 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
   } catch (e) {
     results.push(warn("storage_buckets", "Storage", "Supabase Storage Buckets", String(e)));
   }
+
+  // ── 31. Mine-System ───────────────────────────────────────────────────────
+  try {
+    const { data: mineCfgRow, error: mineErr } = await admin
+      .from("mine_config").select("enabled,levels,section_title").eq("id", "default").maybeSingle();
+    if (mineErr || !mineCfgRow) {
+      results.push(warn("mine_cfg_singleton", "Mine", "mine_config (default)",
+        "Kein Konfigurationseintrag — node scripts/db-audit-fix.cjs ausführen"));
+    } else {
+      const lvls = (mineCfgRow as { levels?: unknown[] }).levels ?? [];
+      results.push(Array.isArray(lvls) && lvls.length === 10
+        ? ok("mine_cfg_singleton", "Mine", "mine_config (default)",
+            `enabled: ${(mineCfgRow as { enabled?: boolean }).enabled ?? true}, ${lvls.length} Level konfiguriert`)
+        : warn("mine_cfg_singleton", "Mine", "mine_config (default)",
+            `${Array.isArray(lvls) ? lvls.length : 0}/10 Level — node scripts/balance-final.cjs ausführen`));
+    }
+  } catch (e) {
+    results.push(warn("mine_cfg_singleton", "Mine", "mine_config (default)", String(e)));
+  }
+
+  try {
+    const { count: mineProgressCount } = await admin
+      .from("mine_progress").select("*", { count: "exact", head: true });
+    results.push(ok("mine_progress_total", "Mine", "mine_progress", `${mineProgressCount ?? 0} aktive Minen`));
+  } catch (e) {
+    results.push(warn("mine_progress_total", "Mine", "mine_progress", String(e)));
+  }
+
+  // ── 32. Backup-System ────────────────────────────────────────────────────
+  try {
+    const { count: backupCount, error: backupErr } = await admin
+      .from("backups").select("*", { count: "exact", head: true });
+    results.push(backupErr
+      ? err("backups_table", "Backup", "backups Tabelle",
+          `Tabelle fehlt — node scripts/db-audit-fix.cjs ausführen: ${backupErr.message}`)
+      : ok("backups_table", "Backup", "backups Tabelle", `${backupCount ?? 0} gespeicherte Backups`));
+  } catch (e) {
+    results.push(err("backups_table", "Backup", "backups Tabelle", String(e)));
+  }
+
+  // ── 33. Homepage Chat Sidebar ────────────────────────────────────────────
+  try {
+    const { data: hccRow, error: hccErr } = await admin
+      .from("homepage_chat_config").select("enabled,title,position").eq("id", "default").maybeSingle();
+    if (hccErr || !hccRow) {
+      results.push(warn("homepage_chat_cfg", "Homepage Chat Sidebar", "homepage_chat_config (default)",
+        "Kein Konfigurationseintrag — node scripts/db-audit-fix.cjs ausführen"));
+    } else {
+      const row = hccRow as { enabled?: boolean; title?: string; position?: string };
+      results.push(ok("homepage_chat_cfg", "Homepage Chat Sidebar", "homepage_chat_config (default)",
+        `enabled: ${row.enabled ?? false}, position: ${row.position ?? "right"}, title: "${row.title ?? "Live Chat"}"`));
+    }
+  } catch (e) {
+    results.push(warn("homepage_chat_cfg", "Homepage Chat Sidebar", "homepage_chat_config (default)", String(e)));
+  }
+
+  // ── 34. Code-Bug-Hinweis: trade_offers vs trades ─────────────────────────
+  // cleanup-config.ts referenziert `.from("trade_offers")` für den Bereinigungsschlüssel
+  // "trade_offers_done", aber die tatsächliche Tabelle heißt `trades`.
+  // Die Bereinigung schlägt deshalb lautlos fehl (PG_UNDEFINED_TABLE wird abgefangen).
+  // Fix: In lib/actions/cleanup-config.ts den Tabellennamen auf "trades" ändern.
+  try {
+    const { error: tradeOffersErr } = await admin.from("trades").select("*").limit(0);
+    results.push(tradeOffersErr
+      ? warn("trade_cleanup_bug", "Daten-Integrität", "Handel-Bereinigung (Code-Bug)",
+          `trades-Tabelle nicht erreichbar: ${tradeOffersErr.message}`)
+      : warn("trade_cleanup_bug", "Daten-Integrität", "Handel-Bereinigung (Code-Bug)",
+          "cleanup-config.ts verwendet .from(\"trade_offers\") statt .from(\"trades\") — Bereinigung schlägt lautlos fehl. In lib/actions/cleanup-config.ts korrigieren."));
+  } catch { /* non-critical */ }
 
   return results;
 }

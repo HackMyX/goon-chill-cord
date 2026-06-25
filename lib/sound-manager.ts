@@ -2,7 +2,14 @@
 
 import type { SoundConfig } from "@/lib/sound-config";
 
-export type FxSound = "win" | "ultraWin" | "click" | "error" | "flip" | "save" | "levelUp" | "xpGain" | "abilityEquip";
+export type FxSound =
+  | "win" | "ultraWin" | "click" | "error" | "flip" | "save"
+  | "levelUp" | "xpGain" | "abilityEquip"
+  | "questComplete" | "bpTierClaim" | "monsterKill"
+  | "pvpHit" | "pvpKill" | "purchaseSuccess"
+  | "purchaseFail" | "streakClaim" | "notificationPing"
+  | "caseOpen" | "caseReveal" | "achievementUnlock"
+  | "messageReceive" | "shopPurchase" | "upgradeSuccess";
 // "hit" is an interrupt channel, not a queued Fx one, on purpose — sustained
 // melee (clicking as fast as ATTACK_COOLDOWN allows) needs every landed hit
 // to play immediately, the same way tick/hover never queue. Routing it
@@ -20,6 +27,21 @@ const DEFAULT_FX_SRC: Record<FxSound, string> = {
   levelUp: "/sounds/win.wav",
   xpGain: "/sounds/tick.wav",
   abilityEquip: "/sounds/save.wav",
+  questComplete:    "/sounds/win.wav",
+  bpTierClaim:      "/sounds/save.wav",
+  monsterKill:      "/sounds/hit.wav",
+  pvpHit:           "/sounds/hit.wav",
+  pvpKill:          "/sounds/win.wav",
+  purchaseSuccess:  "/sounds/save.wav",
+  purchaseFail:     "/sounds/error.wav",
+  streakClaim:      "/sounds/win.wav",
+  notificationPing: "/sounds/tick.wav",
+  caseOpen:         "/sounds/flip.wav",
+  caseReveal:       "/sounds/ultra-win.wav",
+  achievementUnlock:"/sounds/win.wav",
+  messageReceive:   "/sounds/hover.wav",
+  shopPurchase:     "/sounds/save.wav",
+  upgradeSuccess:   "/sounds/win.wav",
 };
 
 const DEFAULT_INTERRUPT_SRC: Record<InterruptSound, string> = {
@@ -31,6 +53,11 @@ const DEFAULT_INTERRUPT_SRC: Record<InterruptSound, string> = {
 const DEFAULT_FX_VOL: Record<FxSound, number> = {
   win: 0.35, ultraWin: 0.35, click: 0.18, error: 0.35, flip: 0.35, save: 0.20,
   levelUp: 0.40, xpGain: 0.15, abilityEquip: 0.25,
+  questComplete: 0.38,    bpTierClaim: 0.32,       monsterKill: 0.22,
+  pvpHit: 0.30,           pvpKill: 0.35,           purchaseSuccess: 0.28,
+  purchaseFail: 0.30,     streakClaim: 0.38,       notificationPing: 0.18,
+  caseOpen: 0.25,         caseReveal: 0.40,        achievementUnlock: 0.42,
+  messageReceive: 0.12,   shopPurchase: 0.28,      upgradeSuccess: 0.35,
 };
 
 const DEFAULT_INTERRUPT_VOL: Record<InterruptSound, number> = {
@@ -94,6 +121,8 @@ class SoundManager {
     let audio = this.interruptAudio.get(name);
     if (!audio) {
       const src = this._config?.[name]?.file ?? DEFAULT_INTERRUPT_SRC[name];
+      // Skip silent placeholder — never create an Audio element for it.
+      if (src === "/sounds/none" || src === "none") return null;
       audio = new Audio(src);
       const vol = this._config?.[name]?.volume ?? DEFAULT_INTERRUPT_VOL[name];
       // hover/tick fire constantly (mouse movement, reel spin) — kept quiet
@@ -109,6 +138,8 @@ class SoundManager {
     let audio = this.fxPool.get(name);
     if (!audio) {
       const src = this._config?.[name]?.file ?? DEFAULT_FX_SRC[name];
+      // Skip silent placeholder — never create an Audio element for it.
+      if (src === "/sounds/none" || src === "none") return null;
       audio = new Audio(src);
       const vol = this._config?.[name]?.volume ?? DEFAULT_FX_VOL[name];
       audio.volume = vol * this._volume;
@@ -202,6 +233,21 @@ export function useSoundManager() {
     levelUp: () => soundManager.play("levelUp"),
     xpGain: () => soundManager.play("xpGain"),
     abilityEquip: () => soundManager.play("abilityEquip"),
+    questComplete:    () => soundManager.play("questComplete"),
+    bpTierClaim:      () => soundManager.play("bpTierClaim"),
+    monsterKill:      () => soundManager.play("monsterKill"),
+    pvpHit:           () => soundManager.play("pvpHit"),
+    pvpKill:          () => soundManager.play("pvpKill"),
+    purchaseSuccess:  () => soundManager.play("purchaseSuccess"),
+    purchaseFail:     () => soundManager.play("purchaseFail"),
+    streakClaim:      () => soundManager.play("streakClaim"),
+    notificationPing: () => soundManager.play("notificationPing"),
+    caseOpen:         () => soundManager.play("caseOpen"),
+    caseReveal:       () => soundManager.play("caseReveal"),
+    achievementUnlock:() => soundManager.play("achievementUnlock"),
+    messageReceive:   () => soundManager.play("messageReceive"),
+    shopPurchase:     () => soundManager.play("shopPurchase"),
+    upgradeSuccess:   () => soundManager.play("upgradeSuccess"),
     setVolume: (v: number) => soundManager.setVolume(v),
     loadConfig: (cfg: SoundConfig) => soundManager.loadConfig(cfg),
   };

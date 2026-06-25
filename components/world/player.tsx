@@ -6,6 +6,7 @@ import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { rarityColorFor, type EquippedItem } from "@/lib/rarity-colors";
+import { getBadgeStyle } from "@/lib/badges";
 import { SlashEffect, SLASH_EFFECT_LIFETIME_MS } from "@/components/world/hit-fx";
 import { getEquippedDamage, capsuleHitTest, momentumMultiplier, getPerkMultiplier, applyIncomingDamage, computePvpDamage } from "@/lib/combat";
 import type { CharacterConfig } from "@/lib/character-config";
@@ -346,6 +347,10 @@ export function Player({
   // idea as world-shell.tsx's red hurt-flash but for dealing damage
   // instead of taking it.
   const cameraShake = useRef(0);
+  // Seconds remaining in the "hurt" window — set on incoming PvP damage,
+  // ticked down each frame, included in the animState broadcast so remote
+  // players can see a hurt reaction on this avatar.
+  const hurtTimer = useRef(0);
 
   // Stamina hysteresis: once sprint drains stamina to 0, sprinting can't
   // restart until it's regenerated back past STAMINA_MIN_TO_START_SPRINT
@@ -412,6 +417,7 @@ export function Player({
       applyIncomingDamage(combatRef.current, payload.amount);
       // Stronger shake than landing a hit — being punched hurts more than punching.
       cameraShake.current = 1.5;
+      hurtTimer.current = 0.45;
     });
   }, [userId, combatRef]);
 
@@ -1123,6 +1129,7 @@ export function Player({
     combatRef.current.playerPos.copy(g.position);
     combatRef.current.playerHeading = g.rotation.y;
 
+    hurtTimer.current = Math.max(0, hurtTimer.current - delta);
     statsSyncTimer.current += delta;
     if (statsSyncTimer.current >= STATS_SYNC_INTERVAL) {
       statsSyncTimer.current = 0;
@@ -1149,6 +1156,17 @@ export function Player({
         shieldMaxHp: combatRef.current.shieldMaxHp,
         moving,
         sprinting,
+        animState: hurtTimer.current > 0
+          ? 'hurt'
+          : slideActive.current
+          ? 'slide'
+          : attackProgress.current > 0
+          ? 'attack'
+          : !grounded.current
+          ? 'jump'
+          : moving
+          ? 'run'
+          : 'idle',
       });
     }
 
@@ -1254,90 +1272,118 @@ export function Player({
             monsterRegistryRef={monsterRegistryRef}
             petTypes={petTypes}
           />
-          {/* Styled nametag — Html overlay so StyledUsername (animated CSS
-              name styles, badges) works here exactly as on all other pages.
-              Matches remote-players.tsx card design so local + remote chars
-              look identical in the world. */}
+          {/* HUD nametag — transparent, game-style, floats above the player.
+              No card/box background — reads like a real game overlay. */}
           {name && (
             <Html
-              position={[0, 2.95, 0]}
+              position={[0, 3.0, 0]}
               center
               occlude={false}
               distanceFactor={7}
               style={{ pointerEvents: "none", userSelect: "none" }}
             >
+              <style>{`
+                @keyframes nametag-float {
+                  0%, 100% { transform: translateY(0px); }
+                  50%       { transform: translateY(-2px); }
+                }
+              `}</style>
               <div style={{
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                gap: "4px",
+                gap: "3px",
+                animation: "nametag-float 3s ease-in-out infinite",
+                pointerEvents: "none",
+                userSelect: "none",
+                textAlign: "center",
               }}>
-                <div style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: "5px",
-                  padding: "7px 12px 8px",
-                  background: "rgba(6,6,10,0.82)",
-                  backdropFilter: "blur(8px)",
-                  WebkitBackdropFilter: "blur(8px)",
-                  border: `1px solid ${isAdmin ? "rgba(239,68,68,0.7)" : isModerator ? "rgba(34,197,94,0.7)" : verified ? "rgba(168,85,247,0.6)" : "rgba(255,255,255,0.1)"}`,
-                  borderRadius: "12px",
-                  boxShadow: isAdmin
-                    ? "0 0 12px rgba(239,68,68,0.5), 0 0 24px rgba(239,68,68,0.2)"
-                    : isModerator
-                    ? "0 0 12px rgba(34,197,94,0.45), 0 0 24px rgba(34,197,94,0.15)"
-                    : verified
-                    ? "0 0 10px rgba(168,85,247,0.35), 0 0 20px rgba(168,85,247,0.1)"
-                    : "0 2px 8px rgba(0,0,0,0.5)",
-                  minWidth: "100px",
-                }}>
-                  <div style={{
-                    color: isAdmin ? "#fbbf24" : "#f4f4f5",
-                    fontSize: "12px",
-                    fontWeight: 800,
-                    fontFamily: "system-ui, sans-serif",
-                    letterSpacing: "0.02em",
-                    whiteSpace: "nowrap",
-                    textShadow: isAdmin ? "0 0 10px rgba(251,191,36,0.7)" : "0 1px 4px rgba(0,0,0,0.95)",
-                  }}>
-                    <StyledUsername name={name} styleKey={nameStyleKey} size="sm" staticMode={true} />
-                  </div>
-                  {(isAdmin || isModerator || verified) && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-                      {isAdmin && (
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", gap: "2px",
-                          padding: "1px 6px",
-                          background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.6)",
-                          borderRadius: "999px", color: "#fca5a5", fontSize: "8px", fontWeight: 700,
-                          fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
-                          boxShadow: "0 0 8px rgba(239,68,68,0.45)", whiteSpace: "nowrap",
-                        }}>⚡ Admin</span>
-                      )}
-                      {isModerator && (
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", gap: "2px",
-                          padding: "1px 6px",
-                          background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.55)",
-                          borderRadius: "999px", color: "#86efac", fontSize: "8px", fontWeight: 700,
-                          fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
-                          boxShadow: "0 0 8px rgba(34,197,94,0.35)", whiteSpace: "nowrap",
-                        }}>🛡 Mod</span>
-                      )}
-                      {verified && (
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", gap: "2px",
-                          padding: "1px 6px",
-                          background: "rgba(59,130,246,0.18)", border: "1px solid rgba(59,130,246,0.55)",
-                          borderRadius: "999px", color: "#93c5fd", fontSize: "8px", fontWeight: 700,
-                          fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
-                          boxShadow: "0 0 8px rgba(59,130,246,0.4)", whiteSpace: "nowrap",
-                        }}>✦ Verified</span>
-                      )}
-                    </div>
+                {/* Name row: role icon + styled name + online dot */}
+                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                  {isAdmin && (
+                    <span style={{ fontSize: "10px", filter: "drop-shadow(0 0 4px rgba(239,68,68,0.9))" }}>⚡</span>
                   )}
+                  {!isAdmin && isModerator && (
+                    <span style={{ fontSize: "10px", filter: "drop-shadow(0 0 4px rgba(34,211,238,0.9))" }}>🛡</span>
+                  )}
+                  {!isAdmin && !isModerator && verified && (
+                    <span style={{ fontSize: "10px", filter: "drop-shadow(0 0 4px rgba(168,85,247,0.9))" }}>✦</span>
+                  )}
+                  <div style={{
+                    fontSize: "13px",
+                    fontFamily: "system-ui, sans-serif",
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                    textShadow: "0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5)",
+                  }}>
+                    {/* Local player: full animated StyledUsername */}
+                    <StyledUsername name={name} styleKey={nameStyleKey} size="sm" />
+                  </div>
+                  <span style={{
+                    width: "5px", height: "5px", borderRadius: "50%",
+                    background: "#4ade80",
+                    boxShadow: "0 0 4px rgba(74,222,128,0.9)",
+                    flexShrink: 0, display: "inline-block",
+                  }} />
                 </div>
+
+                {/* Role-colored divider line */}
+                <div style={{
+                  width: "90px", height: "1px",
+                  background: isAdmin
+                    ? "#ef4444"
+                    : isModerator
+                    ? "#22d3ee"
+                    : verified
+                    ? "#a855f7"
+                    : "rgba(255,255,255,0.25)",
+                  boxShadow: isAdmin
+                    ? "0 0 6px rgba(239,68,68,0.8)"
+                    : isModerator
+                    ? "0 0 6px rgba(34,211,238,0.8)"
+                    : verified
+                    ? "0 0 6px rgba(168,85,247,0.7)"
+                    : "none",
+                }} />
+
+                {/* Badge dots — role-based for the local player */}
+                {(isAdmin || isModerator || verified) && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    {isAdmin && (
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: "16px", height: "16px", borderRadius: "50%",
+                        background: getBadgeStyle("admin").bg,
+                        border: `1px solid ${getBadgeStyle("admin").border}`,
+                        boxShadow: `0 0 5px ${getBadgeStyle("admin").glow}`,
+                        color: getBadgeStyle("admin").text,
+                        fontSize: "9px",
+                      }}>⚡</span>
+                    )}
+                    {isModerator && (
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: "16px", height: "16px", borderRadius: "50%",
+                        background: getBadgeStyle("mod").bg,
+                        border: `1px solid ${getBadgeStyle("mod").border}`,
+                        boxShadow: `0 0 5px ${getBadgeStyle("mod").glow}`,
+                        color: getBadgeStyle("mod").text,
+                        fontSize: "9px",
+                      }}>🛡</span>
+                    )}
+                    {verified && (
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: "16px", height: "16px", borderRadius: "50%",
+                        background: getBadgeStyle("verified").bg,
+                        border: `1px solid ${getBadgeStyle("verified").border}`,
+                        boxShadow: `0 0 5px ${getBadgeStyle("verified").glow}`,
+                        color: getBadgeStyle("verified").text,
+                        fontSize: "9px",
+                      }}>✦</span>
+                    )}
+                  </div>
+                )}
               </div>
             </Html>
           )}

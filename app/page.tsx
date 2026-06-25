@@ -8,6 +8,7 @@ import { getSiteConfig } from "@/lib/actions/site-config";
 import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
 import { getSnakeLeaderboard } from "@/lib/actions/snake";
 import { getMineLeaderboard } from "@/lib/actions/mine";
+import { getHomepageChatConfig } from "@/lib/actions/homepage-chat-config";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -47,6 +48,7 @@ export default async function Home() {
     snakeGrind,
     snakeFarm,
     mineLeaderboard,
+    chatSidebarConfig,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -79,6 +81,7 @@ export default async function Home() {
     getSnakeLeaderboard("grind", 10),
     getSnakeLeaderboard("farm", 10),
     getMineLeaderboard(10),
+    getHomepageChatConfig(),
   ]);
 
   return (
@@ -104,6 +107,7 @@ export default async function Home() {
       nameStyleKey={(profile as Record<string, unknown> | null)?.active_name_style_key as string | undefined}
       userCount={userCount ?? 0}
       homepageConfig={siteConfig.homepageConfig}
+      chatSidebarConfig={chatSidebarConfig}
       snakeX1={snakeX1}
       snakeX2={snakeX2}
       snakeGrind={snakeGrind}

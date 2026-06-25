@@ -5,6 +5,7 @@ import { Save, RefreshCw, AlertTriangle, CheckCircle2, Volume2, Play, VolumeX } 
 import type { SoundConfig, SoundEventKey } from "@/lib/sound-config";
 import { SOUND_EVENT_META, AVAILABLE_SOUND_FILES } from "@/lib/sound-config";
 import { getSoundConfig, updateSoundConfig } from "@/lib/actions/sound-config";
+import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 
 interface SoundConfigEditorProps {
   initialConfig: SoundConfig;
@@ -35,6 +36,8 @@ export function SoundConfigEditor({ initialConfig }: SoundConfigEditorProps) {
   }
 
   function preview(file: string, volume: number) {
+    // Skip silent placeholder
+    if (file === "/sounds/none" || file === "none") return;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = file;
@@ -109,9 +112,17 @@ export function SoundConfigEditor({ initialConfig }: SoundConfigEditorProps) {
       </p>
 
       {Object.entries(grouped).map(([group, events]) => (
-        <div key={group} className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
-          <h3 className="mb-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">{group}</h3>
-          <div className="space-y-3">
+        <CollapsibleAdminRow
+          key={group}
+          header={
+            <div className="flex items-center gap-2">
+              <Volume2 className="h-4 w-4 text-cyan-400" />
+              <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">{group}</span>
+              <span className="ml-1 text-xs text-zinc-600">({events.length})</span>
+            </div>
+          }
+        >
+          <div className="space-y-3 pt-1">
             {events.map((meta) => {
               const key = meta.key as SoundEventKey;
               const ev = config[key] ?? { file: meta.defaultFile, volume: meta.defaultVolume, enabled: true };
@@ -124,7 +135,7 @@ export function SoundConfigEditor({ initialConfig }: SoundConfigEditorProps) {
 
                   {/* Enabled toggle */}
                   <button
-                    onClick={() => setEvent(key, { enabled: !ev.enabled })}
+                    onClick={(e) => { e.stopPropagation(); setEvent(key, { enabled: !ev.enabled }); }}
                     className={`rounded-lg p-1.5 transition ${ev.enabled ? "text-emerald-400 hover:bg-emerald-500/10" : "text-zinc-600 hover:bg-white/5"}`}
                     title={ev.enabled ? "Deaktivieren" : "Aktivieren"}
                   >
@@ -169,7 +180,8 @@ export function SoundConfigEditor({ initialConfig }: SoundConfigEditorProps) {
                   {/* Preview */}
                   <button
                     onClick={() => preview(ev.file, ev.volume)}
-                    className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300 hover:border-white/20 hover:text-white"
+                    disabled={ev.file === "/sounds/none" || ev.file === "none"}
+                    className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300 hover:border-white/20 hover:text-white disabled:opacity-30"
                   >
                     <Play className="h-3 w-3" /> Test
                   </button>
@@ -177,7 +189,7 @@ export function SoundConfigEditor({ initialConfig }: SoundConfigEditorProps) {
               );
             })}
           </div>
-        </div>
+        </CollapsibleAdminRow>
       ))}
     </div>
   );

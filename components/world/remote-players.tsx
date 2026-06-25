@@ -9,6 +9,7 @@ import { angleDelta } from "@/components/world/player";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { getPublicLoadout, type RemoteLoadout } from "@/lib/actions/world";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { getBadgeStyle } from "@/lib/badges";
 import {
   subscribeToWorldRoster,
   subscribeToWorldTransforms,
@@ -143,6 +144,11 @@ function RemotePlayerAvatar({
   // Drives the right-arm swing animation when a pvp_damage event says this
   // avatar landed a hit — 0 = idle, 0→1 = mid-swing, resets to 0 when done.
   const attackProgressRef = useRef(0);
+  // Mirrors the remote player's animState broadcast — updated at 10Hz.
+  const animStateRef = useRef<'idle' | 'run' | 'slide' | 'attack' | 'jump' | 'hurt'>('idle');
+  // Smoothly interpolated Y offset for the jump visual (peer Y is never
+  // broadcast — only X/Z are — so we fake height from animState alone).
+  const remoteYRef = useRef(0);
   // HP bar: updated from transform broadcasts (10Hz). Using state so the
   // Html overlay re-renders when HP changes, but only at 10Hz max.
   const [displayHp, setDisplayHp] = useState(maxHp);
@@ -229,6 +235,7 @@ function RemotePlayerAvatar({
 
       movingRef.current = payload.moving;
       sprintingRef.current = payload.sprinting;
+      animStateRef.current = payload.animState ?? 'idle';
       setDisplayHp(Math.max(0, Math.round(payload.hp)));
       setDisplayShieldHp(Math.max(0, Math.round(payload.shieldHp ?? 0)));
       setDisplayShieldMaxHp(Math.max(0, Math.round(payload.shieldMaxHp ?? 0)));
@@ -274,6 +281,10 @@ function RemotePlayerAvatar({
 
       // Attack swing: override the right arm when this avatar just landed a
       // PvP hit, so observers see the punch — 0→1 progress, then resets.
+      // Also triggered by animState='attack' so monster attacks are visible too.
+      if (animStateRef.current === 'attack' && attackProgressRef.current <= 0) {
+        attackProgressRef.current = 0.001;
+      }
       if (attackProgressRef.current > 0) {
         attackProgressRef.current = Math.min(1, attackProgressRef.current + delta / REMOTE_ATTACK_SWING_DURATION);
         const a = attackProgressRef.current < 1 ? Math.sin(attackProgressRef.current * Math.PI) : 0;
@@ -281,6 +292,22 @@ function RemotePlayerAvatar({
         if (attackProgressRef.current >= 1) attackProgressRef.current = 0;
       }
     }
+
+    // ── Pose overrides from animState ─────────────────────────────────────
+    // Jump: smoothly offset Y so the avatar visibly lifts off the ground
+    // (Y isn't broadcast — we derive it from animState alone).
+    const targetY = animStateRef.current === 'jump' ? 0.55 : 0;
+    remoteYRef.current = THREE.MathUtils.lerp(remoteYRef.current, targetY, Math.min(1, delta * 7));
+    g.position.y = remoteYRef.current;
+
+    // Slide: squash scale-Y + forward tilt. Run: slight forward lean.
+    const isSliding = animStateRef.current === 'slide';
+    g.scale.y = THREE.MathUtils.lerp(g.scale.y, isSliding ? 0.65 : 1, Math.min(1, delta * 8));
+    g.rotation.x = THREE.MathUtils.lerp(
+      g.rotation.x,
+      isSliding ? 0.30 : animStateRef.current === 'run' ? -0.07 : 0,
+      Math.min(1, delta * 8)
+    );
   });
 
   const equippedByCategory = useMemo(() => loadout?.equippedByCategory ?? {}, [loadout]);
@@ -297,25 +324,6 @@ function RemotePlayerAvatar({
   const isAdmin = loadout.role === "admin";
   const isMod = loadout.role === "moderator";
 
-  // Container border + glow based on role
-  const containerBorderColor = isAdmin
-    ? "rgba(239,68,68,0.7)"
-    : isMod
-    ? "rgba(34,197,94,0.7)"
-    : loadout.verified
-    ? "rgba(168,85,247,0.6)"
-    : "rgba(255,255,255,0.1)";
-
-  const containerBoxShadow = isAdmin
-    ? "0 0 12px rgba(239,68,68,0.5), 0 0 24px rgba(239,68,68,0.2), inset 0 0 8px rgba(239,68,68,0.05)"
-    : isMod
-    ? "0 0 12px rgba(34,197,94,0.45), 0 0 24px rgba(34,197,94,0.15), inset 0 0 8px rgba(34,197,94,0.05)"
-    : loadout.verified
-    ? "0 0 10px rgba(168,85,247,0.35), 0 0 20px rgba(168,85,247,0.1)"
-    : "0 2px 8px rgba(0,0,0,0.5)";
-
-  const usernameColor = isAdmin ? "#fbbf24" : "#f4f4f5";
-
   return (
     <group ref={group} position={[0, 0, 0]}>
       <CharacterModel
@@ -330,148 +338,174 @@ function RemotePlayerAvatar({
           <FloatingDamageNumber amount={b.amount} />
         </group>
       ))}
-      {/* Name tag + HP/Shield bars — HTML overlay in 3D space, always faces camera */}
+      {/* HUD nametag + HP bars — transparent game-style overlay */}
       <Html
-        position={[0, 2.75, 0]}
+        position={[0, 2.85, 0]}
         center
         occlude={false}
         distanceFactor={7}
         style={{ pointerEvents: "none", userSelect: "none" }}
       >
+        <style>{`
+          @keyframes nametag-float {
+            0%, 100% { transform: translateY(0px); }
+            50%       { transform: translateY(-2px); }
+          }
+        `}</style>
         <div style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "4px",
+          gap: "5px",
           opacity: isDead ? 0.3 : 1,
           transition: "opacity 0.4s ease",
+          pointerEvents: "none",
+          userSelect: "none",
         }}>
-          {/* Card container */}
+
+          {/* ── Floating nametag (transparent HUD) ── */}
           <div style={{
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: "5px",
-            padding: "7px 12px 8px",
-            background: "rgba(6,6,10,0.82)",
-            backdropFilter: "blur(8px)",
-            WebkitBackdropFilter: "blur(8px)",
-            border: `1px solid ${containerBorderColor}`,
-            borderRadius: "12px",
-            boxShadow: containerBoxShadow,
-            minWidth: "100px",
+            gap: "3px",
+            animation: "nametag-float 3s ease-in-out infinite",
           }}>
-
-            {/* Username */}
-            <div style={{
-              color: usernameColor,
-              fontSize: "12px",
-              fontWeight: 800,
-              fontFamily: "system-ui, sans-serif",
-              letterSpacing: "0.02em",
-              whiteSpace: "nowrap",
-              textShadow: isAdmin
-                ? "0 0 10px rgba(251,191,36,0.7)"
-                : "0 1px 4px rgba(0,0,0,0.95)",
-            }}>
-              <StyledUsername
-                name={loadout.username}
-                styleKey={loadout.nameStyleKey}
-                size="sm"
-                staticMode={true}
-              />
+            {/* Name row: role icon + styled name + online dot */}
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              {isAdmin && (
+                <span style={{ fontSize: "10px", filter: "drop-shadow(0 0 4px rgba(239,68,68,0.9))" }}>⚡</span>
+              )}
+              {!isAdmin && isMod && (
+                <span style={{ fontSize: "10px", filter: "drop-shadow(0 0 4px rgba(34,211,238,0.9))" }}>🛡</span>
+              )}
+              {!isAdmin && !isMod && loadout.verified && (
+                <span style={{ fontSize: "10px", filter: "drop-shadow(0 0 4px rgba(168,85,247,0.9))" }}>✦</span>
+              )}
+              <div style={{
+                fontSize: "12px",
+                fontFamily: "system-ui, sans-serif",
+                fontWeight: 800,
+                whiteSpace: "nowrap",
+                textShadow: "0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5)",
+              }}>
+                <StyledUsername
+                  name={loadout.username}
+                  styleKey={loadout.nameStyleKey}
+                  size="sm"
+                  staticMode={true}
+                />
+              </div>
+              <span style={{
+                width: "5px", height: "5px", borderRadius: "50%",
+                background: "#4ade80",
+                boxShadow: "0 0 4px rgba(74,222,128,0.9)",
+                flexShrink: 0, display: "inline-block",
+              }} />
             </div>
 
-            {/* Badge row */}
-            {(isAdmin || isMod || loadout.verified) && (
-              <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-                {isAdmin && (
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", gap: "2px",
-                    padding: "1px 6px",
-                    background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.6)",
-                    borderRadius: "999px", color: "#fca5a5", fontSize: "8px", fontWeight: 700,
-                    fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
-                    boxShadow: "0 0 8px rgba(239,68,68,0.45)", whiteSpace: "nowrap",
-                  }}>⚡ Admin</span>
-                )}
-                {isMod && (
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", gap: "2px",
-                    padding: "1px 6px",
-                    background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.55)",
-                    borderRadius: "999px", color: "#86efac", fontSize: "8px", fontWeight: 700,
-                    fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
-                    boxShadow: "0 0 8px rgba(34,197,94,0.35)", whiteSpace: "nowrap",
-                  }}>🛡 Mod</span>
-                )}
-                {loadout.verified && (
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", gap: "2px",
-                    padding: "1px 6px",
-                    background: "rgba(59,130,246,0.18)", border: "1px solid rgba(59,130,246,0.55)",
-                    borderRadius: "999px", color: "#93c5fd", fontSize: "8px", fontWeight: 700,
-                    fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
-                    boxShadow: "0 0 8px rgba(59,130,246,0.4)", whiteSpace: "nowrap",
-                  }}>✦ Verified</span>
-                )}
+            {/* Role-colored divider line */}
+            <div style={{
+              width: "80px", height: "1px",
+              background: isAdmin
+                ? "#ef4444"
+                : isMod
+                ? "#22d3ee"
+                : loadout.verified
+                ? "#a855f7"
+                : "rgba(255,255,255,0.25)",
+              boxShadow: isAdmin
+                ? "0 0 6px rgba(239,68,68,0.8)"
+                : isMod
+                ? "0 0 6px rgba(34,211,238,0.8)"
+                : loadout.verified
+                ? "0 0 6px rgba(168,85,247,0.7)"
+                : "none",
+            }} />
+
+            {/* Badge dots — up to 3 from loadout.badges */}
+            {loadout.badges.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                {loadout.badges.slice(0, 3).map((key) => {
+                  const s = getBadgeStyle(key);
+                  const icon =
+                    key === "admin" ? "⚡" :
+                    key === "mod" ? "🛡" :
+                    key === "verified" ? "✦" :
+                    key === "premium" ? "★" :
+                    key === "elite" ? "◆" :
+                    key === "og" ? "🔥" :
+                    key === "streaker" ? "🔥" :
+                    key === "vip" ? "💎" :
+                    key === "helper" ? "🤝" :
+                    key === "ns_ultra" ? "👑" :
+                    key === "grinder" ? "⚔" :
+                    key === "season_vet" ? "🏆" :
+                    "•";
+                  return (
+                    <span key={key} style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: "16px", height: "16px", borderRadius: "50%",
+                      background: s.bg,
+                      border: `1px solid ${s.border}`,
+                      boxShadow: `0 0 5px ${s.glow}`,
+                      color: s.text,
+                      fontSize: "9px",
+                    }}>{icon}</span>
+                  );
+                })}
               </div>
             )}
+          </div>
 
-            {/* Shield bar — only shown when player has a shield equipped */}
+          {/* ── HP + Shield bars (below the float, not animated) ── */}
+          <div style={{
+            display: "flex", flexDirection: "column", gap: "2px",
+            width: "88px",
+          }}>
+            {/* Shield bar */}
             {hasShield && (
-              <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "2px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
                 <div style={{
                   display: "flex", alignItems: "center", justifyContent: "space-between",
-                  fontSize: "8px", fontWeight: 700, fontFamily: "monospace",
+                  fontSize: "7px", fontWeight: 700, fontFamily: "monospace",
                   color: shieldBroken ? "rgba(100,116,139,0.7)" : "rgba(96,165,250,0.9)",
                 }}>
                   <span>🛡</span>
-                  <span style={{ letterSpacing: "0.02em" }}>
-                    {shieldBroken ? "SCHILD LÄDT…" : `${displayShieldHp}/${displayShieldMaxHp}`}
-                  </span>
+                  <span>{shieldBroken ? "LÄDT…" : `${displayShieldHp}/${displayShieldMaxHp}`}</span>
                 </div>
                 <div style={{
-                  width: "100%",
-                  height: "7px",
-                  borderRadius: "4px",
-                  background: "rgba(0,0,0,0.7)",
+                  width: "100%", height: "5px", borderRadius: "3px",
+                  background: "rgba(0,0,0,0.55)",
                   overflow: "hidden",
-                  boxShadow: shieldBroken ? "none" : "0 0 0 1px rgba(96,165,250,0.3), 0 0 8px rgba(96,165,250,0.15)",
+                  boxShadow: shieldBroken ? "none" : "0 0 0 1px rgba(96,165,250,0.25)",
                 }}>
                   <div style={{
                     width: shieldBroken ? "0%" : `${shieldPct}%`,
                     height: "100%",
-                    background: shieldBroken
-                      ? "transparent"
-                      : `linear-gradient(90deg, rgba(96,165,250,0.9), rgba(147,197,253,1))`,
-                    borderRadius: "4px",
-                    transition: "width 0.12s ease, background 0.25s ease",
-                    boxShadow: shieldBroken ? "none" : "0 0 8px rgba(96,165,250,0.7), 0 0 2px rgba(255,255,255,0.4)",
+                    background: `linear-gradient(90deg, rgba(96,165,250,0.9), rgba(147,197,253,1))`,
+                    borderRadius: "3px",
+                    transition: "width 0.12s ease",
+                    boxShadow: shieldBroken ? "none" : "0 0 6px rgba(96,165,250,0.6)",
                   }} />
                 </div>
               </div>
             )}
-
             {/* HP bar */}
-            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "2px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
               <div style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                fontSize: "8px", fontWeight: 700, fontFamily: "monospace",
+                fontSize: "7px", fontWeight: 700, fontFamily: "monospace",
                 color: isDead ? "rgba(239,68,68,0.7)" : hpColor,
               }}>
                 <span>❤</span>
-                <span style={{ letterSpacing: "0.02em" }}>
-                  {isDead ? "☠ TOT" : `${displayHp}/${maxHp}`}
-                </span>
+                <span>{isDead ? "☠ TOT" : `${displayHp}/${maxHp}`}</span>
               </div>
               <div style={{
-                width: "100%",
-                height: "8px",
-                borderRadius: "5px",
-                background: "rgba(0,0,0,0.7)",
+                width: "100%", height: "6px", borderRadius: "3px",
+                background: "rgba(0,0,0,0.55)",
                 overflow: "hidden",
-                boxShadow: `0 0 0 1px rgba(255,255,255,0.08), 0 0 10px ${hpGlow}30`,
+                boxShadow: `0 0 0 1px rgba(255,255,255,0.07)`,
               }}>
                 <div style={{
                   width: isDead ? "0%" : `${hpPct}%`,
@@ -479,14 +513,14 @@ function RemotePlayerAvatar({
                   background: isDead
                     ? "#ef4444"
                     : `linear-gradient(90deg, ${hpColor}cc, ${hpColor})`,
-                  borderRadius: "5px",
+                  borderRadius: "3px",
                   transition: "width 0.12s ease, background 0.3s ease",
-                  boxShadow: isDead ? "none" : `0 0 10px ${hpGlow}, 0 0 2px rgba(255,255,255,0.3)`,
+                  boxShadow: isDead ? "none" : `0 0 8px ${hpGlow}`,
                 }} />
               </div>
             </div>
-
           </div>
+
         </div>
       </Html>
     </group>

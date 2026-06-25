@@ -36,6 +36,10 @@ export interface WorldTransformPayload {
   shieldMaxHp: number;
   moving: boolean;
   sprinting: boolean;
+  /** Animation state broadcast alongside position so remote avatars can
+   * mirror slide/jump/attack poses without local physics. Optional for
+   * backwards-compat with any payload received before this field existed. */
+  animState?: 'idle' | 'run' | 'slide' | 'attack' | 'jump' | 'hurt';
 }
 
 /** Server-authored (lib/actions/pvp.ts via lib/realtime-server.ts), never
