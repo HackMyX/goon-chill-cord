@@ -1096,6 +1096,8 @@ export function Player({
         z: g.position.z,
         yaw: g.rotation.y,
         hp: combatRef.current.hp,
+        shieldHp: combatRef.current.shieldHpRemaining,
+        shieldMaxHp: combatRef.current.shieldMaxHp,
         moving,
         sprinting,
       });

@@ -88,6 +88,7 @@ const OPTIONAL_TABLES: Array<{ name: string; migration: string; feature: string 
   { name: "name_styles",             migration: "Supabase SQL Editor",                                            feature: "Name Styles" },
   { name: "user_name_styles",        migration: "Supabase SQL Editor",                                            feature: "Name Styles (User-Zuweisungen)" },
   { name: "name_style_rarity_config",migration: "scripts/add-name-style-rarity-config.cjs",                      feature: "Name Styles (Seltenheiten-Konfiguration)" },
+  { name: "pet_rarity_overrides",    migration: "scripts/add-pet-rarity-overrides.cjs",                          feature: "Pets (Rarität-Stats pro Tierart)" },
 ];
 
 /** Config singleton rows that must exist. */

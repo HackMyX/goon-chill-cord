@@ -29,6 +29,11 @@ export interface WorldTransformPayload {
   z: number;
   yaw: number;
   hp: number;
+  /** Current shield HP — 0 when no shield equipped or shield fully broken. */
+  shieldHp: number;
+  /** Max shield HP — 0 when no shield is equipped. Remote players show a
+   * shield bar only when this is > 0. */
+  shieldMaxHp: number;
   moving: boolean;
   sprinting: boolean;
 }

@@ -126,6 +126,8 @@ export interface ItemStats {
   /** Pass item name + type to auto-resolve and show pet combat stats. */
   itemName?: string | null;
   itemType?: string | null;
+  /** Item rarity — used to resolve per-rarity pet stats when itemType is "pet". */
+  itemRarity?: string | null;
 }
 
 /**
@@ -142,6 +144,7 @@ export function ItemStatBadges({
   shield_regen_cooldown_sec,
   itemName,
   itemType,
+  itemRarity,
 }: ItemStats) {
   const hasDmg = damage !== null && damage !== undefined && damage > 0;
   const hasArmor = armor !== null && armor !== undefined && armor > 0;
@@ -160,7 +163,7 @@ export function ItemStatBadges({
     shield_regen_cooldown_sec > 0;
   const { damageLabel, armorLabel, perkLabels } = useSiteConfig();
   const petConfigs = usePetConfigs();
-  const petStats = itemType === "pet" && itemName ? getPetStatsForDisplay(itemName, petConfigs) : null;
+  const petStats = itemType === "pet" && itemName ? getPetStatsForDisplay(itemName, petConfigs, itemRarity ?? undefined) : null;
 
   if (!hasDmg && !hasArmor && !hasPerk && !hasShield && !petStats) return null;
 

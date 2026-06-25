@@ -419,64 +419,74 @@ function SupportButtonInner() {
                 <div className="flex flex-col">
                   {view === "list" && (
                     <>
+                      {/* ── Action buttons — always visible at top ── */}
+                      <div className="border-b border-white/10 bg-black/20 p-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          {(Object.entries(CATEGORY_META) as [TicketCategory, typeof CATEGORY_META.bug][]).map(([cat, meta]) => {
+                            const CatIcon = meta.icon;
+                            return (
+                              <button
+                                key={cat}
+                                onClick={() => openNew(cat)}
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-purple-400/35 bg-purple-500/12 px-3 py-2.5 text-xs font-bold text-purple-300 transition-all hover:bg-purple-500/25 hover:border-purple-400/60 hover:shadow-[0_0_12px_rgba(168,85,247,0.2)]"
+                              >
+                                <CatIcon className="h-3.5 w-3.5 shrink-0" />
+                                {meta.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {/* Compact reward hint */}
+                        <p className="mt-2 text-center text-[10px] text-amber-400/70 font-medium">
+                          🏆 Gute Reports &amp; Ideen werden mit Credits belohnt!
+                        </p>
+                      </div>
+
+                      {/* ── Ticket list ── */}
                       {loading && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-zinc-500" /></div>}
                       {!loading && tickets.length === 0 && (
                         <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
                           <MessageCircle className="h-8 w-8 text-zinc-700" />
-                          <p className="text-sm text-zinc-500">Du hast noch keine Tickets.</p>
+                          <p className="text-sm text-zinc-500">Noch keine Tickets. Erstelle deinen ersten Bericht!</p>
                         </div>
                       )}
-                      {!loading && tickets.map((ticket) => {
-                        const meta = CATEGORY_META[ticket.category];
-                        const CatIcon = meta.icon;
-                        return (
-                          <button
-                            key={ticket.id}
-                            onClick={() => openDetail(ticket)}
-                            className="flex flex-col gap-1.5 border-b border-white/[0.05] px-4 py-3 text-left transition-colors hover:bg-purple-500/[0.05] last:border-b-0"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="flex items-center gap-1.5 text-sm font-semibold leading-tight text-zinc-200">
-                                <CatIcon className="h-3 w-3 shrink-0 text-zinc-500" />
-                                {ticket.subject}
-                              </p>
-                              <StatusBadge status={ticket.status} />
-                            </div>
-                            <p className="text-[11px] text-zinc-500">
-                              {new Date(ticket.updatedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                              {" · "}{ticket.messageCount} Nachricht{ticket.messageCount !== 1 ? "en" : ""}
-                            </p>
-                          </button>
-                        );
-                      })}
-                      {/* Reward showcase — always visible in list */}
-                      <div className="mx-3 my-3 overflow-hidden rounded-xl border border-amber-400/30 bg-amber-500/10">
-                        <div className="flex items-center gap-2 border-b border-amber-400/20 px-3 py-2">
-                          <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
-                          <span className="text-xs font-bold text-amber-300">Belohnungen für dein Feedback</span>
-                        </div>
-                        <div className="px-3 py-2.5 text-[11px] leading-relaxed text-amber-200/80">
-                          Hilfreiche Problemmeldungen und gute Ideen werden vom Team mit individuellen <span className="font-bold text-amber-300">Credits-Belohnungen</span> honoriert — je detaillierter dein Report, desto größer die Chance!
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-3 border-t border-white/10 bg-white/[0.02] p-4">
-                        {(Object.entries(CATEGORY_META) as [TicketCategory, typeof CATEGORY_META.bug][]).map(([cat, meta]) => {
-                          const CatIcon = meta.icon;
-                          return (
-                            <div key={cat} className="flex flex-col gap-1.5">
-                              <p className="text-[11px] leading-snug text-zinc-500">{meta.caption}</p>
+                      {!loading && tickets.length > 0 && (
+                        <>
+                          <div className="px-4 pt-3 pb-1">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Deine Tickets</p>
+                          </div>
+                          {tickets.map((ticket) => {
+                            const meta = CATEGORY_META[ticket.category];
+                            const CatIcon = meta.icon;
+                            return (
                               <button
-                                onClick={() => openNew(cat)}
-                                className="flex items-center justify-center gap-2 rounded-lg border border-purple-400/30 bg-purple-500/10 px-3 py-2 text-xs font-bold text-purple-300 hover:bg-purple-500/20"
+                                key={ticket.id}
+                                onClick={() => openDetail(ticket)}
+                                className="flex flex-col gap-1.5 border-b border-white/[0.05] px-4 py-3 text-left transition-colors hover:bg-purple-500/[0.05] last:border-b-0"
                               >
-                                <CatIcon className="h-3.5 w-3.5" />
-                                {meta.label}
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="flex items-center gap-1.5 text-sm font-semibold leading-tight text-zinc-200">
+                                    <CatIcon className="h-3 w-3 shrink-0 text-zinc-500" />
+                                    {ticket.subject}
+                                  </p>
+                                  <StatusBadge status={ticket.status} />
+                                </div>
+                                <p className="text-[11px] text-zinc-500">
+                                  {new Date(ticket.updatedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                  {" · "}{ticket.messageCount} Nachricht{ticket.messageCount !== 1 ? "en" : ""}
+                                </p>
                               </button>
+                            );
+                          })}
+                          {/* Reward showcase — at the bottom of the ticket list */}
+                          <div className="mx-3 my-3 overflow-hidden rounded-xl border border-amber-400/25 bg-amber-500/8">
+                            <div className="flex items-center gap-2 px-3 py-2">
+                              <Trophy className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                              <span className="text-[11px] font-bold text-amber-300">Hilfreiche Berichte = Credits-Belohnung!</span>
                             </div>
-                          );
-                        })}
-                      </div>
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
 

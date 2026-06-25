@@ -6,7 +6,7 @@ import { useFrame } from "@react-three/fiber";
 import { Billboard, Text } from "@react-three/drei";
 import { type EquippedItem } from "@/lib/rarity-colors";
 import { debugWarn } from "@/lib/debug";
-import { getPetSpeciesId, DEFAULT_PET_TYPES, type PetTypeConfig } from "@/lib/pets";
+import { getPetSpeciesId, DEFAULT_PET_TYPES, resolvePetStatsForRarity, type PetTypeConfig } from "@/lib/pets";
 import type { MonsterRegistry } from "@/components/world/combat-types";
 import {
   PetVariant,
@@ -415,8 +415,17 @@ function PetCompanion({
   const speciesId = useMemo(() => getPetSpeciesId(item.name), [item.name]);
   const petConfig = useMemo(() => {
     const fallback = DEFAULT_PET_TYPES.find((p) => p.id === speciesId) ?? DEFAULT_PET_TYPES[DEFAULT_PET_TYPES.length - 1];
-    return (petTypes ?? DEFAULT_PET_TYPES).find((p) => p.id === speciesId) ?? fallback;
-  }, [petTypes, speciesId]);
+    const base = (petTypes ?? DEFAULT_PET_TYPES).find((p) => p.id === speciesId) ?? fallback;
+    // Apply per-rarity stat overrides based on the equipped item's rarity.
+    const rarityStats = resolvePetStatsForRarity(base, item.rarity ?? "normal");
+    return {
+      ...base,
+      damage: rarityStats.damage,
+      aggroRadius: rarityStats.aggroRadius,
+      attackSpeed: rarityStats.attackSpeed,
+      moveSpeed: rarityStats.moveSpeed,
+    };
+  }, [petTypes, speciesId, item.rarity]);
 
   const pos = useRef(new THREE.Vector3(0.8, flying ? 1.2 : 0, 0.6));
   const target = useRef(new THREE.Vector3());

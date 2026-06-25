@@ -146,6 +146,8 @@ function RemotePlayerAvatar({
   // HP bar: updated from transform broadcasts (10Hz). Using state so the
   // Html overlay re-renders when HP changes, but only at 10Hz max.
   const [displayHp, setDisplayHp] = useState(maxHp);
+  const [displayShieldHp, setDisplayShieldHp] = useState(0);
+  const [displayShieldMaxHp, setDisplayShieldMaxHp] = useState(0);
   const [isDead, setIsDead] = useState(false);
 
   // Registers this avatar into the shared registry Player.tsx's melee scan
@@ -228,6 +230,8 @@ function RemotePlayerAvatar({
       movingRef.current = payload.moving;
       sprintingRef.current = payload.sprinting;
       setDisplayHp(Math.max(0, Math.round(payload.hp)));
+      setDisplayShieldHp(Math.max(0, Math.round(payload.shieldHp ?? 0)));
+      setDisplayShieldMaxHp(Math.max(0, Math.round(payload.shieldMaxHp ?? 0)));
       setIsDead(payload.hp <= 0);
     });
   }, [userId]);
@@ -284,7 +288,11 @@ function RemotePlayerAvatar({
   if (!loadout) return null;
 
   const hpPct = Math.max(0, Math.min(100, (displayHp / maxHp) * 100));
-  const hpColor = hpPct > 50 ? "#4ade80" : hpPct > 20 ? "#facc15" : "#ef4444";
+  const hpColor = hpPct > 60 ? "#4ade80" : hpPct > 30 ? "#facc15" : hpPct > 10 ? "#f97316" : "#ef4444";
+  const hpGlow = hpPct > 60 ? "rgba(74,222,128,0.5)" : hpPct > 30 ? "rgba(250,204,21,0.5)" : hpPct > 10 ? "rgba(249,115,22,0.5)" : "rgba(239,68,68,0.5)";
+  const hasShield = displayShieldMaxHp > 0;
+  const shieldPct = hasShield ? Math.max(0, Math.min(100, (displayShieldHp / displayShieldMaxHp) * 100)) : 0;
+  const shieldBroken = hasShield && displayShieldHp <= 0;
 
   const isAdmin = loadout.role === "admin";
   const isMod = loadout.role === "moderator";
@@ -322,21 +330,21 @@ function RemotePlayerAvatar({
           <FloatingDamageNumber amount={b.amount} />
         </group>
       ))}
-      {/* Name tag + HP bar — HTML overlay in 3D space, always faces camera */}
+      {/* Name tag + HP/Shield bars — HTML overlay in 3D space, always faces camera */}
       <Html
-        position={[0, 2.6, 0]}
+        position={[0, 2.75, 0]}
         center
         occlude={false}
-        distanceFactor={8}
+        distanceFactor={7}
         style={{ pointerEvents: "none", userSelect: "none" }}
       >
         <div style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "5px",
-          opacity: isDead ? 0.35 : 1,
-          transition: "opacity 0.3s",
+          gap: "4px",
+          opacity: isDead ? 0.3 : 1,
+          transition: "opacity 0.4s ease",
         }}>
           {/* Card container */}
           <div style={{
@@ -344,26 +352,27 @@ function RemotePlayerAvatar({
             flexDirection: "column",
             alignItems: "center",
             gap: "5px",
-            padding: "6px 10px 7px",
-            background: "rgba(9,9,11,0.72)",
-            backdropFilter: "blur(6px)",
-            WebkitBackdropFilter: "blur(6px)",
+            padding: "7px 12px 8px",
+            background: "rgba(6,6,10,0.82)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
             border: `1px solid ${containerBorderColor}`,
-            borderRadius: "10px",
+            borderRadius: "12px",
             boxShadow: containerBoxShadow,
-            minWidth: "88px",
+            minWidth: "100px",
           }}>
+
             {/* Username */}
             <div style={{
               color: usernameColor,
-              fontSize: "11px",
-              fontWeight: 700,
+              fontSize: "12px",
+              fontWeight: 800,
               fontFamily: "system-ui, sans-serif",
-              letterSpacing: "0.03em",
+              letterSpacing: "0.02em",
               whiteSpace: "nowrap",
               textShadow: isAdmin
-                ? "0 0 8px rgba(251,191,36,0.6)"
-                : "0 1px 4px rgba(0,0,0,0.9)",
+                ? "0 0 10px rgba(251,191,36,0.7)"
+                : "0 1px 4px rgba(0,0,0,0.95)",
             }}>
               <StyledUsername
                 name={loadout.username}
@@ -373,109 +382,110 @@ function RemotePlayerAvatar({
               />
             </div>
 
-            {/* Badge row — only rendered when there is at least one badge */}
+            {/* Badge row */}
             {(isAdmin || isMod || loadout.verified) && (
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                flexWrap: "nowrap",
-              }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
                 {isAdmin && (
                   <span style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "2px",
+                    display: "inline-flex", alignItems: "center", gap: "2px",
                     padding: "1px 6px",
-                    background: "rgba(239,68,68,0.18)",
-                    border: "1px solid rgba(239,68,68,0.55)",
-                    borderRadius: "999px",
-                    color: "#fca5a5",
-                    fontSize: "8px",
-                    fontWeight: 700,
-                    fontFamily: "system-ui, sans-serif",
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                    boxShadow: "0 0 6px rgba(239,68,68,0.4)",
-                    whiteSpace: "nowrap",
-                  }}>
-                    ⚡ Admin
-                  </span>
+                    background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.6)",
+                    borderRadius: "999px", color: "#fca5a5", fontSize: "8px", fontWeight: 700,
+                    fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
+                    boxShadow: "0 0 8px rgba(239,68,68,0.45)", whiteSpace: "nowrap",
+                  }}>⚡ Admin</span>
                 )}
                 {isMod && (
                   <span style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "2px",
+                    display: "inline-flex", alignItems: "center", gap: "2px",
                     padding: "1px 6px",
-                    background: "rgba(34,197,94,0.15)",
-                    border: "1px solid rgba(34,197,94,0.5)",
-                    borderRadius: "999px",
-                    color: "#86efac",
-                    fontSize: "8px",
-                    fontWeight: 700,
-                    fontFamily: "system-ui, sans-serif",
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                    boxShadow: "0 0 6px rgba(34,197,94,0.3)",
-                    whiteSpace: "nowrap",
-                  }}>
-                    🛡 Mod
-                  </span>
+                    background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.55)",
+                    borderRadius: "999px", color: "#86efac", fontSize: "8px", fontWeight: 700,
+                    fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
+                    boxShadow: "0 0 8px rgba(34,197,94,0.35)", whiteSpace: "nowrap",
+                  }}>🛡 Mod</span>
                 )}
                 {loadout.verified && (
                   <span style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "2px",
+                    display: "inline-flex", alignItems: "center", gap: "2px",
                     padding: "1px 6px",
-                    background: "rgba(59,130,246,0.15)",
-                    border: "1px solid rgba(59,130,246,0.5)",
-                    borderRadius: "999px",
-                    color: "#93c5fd",
-                    fontSize: "8px",
-                    fontWeight: 700,
-                    fontFamily: "system-ui, sans-serif",
-                    letterSpacing: "0.04em",
-                    boxShadow: "0 0 6px rgba(59,130,246,0.35)",
-                    whiteSpace: "nowrap",
-                  }}>
-                    ✦ Verified
-                  </span>
+                    background: "rgba(59,130,246,0.18)", border: "1px solid rgba(59,130,246,0.55)",
+                    borderRadius: "999px", color: "#93c5fd", fontSize: "8px", fontWeight: 700,
+                    fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
+                    boxShadow: "0 0 8px rgba(59,130,246,0.4)", whiteSpace: "nowrap",
+                  }}>✦ Verified</span>
                 )}
               </div>
             )}
 
+            {/* Shield bar — only shown when player has a shield equipped */}
+            {hasShield && (
+              <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "2px" }}>
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  fontSize: "8px", fontWeight: 700, fontFamily: "monospace",
+                  color: shieldBroken ? "rgba(100,116,139,0.7)" : "rgba(96,165,250,0.9)",
+                }}>
+                  <span>🛡</span>
+                  <span style={{ letterSpacing: "0.02em" }}>
+                    {shieldBroken ? "SCHILD LÄDT…" : `${displayShieldHp}/${displayShieldMaxHp}`}
+                  </span>
+                </div>
+                <div style={{
+                  width: "100%",
+                  height: "7px",
+                  borderRadius: "4px",
+                  background: "rgba(0,0,0,0.7)",
+                  overflow: "hidden",
+                  boxShadow: shieldBroken ? "none" : "0 0 0 1px rgba(96,165,250,0.3), 0 0 8px rgba(96,165,250,0.15)",
+                }}>
+                  <div style={{
+                    width: shieldBroken ? "0%" : `${shieldPct}%`,
+                    height: "100%",
+                    background: shieldBroken
+                      ? "transparent"
+                      : `linear-gradient(90deg, rgba(96,165,250,0.9), rgba(147,197,253,1))`,
+                    borderRadius: "4px",
+                    transition: "width 0.12s ease, background 0.25s ease",
+                    boxShadow: shieldBroken ? "none" : "0 0 8px rgba(96,165,250,0.7), 0 0 2px rgba(255,255,255,0.4)",
+                  }} />
+                </div>
+              </div>
+            )}
+
             {/* HP bar */}
-            <div style={{
-              width: "72px",
-              height: "5px",
-              borderRadius: "3px",
-              background: "rgba(0,0,0,0.6)",
-              overflow: "hidden",
-              boxShadow: "0 0 0 1px rgba(255,255,255,0.1)",
-            }}>
+            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "2px" }}>
               <div style={{
-                width: `${hpPct}%`,
-                height: "100%",
-                background: hpColor,
-                borderRadius: "3px",
-                transition: "width 0.15s ease, background 0.3s ease",
-                boxShadow: `0 0 6px ${hpColor}88`,
-              }} />
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                fontSize: "8px", fontWeight: 700, fontFamily: "monospace",
+                color: isDead ? "rgba(239,68,68,0.7)" : hpColor,
+              }}>
+                <span>❤</span>
+                <span style={{ letterSpacing: "0.02em" }}>
+                  {isDead ? "☠ TOT" : `${displayHp}/${maxHp}`}
+                </span>
+              </div>
+              <div style={{
+                width: "100%",
+                height: "8px",
+                borderRadius: "5px",
+                background: "rgba(0,0,0,0.7)",
+                overflow: "hidden",
+                boxShadow: `0 0 0 1px rgba(255,255,255,0.08), 0 0 10px ${hpGlow}30`,
+              }}>
+                <div style={{
+                  width: isDead ? "0%" : `${hpPct}%`,
+                  height: "100%",
+                  background: isDead
+                    ? "#ef4444"
+                    : `linear-gradient(90deg, ${hpColor}cc, ${hpColor})`,
+                  borderRadius: "5px",
+                  transition: "width 0.12s ease, background 0.3s ease",
+                  boxShadow: isDead ? "none" : `0 0 10px ${hpGlow}, 0 0 2px rgba(255,255,255,0.3)`,
+                }} />
+              </div>
             </div>
 
-            {/* HP text */}
-            <div style={{
-              color: hpColor,
-              fontSize: "9px",
-              fontWeight: 700,
-              fontFamily: "monospace",
-              textShadow: "0 1px 3px rgba(0,0,0,0.9)",
-              letterSpacing: "0.02em",
-            }}>
-              {isDead ? "☠ TOT" : `${displayHp}/${maxHp}`}
-            </div>
           </div>
         </div>
       </Html>
