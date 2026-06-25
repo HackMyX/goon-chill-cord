@@ -302,8 +302,8 @@ export async function getTicketMessages(ticketId: string): Promise<TicketMessage
   if (!data || data.length === 0) return [];
 
   const userIds = Array.from(new Set(data.map((m) => m.user_id)));
-  const { data: profiles } = await admin.from("profiles").select("id, username, active_name_style_key").in("id", userIds);
-  const byId = new Map((profiles ?? []).map((p) => [p.id, p as { username: string | null; active_name_style_key: string | null }]));
+  const { data: profiles } = await admin.from("profiles").select("id, username, active_name_style_key, avatar_url").in("id", userIds);
+  const byId = new Map((profiles ?? []).map((p) => [p.id, p as { username: string | null; active_name_style_key: string | null; avatar_url: string | null }]));
 
   return data.map((m) => ({
     id: m.id,
@@ -311,6 +311,7 @@ export async function getTicketMessages(ticketId: string): Promise<TicketMessage
     userId: m.user_id,
     username: byId.get(m.user_id)?.username ?? "?",
     nameStyleKey: byId.get(m.user_id)?.active_name_style_key ?? undefined,
+    avatarUrl: byId.get(m.user_id)?.avatar_url ?? null,
     message: m.message ?? "",
     isStaff: m.is_staff ?? false,
     createdAt: m.created_at,
@@ -760,78 +761,128 @@ export async function modUpdateTicketStatus(
 
 export async function modGrantTicketReward(
   ticketId: string,
-  opts: { credits?: number; note?: string }
+  opts: { credits?: number; note?: string; deferred?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { user, isAdminUser } = await requireMod();
     const perms = await effectivePerms(isAdminUser, user.id);
     if (!perms.canRewardTickets) return { success: false, error: "Keine Berechtigung für Ticketbelohnungen." };
-    if (perms.maxRewardPerTicket > 0 && opts.credits && opts.credits > perms.maxRewardPerTicket) {
-      return { success: false, error: `Maximale Belohnung: ${perms.maxRewardPerTicket} Credits.` };
-    }
+
     const admin = createAdminClient();
+    const credits = opts.credits ?? 0;
+
+    // Cumulative limit check: sum all unpaid rewards for this ticket
+    if (perms.maxRewardPerTicket > 0 && credits > 0) {
+      const { data: existing } = await admin
+        .from("ticket_rewards")
+        .select("credits")
+        .eq("ticket_id", ticketId)
+        .is("paid_at", null);
+      const existingTotal = (existing ?? []).reduce((s, r) => s + ((r as Record<string, unknown>).credits as number), 0);
+      if (existingTotal + credits > perms.maxRewardPerTicket) {
+        const remaining = Math.max(0, perms.maxRewardPerTicket - existingTotal);
+        return {
+          success: false,
+          error: remaining === 0
+            ? `Limit erreicht: bereits ${existingTotal} Credits vergeben (max ${perms.maxRewardPerTicket}).`
+            : `Limit überschritten: nur noch ${remaining} Credits verfügbar (${existingTotal} + ${credits} = ${existingTotal + credits} > max ${perms.maxRewardPerTicket}).`,
+        };
+      }
+    }
+
     const { data: ticket } = await admin.from("tickets").select("user_id, subject, status").eq("id", ticketId).single();
     if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
 
     const now = new Date().toISOString();
     const ticketStatus = (ticket as Record<string, unknown>).status as string;
     const isAlreadyClosed = ticketStatus === "closed" || ticketStatus === "resolved";
+    // Deferred defaults to true; but closed tickets always pay immediately
+    const deferred = opts.deferred !== false && !isAlreadyClosed;
 
-    if (isAlreadyClosed) {
-      // Ticket already closed: immediately pay out
-      const updatePayload: Record<string, unknown> = {
-        reward_pending: false,
-        reward_granted_at: now,
-        reward_granted_by: user.id,
-        updated_at: now,
-      };
-      if (opts.note) updatePayload.reward_note = opts.note;
-      if (opts.credits && opts.credits > 0) updatePayload.reward_credits = opts.credits;
+    const { error: insertErr } = await admin.from("ticket_rewards").insert({
+      ticket_id: ticketId,
+      granted_by: user.id,
+      credits,
+      note: opts.note ?? null,
+      deferred,
+      granted_at: now,
+      paid_at: deferred ? null : now,
+    });
+    if (insertErr) return { success: false, error: insertErr.message };
 
-      const { error } = await admin.from("tickets").update(updatePayload).eq("id", ticketId);
-      if (error) return { success: false, error: error.message };
-
-      if (opts.credits && opts.credits > 0) {
-        const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
-        const newCredits = ((targetProfile?.credits as number) ?? 0) + opts.credits;
-        await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
-      }
-      await notifyUser({
-        userId: ticket.user_id,
-        type: "admin_credits",
-        title: "🏆 Belohnung erhalten!",
-        message: opts.credits
-          ? `Für dein Ticket wurden dir +${opts.credits} Credits gutgeschrieben!`
-          : `Für dein Ticket hast du eine Belohnung erhalten!`,
-        link: `/?openTicket=${ticketId}`,
-      });
-    } else {
-      // Ticket still open: pin reward, pay out on close
-      const updatePayload: Record<string, unknown> = {
-        reward_pending: true,
-        reward_granted_by: user.id,
-        updated_at: now,
-      };
-      if (opts.note) updatePayload.reward_note = opts.note;
-      if (opts.credits && opts.credits > 0) updatePayload.reward_credits = opts.credits;
-
-      const { error } = await admin.from("tickets").update(updatePayload).eq("id", ticketId);
-      if (error) return { success: false, error: error.message };
-      await notifyUser({
-        userId: ticket.user_id,
-        type: "admin_credits",
-        title: "🏆 Belohnung angepinnt!",
-        message: opts.credits
-          ? `Dein Ticket enthält eine Belohnung von +${opts.credits} Credits — wird ausgezahlt wenn das Ticket gelöst wird.`
-          : `Dein Ticket enthält eine Belohnung — wird ausgezahlt wenn das Ticket gelöst wird.`,
-        link: `/?openTicket=${ticketId}`,
-      });
+    if (!deferred && credits > 0) {
+      const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
+      const newCredits = ((targetProfile?.credits as number) ?? 0) + credits;
+      await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
     }
+
+    // Sync summary columns
+    await syncTicketRewardSummary(admin, ticketId, user.id, now);
+
+    await notifyUser({
+      userId: ticket.user_id,
+      type: "admin_credits",
+      title: deferred ? "🏆 Belohnung angepinnt!" : "🏆 Belohnung erhalten!",
+      message: credits > 0
+        ? deferred
+          ? `Dein Ticket enthält +${credits} Credits Belohnung — wird ausgezahlt wenn das Ticket gelöst wird.`
+          : `Du hast +${credits} Credits für dein Ticket „${ticket.subject}" erhalten!`
+        : "Belohnung vergeben.",
+      link: `/?openTicket=${ticketId}`,
+    });
     return { success: true };
   } catch (e) {
     void logDebugEvent({ level: "error", scope: "mod", message: "modGrantTicketReward fehlgeschlagen", detail: String(e), context: { ticketId, credits: opts.credits } });
     return { success: false, error: String(e) };
   }
+}
+
+export async function modRemoveTicketReward(
+  rewardId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser, user.id);
+    if (!perms.canRewardTickets) return { success: false, error: "Keine Berechtigung." };
+
+    const admin = createAdminClient();
+    const { data: reward } = await admin
+      .from("ticket_rewards")
+      .select("id, ticket_id, paid_at")
+      .eq("id", rewardId)
+      .single();
+    if (!reward) return { success: false, error: "Belohnung nicht gefunden." };
+    if ((reward as Record<string, unknown>).paid_at) return { success: false, error: "Bereits ausgezahlte Belohnungen können nicht entfernt werden." };
+
+    const { error } = await admin.from("ticket_rewards").delete().eq("id", rewardId);
+    if (error) return { success: false, error: error.message };
+
+    const now = new Date().toISOString();
+    await syncTicketRewardSummary(admin, (reward as Record<string, unknown>).ticket_id as string, user.id, now);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
+
+async function syncTicketRewardSummary(
+  admin: ReturnType<typeof createAdminClient>,
+  ticketId: string,
+  grantedBy: string,
+  now: string,
+): Promise<void> {
+  const { data: rewards } = await admin
+    .from("ticket_rewards")
+    .select("credits, deferred, paid_at")
+    .eq("ticket_id", ticketId);
+  const pending = (rewards ?? []).filter((r) => (r as Record<string, unknown>).deferred && !(r as Record<string, unknown>).paid_at);
+  const pendingTotal = pending.reduce((s, r) => s + ((r as Record<string, unknown>).credits as number), 0);
+  await admin.from("tickets").update({
+    reward_credits: pendingTotal > 0 ? pendingTotal : null,
+    reward_pending: pendingTotal > 0,
+    reward_granted_by: grantedBy,
+    updated_at: now,
+  }).eq("id", ticketId);
 }
 
 export async function modEscalateTicket(ticketId: string): Promise<{ success: boolean; error?: string }> {

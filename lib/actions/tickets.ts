@@ -35,6 +35,7 @@ export interface TicketMessage {
   userId: string;
   username: string;
   nameStyleKey?: string;
+  avatarUrl?: string | null;
   message: string;
   isStaff: boolean;
   createdAt: string;
@@ -50,6 +51,19 @@ export interface InternalNote {
   createdAt: string;
 }
 
+export interface TicketReward {
+  id: string;
+  ticketId: string;
+  credits: number;
+  note?: string | null;
+  deferred: boolean;
+  grantedBy: string;
+  grantedByUsername: string;
+  grantedByAvatarUrl?: string | null;
+  grantedAt: string;
+  paidAt?: string | null;
+}
+
 export interface TicketDetail extends Ticket {
   messages: TicketMessage[];
   internalNotes: InternalNote[];
@@ -58,6 +72,7 @@ export interface TicketDetail extends Ticket {
   rewardNote?: string | null;
   rewardGrantedAt?: string | null;
   rewardPending?: boolean;
+  rewards: TicketReward[];
 }
 
 // ─── User actions ─────────────────────────────────────────────────────────────
@@ -130,6 +145,38 @@ export async function getUserTickets(): Promise<Ticket[]> {
   return attachUsernames(admin, data ?? []);
 }
 
+/** Load all rewards for a ticket — staff only. */
+export async function getTicketRewards(ticketId: string): Promise<TicketReward[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  if (!isModerator(profile)) return [];
+
+  const { data: raw } = await admin
+    .from("ticket_rewards")
+    .select("id, ticket_id, granted_by, credits, note, deferred, granted_at, paid_at")
+    .eq("ticket_id", ticketId)
+    .order("granted_at", { ascending: true });
+
+  const grantorIds = Array.from(new Set((raw ?? []).map((r) => r.granted_by as string)));
+  const grantorInfo = await fetchUsernames(admin, grantorIds);
+
+  return (raw ?? []).map((r) => ({
+    id: r.id as string,
+    ticketId: r.ticket_id as string,
+    credits: r.credits as number,
+    note: r.note as string | null ?? null,
+    deferred: r.deferred as boolean,
+    grantedBy: r.granted_by as string,
+    grantedByUsername: grantorInfo.get(r.granted_by as string)?.username ?? "Staff",
+    grantedByAvatarUrl: grantorInfo.get(r.granted_by as string)?.avatarUrl ?? null,
+    grantedAt: r.granted_at as string,
+    paidAt: r.paid_at as string | null ?? null,
+  }));
+}
+
 export async function getTicketDetail(ticketId: string): Promise<TicketDetail | null> {
   const supabase = await createClient();
   const {
@@ -185,6 +232,29 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
     }
   }
 
+  // Load rewards history
+  const { data: rewardsRaw } = await admin
+    .from("ticket_rewards")
+    .select("id, ticket_id, granted_by, credits, note, deferred, granted_at, paid_at")
+    .eq("ticket_id", ticketId)
+    .order("granted_at", { ascending: true });
+
+  const grantorIds = Array.from(new Set((rewardsRaw ?? []).map((r) => r.granted_by as string)));
+  const grantorInfo = await fetchUsernames(admin, grantorIds);
+
+  const rewards: TicketReward[] = (rewardsRaw ?? []).map((r) => ({
+    id: r.id as string,
+    ticketId: r.ticket_id as string,
+    credits: r.credits as number,
+    note: r.note as string | null ?? null,
+    deferred: r.deferred as boolean,
+    grantedBy: r.granted_by as string,
+    grantedByUsername: grantorInfo.get(r.granted_by as string)?.username ?? "Staff",
+    grantedByAvatarUrl: grantorInfo.get(r.granted_by as string)?.avatarUrl ?? null,
+    grantedAt: r.granted_at as string,
+    paidAt: r.paid_at as string | null ?? null,
+  }));
+
   return {
     ...ticket,
     internalNotes: internalNotesList,
@@ -193,6 +263,7 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
     rewardNote: (data as Record<string, unknown>).reward_note as string | null ?? null,
     rewardGrantedAt: (data as Record<string, unknown>).reward_granted_at as string | null ?? null,
     rewardPending: ((data as Record<string, unknown>).reward_pending as boolean) ?? false,
+    rewards,
     messages: (messages ?? []).map((m) => {
       const userInfo = usernames.get(m.user_id);
       return {
@@ -201,6 +272,7 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
         userId: m.user_id,
         username: userInfo?.username ?? "Unbekannt",
         nameStyleKey: userInfo?.nameStyleKey,
+        avatarUrl: userInfo?.avatarUrl ?? null,
         message: m.message,
         isStaff: m.is_staff,
         createdAt: m.created_at,
@@ -386,7 +458,31 @@ export async function updateTicketStatus(input: {
   const isClosing = input.status === "closed" || input.status === "resolved";
   const hasPendingReward = !!(ticket as Record<string, unknown>).reward_pending;
 
-  // If a reward is pinned to this ticket, closing always auto-resolves (never "geschlossen")
+  // Payout logic: check new ticket_rewards table first, fall back to legacy column
+  let totalPayout = 0;
+  if (isClosing) {
+    const { data: pendingRewards } = await admin
+      .from("ticket_rewards")
+      .select("id, credits")
+      .eq("ticket_id", input.ticketId)
+      .eq("deferred", true)
+      .is("paid_at", null);
+    const newTableTotal = (pendingRewards ?? []).reduce((s, r) => s + ((r as Record<string, unknown>).credits as number), 0);
+    // Backward compat: legacy column if no ticket_rewards entries exist
+    const legacyTotal = newTableTotal === 0 && hasPendingReward
+      ? ((ticket as Record<string, unknown>).reward_credits as number ?? 0) : 0;
+    totalPayout = newTableTotal + legacyTotal;
+
+    if (newTableTotal > 0) {
+      // Mark all deferred unpaid rewards as paid
+      await admin.from("ticket_rewards")
+        .update({ paid_at: new Date().toISOString() })
+        .eq("ticket_id", input.ticketId)
+        .eq("deferred", true)
+        .is("paid_at", null);
+    }
+  }
+
   const effectiveStatus: TicketStatus = (isClosing && hasPendingReward) ? "resolved" : input.status;
   const now = new Date().toISOString();
 
@@ -396,16 +492,15 @@ export async function updateTicketStatus(input: {
     ...(isClosing ? { closed_at: now, closed_by: user.id } : {}),
   };
 
-  // Pay out pending reward when closing
-  if (isClosing && hasPendingReward) {
-    const rewardCredits = (ticket as Record<string, unknown>).reward_credits as number | null;
-    if (rewardCredits && rewardCredits > 0) {
+  if (isClosing && (hasPendingReward || totalPayout > 0)) {
+    if (totalPayout > 0) {
       const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
-      const newCredits = ((targetProfile?.credits as number) ?? 0) + rewardCredits;
+      const newCredits = ((targetProfile?.credits as number) ?? 0) + totalPayout;
       await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
     }
     updatePayload.reward_pending = false;
     updatePayload.reward_granted_at = now;
+    updatePayload.reward_credits = totalPayout > 0 ? totalPayout : (ticket as Record<string, unknown>).reward_credits;
     const grantedBy = (ticket as Record<string, unknown>).reward_granted_by as string | null;
     if (!grantedBy) updatePayload.reward_granted_by = user.id;
   }
@@ -420,9 +515,8 @@ export async function updateTicketStatus(input: {
   };
 
   let notifyMsg = `Dein Ticket „${ticket.subject}" ist jetzt: ${STATUS_LABELS[effectiveStatus]}`;
-  if (isClosing && hasPendingReward) {
-    const credits = (ticket as Record<string, unknown>).reward_credits as number | null;
-    notifyMsg += credits ? ` · +${credits} Credits wurden gutgeschrieben!` : " · Deine Belohnung wurde ausgezahlt!";
+  if (isClosing && (hasPendingReward || totalPayout > 0)) {
+    notifyMsg += totalPayout > 0 ? ` · +${totalPayout} Credits wurden gutgeschrieben!` : " · Deine Belohnung wurde ausgezahlt!";
   }
 
   await notifyUser({
@@ -499,10 +593,10 @@ export async function deleteTicketsBulk(ticketIds: string[]): Promise<{ success:
   return { success: true, deleted: data?.length ?? 0 };
 }
 
-/** Grant a reward for a helpful ticket — admin only. */
+/** Grant a reward for a helpful ticket — mod/admin. Inserts into ticket_rewards table. */
 export async function adminGrantTicketReward(
   ticketId: string,
-  opts: { credits?: number; note?: string }
+  opts: { credits?: number; note?: string; deferred?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -512,34 +606,101 @@ export async function adminGrantTicketReward(
   const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
   if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
 
-  const { data: ticket } = await admin.from("tickets").select("user_id, subject, category").eq("id", ticketId).single();
+  const { data: ticket } = await admin.from("tickets").select("user_id, subject, status").eq("id", ticketId).single();
   if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
 
-  // Pin reward to ticket — credits are paid out when ticket is closed/resolved
+  const credits = opts.credits ?? 0;
+  const deferred = opts.deferred !== false;
   const now = new Date().toISOString();
-  const updatePayload: Record<string, unknown> = {
-    reward_pending: true,
-    reward_granted_by: user.id,
-    updated_at: now,
-  };
-  if (opts.note) updatePayload.reward_note = opts.note;
-  if (opts.credits && opts.credits > 0) updatePayload.reward_credits = opts.credits;
+  const ticketStatus = (ticket as Record<string, unknown>).status as string;
+  const isAlreadyClosed = ticketStatus === "closed" || ticketStatus === "resolved";
 
-  const { error } = await admin.from("tickets").update(updatePayload).eq("id", ticketId);
-  if (error) return { success: false, error: error.message };
+  // For closed tickets, always pay immediately regardless of deferred flag
+  const actuallyDeferred = deferred && !isAlreadyClosed;
+
+  const { error: insertErr } = await admin.from("ticket_rewards").insert({
+    ticket_id: ticketId,
+    granted_by: user.id,
+    credits,
+    note: opts.note ?? null,
+    deferred: actuallyDeferred,
+    granted_at: now,
+    paid_at: actuallyDeferred ? null : now,
+  });
+  if (insertErr) return { success: false, error: insertErr.message };
+
+  if (!actuallyDeferred && credits > 0) {
+    const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
+    const newCredits = ((targetProfile?.credits as number) ?? 0) + credits;
+    await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
+  }
+
+  // Sync summary columns on ticket
+  await syncTicketRewardSummaryAdmin(admin, ticketId, user.id, now);
 
   await notifyUser({
     userId: ticket.user_id,
     type: "admin_credits",
-    title: "🏆 Belohnung angepinnt!",
-    message: opts.credits
-      ? `Dein Ticket „${ticket.subject}" enthält eine Belohnung von +${opts.credits} Credits — wird ausgezahlt wenn das Ticket gelöst wird.`
-      : `Dein Ticket enthält eine Belohnung — wird ausgezahlt wenn das Ticket gelöst wird.`,
+    title: actuallyDeferred ? "🏆 Belohnung angepinnt!" : "🏆 Belohnung erhalten!",
+    message: credits > 0
+      ? actuallyDeferred
+        ? `Dein Ticket „${ticket.subject}" enthält +${credits} Credits Belohnung — wird ausgezahlt wenn das Ticket gelöst wird.`
+        : `Du hast +${credits} Credits für dein Ticket „${ticket.subject}" erhalten!`
+      : `Belohnung vergeben.`,
     link: `/?openTicket=${ticketId}`,
   });
 
   revalidatePath("/admin");
   return { success: true };
+}
+
+/** Remove an unpaid reward — mod/admin only. */
+export async function adminRemoveTicketReward(
+  rewardId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
+
+  const { data: reward } = await admin
+    .from("ticket_rewards")
+    .select("id, ticket_id, paid_at")
+    .eq("id", rewardId)
+    .single();
+  if (!reward) return { success: false, error: "Belohnung nicht gefunden." };
+  if ((reward as Record<string, unknown>).paid_at) return { success: false, error: "Bereits ausgezahlte Belohnungen können nicht entfernt werden." };
+
+  const { error } = await admin.from("ticket_rewards").delete().eq("id", rewardId);
+  if (error) return { success: false, error: error.message };
+
+  await syncTicketRewardSummaryAdmin(admin, (reward as Record<string, unknown>).ticket_id as string, user.id, new Date().toISOString());
+
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+async function syncTicketRewardSummaryAdmin(
+  admin: ReturnType<typeof createAdminClient>,
+  ticketId: string,
+  grantedBy: string,
+  now: string,
+): Promise<void> {
+  const { data: rewards } = await admin
+    .from("ticket_rewards")
+    .select("credits, deferred, paid_at")
+    .eq("ticket_id", ticketId);
+  const pending = (rewards ?? []).filter((r) => (r as Record<string, unknown>).deferred && !(r as Record<string, unknown>).paid_at);
+  const pendingTotal = pending.reduce((s, r) => s + ((r as Record<string, unknown>).credits as number), 0);
+  await admin.from("tickets").update({
+    reward_credits: pendingTotal > 0 ? pendingTotal : null,
+    reward_pending: pendingTotal > 0,
+    reward_granted_by: grantedBy,
+    updated_at: now,
+  }).eq("id", ticketId);
 }
 
 /** Delete tickets by creation date range — admin/mod only. */
@@ -613,15 +774,16 @@ export async function escalateTicketToAdmin(ticketId: string): Promise<{ success
 async function fetchUsernames(
   admin: ReturnType<typeof createAdminClient>,
   userIds: string[],
-): Promise<Map<string, { username: string; nameStyleKey?: string }>> {
+): Promise<Map<string, { username: string; nameStyleKey?: string; avatarUrl?: string | null }>> {
   if (userIds.length === 0) return new Map();
-  const { data } = await admin.from("profiles").select("id, username, active_name_style_key").in("id", userIds);
+  const { data } = await admin.from("profiles").select("id, username, active_name_style_key, avatar_url").in("id", userIds);
   return new Map(
-    (data ?? []).map((p: { id: string; username: string | null; active_name_style_key?: string | null }) => [
+    (data ?? []).map((p: { id: string; username: string | null; active_name_style_key?: string | null; avatar_url?: string | null }) => [
       p.id,
       {
         username: p.username ?? "Unbekannt",
         nameStyleKey: p.active_name_style_key ?? undefined,
+        avatarUrl: p.avatar_url ?? null,
       },
     ])
   );

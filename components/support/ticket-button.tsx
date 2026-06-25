@@ -790,37 +790,86 @@ function SupportButtonInner() {
                             </div>
                           </div>
 
-                          {/* Reward banner */}
-                          {detail.rewardGrantedAt && (
-                            <div className="relative overflow-hidden border-b border-amber-400/30 bg-gradient-to-r from-amber-500/20 to-amber-600/10 px-4 py-3">
-                              <div className="relative flex items-center gap-3">
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
-                                  <Trophy className="h-5 w-5 text-amber-400" />
-                                </div>
-                                <div className="flex flex-col">
-                                  <span className="text-sm font-extrabold text-amber-300">
-                                    Belohnung erhalten!{detail.rewardCredits ? ` +${detail.rewardCredits} Credits` : ""}
-                                  </span>
-                                  <span className="text-[10px] text-amber-400/70">
-                                    {detail.rewardNote ?? "Danke für dein wertvolles Feedback!"}
-                                  </span>
-                                </div>
+                          {/* Reward banners — from rewards array (new) with legacy fallback */}
+                          {(() => {
+                            const rewards = detail.rewards ?? [];
+                            const pendingRewards = rewards.filter(r => r.deferred && !r.paidAt);
+                            const paidRewards = rewards.filter(r => r.paidAt);
+                            const pendingTotal = pendingRewards.reduce((s, r) => s + r.credits, 0);
+                            const paidTotal = paidRewards.reduce((s, r) => s + r.credits, 0);
+                            // Legacy fallback for tickets without ticket_rewards entries
+                            const legacyPaid = rewards.length === 0 && detail.rewardGrantedAt;
+                            const legacyPending = rewards.length === 0 && detail.rewardPending && !detail.rewardGrantedAt;
+                            if (!legacyPaid && !legacyPending && rewards.length === 0) return null;
+                            return (
+                              <div className="border-b border-amber-400/25">
+                                {/* Paid rewards */}
+                                {(paidTotal > 0 || legacyPaid) && (
+                                  <div className="relative overflow-hidden bg-gradient-to-r from-amber-500/20 to-amber-600/10 px-4 py-3">
+                                    <div className="relative flex items-center gap-3">
+                                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
+                                        <Trophy className="h-5 w-5 text-amber-400" />
+                                      </div>
+                                      <div className="flex flex-col">
+                                        <span className="text-sm font-extrabold text-amber-300">
+                                          Belohnung erhalten! +{paidTotal > 0 ? paidTotal : detail.rewardCredits ?? 0} Credits
+                                        </span>
+                                        {paidRewards.length > 1 && (
+                                          <div className="mt-1 flex flex-wrap gap-1">
+                                            {paidRewards.map((r) => (
+                                              <span key={r.id} className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-bold text-amber-300">
+                                                +{r.credits}{r.note ? ` — ${r.note}` : ""}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {paidRewards.length === 1 && paidRewards[0].note && (
+                                          <span className="text-[10px] text-amber-400/70">{paidRewards[0].note}</span>
+                                        )}
+                                        {legacyPaid && detail.rewardNote && (
+                                          <span className="text-[10px] text-amber-400/70">{detail.rewardNote}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                {/* Pending deferred rewards */}
+                                {(pendingTotal > 0 || legacyPending) && (
+                                  <div className="bg-gradient-to-r from-amber-500/12 to-transparent px-4 py-3">
+                                    <div className="flex items-start gap-2.5">
+                                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/15">
+                                        <Trophy className="h-4 w-4 animate-pulse text-amber-400" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-[11px] font-black text-amber-300">
+                                          🏆 Belohnung wartet auf dich!
+                                        </p>
+                                        <p className="mt-0.5 text-xs font-extrabold text-amber-200">
+                                          +{pendingTotal > 0 ? pendingTotal : detail.rewardCredits ?? 0} Credits
+                                        </p>
+                                        {pendingRewards.length > 1 && (
+                                          <div className="mt-1 flex flex-wrap gap-1">
+                                            {pendingRewards.map((r) => (
+                                              <span key={r.id} className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-bold text-amber-300 border border-amber-500/20">
+                                                +{r.credits}{r.note ? ` — ${r.note}` : ""}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {pendingRewards.length === 1 && pendingRewards[0].note && (
+                                          <p className="text-[10px] text-amber-400/70">{pendingRewards[0].note}</p>
+                                        )}
+                                        <p className="mt-1.5 flex items-center gap-1 text-[10px] text-amber-500/80">
+                                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                          Wird automatisch bei Ticket-Lösung ausgezahlt
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          )}
-
-                          {/* Reward pending banner */}
-                          {detail.rewardPending && !detail.rewardGrantedAt && (
-                            <div className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
-                              <div className="flex items-center gap-2">
-                                <Trophy className="h-3.5 w-3.5 animate-pulse text-amber-400 shrink-0" />
-                                <span className="text-xs font-bold text-amber-300">
-                                  Belohnung angepinnt{detail.rewardCredits ? ` — +${detail.rewardCredits} Credits` : ""}
-                                </span>
-                                <span className="ml-auto text-[10px] text-amber-500">wird bei Lösung ausgezahlt</span>
-                              </div>
-                            </div>
-                          )}
+                            );
+                          })()}
 
                           {/* Original description + attachment */}
                           <div className="border-b border-white/[0.05] bg-white/[0.02] px-4 py-3">
@@ -852,38 +901,62 @@ function SupportButtonInner() {
                           </div>
 
                           {/* Messages thread */}
-                          <div className="flex flex-col gap-0.5 px-3 py-2">
+                          <div className="flex flex-col gap-3 px-3 py-3">
                             {detail.messages.length === 0 && (
                               <p className="py-4 text-center text-xs text-zinc-600">Noch keine Antworten vom Team.</p>
                             )}
                             {detail.messages.map((msg) => (
-                              <div
-                                key={msg.id}
-                                className={`rounded-xl px-3 py-2 ${msg.isStaff ? "ml-4 bg-purple-500/10 border border-purple-500/15" : "mr-4 bg-white/[0.03]"}`}
-                              >
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`text-[10px] font-bold ${msg.isStaff ? "text-purple-300" : "text-zinc-400"}`}>
-                                    {msg.isStaff ? "🛡 " : ""}
-                                    <StyledUsername name={msg.username} styleKey={msg.nameStyleKey} size="sm" staticMode />
-                                  </span>
-                                  <span className="text-[10px] text-zinc-600">
-                                    {new Date(msg.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
-                                  </span>
-                                </div>
-                                <p className="mt-0.5 text-xs leading-relaxed text-zinc-300">{msg.message}</p>
-                                {msg.attachmentUrl && (
-                                  <div className="mt-1.5">
-                                    {isImageUrl(msg.attachmentUrl) ? (
-                                      <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">
-                                        <img src={msg.attachmentUrl} alt="Anhang" className="max-h-40 rounded-lg object-cover cursor-pointer hover:opacity-90 border border-white/10" />
-                                      </a>
-                                    ) : (
-                                      <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] text-purple-300">
-                                        <Paperclip className="h-3 w-3" /> Anhang
-                                      </a>
-                                    )}
+                              <div key={msg.id} className={`flex gap-2.5 ${msg.isStaff ? "flex-row-reverse" : "flex-row"}`}>
+                                {/* Avatar */}
+                                {msg.avatarUrl ? (
+                                  <img
+                                    src={msg.avatarUrl}
+                                    alt=""
+                                    className="h-7 w-7 shrink-0 rounded-full border border-white/10 object-cover"
+                                  />
+                                ) : (
+                                  <div className={`h-7 w-7 shrink-0 rounded-full border flex items-center justify-center text-[10px] font-black ${
+                                    msg.isStaff
+                                      ? "bg-purple-500/20 border-purple-500/40 text-purple-200"
+                                      : "bg-zinc-700/40 border-zinc-600/30 text-zinc-300"
+                                  }`}>
+                                    {msg.username.charAt(0).toUpperCase()}
                                   </div>
                                 )}
+                                {/* Bubble */}
+                                <div className={`max-w-[78%] ${msg.isStaff ? "items-end" : "items-start"} flex flex-col gap-0.5`}>
+                                  <div className={`flex items-center gap-1.5 ${msg.isStaff ? "flex-row-reverse" : ""}`}>
+                                    <span className="text-[11px] font-semibold text-zinc-200">{msg.username}</span>
+                                    {msg.isStaff && (
+                                      <span className="rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-purple-300 border border-purple-500/30">
+                                        Staff
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] text-zinc-600">
+                                      {new Date(msg.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                                    </span>
+                                  </div>
+                                  <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+                                    msg.isStaff
+                                      ? "rounded-tr-sm bg-purple-500/15 border border-purple-500/20 text-zinc-100"
+                                      : "rounded-tl-sm bg-white/[0.05] border border-white/8 text-zinc-300"
+                                  }`}>
+                                    <p className="whitespace-pre-wrap">{msg.message}</p>
+                                    {msg.attachmentUrl && (
+                                      <div className="mt-1.5">
+                                        {isImageUrl(msg.attachmentUrl) ? (
+                                          <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                                            <img src={msg.attachmentUrl} alt="Anhang" className="max-h-40 rounded-lg object-cover cursor-pointer hover:opacity-90 border border-white/10" />
+                                          </a>
+                                        ) : (
+                                          <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] text-purple-300">
+                                            <Paperclip className="h-3 w-3" /> Anhang
+                                          </a>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             ))}
                             {newMsgFlash && (

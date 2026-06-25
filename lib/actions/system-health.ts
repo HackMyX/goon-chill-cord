@@ -41,7 +41,7 @@ const REQUIRED_TABLES = [
   // Core user & auth
   "profiles", "notifications", "login_events", "device_bans",
   // Moderation & support
-  "tickets", "ticket_messages", "ticket_internal_notes", "mod_actions", "mod_permissions", "audit_logs",
+  "tickets", "ticket_messages", "ticket_internal_notes", "ticket_rewards", "mod_actions", "mod_permissions", "audit_logs",
   // Items & economy
   "inventory", "items", "case_tiers", "case_groups",
   // Trading & auctions

@@ -20,9 +20,9 @@ import {
   modWarnUser, modAddNote, modTempBan, modLiftBan, modCloseTicket, modAddCredits,
   modRemoveWarning, getModUserHistory, getTicketMessages, modMarkInProgress, modReplyToTicket,
   modDeleteTicket, modSetTicketPriority, modUpdateTicketStatus, modGrantTicketReward,
-  modEscalateTicket, getMyEffectivePermissions,
+  modRemoveTicketReward, modEscalateTicket, getMyEffectivePermissions,
 } from "@/lib/actions/mod";
-import { addInternalNote, getInternalNotes, type InternalNote } from "@/lib/actions/tickets";
+import { addInternalNote, getInternalNotes, getTicketRewards, type InternalNote, type TicketReward } from "@/lib/actions/tickets";
 import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage } from "@/lib/mod";
 import { ADMIN_MOD_PERMISSIONS } from "@/lib/mod";
 
@@ -673,6 +673,8 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   const [showReward, setShowReward] = useState(false);
   const [rewardCredits, setRewardCredits] = useState(500);
   const [rewardNote, setRewardNote] = useState("");
+  const [rewardDeferred, setRewardDeferred] = useState(true);
+  const [rewards, setRewards] = useState<TicketReward[]>([]);
   const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
@@ -716,9 +718,11 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
     Promise.all([
       getTicketMessages(t.id),
       getInternalNotes(t.id),
-    ]).then(([list, notes]) => {
+      getTicketRewards(t.id),
+    ]).then(([list, notes, rwd]) => {
       setMsgs(list);
       setInternalNotes(notes);
+      setRewards(rwd);
       setLoadingMsgs(false);
     });
   }, [open, t.id, msgs]);
@@ -813,10 +817,15 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
       const res = await modGrantTicketReward(t.id, {
         credits: rewardCredits > 0 ? rewardCredits : undefined,
         note: rewardNote.trim() || undefined,
+        deferred: rewardDeferred,
       });
       if (res.success) {
-        showFlash(`+${rewardCredits} Credits vergeben!`, true);
+        showFlash(`+${rewardCredits} Credits ${rewardDeferred ? "angepinnt" : "sofort vergeben"}!`, true);
         setShowReward(false);
+        setRewardCredits(500);
+        setRewardNote("");
+        const rwd = await getTicketRewards(t.id);
+        setRewards(rwd);
         onRefresh();
       } else showFlash(res.error ?? "Fehler.", false);
     });
@@ -972,53 +981,125 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
             </div>
           )}
           {msgs && msgs.length > 0 && (
-            <div className="mt-3 flex flex-col gap-2">
+            <div className="mt-3 flex flex-col gap-3">
               {msgs.map((m) => (
                 <div key={m.id} className={`flex gap-2.5 ${m.isStaff ? "flex-row-reverse" : "flex-row"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                    m.isStaff ? "rounded-tr-sm bg-sky-500/20 text-sky-100" : "rounded-tl-sm bg-white/5 text-zinc-300"
-                  }`}>
-                    <p className="whitespace-pre-wrap">{m.message}</p>
-                    {m.attachmentUrl && (
-                      <div className="mt-1.5">
-                        {isImageUrl(m.attachmentUrl) ? (
-                          <a href={m.attachmentUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={m.attachmentUrl} alt="Anhang" className="max-h-40 rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity border border-white/10" />
-                          </a>
-                        ) : (
-                          <a href={m.attachmentUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-sky-400 hover:text-sky-300">
-                            <Paperclip className="h-3 w-3" />Anhang ansehen
-                          </a>
-                        )}
-                      </div>
-                    )}
-                    <p className={`mt-1 text-[10px] ${m.isStaff ? "text-sky-400/70 text-right" : "text-zinc-600"}`}>
-                      {m.isStaff ? "Staff" : m.username} · {timeAgo(m.createdAt)}
-                    </p>
+                  {/* Avatar */}
+                  {m.avatarUrl ? (
+                    <img src={m.avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full border border-white/10 object-cover" />
+                  ) : (
+                    <div className={`h-7 w-7 shrink-0 rounded-full border flex items-center justify-center text-[10px] font-black ${
+                      m.isStaff ? "bg-sky-500/20 border-sky-500/40 text-sky-200" : "bg-zinc-700/40 border-zinc-600/30 text-zinc-300"
+                    }`}>
+                      {m.username.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  {/* Bubble */}
+                  <div className={`max-w-[78%] flex flex-col gap-0.5 ${m.isStaff ? "items-end" : "items-start"}`}>
+                    <div className={`flex items-center gap-1.5 ${m.isStaff ? "flex-row-reverse" : ""}`}>
+                      <span className="text-[11px] font-semibold text-zinc-200">{m.username}</span>
+                      {m.isStaff && (
+                        <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-sky-300 border border-sky-500/30">
+                          Staff
+                        </span>
+                      )}
+                      <span className="text-[10px] text-zinc-600">{timeAgo(m.createdAt)}</span>
+                    </div>
+                    <div className={`rounded-2xl px-3 py-2 text-sm ${
+                      m.isStaff ? "rounded-tr-sm bg-sky-500/15 border border-sky-500/20 text-sky-100" : "rounded-tl-sm bg-white/[0.05] border border-white/8 text-zinc-300"
+                    }`}>
+                      <p className="whitespace-pre-wrap">{m.message}</p>
+                      {m.attachmentUrl && (
+                        <div className="mt-1.5">
+                          {isImageUrl(m.attachmentUrl) ? (
+                            <a href={m.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                              <img src={m.attachmentUrl} alt="Anhang" className="max-h-40 rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity border border-white/10" />
+                            </a>
+                          ) : (
+                            <a href={m.attachmentUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-sky-400 hover:text-sky-300">
+                              <Paperclip className="h-3 w-3" />Anhang ansehen
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Reward banner */}
-          {alreadyRewarded && (
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
-              <Trophy className="h-3.5 w-3.5 shrink-0" />
-              Belohnung ausgezahlt{t.rewardCredits ? ` · +${t.rewardCredits} Credits` : ""}
-              {t.rewardNote && <span className="text-amber-400/70"> — {t.rewardNote}</span>}
-            </div>
-          )}
-          {rewardIsPending && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-[11px]">
-              <Trophy className="h-3.5 w-3.5 shrink-0 animate-pulse text-amber-400" />
-              <span className="font-bold text-amber-300">
-                Belohnung angepinnt{t.rewardCredits ? ` · +${t.rewardCredits} Credits` : ""}
-              </span>
-              {t.rewardNote && <span className="text-amber-400/70"> — {t.rewardNote}</span>}
-              <span className="ml-auto rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400">
-                Auszahlung bei Lösung
-              </span>
+          {/* Reward history + management */}
+          {(rewards.length > 0 || alreadyRewarded || rewardIsPending) && (
+            <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+              <div className="flex items-center gap-2 border-b border-amber-500/15 px-3 py-2">
+                <Trophy className="h-3.5 w-3.5 text-amber-400" />
+                <span className="text-[11px] font-black text-amber-300">Belohnungen</span>
+                {perms.maxRewardPerTicket > 0 && (() => {
+                  const usedTotal = rewards.filter(r => !r.paidAt).reduce((s, r) => s + r.credits, 0);
+                  const pct = Math.min(100, (usedTotal / perms.maxRewardPerTicket) * 100);
+                  return (
+                    <div className="ml-auto flex items-center gap-2">
+                      <div className="h-1.5 w-20 rounded-full bg-black/30 overflow-hidden">
+                        <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-[10px] text-amber-500">{fmt(usedTotal)}/{fmt(perms.maxRewardPerTicket)} CR</span>
+                    </div>
+                  );
+                })()}
+              </div>
+              {/* Reward rows */}
+              {rewards.length > 0 ? (
+                <div className="flex flex-col divide-y divide-white/5">
+                  {rewards.map((r) => (
+                    <div key={r.id} className="flex items-center gap-2 px-3 py-2">
+                      {r.grantedByAvatarUrl ? (
+                        <img src={r.grantedByAvatarUrl} alt="" className="h-5 w-5 shrink-0 rounded-full border border-white/10 object-cover" />
+                      ) : (
+                        <div className="h-5 w-5 shrink-0 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-[8px] font-black text-amber-300">
+                          {r.grantedByUsername.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="text-[10px] text-zinc-500">{r.grantedByUsername}</span>
+                      <span className="text-[11px] font-extrabold text-amber-200">+{fmt(r.credits)} CR</span>
+                      {r.note && <span className="text-[10px] text-zinc-500 truncate">— {r.note}</span>}
+                      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                        {r.paidAt ? (
+                          <span className="rounded-full bg-emerald-500/15 border border-emerald-500/25 px-1.5 py-0.5 text-[8px] font-black text-emerald-400">✓ ausgezahlt</span>
+                        ) : r.deferred ? (
+                          <span className="rounded-full bg-amber-500/15 border border-amber-500/25 px-1.5 py-0.5 text-[8px] font-black text-amber-400">⏳ bei Abschluss</span>
+                        ) : (
+                          <span className="rounded-full bg-sky-500/15 border border-sky-500/25 px-1.5 py-0.5 text-[8px] font-black text-sky-400">⚡ sofort</span>
+                        )}
+                        {!r.paidAt && perms.canRewardTickets && (
+                          <button
+                            onClick={() => startTransition(async () => {
+                              const res = await modRemoveTicketReward(r.id);
+                              if (res.success) {
+                                const rwd = await getTicketRewards(t.id);
+                                setRewards(rwd);
+                                onRefresh();
+                              } else showFlash(res.error ?? "Fehler.", false);
+                            })}
+                            className="flex h-5 w-5 items-center justify-center rounded-full border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                            title="Belohnung entfernen"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-3 py-2 text-[11px] text-zinc-600">
+                  {alreadyRewarded
+                    ? `Belohnung ausgezahlt${t.rewardCredits ? ` · +${t.rewardCredits} Credits` : ""}`
+                    : rewardIsPending
+                    ? `Belohnung angepinnt${t.rewardCredits ? ` · +${t.rewardCredits} Credits` : ""} · Auszahlung bei Lösung`
+                    : null}
+                </div>
+              )}
             </div>
           )}
 
@@ -1136,55 +1217,86 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           )}
 
           {/* Reward form */}
-          {showReward && perms.canRewardTickets && (
-            <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-[11px] font-bold text-amber-300">Belohnung vergeben</p>
-                {perms.maxRewardPerTicket > 0 && (
-                  <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400">
-                    max. {fmt(perms.maxRewardPerTicket)} CR
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] text-zinc-500">Credits</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={perms.maxRewardPerTicket > 0 ? perms.maxRewardPerTicket : undefined}
-                    value={rewardCredits}
-                    onChange={(e) => {
-                      const v = Math.max(0, Number(e.target.value));
-                      setRewardCredits(perms.maxRewardPerTicket > 0 ? Math.min(v, perms.maxRewardPerTicket) : v);
-                    }}
-                    className="w-28 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-amber-400/40"
-                  />
-                </label>
-                <label className="flex flex-1 flex-col gap-1">
-                  <span className="text-[10px] text-zinc-500">Notiz (optional)</span>
-                  <input
-                    type="text" value={rewardNote} onChange={(e) => setRewardNote(e.target.value)}
-                    maxLength={100} placeholder="z.B. Super Bug-Report!"
-                    className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
-                  />
-                </label>
-              </div>
-              {perms.maxRewardPerTicket > 0 && rewardCredits > perms.maxRewardPerTicket && (
-                <p className="mt-1.5 text-[10px] text-red-400">
-                  Limit überschritten — max. {fmt(perms.maxRewardPerTicket)} CR erlaubt.
+          {showReward && perms.canRewardTickets && (() => {
+            const usedTotal = rewards.filter(r => !r.paidAt).reduce((s, r) => s + r.credits, 0);
+            const remaining = perms.maxRewardPerTicket > 0 ? Math.max(0, perms.maxRewardPerTicket - usedTotal) : Infinity;
+            const wouldExceed = perms.maxRewardPerTicket > 0 && rewardCredits > remaining;
+            return (
+              <div className="mt-3 rounded-xl border border-amber-500/25 bg-gradient-to-b from-amber-500/8 to-transparent p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold text-amber-300">Neue Belohnung</p>
+                  {perms.maxRewardPerTicket > 0 && (
+                    <span className={`text-[10px] font-bold ${remaining === 0 ? "text-red-400" : "text-amber-500"}`}>
+                      noch {fmt(remaining)} CR verfügbar
+                    </span>
+                  )}
+                </div>
+                {/* Auszahlungstyp toggle */}
+                <div className="flex gap-1.5 rounded-xl border border-white/8 bg-black/20 p-1">
+                  <button
+                    onClick={() => setRewardDeferred(true)}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-bold transition-all ${
+                      rewardDeferred ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <span>⏳</span> Bei Abschluss
+                  </button>
+                  <button
+                    onClick={() => setRewardDeferred(false)}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-bold transition-all ${
+                      !rewardDeferred ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <span>⚡</span> Sofort auszahlen
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-600">
+                  {rewardDeferred
+                    ? "Credits werden automatisch bei Ticket-Lösung gutgeschrieben und sind im Ticket sichtbar."
+                    : "Credits werden dem User sofort gutgeschrieben."}
                 </p>
-              )}
-              <button
-                onClick={handleGrantReward}
-                disabled={pending || rewardCredits < 1 || (perms.maxRewardPerTicket > 0 && rewardCredits > perms.maxRewardPerTicket)}
-                className="mt-2 flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 transition-colors"
-              >
-                {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trophy className="h-3.5 w-3.5" />}
-                Belohnung anpinnen
-              </button>
-            </div>
-          )}
+                <div className="flex gap-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-zinc-500">Credits</span>
+                    <input
+                      type="number" min={0}
+                      max={perms.maxRewardPerTicket > 0 ? remaining : undefined}
+                      value={rewardCredits}
+                      onChange={(e) => {
+                        const v = Math.max(0, Number(e.target.value));
+                        setRewardCredits(remaining !== Infinity ? Math.min(v, remaining) : v);
+                      }}
+                      className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/40"
+                    />
+                  </div>
+                  <div className="flex flex-1 flex-col gap-1">
+                    <span className="text-[10px] text-zinc-500">Notiz (optional)</span>
+                    <input
+                      type="text" value={rewardNote} onChange={(e) => setRewardNote(e.target.value)}
+                      maxLength={100} placeholder="z.B. Super Bug-Report!"
+                      className="w-full rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
+                    />
+                  </div>
+                </div>
+                {wouldExceed && (
+                  <p className="text-[10px] text-red-400 font-bold">Limit überschritten — max. noch {fmt(remaining)} CR möglich.</p>
+                )}
+                {remaining === 0 && perms.maxRewardPerTicket > 0 && (
+                  <p className="text-[10px] text-red-400 font-bold">Belohnungslimit für dieses Ticket bereits ausgeschöpft.</p>
+                )}
+                <button
+                  onClick={handleGrantReward}
+                  disabled={pending || rewardCredits < 1 || wouldExceed || (perms.maxRewardPerTicket > 0 && remaining === 0)}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-white transition-colors disabled:opacity-50 ${
+                    rewardDeferred ? "bg-amber-600 hover:bg-amber-500" : "bg-sky-600 hover:bg-sky-500"
+                  }`}
+                >
+                  {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trophy className="h-3.5 w-3.5" />}
+                  {rewardDeferred ? "Anpinnen" : "Sofort vergeben"}
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Internal notes (staff only) */}
           <div className="mt-3 border-t border-white/5 pt-3">

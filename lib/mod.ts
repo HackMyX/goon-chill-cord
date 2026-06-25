@@ -139,6 +139,7 @@ export interface TicketMessage {
   userId: string;
   username: string;
   nameStyleKey?: string;
+  avatarUrl: string | null;
   message: string;
   isStaff: boolean;
   createdAt: string;

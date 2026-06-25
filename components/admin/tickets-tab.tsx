@@ -28,6 +28,7 @@ import {
 import {
   getAdminTickets,
   getTicketDetail,
+  getTicketRewards,
   addTicketMessage,
   updateTicketStatus,
   setTicketPriority,
@@ -35,10 +36,12 @@ import {
   deleteTicketsBulk,
   deleteTicketsByDateRange,
   adminGrantTicketReward,
+  adminRemoveTicketReward,
   addInternalNote,
   getInternalNotes,
   type Ticket,
   type TicketDetail,
+  type TicketReward,
   type TicketStatus,
   type TicketCategory,
   type TicketPriority,
@@ -176,8 +179,10 @@ function TicketRow({
   const [showReward, setShowReward] = useState(false);
   const [rewardCredits, setRewardCredits] = useState(500);
   const [rewardNote, setRewardNote] = useState("");
+  const [rewardDeferred, setRewardDeferred] = useState(true);
   const [rewarding, setRewarding] = useState(false);
   const [rewardMessage, setRewardMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [rewards, setRewards] = useState<TicketReward[]>([]);
   const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
   const [showNotes, setShowNotes] = useState(false);
   const [newNote, setNewNote] = useState("");
@@ -190,8 +195,12 @@ function TicketRow({
     if (!expanded) {
       setExpanded(true);
       setLoadingDetail(true);
-      const d = await getTicketDetail(ticket.id);
+      const [d, rwd] = await Promise.all([
+        getTicketDetail(ticket.id),
+        getTicketRewards(ticket.id),
+      ]);
       setDetail(d);
+      setRewards(rwd);
       if (d?.internalNotes) setInternalNotes(d.internalNotes);
       setLoadingDetail(false);
     } else {
@@ -275,12 +284,17 @@ function TicketRow({
     const res = await adminGrantTicketReward(ticket.id, {
       credits: rewardCredits > 0 ? rewardCredits : undefined,
       note: rewardNote.trim() || undefined,
+      deferred: rewardDeferred,
     });
     setRewarding(false);
     if (res.success) {
       sound.win?.();
-      setRewardMessage({ text: `+${rewardCredits} Credits vergeben!`, ok: true });
+      setRewardMessage({ text: `+${rewardCredits} Credits ${rewardDeferred ? "angepinnt" : "sofort vergeben"}!`, ok: true });
       setShowReward(false);
+      setRewardCredits(500);
+      setRewardNote("");
+      const rwd = await getTicketRewards(ticket.id);
+      setRewards(rwd);
       onUpdated();
     } else {
       sound.error();
@@ -417,42 +431,54 @@ function TicketRow({
               </div>
 
               {/* Messages */}
-              <div className="flex flex-col gap-2 px-4 py-3">
+              <div className="flex flex-col gap-3 px-4 py-3">
                 {detail.messages.length === 0 && (
                   <p className="text-center text-xs text-zinc-600">Noch keine Nachrichten.</p>
                 )}
                 {detail.messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`rounded-xl px-3 py-2 ${msg.isStaff ? "ml-6 bg-purple-500/10" : "mr-6 bg-white/[0.04]"}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-bold ${msg.isStaff ? "text-purple-300" : "text-zinc-400"}`}>
-                        {msg.isStaff ? "🛡 " : ""}{msg.username}
-                      </span>
-                      <span className="text-[10px] text-zinc-600">
-                        {new Date(msg.createdAt).toLocaleString("de-DE", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-sm leading-relaxed text-zinc-300">{msg.message}</p>
-                    {msg.attachmentUrl && (
-                      <div className="mt-1.5">
-                        {isImageUrl(msg.attachmentUrl) ? (
-                          <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={msg.attachmentUrl} alt="Anhang" className="max-h-48 rounded-lg object-cover cursor-pointer hover:opacity-90 border border-white/10" />
-                          </a>
-                        ) : (
-                          <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] text-purple-300 hover:bg-purple-500/20">
-                            <Paperclip className="h-3 w-3" /> Anhang öffnen
-                          </a>
-                        )}
+                  <div key={msg.id} className={`flex gap-2.5 ${msg.isStaff ? "flex-row-reverse" : "flex-row"}`}>
+                    {/* Avatar */}
+                    {msg.avatarUrl ? (
+                      <img src={msg.avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full border border-white/10 object-cover" />
+                    ) : (
+                      <div className={`h-7 w-7 shrink-0 rounded-full border flex items-center justify-center text-[10px] font-black ${
+                        msg.isStaff ? "bg-purple-500/20 border-purple-500/40 text-purple-200" : "bg-zinc-700/40 border-zinc-600/30 text-zinc-300"
+                      }`}>
+                        {msg.username.charAt(0).toUpperCase()}
                       </div>
                     )}
+                    {/* Bubble */}
+                    <div className={`max-w-[78%] flex flex-col gap-0.5 ${msg.isStaff ? "items-end" : "items-start"}`}>
+                      <div className={`flex items-center gap-1.5 ${msg.isStaff ? "flex-row-reverse" : ""}`}>
+                        <span className="text-[11px] font-semibold text-zinc-200">{msg.username}</span>
+                        {msg.isStaff && (
+                          <span className="rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-purple-300 border border-purple-500/30">
+                            Staff
+                          </span>
+                        )}
+                        <span className="text-[10px] text-zinc-600">
+                          {new Date(msg.createdAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      <div className={`rounded-2xl px-3 py-2 text-sm ${
+                        msg.isStaff ? "rounded-tr-sm bg-purple-500/15 border border-purple-500/20 text-zinc-100" : "rounded-tl-sm bg-white/[0.05] border border-white/8 text-zinc-300"
+                      }`}>
+                        <p className="leading-relaxed whitespace-pre-wrap">{msg.message}</p>
+                        {msg.attachmentUrl && (
+                          <div className="mt-1.5">
+                            {isImageUrl(msg.attachmentUrl) ? (
+                              <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                                <img src={msg.attachmentUrl} alt="Anhang" className="max-h-48 rounded-lg object-cover cursor-pointer hover:opacity-90 border border-white/10" />
+                              </a>
+                            ) : (
+                              <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] text-purple-300 hover:bg-purple-500/20">
+                                <Paperclip className="h-3 w-3" /> Anhang öffnen
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -524,85 +550,148 @@ function TicketRow({
               )}
 
               {/* Reward section */}
-              <div className="border-t border-white/[0.06] px-4 py-3">
-                {detail.rewardGrantedAt ? (
+              <div className="border-t border-white/[0.06] px-4 py-3 space-y-3">
+                {/* Reward history */}
+                {rewards.length > 0 && (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+                    <div className="flex items-center gap-2 border-b border-amber-500/15 px-3 py-2">
+                      <Trophy className="h-3.5 w-3.5 text-amber-400" />
+                      <span className="text-[11px] font-black text-amber-300">Belohnungen</span>
+                      <span className="ml-auto text-[10px] text-amber-500 font-bold">
+                        Gesamt: +{rewards.reduce((s, r) => s + r.credits, 0).toLocaleString("de-DE")} CR
+                      </span>
+                    </div>
+                    <div className="flex flex-col divide-y divide-white/5">
+                      {rewards.map((r) => (
+                        <div key={r.id} className="flex items-center gap-2 px-3 py-2">
+                          {r.grantedByAvatarUrl ? (
+                            <img src={r.grantedByAvatarUrl} alt="" className="h-5 w-5 shrink-0 rounded-full border border-white/10 object-cover" />
+                          ) : (
+                            <div className="h-5 w-5 shrink-0 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-[8px] font-black text-amber-300">
+                              {r.grantedByUsername.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="text-[10px] text-zinc-500">{r.grantedByUsername}</span>
+                          <span className="text-[11px] font-extrabold text-amber-200">+{r.credits.toLocaleString("de-DE")} CR</span>
+                          {r.note && <span className="text-[10px] text-zinc-500 truncate">— {r.note}</span>}
+                          <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                            {r.paidAt ? (
+                              <span className="rounded-full bg-emerald-500/15 border border-emerald-500/25 px-1.5 py-0.5 text-[8px] font-black text-emerald-400">✓ ausgezahlt</span>
+                            ) : r.deferred ? (
+                              <span className="rounded-full bg-amber-500/15 border border-amber-500/25 px-1.5 py-0.5 text-[8px] font-black text-amber-400">⏳ bei Abschluss</span>
+                            ) : (
+                              <span className="rounded-full bg-sky-500/15 border border-sky-500/25 px-1.5 py-0.5 text-[8px] font-black text-sky-400">⚡ sofort</span>
+                            )}
+                            {!r.paidAt && (
+                              <button
+                                onClick={async () => {
+                                  const res = await adminRemoveTicketReward(r.id);
+                                  if (res.success) {
+                                    const rwd = await getTicketRewards(ticket.id);
+                                    setRewards(rwd);
+                                    onUpdated();
+                                  } else setRewardMessage({ text: res.error ?? "Fehler.", ok: false });
+                                }}
+                                className="flex h-5 w-5 items-center justify-center rounded-full border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                                title="Belohnung entfernen"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Legacy fallback banners */}
+                {rewards.length === 0 && detail.rewardGrantedAt && (
                   <div className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
                     <Trophy className="h-3.5 w-3.5 shrink-0" />
                     Belohnung ausgezahlt{detail.rewardCredits ? ` · +${detail.rewardCredits} Credits` : ""}
-                    {detail.rewardNote && (
-                      <span className="text-amber-400/70"> — {detail.rewardNote}</span>
-                    )}
+                    {detail.rewardNote && <span className="text-amber-400/70"> — {detail.rewardNote}</span>}
                   </div>
-                ) : detail.rewardPending ? (
+                )}
+                {rewards.length === 0 && detail.rewardPending && !detail.rewardGrantedAt && (
                   <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-[11px]">
                     <Trophy className="h-3.5 w-3.5 shrink-0 text-amber-400 animate-pulse" />
                     <span className="font-bold text-amber-300">
                       Belohnung angepinnt{detail.rewardCredits ? ` · +${detail.rewardCredits} Credits` : ""}
                     </span>
-                    {detail.rewardNote && (
-                      <span className="text-amber-400/70"> — {detail.rewardNote}</span>
-                    )}
+                    {detail.rewardNote && <span className="text-amber-400/70"> — {detail.rewardNote}</span>}
                     <span className="ml-auto rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400">
                       Wird bei Lösung ausgezahlt
                     </span>
                   </div>
-                ) : (
-                  <>
+                )}
+
+                {/* Add new reward */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => setShowReward((v) => !v)}
+                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors ${
+                      showReward ? "border-amber-500/40 bg-amber-500/15 text-amber-300" : "border-white/10 text-zinc-500 hover:border-amber-500/30 hover:text-amber-400"
+                    }`}
+                  >
+                    <Trophy className="h-3.5 w-3.5" />
+                    {rewards.length > 0 ? "Weitere Belohnung" : "Belohnung vergeben"}
+                  </button>
+                  {rewardMessage && (
+                    <span className={`text-[11px] ${rewardMessage.ok ? "text-emerald-400" : "text-red-400"}`}>{rewardMessage.text}</span>
+                  )}
+                </div>
+
+                {showReward && (
+                  <div className="rounded-xl border border-amber-500/25 bg-gradient-to-b from-amber-500/8 to-transparent p-3 space-y-3">
+                    {/* Auszahlungstyp toggle */}
+                    <div className="flex gap-1.5 rounded-xl border border-white/8 bg-black/20 p-1">
+                      <button
+                        onClick={() => setRewardDeferred(true)}
+                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-bold transition-all ${
+                          rewardDeferred ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "text-zinc-500 hover:text-zinc-300"
+                        }`}
+                      >
+                        ⏳ Bei Abschluss
+                      </button>
+                      <button
+                        onClick={() => setRewardDeferred(false)}
+                        className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-bold transition-all ${
+                          !rewardDeferred ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "text-zinc-500 hover:text-zinc-300"
+                        }`}
+                      >
+                        ⚡ Sofort auszahlen
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] text-zinc-500 flex items-center gap-1"><Coins className="h-3 w-3" /> Credits</span>
+                        <input
+                          type="number" min={0} value={rewardCredits}
+                          onChange={(e) => setRewardCredits(Math.max(0, Number(e.target.value)))}
+                          className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-amber-400/40"
+                        />
+                      </div>
+                      <div className="flex flex-1 flex-col gap-1">
+                        <span className="text-[10px] text-zinc-500">Notiz (optional)</span>
+                        <input
+                          type="text" value={rewardNote} onChange={(e) => setRewardNote(e.target.value)}
+                          maxLength={100} placeholder="z.B. Super Bug-Report!"
+                          className="w-full rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
+                        />
+                      </div>
+                    </div>
                     <button
-                      onClick={() => setShowReward((v) => !v)}
-                      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors ${
-                        showReward
-                          ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
-                          : "border-white/10 text-zinc-500 hover:border-amber-500/30 hover:text-amber-400"
+                      onClick={handleGrantReward}
+                      disabled={rewarding || rewardCredits < 1}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-white transition-colors disabled:opacity-50 ${
+                        rewardDeferred ? "bg-amber-600 hover:bg-amber-500" : "bg-sky-600 hover:bg-sky-500"
                       }`}
                     >
-                      <Trophy className="h-3.5 w-3.5" />
-                      Belohnung anpinnen
+                      {rewarding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trophy className="h-3.5 w-3.5" />}
+                      {rewardDeferred ? "Anpinnen" : "Sofort vergeben"}
                     </button>
-                    {showReward && (
-                      <div className="mt-3 flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-                        <p className="text-[11px] font-bold text-amber-300">Belohnung anpinnen (Auszahlung bei Ticketlösung):</p>
-                        <div className="flex flex-wrap gap-3">
-                          <label className="flex flex-col gap-1">
-                            <span className="text-[10px] text-zinc-500 flex items-center gap-1"><Coins className="h-3 w-3" /> Credits</span>
-                            <input
-                              type="number"
-                              min={0}
-                              value={rewardCredits}
-                              onChange={(e) => setRewardCredits(Math.max(0, Number(e.target.value)))}
-                              className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-amber-400/40"
-                            />
-                          </label>
-                          <label className="flex flex-1 flex-col gap-1">
-                            <span className="text-[10px] text-zinc-500">Notiz (optional)</span>
-                            <input
-                              type="text"
-                              value={rewardNote}
-                              onChange={(e) => setRewardNote(e.target.value)}
-                              maxLength={100}
-                              placeholder="z.B. Super Bug-Report!"
-                              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-amber-400/40"
-                            />
-                          </label>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={handleGrantReward}
-                            disabled={rewarding || rewardCredits < 1}
-                            className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 transition-colors"
-                          >
-                            {rewarding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trophy className="h-3.5 w-3.5" />}
-                            Belohnung anpinnen
-                          </button>
-                          {rewardMessage && (
-                            <span className={`text-[11px] ${rewardMessage.ok ? "text-emerald-400" : "text-red-400"}`}>
-                              {rewardMessage.text}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  </div>
                 )}
               </div>
 
