@@ -1532,39 +1532,48 @@ function RarityConfigCard({
         </label>
       </div>
 
-      {/* Case drop weight */}
-      <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1.5 text-xs text-zinc-500">
-          Case-Drop-Gewicht
-          <input
-            type="number"
-            value={dropWeight}
-            min={0}
-            max={1000}
-            onChange={(e) => { setDropWeight(Number(e.target.value)); setDirty(true); }}
-            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-purple-500/60"
-          />
-          <span className="text-[10px] text-zinc-600">Höher = häufiger</span>
-        </label>
-        <div className="flex flex-col gap-2 justify-center">
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+      {/* Case drop section */}
+      <div className="rounded-lg border border-amber-400/15 bg-amber-500/5 p-3 space-y-3">
+        <p className="text-[10px] font-semibold text-amber-300/80">NAME-STYLE AUS CASES — so wird es eingestellt:</p>
+        <ol className="text-[10px] leading-relaxed text-zinc-400 list-decimal list-inside space-y-0.5">
+          <li><strong className="text-zinc-300">Hier (Rarität-Konfiguration):</strong> "Case-Drop aktiviert" AN + Wahrscheinlichkeit eintragen</li>
+          <li><strong className="text-zinc-300">Admin → Economy &amp; Cases → Tier:</strong> "Name-Style Bonus-Drops aktivieren" anschalten</li>
+          <li><strong className="text-zinc-300">Jeweiliger Style → "Aus Case gewinnbar":</strong> Haken setzen damit dieser Style droppbar ist</li>
+        </ol>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1.5 text-xs text-zinc-500">
+            Drop-Wahrscheinlichkeit (%)
             <input
-              type="checkbox"
-              checked={dropEnabled}
-              onChange={(e) => { setDropEnabled(e.target.checked); setDirty(true); }}
-              className="h-4 w-4 accent-amber-500 rounded"
+              type="number"
+              value={dropWeight}
+              min={0}
+              max={100}
+              step={0.5}
+              onChange={(e) => { setDropWeight(Number(e.target.value)); setDirty(true); }}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500/60"
             />
-            Case-Drop aktiviert
+            <span className="text-[10px] text-zinc-600">{dropWeight}% — pro Case-Öffnung dieser Rarität</span>
           </label>
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
-            <input
-              type="checkbox"
-              checked={bpEnabled}
-              onChange={(e) => { setBpEnabled(e.target.checked); setDirty(true); }}
-              className="h-4 w-4 accent-green-500 rounded"
-            />
-            Battle-Pass-Belohnung
-          </label>
+          <div className="flex flex-col gap-2 justify-center">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+              <input
+                type="checkbox"
+                checked={dropEnabled}
+                onChange={(e) => { setDropEnabled(e.target.checked); setDirty(true); }}
+                className="h-4 w-4 accent-amber-500 rounded"
+              />
+              Case-Drop aktiviert
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+              <input
+                type="checkbox"
+                checked={bpEnabled}
+                onChange={(e) => { setBpEnabled(e.target.checked); setDirty(true); }}
+                className="h-4 w-4 accent-green-500 rounded"
+              />
+              Battle-Pass-Belohnung
+            </label>
+          </div>
         </div>
       </div>
 

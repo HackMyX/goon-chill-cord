@@ -89,6 +89,7 @@ const OPTIONAL_TABLES: Array<{ name: string; migration: string; feature: string 
   { name: "user_name_styles",        migration: "Supabase SQL Editor",                                            feature: "Name Styles (User-Zuweisungen)" },
   { name: "name_style_rarity_config",migration: "scripts/add-name-style-rarity-config.cjs",                      feature: "Name Styles (Seltenheiten-Konfiguration)" },
   { name: "pet_rarity_overrides",    migration: "scripts/add-pet-rarity-overrides.cjs",                          feature: "Pets (Rarität-Stats pro Tierart)" },
+  { name: "case_groups",             migration: "scripts/add-case-groups.cjs",                                    feature: "Cases (dynamische Gruppen — Admin kann unbegrenzt neue Cases erstellen)" },
 ];
 
 /** Config singleton rows that must exist. */
@@ -132,9 +133,14 @@ const COLUMN_CHECKS: Array<{
   { id: "col_site_topbarlabels",  category: "Konfiguration",      table: "site_config",         col: "topbar_show_labels",      detail: "ALTER TABLE site_config ADD COLUMN topbar_show_labels boolean DEFAULT false;" },
   // Patch notes — popup toggle
   { id: "col_patch_popup",        category: "Patch Notes",        table: "patch_notes",         col: "show_popup",              detail: "ALTER TABLE patch_notes ADD COLUMN show_popup boolean NOT NULL DEFAULT false;" },
-  // Case tiers — extended (2026-06-x)
+  // Case tiers — extended
   { id: "col_case_preview",       category: "Cases",              table: "case_tiers",          col: "preview_cost",            detail: "ALTER TABLE case_tiers ADD COLUMN preview_cost integer DEFAULT 0;" },
   { id: "col_case_multimax",      category: "Cases",              table: "case_tiers",          col: "multi_open_max",          detail: "ALTER TABLE case_tiers ADD COLUMN multi_open_max integer DEFAULT 10;" },
+  // Case groups system (run scripts/add-case-groups.cjs)
+  { id: "col_case_sort_order",    category: "Cases",              table: "case_tiers",          col: "sort_order",              detail: "node scripts/add-case-groups.cjs" },
+  { id: "col_case_perrarity",     category: "Cases",              table: "case_tiers",          col: "per_rarity_item_ids",     detail: "node scripts/add-case-groups.cjs" },
+  { id: "col_case_nsstyles",      category: "Cases",              table: "case_tiers",          col: "name_styles_eligible",    detail: "node scripts/add-case-groups.cjs" },
+  { id: "col_case_tiersublabel",  category: "Cases",              table: "case_tiers",          col: "tier_sublabel",           detail: "node scripts/add-case-groups.cjs" },
   // Shop settings — MOTD
   { id: "col_shop_motd",          category: "Shop",               table: "shop_settings",       col: "motd",                    detail: "ALTER TABLE shop_settings ADD COLUMN motd text;" },
   { id: "col_shop_motdenabled",   category: "Shop",               table: "shop_settings",       col: "motd_enabled",            detail: "ALTER TABLE shop_settings ADD COLUMN motd_enabled boolean DEFAULT false;" },

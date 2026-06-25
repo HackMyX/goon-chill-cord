@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
-import { CaseTierEditor } from "@/components/admin/case-tier-editor";
+import { CasesAdminTab } from "@/components/admin/case-group-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import { ItemsTab } from "@/components/admin/items-tab";
 import { AuditTimeline } from "@/components/admin/audit-timeline";
@@ -75,6 +75,23 @@ export interface CaseTierRow {
   group_subtitle: string | null;
   preview_cost: number | null;
   multi_open_max: number | null;
+  sort_order: number | null;
+  per_rarity_item_ids: Partial<Record<Rarity, string[] | null>> | null;
+  name_styles_eligible: boolean | null;
+  tier_sublabel: string | null;
+  updated_at: string;
+}
+
+export interface CaseGroupRow {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  icon_name: string;
+  item_types: string[];
+  display_order: number;
+  enabled: boolean;
+  accent_color: string | null;
+  is_custom: boolean;
   updated_at: string;
 }
 
@@ -108,6 +125,7 @@ interface AdminShellProps {
   credits: number;
   streakDays: number;
   auditLog: AuditLogEntry[];
+  caseGroups: CaseGroupRow[];
   caseTiers: CaseTierRow[];
   profiles: ProfileRow[];
   items: ItemRow[];
@@ -166,6 +184,7 @@ export function AdminShell({
   credits: initialCredits,
   streakDays,
   auditLog: initialAuditLog,
+  caseGroups,
   caseTiers,
   profiles: initialProfiles,
   items: initialItems,
@@ -337,19 +356,7 @@ export function AdminShell({
         </div>
 
         {tab === "economy" && (
-          <div className="flex flex-col gap-4">
-            {caseTiers.length === 0 ? (
-              <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm text-amber-200">
-                Keine Case-Tiers in der DB. Führe einmalig{" "}
-                <code className="rounded bg-black/40 px-1.5 py-0.5">
-                  node scripts/seed-case-tiers.mjs
-                </code>{" "}
-                aus.
-              </p>
-            ) : (
-              caseTiers.map((tier) => <CaseTierEditor key={tier.id} tier={tier} items={items} />)
-            )}
-          </div>
+          <CasesAdminTab caseGroups={caseGroups} caseTiers={caseTiers} items={items} />
         )}
 
         {tab === "streak" && <StreakConfigEditor config={streakConfig} />}

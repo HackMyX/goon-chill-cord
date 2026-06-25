@@ -51,12 +51,17 @@ export interface UpdateCaseTierInput {
   enabled: boolean;
   itemTypes: string[];
   itemIds?: string[] | null;
+  /** Per-rarity specific item overrides (null per rarity = use type pool). */
+  perRarityItemIds?: Partial<Record<Rarity, string[] | null>> | null;
   groupLabel?: string | null;
   groupSubtitle?: string | null;
+  tierSublabel?: string | null;
   /** Credits deducted when clicking "Sofort anzeigen". 0 = free. */
   previewCost?: number;
   /** Max cases openable at once (2–10). */
   multiOpenMax?: number;
+  /** Whether this case tier can drop name styles (probability set in Name-Styles tab). */
+  nameStylesEligible?: boolean;
 }
 
 export async function updateCaseTier(input: UpdateCaseTierInput): Promise<AdminActionResult> {
@@ -72,21 +77,46 @@ export async function updateCaseTier(input: UpdateCaseTierInput): Promise<AdminA
     updated_at: new Date().toISOString(),
   };
 
+  // Full payload with all known columns
   let { data, error } = await admin
     .from("case_tiers")
     .update({
       ...basePayload,
       item_types: input.itemTypes,
       item_ids: input.itemIds ?? null,
+      per_rarity_item_ids: input.perRarityItemIds ?? null,
       group_label: input.groupLabel ?? null,
       group_subtitle: input.groupSubtitle ?? null,
+      tier_sublabel: input.tierSublabel ?? null,
       preview_cost: input.previewCost ?? 0,
       multi_open_max: Math.min(10, Math.max(2, input.multiOpenMax ?? 10)),
+      name_styles_eligible: input.nameStylesEligible ?? false,
     })
     .eq("id", input.tierId)
     .select("id");
 
-  // New columns may not exist yet — retry without them rather than blocking the save.
+  // Graceful degradation: retry without newer columns if they don't exist yet
+  if (error?.message) {
+    const newCols = ["per_rarity_item_ids", "name_styles_eligible", "tier_sublabel"];
+    if (newCols.some((c) => error!.message.includes(c))) {
+      const retry = await admin
+        .from("case_tiers")
+        .update({
+          ...basePayload,
+          item_types: input.itemTypes,
+          item_ids: input.itemIds ?? null,
+          group_label: input.groupLabel ?? null,
+          group_subtitle: input.groupSubtitle ?? null,
+          preview_cost: input.previewCost ?? 0,
+          multi_open_max: Math.min(10, Math.max(2, input.multiOpenMax ?? 10)),
+        })
+        .eq("id", input.tierId)
+        .select("id");
+      data = retry.data;
+      error = retry.error;
+    }
+  }
+
   if (
     error?.message &&
     (error.message.includes("item_ids") || error.message.includes("group_label") ||
@@ -102,7 +132,6 @@ export async function updateCaseTier(input: UpdateCaseTierInput): Promise<AdminA
     error = retry.error;
   }
 
-  // `item_types` column also not yet in DB — retry with base only.
   if (error?.message?.includes("item_types")) {
     const retry = await admin
       .from("case_tiers")

@@ -7,6 +7,66 @@ import { findCaseTier, pickRarity, RARITY_LABELS } from "@/lib/cases";
 import { getCaseConfig } from "@/lib/cases-config";
 import { notifyUser } from "@/lib/notifications-internal";
 import { broadcastSystemWin } from "@/lib/actions/global-chat";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+/**
+ * Attempt a bonus name-style drop after a case open.
+ * Returns the style key if won, null otherwise.
+ * Never throws — always best-effort.
+ */
+async function tryDropNameStyle(
+  userId: string,
+  rarity: string,
+  supabase: SupabaseClient
+): Promise<string | null> {
+  try {
+    // 1. Check rarity config for drop probability
+    const { data: rarityConf } = await supabase
+      .from("name_style_rarity_config")
+      .select("case_drop_enabled, case_drop_weight")
+      .eq("rarity", rarity)
+      .single();
+
+    if (!rarityConf?.case_drop_enabled || !rarityConf.case_drop_weight) return null;
+
+    // 2. Roll against the probability
+    if (Math.random() * 100 >= rarityConf.case_drop_weight) return null;
+
+    // 3. Find eligible styles for this rarity
+    const { data: styles } = await supabase
+      .from("name_styles")
+      .select("key")
+      .eq("can_win_from_case", true)
+      .eq("rarity", rarity)
+      .limit(200);
+
+    if (!styles || styles.length === 0) return null;
+
+    // 4. Pick a random one the user doesn't already own
+    const { data: owned } = await supabase
+      .from("user_name_styles")
+      .select("style_key")
+      .eq("user_id", userId);
+
+    const ownedKeys = new Set((owned ?? []).map((r) => r.style_key));
+    const eligible = styles.filter((s) => !ownedKeys.has(s.key));
+    if (eligible.length === 0) return null;
+
+    const picked = eligible[Math.floor(Math.random() * eligible.length)];
+
+    // 5. Grant the style
+    const { error } = await supabase.from("user_name_styles").insert({
+      user_id: userId,
+      style_key: picked.key,
+      source: "won",
+    });
+
+    if (error) return null;
+    return picked.key;
+  } catch {
+    return null;
+  }
+}
 
 export interface WonItem {
   id: string;
@@ -66,14 +126,24 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
 
   const rolledRarity = pickRarity(tier.rarityWeights);
 
-  // Item pool resolution:
-  // 1. itemIds (specific items pinned via admin) — highest priority
-  // 2. itemTypes (category filter set via admin) — falls back to group default
-  const useSpecificItems = tier.itemIds && tier.itemIds.length > 0;
+  // Item pool resolution (priority order):
+  // 1. perRarityItemIds[rarity] — specific items for this exact rarity (new, preferred)
+  // 2. itemIds — legacy global pin list (all rarities)
+  // 3. itemTypes — category-based pool (default)
+  const perRarityPin = tier.perRarityItemIds?.[rolledRarity];
+  const usePerRarityPin = Array.isArray(perRarityPin) && perRarityPin.length > 0;
+  const useGlobalPin = !usePerRarityPin && !!(tier.itemIds && tier.itemIds.length > 0);
   const itemTypes = tier.itemTypes ?? group.itemTypes;
   const FULL_SELECT = "id, name, rarity, type, image_url, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec";
 
-  let { data: pool, error: poolError } = useSpecificItems
+  let { data: pool, error: poolError } = usePerRarityPin
+    ? await supabase
+        .from("items")
+        .select(FULL_SELECT)
+        .in("id", perRarityPin!)
+        .eq("rarity", rolledRarity)
+        .limit(500)
+    : useGlobalPin
     ? await supabase
         .from("items")
         .select(FULL_SELECT)
@@ -89,7 +159,14 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
 
   // Fallback if stat columns haven't been migrated yet — still open the case.
   if (poolError) {
-    const retry = useSpecificItems
+    const retry = usePerRarityPin
+      ? await supabase
+          .from("items")
+          .select("id, name, rarity, type, image_url")
+          .in("id", perRarityPin!)
+          .eq("rarity", rolledRarity)
+          .limit(500)
+      : useGlobalPin
       ? await supabase
           .from("items")
           .select("id, name, rarity, type, image_url")
@@ -113,17 +190,11 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
   // Fallback: rolled rarity has no matching items in the pool — broaden to
   // any rarity so the case never hard-errors while the catalogue is filling up.
   if (!poolError && (!pool || pool.length === 0)) {
-    const fallback = useSpecificItems
-      ? await supabase
-          .from("items")
-          .select(FULL_SELECT)
-          .in("id", tier.itemIds!)
-          .limit(500)
-      : await supabase
-          .from("items")
-          .select(FULL_SELECT)
-          .in("type", itemTypes)
-          .limit(500);
+    const fallback = usePerRarityPin
+      ? await supabase.from("items").select(FULL_SELECT).in("id", perRarityPin!).limit(500)
+      : useGlobalPin
+      ? await supabase.from("items").select(FULL_SELECT).in("id", tier.itemIds!).limit(500)
+      : await supabase.from("items").select(FULL_SELECT).in("type", itemTypes).limit(500);
     pool = fallback.data;
     poolError = fallback.error;
   }
@@ -189,8 +260,14 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
 
   revalidatePath("/");
 
-  // Every case open gets a notification now — full, accurate history of
-  // every drop, not just the rare highlights.
+  // ── Name style bonus drop ─────────────────────────────────────────────────
+  // Only runs if this tier has name styles enabled AND the rarity config says drop is active.
+  let wonStyleKey: string | null = null;
+  if (tier.nameStylesEligible) {
+    wonStyleKey = await tryDropNameStyle(user.id, wonItem.rarity, supabase);
+  }
+
+  // Every case open gets a notification — full drop history.
   const rarityLabel = RARITY_LABELS[wonItem.rarity as keyof typeof RARITY_LABELS] ?? wonItem.rarity;
   await notifyUser({
     userId: user.id,
@@ -199,9 +276,19 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
       wonItem.rarity === "mythisch" || wonItem.rarity === "ultra"
         ? `${rarityLabel}-Drop!`
         : "Case geöffnet",
-    message: `Du hast „${wonItem.name}" (${rarityLabel}) gezogen!`,
+    message: `Du hast „${wonItem.name}" (${rarityLabel}) gezogen!${wonStyleKey ? ` + Name-Style Bonus!` : ""}`,
     link: "/garderobe",
   });
+
+  if (wonStyleKey) {
+    await notifyUser({
+      userId: user.id,
+      type: "case_opened",
+      title: "🎨 Name-Style gewonnen!",
+      message: `Bonus-Drop: Name-Style „${wonStyleKey}" wurde deiner Sammlung hinzugefügt!`,
+      link: "/profil",
+    });
+  }
 
   // Broadcast ultra/mythisch wins globally
   if (wonItem.rarity === "ultra" || wonItem.rarity === "mythisch") {
@@ -301,25 +388,31 @@ export async function openCaseBatch(tierId: string, count: number): Promise<Open
     return { success: false, error: `Nicht genug Credits (benötigt: ${totalCost.toLocaleString("de-DE")}).` };
   }
 
-  // Load item pool once, reuse for all N rolls
-  const useSpecificItems = tier.itemIds && tier.itemIds.length > 0;
-  const itemTypes = tier.itemTypes ?? group.itemTypes;
+  // Load full item pool once for all N rolls.
+  // Respects perRarityItemIds if set, otherwise falls back to legacy itemIds then itemTypes.
+  const batchItemTypes = tier.itemTypes ?? group.itemTypes;
   const FULL_SELECT = "id, name, rarity, type, image_url, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec";
-  const { data: fullPool } = useSpecificItems
+  const hasGlobalPin = !!(tier.itemIds && tier.itemIds.length > 0);
+  const { data: fullPool } = hasGlobalPin
     ? await supabase.from("items").select(FULL_SELECT).in("id", tier.itemIds!).limit(500)
-    : await supabase.from("items").select(FULL_SELECT).in("type", itemTypes).limit(500);
+    : await supabase.from("items").select(FULL_SELECT).in("type", batchItemTypes).limit(500);
 
   if (!fullPool || fullPool.length === 0) {
     return { success: false, error: "Keine Items im Pool gefunden." };
   }
 
-  // Roll N items, each filtered by rolled rarity, with fallback to any rarity
+  // Roll N items, each filtered by rolled rarity, with per-rarity pin support
   const wonItems: WonItem[] = [];
   for (let i = 0; i < safeCount; i++) {
     const rarity = pickRarity(tier.rarityWeights);
-    const rarityPool = fullPool.filter((it) => it.rarity === rarity);
-    const draw = rarityPool.length > 0 ? rarityPool : fullPool;
-    wonItems.push(draw[Math.floor(Math.random() * draw.length)] as WonItem);
+    // Check for per-rarity pin
+    const rPin = tier.perRarityItemIds?.[rarity];
+    const useRPin = Array.isArray(rPin) && rPin.length > 0;
+    const draw = useRPin
+      ? fullPool.filter((it) => it.rarity === rarity && rPin!.includes(it.id))
+      : fullPool.filter((it) => it.rarity === rarity);
+    const finalDraw = draw.length > 0 ? draw : fullPool;
+    wonItems.push(finalDraw[Math.floor(Math.random() * finalDraw.length)] as WonItem);
   }
 
   // Atomic deduction: gte guard prevents double-spend
@@ -350,6 +443,16 @@ export async function openCaseBatch(tierId: string, count: number): Promise<Open
 
   revalidatePath("/");
 
+  // ── Batch name style drops ───────────────────────────────────────────────
+  // For each rolled rarity, attempt a name style drop (best-effort).
+  let batchStylesWon = 0;
+  if (tier.nameStylesEligible) {
+    for (const item of wonItems) {
+      const styleKey = await tryDropNameStyle(user.id, item.rarity, supabase);
+      if (styleKey) batchStylesWon++;
+    }
+  }
+
   // Single summary notification for batch opens
   const bestRarity = (["ultra", "mythisch", "selten", "normal"] as const).find(
     (r) => wonItems.some((i) => i.rarity === r)
@@ -359,7 +462,7 @@ export async function openCaseBatch(tierId: string, count: number): Promise<Open
     userId: user.id,
     type: "case_opened",
     title: bestRarity === "ultra" || bestRarity === "mythisch" ? `${bestLabel}-Drop in Batch!` : `${safeCount}× Case geöffnet`,
-    message: `Du hast ${safeCount}× Cases geöffnet. Bestes Item: „${wonItems.find((i) => i.rarity === bestRarity)?.name ?? "Unbekannt"}" (${bestLabel}).`,
+    message: `Du hast ${safeCount}× Cases geöffnet. Bestes Item: „${wonItems.find((i) => i.rarity === bestRarity)?.name ?? "Unbekannt"}" (${bestLabel}).${batchStylesWon > 0 ? ` + ${batchStylesWon}× Name-Style Bonus!` : ""}`,
     link: "/garderobe",
   });
 

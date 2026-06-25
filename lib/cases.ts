@@ -5,7 +5,32 @@ export type Rarity = "normal" | "selten" | "mythisch" | "ultra";
  * client tree (DashboardShell); only plain, JSON-serializable data may cross
  * that Server -> Client boundary. The string is resolved to a real Lucide
  * icon client-side via `getCaseIcon()` in lib/case-icons.ts. */
-export type CaseIconName = "package" | "swords";
+export type CaseIconName =
+  | "package"
+  | "swords"
+  | "gem"
+  | "star"
+  | "shield"
+  | "zap"
+  | "crown"
+  | "flame"
+  | "trophy"
+  | "gift"
+  | "sparkles";
+
+export const CASE_ICON_OPTIONS: { value: CaseIconName; label: string }[] = [
+  { value: "package",  label: "Paket" },
+  { value: "swords",   label: "Schwerter" },
+  { value: "gem",      label: "Edelstein" },
+  { value: "star",     label: "Stern" },
+  { value: "shield",   label: "Schild" },
+  { value: "zap",      label: "Blitz" },
+  { value: "crown",    label: "Krone" },
+  { value: "flame",    label: "Flamme" },
+  { value: "trophy",   label: "Pokal" },
+  { value: "gift",     label: "Geschenk" },
+  { value: "sparkles", label: "Glitzer" },
+];
 
 export const RARITY_ORDER: Rarity[] = ["normal", "selten", "mythisch", "ultra"];
 
@@ -92,11 +117,17 @@ export interface CaseTier {
   enabled?: boolean;
   /** Overrides the parent group's itemTypes when set via the admin panel. */
   itemTypes?: string[];
-  /** When set, the case draws only from these exact item IDs (still filtered by
-   * rolled rarity). Empty array / undefined = fall back to itemTypes pool. */
+  /** Legacy: when set, this case draws only from these exact item IDs (all rarities).
+   * Prefer perRarityItemIds for new configurations. */
   itemIds?: string[];
-  /** Group-level display label stored on the standard tier row — shown as the
-   * case group's title in the dashboard when set by the admin. */
+  /** Per-rarity item overrides. For each rarity: null/missing = use type pool,
+   * string[] = use only these specific items for that rarity. */
+  perRarityItemIds?: Partial<Record<Rarity, string[] | null>>;
+  /** Whether this case tier can also drop name styles (configured via Name-Styles → Rarität-Konfiguration). */
+  nameStylesEligible?: boolean;
+  /** Sort position within the group (0 = standard/first, 1 = premium/second, etc.) */
+  sortOrder?: number;
+  /** Group-level display label stored on the standard tier row. */
   groupLabel?: string;
   /** Group-level subtitle stored on the standard tier row. */
   groupSubtitle?: string;
@@ -156,19 +187,30 @@ export interface CaseGroup {
   iconName: CaseIconName;
   /** items.type values that belong to this case's pool. */
   itemTypes: string[];
+  /** Optional accent colour for the case card (CSS colour string). */
+  accentColor?: string;
+  /** Sort position for display ordering. Lower = shown first. */
+  displayOrder?: number;
+  /** true for admin-created groups (can be deleted), false for seeded defaults. */
+  isCustom?: boolean;
+  /** All tiers for this group in sort order. `standard` and `premium` are
+   * backward-compat aliases to `tiers[0]` and `tiers[1]`. */
+  tiers: CaseTier[];
+  /** First tier — convenience alias for tiers[0]. */
   standard: CaseTier;
+  /** Second tier — convenience alias for tiers[1]. */
   premium: CaseTier;
 }
 
+function mkGroup(base: Omit<CaseGroup, "tiers">): CaseGroup {
+  return { ...base, tiers: [base.standard, base.premium] };
+}
+
 export const CASE_GROUPS: CaseGroup[] = [
-  {
+  mkGroup({
     id: "cosmetics",
     title: "Case Opening",
     iconName: "package",
-    // Every wardrobe-cosmetic dbType (lib/wardrobe.ts) plus ring/amulet —
-    // this is the pool that actually contains ~95% of the 900+ generated
-    // items, so it has to cover all of them or almost nothing is ever
-    // reachable from this case.
     itemTypes: [
       "hat",
       "jacket",
@@ -183,17 +225,6 @@ export const CASE_GROUPS: CaseGroup[] = [
       "ring",
       "amulet",
     ],
-    // Both tiers' weights now sum to a clean 100, and premium (5x the
-    // price of standard) consistently buys a 5x better shot at Ultra in
-    // both case groups — with the in-between rarities improving by a
-    // smaller, still-meaningful multiplier. Rarer tier = bigger relative
-    // payoff for paying the premium price, which is the whole point of a
-    // premium tier existing at all.
-    // Matches the original site's published odds exactly (Normal 87% /
-    // Selten 10% / Mythisch 3% / Ultra 0.1% standard, 78/14/7.5/0.5
-    // premium) — normal is shaved by the rounding remainder (86.9/91.95
-    // below) purely so each tier sums to exactly 100, not 100.05-100.1;
-    // it still displays as the same rounded percentage.
     standard: {
       id: "cosmetics-standard",
       label: "CASE ÖFFNEN",
@@ -207,8 +238,8 @@ export const CASE_GROUPS: CaseGroup[] = [
       price: 25000,
       rarityWeights: { normal: 78, selten: 14, mythisch: 7.5, ultra: 0.5 },
     },
-  },
-  {
+  }),
+  mkGroup({
     id: "weapons",
     title: "Waffen Case",
     subtitle: "Gewinne Waffen für den 3D-World-Kampf — ab 30.000 CR",
@@ -227,7 +258,7 @@ export const CASE_GROUPS: CaseGroup[] = [
       price: 150000,
       rarityWeights: { normal: 84.8, selten: 9, mythisch: 6, ultra: 0.2 },
     },
-  },
+  }),
 ];
 
 export function findCaseTier(
@@ -235,8 +266,8 @@ export function findCaseTier(
   groups: CaseGroup[] = CASE_GROUPS
 ): { group: CaseGroup; tier: CaseTier } | undefined {
   for (const group of groups) {
-    if (group.standard.id === tierId) return { group, tier: group.standard };
-    if (group.premium.id === tierId) return { group, tier: group.premium };
+    const tier = group.tiers.find((t) => t.id === tierId);
+    if (tier) return { group, tier };
   }
   return undefined;
 }

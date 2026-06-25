@@ -22,10 +22,12 @@ import { getCleanupRules } from "@/lib/actions/cleanup-config";
 import { adminListBattlePasses, checkBattlePassMigration } from "@/lib/actions/battle-pass";
 import { getPlinkoConfig } from "@/lib/actions/plinko";
 import { CASE_GROUPS } from "@/lib/cases";
+import { getCaseGroups } from "@/lib/actions/cases-admin";
 import {
   AdminShell,
   type AuditLogEntry,
   type CaseTierRow,
+  type CaseGroupRow,
   type ProfileRow,
   type ItemRow,
 } from "@/components/admin/admin-shell";
@@ -50,11 +52,23 @@ export default async function AdminPage() {
 
   // Graceful column fallback: try with all new columns, degrade if not yet migrated.
   async function fetchTierRows() {
+    // Try with all columns (including the new ones from add-case-groups.cjs)
     const withAll = await admin
+      .from("case_tiers")
+      .select("id, group_id, label, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, preview_cost, multi_open_max, sort_order, per_rarity_item_ids, name_styles_eligible, tier_sublabel, updated_at")
+      .order("sort_order", { ascending: true });
+    if (!withAll.error) return withAll.data;
+
+    // Fallback without new columns
+    const withOldFull = await admin
       .from("case_tiers")
       .select("id, group_id, label, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, preview_cost, multi_open_max, updated_at")
       .order("group_id", { ascending: true });
-    if (!withAll.error) return withAll.data;
+    if (!withOldFull.error) {
+      return (withOldFull.data ?? []).map((row) => ({
+        ...row, sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null,
+      }));
+    }
 
     const withOld = await admin
       .from("case_tiers")
@@ -62,7 +76,7 @@ export default async function AdminPage() {
       .order("group_id", { ascending: true });
     if (!withOld.error) {
       return (withOld.data ?? []).map((row) => ({
-        ...row, preview_cost: 0, multi_open_max: 10,
+        ...row, preview_cost: 0, multi_open_max: 10, sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null,
       }));
     }
 
@@ -73,6 +87,7 @@ export default async function AdminPage() {
     if (!withTypes.error) {
       return (withTypes.data ?? []).map((row) => ({
         ...row, item_ids: null, group_label: null, group_subtitle: null, preview_cost: 0, multi_open_max: 10,
+        sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null,
       }));
     }
 
@@ -82,6 +97,7 @@ export default async function AdminPage() {
       .order("group_id", { ascending: true });
     return (withoutTypes.data ?? []).map((row) => ({
       ...row, item_types: null, item_ids: null, group_label: null, group_subtitle: null, preview_cost: 0, multi_open_max: 10,
+      sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null,
     }));
   }
 
@@ -182,17 +198,20 @@ export default async function AdminPage() {
     getPlinkoConfig(),
   ]);
 
-  // Keep case tiers in the same order as CASE_GROUPS (standard before premium,
-  // cosmetics before weapons) regardless of DB return order, so the admin panel
-  // positions never shift after a save/revalidate.
+  // Load case groups (new dynamic system — graceful if table not yet migrated)
+  const caseGroupRows = await getCaseGroups().catch(() => [] as CaseGroupRow[]);
+
+  // Sort tiers: by group display_order, then sort_order within the group.
+  // Falls back to CASE_GROUPS known order when case_groups table is not yet migrated.
   const KNOWN_TIER_ORDER = CASE_GROUPS.flatMap((g) => [g.standard.id, g.premium.id]);
+  const groupOrderById = new Map(caseGroupRows.map((g, i) => [g.id, g.display_order ?? i]));
   const sortedTierRows = [...(tierRows ?? [])].sort((a, b) => {
-    const ai = KNOWN_TIER_ORDER.indexOf(a.id);
-    const bi = KNOWN_TIER_ORDER.indexOf(b.id);
-    if (ai !== -1 && bi !== -1) return ai - bi;
-    if (ai !== -1) return -1;
-    if (bi !== -1) return 1;
-    return a.id.localeCompare(b.id);
+    const aGroupOrder = groupOrderById.get(a.group_id) ?? 999;
+    const bGroupOrder = groupOrderById.get(b.group_id) ?? 999;
+    if (aGroupOrder !== bGroupOrder) return aGroupOrder - bGroupOrder;
+    const aSortOrder = a.sort_order ?? KNOWN_TIER_ORDER.indexOf(a.id);
+    const bSortOrder = b.sort_order ?? KNOWN_TIER_ORDER.indexOf(b.id);
+    return aSortOrder - bSortOrder;
   });
 
   return (
@@ -201,6 +220,7 @@ export default async function AdminPage() {
       credits={profile?.credits ?? 0}
       streakDays={profile?.streak_days ?? 0}
       auditLog={(auditRows ?? []) as unknown as AuditLogEntry[]}
+      caseGroups={caseGroupRows as CaseGroupRow[]}
       caseTiers={sortedTierRows as unknown as CaseTierRow[]}
       profiles={(profileRows ?? []) as unknown as ProfileRow[]}
       items={((itemRows ?? []) as unknown[]) as ItemRow[]}

@@ -1,4 +1,4 @@
-import { Package, Swords, type LucideIcon } from "lucide-react";
+import { Package, Swords, Gem, Star, Shield, Zap, Crown, Flame, Trophy, Gift, Sparkles, type LucideIcon } from "lucide-react";
 import type { CaseIconName } from "@/lib/cases";
 
 /**
@@ -8,8 +8,17 @@ import type { CaseIconName } from "@/lib/cases";
  * client code ever imports this file and calls the resolver locally.
  */
 const CASE_ICONS: Record<CaseIconName, LucideIcon> = {
-  package: Package,
-  swords: Swords,
+  package:  Package,
+  swords:   Swords,
+  gem:      Gem,
+  star:     Star,
+  shield:   Shield,
+  zap:      Zap,
+  crown:    Crown,
+  flame:    Flame,
+  trophy:   Trophy,
+  gift:     Gift,
+  sparkles: Sparkles,
 };
 
 export function getCaseIcon(name: CaseIconName): LucideIcon {
