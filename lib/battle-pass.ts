@@ -55,6 +55,7 @@ export interface BattlePass {
   showTierCountInShop: boolean;
   showCountdown: boolean;
   passIcon: string;
+  incompatibleWith: string[];
   tiers: BattlePassTier[];
   createdAt: string;
 }

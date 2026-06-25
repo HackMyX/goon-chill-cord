@@ -18,6 +18,7 @@ import { getPublicProfile, type PublicProfile } from "@/lib/actions/community";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { getBadgeStyle } from "@/lib/badges";
+import { subscribeToPresence } from "@/lib/presence-client";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -129,6 +130,7 @@ function ModalContent({ userId, onClose }: ProfileModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
   const { currencyName } = useSiteConfig();
 
   useEffect(() => {
@@ -146,6 +148,15 @@ function ModalContent({ userId, onClose }: ProfileModalProps) {
     const t = setTimeout(() => setCanvasReady(true), 280);
     return () => clearTimeout(t);
   }, []);
+
+  // Subscribe to presence to show real online status
+  useEffect(() => {
+    if (!profile?.id) return;
+    const profileId = profile.id;
+    return subscribeToPresence((onlineIds) => {
+      setIsOnline(onlineIds.has(profileId));
+    });
+  }, [profile?.id]);
 
   useEffect(() => {
     const fn = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -246,7 +257,9 @@ function ModalContent({ userId, onClose }: ProfileModalProps) {
                         {profile.username.charAt(0).toUpperCase()}
                       </div>
                     )}
-                    <span className="absolute bottom-1 right-1 h-3.5 w-3.5 rounded-full border-2 border-[#08050f] bg-emerald-500 shadow" />
+                    {isOnline && (
+                      <span className="absolute bottom-1 right-1 h-3.5 w-3.5 rounded-full border-2 border-[#08050f] bg-emerald-500 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
+                    )}
                   </div>
 
                   {/* Name + verified icon */}
@@ -303,18 +316,18 @@ function ModalContent({ userId, onClose }: ProfileModalProps) {
                   </div>
                 )}
 
-                {/* Admin: UUID + warning strikes */}
-                {profile.viewerIsElevated && (
-                  <div className="w-full space-y-2">
-                    {profile.warningStrikes > 0 && (
-                      <div className="flex items-center gap-1.5 rounded-xl border border-red-800/40 bg-red-950/30 px-3 py-2 text-[11px] text-red-400">
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                        {profile.warningStrikes} Verwarnung{profile.warningStrikes !== 1 ? "en" : ""}
-                      </div>
-                    )}
-                    <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold text-zinc-200">{profile.username}</span>
+                {/* Plain username (visible to all) + warning strikes + UUID copy (elevated only) */}
+                <div className="w-full space-y-2">
+                  {profile.viewerIsElevated && profile.warningStrikes > 0 && (
+                    <div className="flex items-center gap-1.5 rounded-xl border border-red-800/40 bg-red-950/30 px-3 py-2 text-[11px] text-red-400">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      {profile.warningStrikes} Verwarnung{profile.warningStrikes !== 1 ? "en" : ""}
+                    </div>
+                  )}
+                  <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-zinc-200">{profile.username}</span>
+                      {profile.viewerIsElevated && (
                         <button
                           onClick={handleCopyId}
                           className="rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300"
@@ -322,10 +335,10 @@ function ModalContent({ userId, onClose }: ProfileModalProps) {
                         >
                           {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
                         </button>
-                      </div>
+                      )}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
 
               {/* ── Right column: stats + inventory ── */}

@@ -758,7 +758,11 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("ticket-attachments")
           .upload(filePath, replyAttachFile, { upsert: false });
-        if (!uploadError && uploadData) {
+        if (uploadError) {
+          showFlash(`Anhang-Upload fehlgeschlagen: ${uploadError.message}`, false);
+          return;
+        }
+        if (uploadData) {
           const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(uploadData.path);
           attachmentUrl = urlData.publicUrl;
         }

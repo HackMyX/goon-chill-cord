@@ -132,6 +132,7 @@ function SupportButtonInner() {
   const [detail, setDetail] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [ticketFilter, setTicketFilter] = useState<TicketListFilter>("open");
+  const [unseenBadge, setUnseenBadge] = useState<{ label: string; count: number } | null>(null);
 
   const [category, setCategory] = useState<TicketCategory>("bug");
   const [subject, setSubject] = useState("");
@@ -234,7 +235,15 @@ function SupportButtonInner() {
       const { data: profile } = await supabase.from("profiles").select("support_banned, role").eq("id", user.id).single();
       setVisible(!profile?.support_banned);
       if (profile?.role) setUserRole(profile.role);
+      if (profile?.support_banned) return;
+      // Background badge check
+      const lastSeenStr = typeof window !== "undefined" ? window.localStorage.getItem("support:lastSeen") : null;
+      const lastSeen = lastSeenStr ? new Date(lastSeenStr).getTime() : 0;
+      const result = await getUserTickets();
+      setTickets(result);
+      setUnseenBadge(computeUnseenBadge(result, lastSeen));
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -265,9 +274,27 @@ function SupportButtonInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingOpenTicketId, visible]);
 
+  function computeUnseenBadge(ts: Ticket[], lastSeen: number): { label: string; count: number } | null {
+    // Only flag tickets that were updated AFTER the last check AND were already
+    // known before (not just created) → the change must be from staff.
+    const unseen = ts.filter((t) => {
+      const upd = new Date(t.updatedAt).getTime();
+      const cre = new Date(t.createdAt).getTime();
+      return upd > lastSeen && cre <= lastSeen;
+    });
+    if (unseen.length === 0) return null;
+    const hasResolved = unseen.some((t) => t.status === "resolved" || t.status === "closed");
+    const label = hasResolved ? "Ticket gelöst!" : "Neue Antwort";
+    return { label, count: unseen.length };
+  }
+
   function handleOpen() {
     setOpen(true);
     setView("list");
+    setUnseenBadge(null);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("support:lastSeen", new Date().toISOString());
+    }
     loadTickets();
   }
 
@@ -306,18 +333,21 @@ function SupportButtonInner() {
 
     let attachmentUrl: string | undefined;
     if (attachmentFile) {
-      try {
-        const supabase = createClient();
-        const ext = attachmentFile.name.split(".").pop() ?? "bin";
-        const path = `ticket-${Date.now()}.${ext}`;
-        const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from("ticket-attachments")
-          .upload(path, attachmentFile, { upsert: false });
-        if (!uploadErr && uploadData) {
-          const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(uploadData.path);
-          attachmentUrl = urlData.publicUrl;
-        }
-      } catch { /* ignore upload errors — ticket still created without attachment */ }
+      const supabase = createClient();
+      const ext = attachmentFile.name.split(".").pop() ?? "bin";
+      const path = `ticket-${Date.now()}.${ext}`;
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from("ticket-attachments")
+        .upload(path, attachmentFile, { upsert: false });
+      if (uploadErr) {
+        setSubmitting(false);
+        setFormError(`Anhang konnte nicht hochgeladen werden: ${uploadErr.message}`);
+        return;
+      }
+      if (uploadData) {
+        const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(uploadData.path);
+        attachmentUrl = urlData.publicUrl;
+      }
     }
 
     const res = await createTicket({ subject: subject.trim(), description: description.trim(), category, attachmentUrl });
@@ -348,7 +378,11 @@ function SupportButtonInner() {
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("ticket-attachments")
         .upload(filePath, replyAttachFile, { upsert: false });
-      if (!uploadError && uploadData) {
+      if (uploadError) {
+        setSending(false);
+        return;
+      }
+      if (uploadData) {
         const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(uploadData.path);
         attachmentUrl = urlData.publicUrl;
       }
@@ -402,9 +436,13 @@ function SupportButtonInner() {
               <span className="rounded-xl bg-purple-600 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_0_14px_rgba(147,51,234,0.75),0_2px_8px_rgba(0,0,0,0.4)]">
                 Hilfe & Chat
               </span>
-              {(openCount + inProgCount) > 0 && (
-                <span className="rounded-xl border border-blue-400/40 bg-blue-500/20 px-2.5 py-0.5 text-[10px] font-bold text-blue-300">
-                  {openCount + inProgCount} Ticket{(openCount + inProgCount) !== 1 ? "s" : ""} aktiv
+              {unseenBadge && (
+                <span className={`rounded-xl border px-2.5 py-0.5 text-[10px] font-bold shadow-[0_0_10px_rgba(147,51,234,0.4)] ${
+                  unseenBadge.label.includes("gelöst") || unseenBadge.label.includes("Belohnung")
+                    ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-300"
+                    : "border-purple-400/40 bg-purple-500/20 text-purple-200"
+                }`}>
+                  {unseenBadge.count > 1 ? `${unseenBadge.count}× ` : ""}{unseenBadge.label}
                 </span>
               )}
               <span className="rounded-xl border border-amber-400/40 bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.25)]">
@@ -418,9 +456,9 @@ function SupportButtonInner() {
             >
               <span className="absolute inset-0 animate-ping rounded-full bg-purple-400 opacity-10" />
               <MessageCircle className="h-6 w-6" />
-              {(openCount + inProgCount) > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[9px] font-black text-white">
-                  {openCount + inProgCount}
+              {unseenBadge && (
+                <span className="absolute -right-1 -top-1 flex h-5 w-5 animate-bounce items-center justify-center rounded-full bg-purple-400 text-[9px] font-black text-white shadow-[0_0_8px_rgba(192,132,252,0.8)]">
+                  {unseenBadge.count}
                 </span>
               )}
             </button>

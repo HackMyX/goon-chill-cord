@@ -203,6 +203,7 @@ const COLUMN_CHECKS: Array<{
   { id: "col_bp_show_countdown",     category: "Battle Pass", table: "battle_passes",     col: "show_countdown",         detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS show_countdown boolean DEFAULT true;" },
   { id: "col_bp_pass_icon",          category: "Battle Pass", table: "battle_passes",     col: "pass_icon",              detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS pass_icon text DEFAULT '🏆';" },
   { id: "col_bp_updated_at",         category: "Battle Pass", table: "battle_passes",     col: "updated_at",             detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();" },
+  { id: "col_bp_incompatible_with",  category: "Battle Pass", table: "battle_passes",     col: "incompatible_with",      detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS incompatible_with TEXT[] NOT NULL DEFAULT '{}';" },
   // Tickets — per-message attachments (2026-06-25)
   { id: "col_ticketmsg_attachment",  category: "Tickets",     table: "ticket_messages",   col: "attachment_url",         detail: "node scripts/full-db-sync.cjs" },
   // World config — spawn config columns (2026-06-25)

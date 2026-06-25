@@ -135,54 +135,72 @@ function TrackTileCard({
   return (
     <motion.div
       onClick={onClick}
-      whileHover={{ y: -4, scale: 1.03 }}
-      whileTap={{ scale: 0.97 }}
+      whileHover={{ y: -5, scale: 1.04 }}
+      whileTap={{ scale: 0.96 }}
       className={`relative flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl border transition-all duration-200 ${
-        isMilestone ? "w-36 h-52" : "w-28 h-44"
+        isMilestone ? "w-36 h-56" : "w-28 h-44"
       }`}
       style={
         isAvailable
           ? {
-              borderColor: `${trackColor}80`,
-              background: `linear-gradient(160deg, ${trackColor}22 0%, ${trackColor}08 60%, transparent 100%)`,
+              borderColor: `${trackColor}90`,
+              background: `linear-gradient(160deg, ${trackColor}28 0%, ${trackColor}10 60%, transparent 100%)`,
               boxShadow: isSelected
-                ? `0 0 0 2px ${trackColor}, 0 0 32px ${glow}80`
-                : `0 0 20px ${glow}40`,
+                ? `0 0 0 2px ${trackColor}, 0 0 36px ${glow}90`
+                : `0 0 24px ${glow}55`,
             }
           : isClaimed
-            ? { borderColor: "rgba(52,211,153,0.3)", background: "rgba(52,211,153,0.04)" }
+            ? { borderColor: "rgba(52,211,153,0.35)", background: "rgba(52,211,153,0.05)", boxShadow: "0 0 12px rgba(52,211,153,0.08)" }
             : { borderColor: "rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.01)" }
       }
     >
-      {/* Milestone crown */}
+      {/* Milestone top bar */}
       {isMilestone && (
-        <div
-          className="absolute top-0 inset-x-0 h-0.5 rounded-t-2xl"
-          style={{ background: `linear-gradient(90deg, transparent, ${trackColor}, transparent)` }}
-        />
+        <>
+          <div
+            className="absolute top-0 inset-x-0 h-1 rounded-t-2xl"
+            style={{ background: `linear-gradient(90deg, transparent, ${trackColor}, transparent)` }}
+          />
+          <motion.div
+            className="absolute top-0 inset-x-0 h-1 rounded-t-2xl"
+            animate={{ opacity: [0, 1, 0] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: `linear-gradient(90deg, transparent, #fff8, transparent)` }}
+          />
+        </>
       )}
 
       {/* Shimmer on available */}
       {isAvailable && (
-        <motion.div
-          className="pointer-events-none absolute inset-0 rounded-2xl"
-          animate={{ opacity: [0, 0.5, 0] }}
-          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-          style={{ background: `linear-gradient(135deg, ${trackColor}28, transparent 60%)` }}
-        />
+        <>
+          <motion.div
+            className="pointer-events-none absolute inset-0 rounded-2xl"
+            animate={{ opacity: [0, 0.6, 0] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: `linear-gradient(135deg, ${trackColor}30, transparent 60%)` }}
+          />
+          {/* Scan line */}
+          <motion.div
+            className="pointer-events-none absolute left-0 right-0 h-6"
+            animate={{ top: ["-10%", "110%"] }}
+            transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.8 }}
+            style={{ background: `linear-gradient(180deg, transparent, ${trackColor}18, transparent)` }}
+          />
+        </>
       )}
 
       {/* Claimed overlay */}
       {isClaimed && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-emerald-500/5">
-          <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-emerald-400/80" />
+        <div className="absolute inset-0 flex items-center justify-center rounded-2xl">
+          <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-emerald-400/90" />
+          <div className="absolute inset-0 rounded-2xl" style={{ background: "radial-gradient(circle at 50% 50%, rgba(52,211,153,0.07) 0%, transparent 70%)" }} />
         </div>
       )}
 
       {/* Locked overlay */}
       {isLocked && (
-        <div className="absolute inset-0 rounded-2xl bg-black/30 backdrop-blur-[1px]">
-          <Lock className="absolute bottom-2 right-2 h-3 w-3 text-white/15" />
+        <div className="absolute inset-0 rounded-2xl bg-black/35 backdrop-blur-[1px]">
+          <Lock className="absolute bottom-2 right-2 h-3 w-3 text-white/12" />
         </div>
       )}
 
@@ -607,12 +625,29 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
         {/* Particles */}
         <ParticleField accent={accent} count={35} />
 
-        {/* Banner image */}
+        {/* Banner image — cinematic full bleed */}
         {pass.bannerImageUrl && (
-          <div
-            className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-[0.08]"
-            style={{ backgroundImage: `url(${pass.bannerImageUrl})` }}
-          />
+          <>
+            <div
+              className="pointer-events-none absolute inset-0 bg-cover bg-center"
+              style={{
+                backgroundImage: `url(${pass.bannerImageUrl})`,
+                opacity: 0.18,
+                maskImage: "linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 100%)",
+                WebkitMaskImage: "linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 100%)",
+              }}
+            />
+            {/* Character preview — right-side fade-in */}
+            <div
+              className="pointer-events-none absolute right-0 top-0 h-full w-1/3 bg-contain bg-right-top bg-no-repeat hidden lg:block"
+              style={{
+                backgroundImage: `url(${pass.bannerImageUrl})`,
+                opacity: 0.35,
+                maskImage: "linear-gradient(270deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0) 100%)",
+                WebkitMaskImage: "linear-gradient(270deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0) 100%)",
+              }}
+            />
+          </>
         )}
 
         {/* Hero content */}
@@ -1011,24 +1046,45 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
               </div>
             )}
 
+            {/* Banner preview card */}
+            {pass.bannerImageUrl && (
+              <div
+                className="rounded-2xl overflow-hidden border"
+                style={{ borderColor: `${accent}25` }}
+              >
+                <div className="relative h-28 bg-cover bg-center" style={{ backgroundImage: `url(${pass.bannerImageUrl})` }}>
+                  <div
+                    className="absolute inset-0"
+                    style={{ background: `linear-gradient(0deg, ${accent}40 0%, transparent 60%)` }}
+                  />
+                  <div className="absolute bottom-2 left-3 text-xs font-black text-white drop-shadow-lg">{pass.name}</div>
+                </div>
+              </div>
+            )}
+
             {/* Remaining tiers quick stats */}
-            <div className="rounded-2xl border border-white/[0.05] bg-white/[0.01] p-4">
-              <h4 className="mb-3 text-[10px] font-black uppercase tracking-widest text-white/25">Überblick</h4>
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-white/40">Abgeholte Tiers</span>
-                  <span className="font-bold text-emerald-400">{claimedCount} / {pass.tierCount}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-white/40">Verfügbare Tiers</span>
-                  <span className="font-bold" style={{ color: accent }}>
-                    {pass.tiers.filter((t) => getTierState(t, userStatus, progressDays) === "available").length}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-white/40">Noch gesperrte</span>
-                  <span className="font-bold text-white/30">
-                    {pass.tiers.filter((t) => getTierState(t, userStatus, progressDays) === "locked").length}
+            <div
+              className="rounded-2xl border p-4"
+              style={{ borderColor: `${accent}12`, background: `${accent}04` }}
+            >
+              <h4 className="mb-3 text-[10px] font-black uppercase tracking-widest" style={{ color: `${accent}60` }}>Überblick</h4>
+              <div className="space-y-2.5">
+                {[
+                  { label: "Abgeholte Tiers", value: `${claimedCount} / ${pass.tierCount}`, color: "#34d399" },
+                  { label: "Verfügbare Tiers", value: String(pass.tiers.filter((t) => getTierState(t, userStatus, progressDays) === "available").length), color: accent },
+                  { label: "Gesperrte Tiers", value: String(pass.tiers.filter((t) => getTierState(t, userStatus, progressDays) === "locked").length), color: "rgba(255,255,255,0.25)" },
+                  { label: "Meilenstein-Tiers", value: String(pass.tiers.filter((t) => t.highlightTier).length), color: "#fbbf24" },
+                ].map((s) => (
+                  <div key={s.label} className="flex items-center justify-between text-xs">
+                    <span className="text-white/35">{s.label}</span>
+                    <span className="font-black tabular-nums" style={{ color: s.color }}>{s.value}</span>
+                  </div>
+                ))}
+                <div className="mt-2 h-px bg-white/5" />
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-white/35">Free / Premium / Elite</span>
+                  <span className="font-bold text-white/40 tabular-nums">
+                    {freeTiers.length} / {premiumTiers.length} / {eliteTiers.length}
                   </span>
                 </div>
               </div>

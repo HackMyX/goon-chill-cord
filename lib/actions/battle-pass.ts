@@ -64,6 +64,7 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
     showTierCountInShop: (r.show_tier_count_in_shop as boolean | null) ?? true,
     showCountdown: (r.show_countdown as boolean | null) ?? true,
     passIcon: (r.pass_icon as string | null) ?? "🏆",
+    incompatibleWith: (r.incompatible_with as string[] | null) ?? [],
     tiers,
     createdAt: r.created_at as string,
   };
@@ -212,7 +213,7 @@ export async function purchaseBattlePass(passId: string): Promise<{ success: boo
 
   const admin = createAdminClient();
   const [{ data: passRow }, { data: profile }, { currencyName }] = await Promise.all([
-    admin.from("battle_passes").select("id, price_cr, enabled, is_active").eq("id", passId).single(),
+    admin.from("battle_passes").select("id, price_cr, enabled, is_active, incompatible_with").eq("id", passId).single(),
     admin.from("profiles").select("credits").eq("id", user.id).single(),
     getSiteConfig(),
   ]);
@@ -223,6 +224,25 @@ export async function purchaseBattlePass(passId: string): Promise<{ success: boo
   if (!profile) return { success: false, error: "Profil nicht gefunden." };
   if (profile.credits < passRow.price_cr) {
     return { success: false, error: `Nicht genug ${currencyName}. Benötigt: ${passRow.price_cr.toLocaleString("de-DE")} ${currencyName}.` };
+  }
+
+  // Incompatibility check
+  const incompatibleWith = (passRow.incompatible_with as string[] | null) ?? [];
+  if (incompatibleWith.length > 0) {
+    const { data: conflictRows } = await admin
+      .from("user_battle_passes")
+      .select("pass_id")
+      .eq("user_id", user.id)
+      .eq("has_premium", true)
+      .in("pass_id", incompatibleWith);
+    if (conflictRows && conflictRows.length > 0) {
+      const { data: conflictPasses } = await admin
+        .from("battle_passes")
+        .select("name")
+        .in("id", conflictRows.map((r) => r.pass_id as string));
+      const names = (conflictPasses ?? []).map((p) => p.name as string).join(", ");
+      return { success: false, error: `Dieser Pass ist nicht kombinierbar mit: ${names}. Du kannst ihn nicht gleichzeitig besitzen.` };
+    }
   }
 
   const { data: existing } = await admin
@@ -281,7 +301,7 @@ export async function purchaseEliteBattlePass(passId: string): Promise<{ success
 
   const admin = createAdminClient();
   const [{ data: passRow }, { data: profile }, { currencyName }] = await Promise.all([
-    admin.from("battle_passes").select("id, elite_price_cr, elite_enabled, enabled, is_active").eq("id", passId).single(),
+    admin.from("battle_passes").select("id, elite_price_cr, elite_enabled, enabled, is_active, incompatible_with").eq("id", passId).single(),
     admin.from("profiles").select("credits").eq("id", user.id).single(),
     getSiteConfig(),
   ]);
@@ -297,6 +317,25 @@ export async function purchaseEliteBattlePass(passId: string): Promise<{ success
   const elitePriceCr = (passRow.elite_price_cr as number | null) ?? 0;
   if (profile.credits < elitePriceCr) {
     return { success: false, error: `Nicht genug ${currencyName}. Benötigt: ${elitePriceCr.toLocaleString("de-DE")} ${currencyName}.` };
+  }
+
+  // Incompatibility check
+  const incompatibleWith = (passRow.incompatible_with as string[] | null) ?? [];
+  if (incompatibleWith.length > 0) {
+    const { data: conflictRows } = await admin
+      .from("user_battle_passes")
+      .select("pass_id")
+      .eq("user_id", user.id)
+      .eq("has_elite", true)
+      .in("pass_id", incompatibleWith);
+    if (conflictRows && conflictRows.length > 0) {
+      const { data: conflictPasses } = await admin
+        .from("battle_passes")
+        .select("name")
+        .in("id", conflictRows.map((r) => r.pass_id as string));
+      const names = (conflictPasses ?? []).map((p) => p.name as string).join(", ");
+      return { success: false, error: `Dieser Elite-Pass ist nicht kombinierbar mit: ${names}.` };
+    }
   }
 
   const { data: existing } = await admin
@@ -670,6 +709,7 @@ export interface AdminPassInput {
   showTierCountInShop: boolean;
   showCountdown: boolean;
   passIcon: string;
+  incompatibleWith?: string[];
 }
 
 export async function adminCreateBattlePass(
@@ -709,6 +749,7 @@ export async function adminCreateBattlePass(
       show_tier_count_in_shop: input.showTierCountInShop ?? true,
       show_countdown: input.showCountdown ?? true,
       pass_icon: input.passIcon?.trim() || "🏆",
+      incompatible_with: input.incompatibleWith ?? [],
     })
     .select("id")
     .single();
@@ -758,6 +799,7 @@ export async function adminUpdateBattlePass(
       show_tier_count_in_shop: input.showTierCountInShop ?? true,
       show_countdown: input.showCountdown ?? true,
       pass_icon: input.passIcon?.trim() || "🏆",
+      incompatible_with: input.incompatibleWith ?? [],
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);

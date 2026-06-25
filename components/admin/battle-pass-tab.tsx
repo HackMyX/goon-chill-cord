@@ -905,10 +905,12 @@ function TierEditorModal({
 
 function PassEditor({
   pass,
+  passes,
   onSaved,
   onDelete,
 }: {
   pass: BattlePass;
+  passes: BattlePass[];
   onSaved: () => void | Promise<void>;
   onDelete: () => void;
 }) {
@@ -938,6 +940,7 @@ function PassEditor({
   const [showCountdown, setShowCountdown] = useState(pass.showCountdown ?? true);
   const [showTierCountInShop, setShowTierCountInShop] = useState(pass.showTierCountInShop ?? true);
   const [highlightColor, setHighlightColor] = useState(pass.highlightColor ?? "");
+  const [incompatibleWith, setIncompatibleWith] = useState<string[]>(pass.incompatibleWith ?? []);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -981,6 +984,7 @@ function PassEditor({
       showCountdown,
       showTierCountInShop,
       highlightColor: highlightColor.trim(),
+      incompatibleWith,
     };
     const res = await adminUpdateBattlePass(pass.id, input);
     setSaving(false);
@@ -1152,6 +1156,54 @@ function PassEditor({
           <p className="text-[10px] text-zinc-600">Aktiviere den Elite-Track, um einen dritten Tier-Track mit separatem Preis anzubieten.</p>
         )}
       </div>
+
+      {/* Combinability (incompatible passes) */}
+      {(() => {
+        const otherPasses = passes.filter((p) => p.id !== pass.id);
+        if (otherPasses.length === 0) return null;
+        return (
+          <div className="rounded-xl border border-orange-500/20 bg-orange-500/[0.04] p-4 space-y-3">
+            <p className="text-xs font-bold text-orange-300 flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" />Kombinierbarkeit
+            </p>
+            <p className="text-[10px] text-zinc-500">
+              Wähle Pässe aus, mit denen dieser Pass <strong className="text-orange-300/80">nicht kombinierbar</strong> ist.
+              User die bereits einen der gewählten Pässe besitzen, können diesen Pass nicht kaufen.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {otherPasses.map((p) => {
+                const isSelected = incompatibleWith.includes(p.id);
+                const pTheme = BP_THEMES[p.theme ?? "default"];
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() =>
+                      setIncompatibleWith((prev) =>
+                        isSelected ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                      )
+                    }
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${
+                      isSelected
+                        ? "border-orange-400/60 bg-orange-500/15 text-orange-200 shadow-[0_0_8px_rgba(249,115,22,0.2)]"
+                        : "border-white/10 text-zinc-400 hover:border-white/20 hover:text-zinc-300"
+                    }`}
+                  >
+                    {isSelected ? <X className="h-3 w-3 text-orange-400" /> : <Check className="h-3 w-3 opacity-30" />}
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: pTheme.accent }} />
+                    {p.name}
+                    <span className="text-zinc-600">{p.seasonLabel}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {incompatibleWith.length > 0 && (
+              <p className="text-[10px] text-orange-300/60">
+                ⚠️ {incompatibleWith.length} inkompatible{incompatibleWith.length === 1 ? "r" : ""} Pass{incompatibleWith.length === 1 ? "" : "es"} ausgewählt
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Visibility toggles */}
       <div className="space-y-2">
@@ -1776,6 +1828,7 @@ export function BattlePassTab({ initialPasses, migrationNeeded = false }: { init
             >
               <PassEditor
                 pass={pass}
+                passes={passes}
                 onSaved={reload}
                 onDelete={reload}
               />
