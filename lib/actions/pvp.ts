@@ -91,11 +91,18 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
   // Re-fetch the attacker's *currently equipped* weapon server-side — never
   // trust a client-supplied damage number, exactly the same rule
   // claimMonsterKill applies to monster rewards.
-  const { data: inventory } = await admin
-    .from("inventory")
-    .select("item:items(damage, type)")
-    .eq("user_id", user.id)
-    .eq("equipped", true);
+  const [{ data: inventory }, { data: attackerProfile }] = await Promise.all([
+    admin
+      .from("inventory")
+      .select("item:items(damage, type)")
+      .eq("user_id", user.id)
+      .eq("equipped", true),
+    admin
+      .from("profiles")
+      .select("equipped_ability_key")
+      .eq("id", user.id)
+      .single(),
+  ]);
   const weaponRow = ((inventory ?? []) as unknown as { item: (EquippedItem & { type: string }) | null }[]).find(
     (row) => row.item && isWeaponType(row.item.type)
   );
@@ -106,7 +113,7 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
   // per-tier HP headroom monsters are individually balanced around, so
   // applying raw weapon/momentum numbers here would let a single
   // sprint-jump hit from a top-tier weapon one-shot anyone outright.
-  const damage = computePvpDamage(
+  let damage = computePvpDamage(
     baseDmg,
     input.sprinting,
     input.airborne,
@@ -114,6 +121,22 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
     characterConfig.airborneDamageMultiplier,
     characterConfig.pvpDamageMultiplier
   );
+
+  // Apply world_damage_boost ability if attacker has one equipped
+  const equippedKey = (attackerProfile?.equipped_ability_key as string | null) ?? null;
+  if (equippedKey) {
+    try {
+      const { data: abilityDef } = await admin
+        .from("ability_definitions")
+        .select("effect_type, effect_value")
+        .eq("key", equippedKey)
+        .eq("enabled", true)
+        .single();
+      if (abilityDef?.effect_type === "world_damage_boost") {
+        damage = Math.round(damage * (1 + (abilityDef.effect_value as number)));
+      }
+    } catch { /* non-fatal */ }
+  }
 
   try {
     const { data: targetProfile } = await admin
@@ -128,11 +151,19 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
         targetUserId: input.targetUserId,
         targetUsername: (targetProfile?.username as string | null) ?? null,
         damage,
+        abilityKey: equippedKey,
       },
     });
   } catch {
     // best-effort — the hit still lands below either way.
   }
+
+  // Award XP for landing a PvP hit (fire-and-forget, non-blocking)
+  try {
+    const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
+    const xpCfg = await getXpConfig();
+    void awardXp(user.id, xpCfg.sources.pvp_kill ?? 15, "pvp_kill", `Schaden: ${damage} an ${input.targetUserId.slice(0, 8)}`);
+  } catch { /* non-fatal */ }
 
   // Broadcast is now done client-side via broadcastPvpDamage (world-realtime.ts)
   // using the same httpSend path as every other game event — the REST broadcast

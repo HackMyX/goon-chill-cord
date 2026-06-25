@@ -27,6 +27,7 @@ import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
 import { useSoundManager } from "@/lib/sound-manager";
 import { createClient } from "@/lib/supabase/client";
 import { DEFAULT_TOPBAR_RIGHT_SLOTS } from "@/lib/site-config";
+import { LevelBadge } from "@/components/ui/level-badge";
 
 interface TopBarProps {
   credits: number;
@@ -37,6 +38,7 @@ interface TopBarProps {
   isModerator?: boolean;
   userId?: string;
   pendingTradesCount?: number;
+  level?: number;
 }
 
 export function TopBar({
@@ -48,6 +50,7 @@ export function TopBar({
   isModerator = false,
   userId,
   pendingTradesCount = 0,
+  level,
 }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
@@ -65,7 +68,9 @@ export function TopBar({
   const [liveInventoryCount, setLiveInventoryCount] = useState(inventoryCount);
   const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [liveLevel, setLiveLevel] = useState(level ?? 0);
   useEffect(() => { setLiveInventoryCount(inventoryCount); }, [inventoryCount]);
+  useEffect(() => { if (level !== undefined) setLiveLevel(level); }, [level]);
 
   useEffect(() => {
     if (userId) { setResolvedUserId(userId); return; }
@@ -78,6 +83,11 @@ export function TopBar({
   useEffect(() => {
     if (!resolvedUserId) return;
     const supabase = createClient();
+    // Fetch initial level if not passed as prop
+    if (!level) {
+      supabase.from("profiles").select("level").eq("id", resolvedUserId).single()
+        .then(({ data }) => { if (data?.level) setLiveLevel(data.level as number); });
+    }
     const channel = supabase
       .channel(`topbar-inventory-${resolvedUserId}`)
       .on(
@@ -90,8 +100,17 @@ export function TopBar({
         { event: "DELETE", schema: "public", table: "inventory", filter: `user_id=eq.${resolvedUserId}` },
         () => setLiveInventoryCount((n) => Math.max(0, n - 1))
       )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${resolvedUserId}` },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          if (typeof row.level === "number") setLiveLevel(row.level);
+        }
+      )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedUserId]);
 
   const slots: string[] =
@@ -250,6 +269,12 @@ export function TopBar({
           <span className="tabular-nums">{creditsLabel}</span>
           <span className="hidden text-xs text-purple-200/70 sm:inline [@media(max-height:600px)]:hidden">{currencyName}</span>
         </motion.div>
+
+        {liveLevel > 0 && (
+          <Link href="/account" onMouseEnter={sound.hover} onClick={sound.click} className="hidden sm:block [@media(max-height:600px)]:hidden">
+            <LevelBadge level={liveLevel} size="xs" />
+          </Link>
+        )}
 
         {isAdmin && (
           <>

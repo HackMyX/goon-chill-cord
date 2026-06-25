@@ -1,0 +1,351 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { Plus, Trash2, Save, RefreshCw, AlertTriangle, CheckCircle2, Zap, Users, X } from "lucide-react";
+import type { AbilityDefinition, AbilityCategory, AbilityEffectType, AbilityRarity } from "@/lib/abilities";
+import {
+  ABILITY_CATEGORY_LABELS, ABILITY_CATEGORY_COLORS,
+  ABILITY_RARITY_COLORS, ABILITY_RARITY_LABELS,
+} from "@/lib/abilities";
+import {
+  getAllAbilityDefinitions, adminUpsertAbilityDefinition,
+  adminDeleteAbilityDefinition, adminGrantAbility, adminRevokeAbility, getUserAbilities,
+} from "@/lib/actions/abilities";
+
+interface AbilityAdminTabProps {
+  profiles: { id: string; username: string }[];
+}
+
+const EFFECT_TYPES: AbilityEffectType[] = [
+  "mine_cr_bonus", "mine_double_chance", "mine_speed", "mine_storage_hours", "mine_upgrade_discount",
+  "snake_cr_per_apple", "snake_gold_apple_rate",
+  "plinko_loss_recovery", "plinko_multiplier_boost",
+  "don_bonus_flips", "don_daily_shield",
+  "world_damage_boost", "world_hp_regen", "world_xp_boost",
+  "xp_boost", "credit_bonus", "streak_grace_hours",
+];
+
+const CATEGORIES: AbilityCategory[] = ["mine", "snake", "plinko", "don", "world", "global"];
+const RARITIES: AbilityRarity[] = ["selten", "mythisch", "ultra"];
+
+const BLANK: Partial<AbilityDefinition> & { key: string } = {
+  key: "", name: "", description: "", category: "global", effectType: "xp_boost",
+  effectValue: 0, effectConfig: {}, rarity: "selten", icon: "Zap",
+  shopPriceCr: 0, availableInShop: false, canDropFromCases: true, enabled: true, sortOrder: 0,
+};
+
+export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
+  const [abilities, setAbilities] = useState<AbilityDefinition[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<(Partial<AbilityDefinition> & { key: string }) | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+
+  // Grant ability form
+  const [grantUserId, setGrantUserId] = useState("");
+  const [grantAbilityKey, setGrantAbilityKey] = useState("");
+  const [grantMsg, setGrantMsg] = useState("");
+
+  // User inventory modal
+  const [viewUserId, setViewUserId] = useState("");
+  const [userInventory, setUserInventory] = useState<{ id: string; abilityKey: string; source: string; acquiredAt: string }[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+
+  useEffect(() => {
+    getAllAbilityDefinitions().then((d) => { setAbilities(d); setLoading(false); });
+  }, []);
+
+  async function handleSave() {
+    if (!editing || !editing.key) { setSaveMsg("❌ Key fehlt"); return; }
+    setSaving(true); setSaveMsg("");
+    const result = await adminUpsertAbilityDefinition(editing);
+    setSaving(false);
+    if (result.success) {
+      setSaveMsg("✅ Gespeichert!");
+      setTimeout(() => setSaveMsg(""), 2000);
+      const fresh = await getAllAbilityDefinitions();
+      setAbilities(fresh);
+      setEditing(null);
+    } else {
+      setSaveMsg(`❌ ${result.error}`);
+    }
+  }
+
+  async function handleDelete(key: string) {
+    if (!confirm(`Fähigkeit "${key}" wirklich löschen?`)) return;
+    const result = await adminDeleteAbilityDefinition(key);
+    if (result.success) {
+      setAbilities((prev) => prev.filter((a) => a.key !== key));
+    } else {
+      alert(result.error);
+    }
+  }
+
+  async function handleGrant() {
+    if (!grantUserId || !grantAbilityKey) return;
+    const res = await adminGrantAbility(grantUserId, grantAbilityKey);
+    setGrantMsg(res.success ? "✅ Vergeben!" : `❌ ${res.error}`);
+    setTimeout(() => setGrantMsg(""), 2500);
+  }
+
+  async function handleLoadInventory() {
+    if (!viewUserId) return;
+    setInventoryLoading(true);
+    const items = await getUserAbilities(viewUserId);
+    setUserInventory(items.map((i) => ({ id: i.id, abilityKey: i.abilityKey, source: i.source, acquiredAt: i.acquiredAt })));
+    setInventoryLoading(false);
+  }
+
+  async function handleRevoke(userAbilityId: string) {
+    const res = await adminRevokeAbility(userAbilityId);
+    if (res.success) {
+      setUserInventory((prev) => prev.filter((i) => i.id !== userAbilityId));
+    } else {
+      alert(res.error);
+    }
+  }
+
+  if (loading) return (
+    <div className="flex items-center gap-2 py-8 text-zinc-500">
+      <RefreshCw className="h-4 w-4 animate-spin" /> Lade Fähigkeiten…
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Zap className="h-5 w-5 text-amber-400" />
+          <h2 className="text-base font-bold text-zinc-100">Fähigkeiten (Abilities)</h2>
+        </div>
+        <button
+          onClick={() => setEditing({ ...BLANK })}
+          className="flex items-center gap-1.5 rounded-xl bg-purple-600/80 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-500"
+        >
+          <Plus className="h-3.5 w-3.5" /> Neue Fähigkeit
+        </button>
+      </div>
+
+      {/* Ability grid */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {abilities.map((a) => (
+          <div key={a.key} className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+            <div className="mb-2 flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-zinc-100">{a.name}</span>
+                  <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${ABILITY_RARITY_COLORS[a.rarity]}`}>
+                    {ABILITY_RARITY_LABELS[a.rarity]}
+                  </span>
+                </div>
+                <span className={`mt-0.5 inline-block rounded-md border px-1.5 py-0.5 text-[10px] ${ABILITY_CATEGORY_COLORS[a.category]}`}>
+                  {ABILITY_CATEGORY_LABELS[a.category]}
+                </span>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setEditing({ ...a })}
+                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => handleDelete(a.key)}
+                  className="rounded-lg p-1.5 text-red-400/70 hover:bg-red-500/10 hover:text-red-400"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+            <p className="mb-2 text-xs text-zinc-400">{a.description}</p>
+            <div className="flex flex-wrap gap-1.5 text-[10px] text-zinc-500">
+              <span className="rounded bg-black/30 px-1.5 py-0.5">{a.effectType}: {a.effectValue}</span>
+              {a.availableInShop && <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-400">Shop</span>}
+              {a.canDropFromCases && <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400">Cases</span>}
+              {!a.enabled && <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-red-400">Deaktiviert</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Edit modal */}
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 p-4 pt-10">
+          <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-zinc-900 p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-base font-bold text-zinc-100">
+                {abilities.some((a) => a.key === editing.key) ? "Fähigkeit bearbeiten" : "Neue Fähigkeit"}
+              </h3>
+              <button onClick={() => setEditing(null)} className="rounded-lg p-1 text-zinc-400 hover:text-zinc-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { label: "Key (einmalig)", field: "key", type: "text" },
+                { label: "Name", field: "name", type: "text" },
+                { label: "Icon (Lucide)", field: "icon", type: "text" },
+                { label: "Sortierung", field: "sortOrder", type: "number" },
+                { label: "Effect Value", field: "effectValue", type: "number" },
+                { label: "Shop-Preis (CR)", field: "shopPriceCr", type: "number" },
+              ].map(({ label, field, type }) => (
+                <label key={field} className="flex flex-col gap-1">
+                  <span className="text-xs text-zinc-400">{label}</span>
+                  <input
+                    type={type}
+                    value={String((editing as Record<string, unknown>)[field] ?? "")}
+                    onChange={(e) => setEditing((prev) => prev ? { ...prev, [field]: type === "number" ? Number(e.target.value) : e.target.value } : null)}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </label>
+              ))}
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-400">Beschreibung</span>
+                <input
+                  value={editing.description ?? ""}
+                  onChange={(e) => setEditing((prev) => prev ? { ...prev, description: e.target.value } : null)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-400">Kategorie</span>
+                <select
+                  value={editing.category ?? "global"}
+                  onChange={(e) => setEditing((prev) => prev ? { ...prev, category: e.target.value as AbilityCategory } : null)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none"
+                >
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{ABILITY_CATEGORY_LABELS[c]}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-400">Effect Type</span>
+                <select
+                  value={editing.effectType ?? "xp_boost"}
+                  onChange={(e) => setEditing((prev) => prev ? { ...prev, effectType: e.target.value as AbilityEffectType } : null)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none"
+                >
+                  {EFFECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-400">Seltenheit</span>
+                <select
+                  value={editing.rarity ?? "selten"}
+                  onChange={(e) => setEditing((prev) => prev ? { ...prev, rarity: e.target.value as AbilityRarity } : null)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none"
+                >
+                  {RARITIES.map((r) => <option key={r} value={r}>{ABILITY_RARITY_LABELS[r]}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-4">
+              {[
+                { field: "availableInShop", label: "Im Shop verfügbar" },
+                { field: "canDropFromCases", label: "Aus Cases dropbar" },
+                { field: "enabled", label: "Aktiviert" },
+              ].map(({ field, label }) => (
+                <label key={field} className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={Boolean((editing as Record<string, unknown>)[field])}
+                    onChange={(e) => setEditing((prev) => prev ? { ...prev, [field]: e.target.checked } : null)}
+                    className="rounded"
+                  />
+                  <span className="text-sm text-zinc-300">{label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-5 flex items-center gap-3">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center gap-1.5 rounded-xl bg-purple-600/80 px-4 py-2 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50"
+              >
+                {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Speichern
+              </button>
+              <button onClick={() => setEditing(null)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-400 hover:text-zinc-100">
+                Abbrechen
+              </button>
+              {saveMsg && (
+                <span className={`text-sm ${saveMsg.startsWith("✅") ? "text-emerald-400" : "text-red-400"}`}>{saveMsg}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grant ability */}
+      <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
+          <Zap className="h-3.5 w-3.5 text-purple-400" />
+          Fähigkeit manuell vergeben
+        </h3>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-zinc-400">Spieler</span>
+            <select value={grantUserId} onChange={(e) => setGrantUserId(e.target.value)}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none">
+              <option value="">Spieler wählen…</option>
+              {profiles.map((p) => <option key={p.id} value={p.id}>{p.username}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-zinc-400">Fähigkeit</span>
+            <select value={grantAbilityKey} onChange={(e) => setGrantAbilityKey(e.target.value)}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none">
+              <option value="">Fähigkeit wählen…</option>
+              {abilities.map((a) => <option key={a.key} value={a.key}>{a.name}</option>)}
+            </select>
+          </div>
+          <button onClick={handleGrant} disabled={!grantUserId || !grantAbilityKey}
+            className="rounded-xl bg-purple-600/80 px-4 py-1.5 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50">
+            Vergeben
+          </button>
+          {grantMsg && <span className={`text-sm ${grantMsg.startsWith("✅") ? "text-emerald-400" : "text-red-400"}`}>{grantMsg}</span>}
+        </div>
+      </div>
+
+      {/* View user inventory */}
+      <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
+          <Users className="h-3.5 w-3.5 text-blue-400" />
+          Spieler-Inventar anzeigen
+        </h3>
+        <div className="flex gap-3 items-end mb-4">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-zinc-400">Spieler</span>
+            <select value={viewUserId} onChange={(e) => setViewUserId(e.target.value)}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none">
+              <option value="">Spieler wählen…</option>
+              {profiles.map((p) => <option key={p.id} value={p.id}>{p.username}</option>)}
+            </select>
+          </div>
+          <button onClick={handleLoadInventory} disabled={!viewUserId || inventoryLoading}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-zinc-300 hover:text-white disabled:opacity-50 flex items-center gap-1.5">
+            {inventoryLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+            Laden
+          </button>
+        </div>
+        {userInventory.length > 0 && (
+          <div className="space-y-1.5">
+            {userInventory.map((item) => (
+              <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+                <div>
+                  <span className="text-sm font-medium text-zinc-200">{item.abilityKey}</span>
+                  <span className="ml-2 text-xs text-zinc-500">{item.source} · {new Date(item.acquiredAt).toLocaleDateString("de-DE")}</span>
+                </div>
+                <button onClick={() => handleRevoke(item.id)} className="rounded-lg p-1 text-red-400/60 hover:text-red-400">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {viewUserId && userInventory.length === 0 && !inventoryLoading && (
+          <p className="text-xs text-zinc-500 italic">Keine Fähigkeiten</p>
+        )}
+      </div>
+    </div>
+  );
+}

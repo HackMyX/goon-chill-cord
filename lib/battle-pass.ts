@@ -1,6 +1,6 @@
 import type { Rarity } from "@/lib/cases";
 
-export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_boost" | "name_style";
+export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_boost" | "name_style" | "ability";
 export type BpTheme = "default" | "gold" | "neon" | "fire" | "ice";
 export type BpShopPosition = "top" | "below_motd" | "below_featured" | "between_categories" | "bottom";
 export type BpShopBannerSize = "card" | "banner" | "hero";
@@ -20,6 +20,7 @@ export interface BattlePassTier {
   rewardItemRarity: Rarity | null;
   rewardXpBoost: number | null;
   rewardNameStyleKey: string | null;
+  rewardAbilityKey: string | null;
   rewardQuantity: number;
   highlightTier: boolean;
   description: string | null;

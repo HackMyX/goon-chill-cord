@@ -7,6 +7,7 @@ import { isAdmin } from "@/lib/admin";
 import { DEFAULT_MINE_CONFIG, DEFAULT_MINE_LEVELS, type MineConfig, type MineLevel } from "@/lib/mine-config";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
+import { awardXp, getXpConfig } from "@/lib/actions/level-system";
 
 export interface MineProgress {
   userId: string;
@@ -131,7 +132,7 @@ export async function collectMineCredits(): Promise<CollectResult> {
   const [config, { currencyName }, { data: profile }, progress] = await Promise.all([
     getMineConfig(),
     getSiteConfig(),
-    supabase.from("profiles").select("credits").eq("id", user.id).single(),
+    supabase.from("profiles").select("credits, equipped_ability_key").eq("id", user.id).single(),
     getMineProgress(user.id),
   ]);
 
@@ -141,16 +142,59 @@ export async function collectMineCredits(): Promise<CollectResult> {
   const mineProgress = progress ?? await ensureMineProgress(user.id);
   const levelCfg = config.levels.find((l) => l.level === mineProgress.level) ?? config.levels[0];
 
+  // Apply ability effects: storage bonus
+  const equippedKey = (profile as Record<string, unknown>).equipped_ability_key as string | null;
+  let storageHoursBonus = 0;
+  let crBonusMultiplier = 1.0;
+  let doubleChance = 0.0;
+  let upgradeDiscountRate = 0.0;
+
+  if (equippedKey) {
+    try {
+      const { data: abilityDef } = await admin
+        .from("ability_definitions")
+        .select("effect_type, effect_value, effect_config")
+        .eq("key", equippedKey)
+        .eq("enabled", true)
+        .single();
+
+      if (abilityDef) {
+        const et = abilityDef.effect_type as string;
+        const ev = Number(abilityDef.effect_value) ?? 0;
+        const ec = (abilityDef.effect_config ?? {}) as Record<string, number>;
+
+        if (et === "mine_cr_bonus") {
+          crBonusMultiplier = 1 + ev;
+          if (ec.storage_bonus) storageHoursBonus = levelCfg.maxStorageHours * ec.storage_bonus;
+          if (ec.double_chance) doubleChance = ec.double_chance;
+          if (ec.upgrade_discount) upgradeDiscountRate = ec.upgrade_discount;
+        } else if (et === "mine_double_chance") {
+          doubleChance = ev;
+        } else if (et === "mine_storage_hours") {
+          storageHoursBonus = ev;
+        } else if (et === "mine_upgrade_discount") {
+          upgradeDiscountRate = ev;
+        }
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  const effectiveMaxStorageHours = levelCfg.maxStorageHours + storageHoursBonus;
   const elapsedMs = Date.now() - new Date(mineProgress.lastCollectedAt).getTime();
   const elapsedHours = elapsedMs / 3600000;
-  const maxStorage = levelCfg.crPerHour * levelCfg.maxStorageHours;
+  const maxStorage = levelCfg.crPerHour * effectiveMaxStorageHours;
   const rawEarned = levelCfg.crPerHour * elapsedHours;
-  const earned = Math.floor(Math.min(rawEarned, maxStorage));
+  let earned = Math.floor(Math.min(rawEarned, maxStorage) * crBonusMultiplier);
+
+  // Double chance roll
+  if (doubleChance > 0 && Math.random() < doubleChance) {
+    earned *= 2;
+  }
 
   if (earned <= 0) return { success: false, error: "Noch nichts zu schürfen — warte ein bisschen!" };
 
   const now = new Date().toISOString();
-  const newCredits = profile.credits + earned;
+  const newCredits = (profile.credits as number) + earned;
 
   const [{ error: creditErr }] = await Promise.all([
     supabase.from("profiles").update({ credits: newCredits }).eq("id", user.id),
@@ -163,11 +207,19 @@ export async function collectMineCredits(): Promise<CollectResult> {
 
   if (creditErr) return { success: false, error: "Credits konnten nicht vergeben werden." };
 
+  // Award XP (non-fatal)
+  try {
+    const xpCfg = await getXpConfig();
+    const xpPerCr = xpCfg.sources.mine_collect_per_100cr ?? 1;
+    const xpAmount = Math.max(1, Math.round((earned / 100) * xpPerCr));
+    void awardXp(user.id, xpAmount, "mine_collect", `Level ${mineProgress.level}, ${earned} CR`);
+  } catch { /* non-fatal */ }
+
   try {
     await admin.from("audit_logs").insert({
       user_id: user.id,
       action: "mine_collect",
-      payload: { level: mineProgress.level, earned, elapsed_hours: elapsedHours.toFixed(2) },
+      payload: { level: mineProgress.level, earned, elapsed_hours: elapsedHours.toFixed(2), ability: equippedKey ?? null },
     });
   } catch { /* non-fatal */ }
 
@@ -194,7 +246,7 @@ export async function upgradeMine(): Promise<UpgradeResult> {
   const [config, { currencyName }, { data: profile }, progress] = await Promise.all([
     getMineConfig(),
     getSiteConfig(),
-    supabase.from("profiles").select("credits").eq("id", user.id).single(),
+    supabase.from("profiles").select("credits, equipped_ability_key").eq("id", user.id).single(),
     getMineProgress(user.id),
   ]);
 
@@ -207,13 +259,34 @@ export async function upgradeMine(): Promise<UpgradeResult> {
   if (!currentLevelCfg) return { success: false, error: "Level nicht gefunden." };
   if (currentLevelCfg.upgradeCost === null) return { success: false, error: "Maximales Level bereits erreicht!" };
 
-  const cost = currentLevelCfg.upgradeCost;
-  if (profile.credits < cost) {
+  // Apply upgrade discount ability
+  let cost = currentLevelCfg.upgradeCost;
+  const equippedKeyUpgrade = ((profile as Record<string, unknown>).equipped_ability_key) as string | null;
+  if (equippedKeyUpgrade) {
+    try {
+      const { data: abilityDefUpgrade } = await admin
+        .from("ability_definitions")
+        .select("effect_type, effect_value, effect_config")
+        .eq("key", equippedKeyUpgrade)
+        .eq("enabled", true)
+        .single();
+      if (abilityDefUpgrade) {
+        const ec = (abilityDefUpgrade.effect_config ?? {}) as Record<string, number>;
+        if (abilityDefUpgrade.effect_type === "mine_upgrade_discount") {
+          cost = Math.floor(cost * (1 - Number(abilityDefUpgrade.effect_value)));
+        } else if (abilityDefUpgrade.effect_type === "mine_cr_bonus" && ec.upgrade_discount) {
+          cost = Math.floor(cost * (1 - ec.upgrade_discount));
+        }
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  if ((profile.credits as number) < cost) {
     return { success: false, error: `Nicht genug ${currencyName}. Du brauchst ${cost.toLocaleString("de-DE")} CR.` };
   }
 
   const newLevel = mineProgress.level + 1;
-  const newCredits = profile.credits - cost;
+  const newCredits = (profile.credits as number) - cost;
   const now = new Date().toISOString();
 
   const [{ error: creditErr }] = await Promise.all([
@@ -222,6 +295,14 @@ export async function upgradeMine(): Promise<UpgradeResult> {
   ]);
 
   if (creditErr) return { success: false, error: "Upgrade fehlgeschlagen." };
+
+  // Award XP for upgrading
+  try {
+    const xpCfg = await getXpConfig();
+    const baseXp = xpCfg.sources.mine_collect_per_100cr ?? 1;
+    const upgradeXp = Math.max(20, Math.round((cost / 100) * baseXp * 0.5));
+    void awardXp(user.id, upgradeXp, "mine_upgrade", `Mine Level ${mineProgress.level} → ${newLevel}`);
+  } catch { /* non-fatal */ }
 
   try {
     await admin.from("audit_logs").insert({

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { WardrobeShell, type InventoryRow } from "@/components/wardrobe/wardrobe-shell";
 import { isAdmin, isModerator } from "@/lib/admin";
+import { getMyAbilities } from "@/lib/actions/abilities";
 
 export default async function GarderobePage() {
   const supabase = await createClient();
@@ -15,9 +16,11 @@ export default async function GarderobePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days, gender, gender_locked, role, username")
+    .select("credits, streak_days, gender, gender_locked, role, username, equipped_ability_key")
     .eq("id", user.id)
     .single();
+
+  const userAbilities = await getMyAbilities().catch(() => []);
 
   const withDamage = await supabase
     .from("inventory")
@@ -53,6 +56,8 @@ export default async function GarderobePage() {
       username={profile?.username ?? ""}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}
+      abilities={userAbilities}
+      equippedAbilityKey={(profile?.equipped_ability_key as string | null) ?? null}
     />
   );
 }

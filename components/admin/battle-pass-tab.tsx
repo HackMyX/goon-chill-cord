@@ -28,6 +28,7 @@ const REWARD_ICONS: Record<BpRewardType, React.ReactNode> = {
   badge:      <Trophy className="h-3.5 w-3.5" />,
   xp_boost:   <TrendingUp className="h-3.5 w-3.5" />,
   name_style: <Palette className="h-3.5 w-3.5" />,
+  ability:    <Zap className="h-3.5 w-3.5" />,
 };
 
 const REWARD_LABELS: Record<BpRewardType, string> = {
@@ -37,6 +38,7 @@ const REWARD_LABELS: Record<BpRewardType, string> = {
   badge:      "Badge / Titel",
   xp_boost:   "XP Boost (Tage)",
   name_style: "Name Style",
+  ability:    "Fähigkeit",
 };
 
 const TIER_EMOJIS = ["🎁","💰","⚡","🔥","🌟","💎","👑","🎯","🎲","🚀","✨","🎪","🌈","💫","🛡️","⚔️","🎭","🎨","🎵","🎮","🏆","⭐","🎀","🔮","🐉"];

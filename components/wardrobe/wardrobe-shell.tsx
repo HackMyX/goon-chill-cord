@@ -21,6 +21,8 @@ import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { NameStyleSection } from "@/components/wardrobe/name-style-section";
 import { getMyNameStyles, type UserNameStyleRow } from "@/lib/actions/name-styles";
+import { AbilitiesSection } from "@/components/garderobe/abilities-section";
+import type { UserAbility } from "@/lib/abilities";
 
 export interface InventoryRow {
   id: string;
@@ -54,6 +56,8 @@ interface WardrobeShellProps {
    * bodies to test the male/female Garderobe and World rendering. */
   isAdmin?: boolean;
   isModerator?: boolean;
+  abilities?: UserAbility[];
+  equippedAbilityKey?: string | null;
 }
 
 const ROW_HEIGHT = 76; // row height incl. gap, used by the virtualizer's size estimate
@@ -198,6 +202,8 @@ export function WardrobeShell({
   username,
   isAdmin = false,
   isModerator = false,
+  abilities = [],
+  equippedAbilityKey = null,
 }: WardrobeShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -545,6 +551,14 @@ export function WardrobeShell({
             />
           </div>
         )}
+
+        <div className="mt-6">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
+            <span>⚡</span>
+            Fähigkeiten-Slot
+          </h2>
+          <AbilitiesSection abilities={abilities} equippedKey={equippedAbilityKey} />
+        </div>
       </main>
 
       {previewRow && (

@@ -316,6 +316,7 @@ export function PlinkoShell({ config, initialCredits, initialUsedThisHour, isAdm
     if (sessionHistory[0]) {
       setCredits(sessionHistory[0].newCredits);
       if (sessionHistory[0].multiplier >= 2) sound.save?.();
+      sound.xpGain?.();
     }
     // auto-bet: queue next drop after short delay
     if (autoBetRef.current) {

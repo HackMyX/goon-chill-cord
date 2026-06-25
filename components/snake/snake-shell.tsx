@@ -958,6 +958,7 @@ export function SnakeShell({
           setDailyCr((prev) => prev + (res.creditsAwarded ?? 0));
           setDailyGames((prev) => ({ ...prev, [finalMode]: prev[finalMode] + 1 }));
           setLastResult({ creditsAwarded: res.creditsAwarded ?? 0, isNewRecord: res.isNewRecord ?? false, previousBest: res.previousBest ?? 0 });
+          if (finalScore > 0) sound.xpGain();
           router.refresh();
         }
       });

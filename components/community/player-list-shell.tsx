@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, Users, Search, Crown, Shield, Flame, BadgeCheck } from "lucide-react";
+import { ArrowLeft, Users, Search, Crown, Shield, Flame, BadgeCheck, Zap } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { ProfileModal } from "@/components/community/profile-modal";
 import { PlayerCardAvatar } from "@/components/community/player-card-avatar";
@@ -15,6 +15,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { useRealtimeProfile, useRealtimeAllProfiles } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { LevelBadge } from "@/components/ui/level-badge";
 
 export interface PlayerCard {
   id: string;
@@ -26,6 +27,7 @@ export interface PlayerCard {
   streakDays: number;
   gender: "m" | "w";
   verified: boolean;
+  level?: number;
   equippedByCategory: Record<string, EquippedItem | undefined>;
   rarityCounts: Record<Rarity, number>;
 }
@@ -97,6 +99,7 @@ function PlayerListShellInner({ players: initialPlayers, credits: initialCredits
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [sortBy, setSortBy] = useState<"credits" | "level">("credits");
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
     if (typeof row.credits === "number") setCredits(row.credits);
@@ -129,9 +132,10 @@ function PlayerListShellInner({ players: initialPlayers, credits: initialCredits
       const aOnline = onlineIds.has(a.id) ? 1 : 0;
       const bOnline = onlineIds.has(b.id) ? 1 : 0;
       if (aOnline !== bOnline) return bOnline - aOnline;
+      if (sortBy === "level") return (b.level ?? 1) - (a.level ?? 1);
       return b.credits - a.credits;
     });
-  }, [filtered, onlineIds]);
+  }, [filtered, onlineIds, sortBy]);
 
   const activeCount = onlineIds.size;
 
@@ -175,6 +179,33 @@ function PlayerListShellInner({ players: initialPlayers, credits: initialCredits
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
             {activeCount} online
           </div>
+        </div>
+
+        {/* Sort toggle */}
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-xs text-zinc-600">Sortierung:</span>
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => { sound.click(); setSortBy("credits"); }}
+            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold transition-colors ${
+              sortBy === "credits"
+                ? "border-purple-500/40 bg-purple-500/15 text-purple-200"
+                : "border-white/8 bg-white/[0.02] text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Flame className="h-3 w-3" /> Credits
+          </button>
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => { sound.click(); setSortBy("level"); }}
+            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold transition-colors ${
+              sortBy === "level"
+                ? "border-amber-500/40 bg-amber-500/15 text-amber-200"
+                : "border-white/8 bg-white/[0.02] text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Zap className="h-3 w-3" /> Level / XP
+          </button>
         </div>
 
         {/* Search + role filter bar */}
@@ -284,11 +315,16 @@ function PlayerListShellInner({ players: initialPlayers, credits: initialCredits
                     <p className={`text-sm font-semibold ${isPlayerAdmin ? "text-amber-300" : isPlayerMod ? "text-sky-300" : "text-purple-300"}`}>
                       {new Intl.NumberFormat("de-DE").format(player.credits)} {currencyName}
                     </p>
-                    {player.streakDays > 0 && (
-                      <span className="flex items-center gap-0.5 text-[10px] font-bold text-orange-400">
-                        <Flame className="h-3 w-3" />{player.streakDays}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {(player.level ?? 1) > 1 && (
+                        <LevelBadge level={player.level ?? 1} size="xs" />
+                      )}
+                      {player.streakDays > 0 && (
+                        <span className="flex items-center gap-0.5 text-[10px] font-bold text-orange-400">
+                          <Flame className="h-3 w-3" />{player.streakDays}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {total === 0 ? (

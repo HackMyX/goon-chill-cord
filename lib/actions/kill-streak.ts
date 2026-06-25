@@ -206,6 +206,13 @@ export async function registerStreakKill(monsterTypeId: string): Promise<Registe
     // best-effort — the credit grant above already happened either way.
   }
 
+  // Award XP for the monster kill (fire-and-forget, non-blocking)
+  try {
+    const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
+    const xpCfg = await getXpConfig();
+    void awardXp(user.id, xpCfg.sources.world_kill ?? 10, "world_kill", `Monster: ${monsterTypeId} (Kill #${newStreakKillCount})`);
+  } catch { /* non-fatal */ }
+
   return { success: true, reward, newStreakKillCount, newPendingStreakCr };
 }
 

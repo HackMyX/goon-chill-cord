@@ -312,6 +312,13 @@ export async function dropPlinkoBall(input: {
     });
   }
 
+  // Award XP per drop (fire-and-forget)
+  try {
+    const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
+    const xpCfg = await getXpConfig();
+    void awardXp(user.id, xpCfg.sources.plinko_per_drop ?? 5, "plinko_drop", `${multiplier}x · ${input.riskLevel}`);
+  } catch { /* non-fatal */ }
+
   return { success: true, bucketIndex: clampedIdx, multiplier, payout, newCredits, path };
 }
 

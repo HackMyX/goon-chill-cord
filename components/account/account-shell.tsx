@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Coins, Package, Sparkles, ShieldCheck, Pencil, Check, X, Repeat, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowLeft, Coins, Package, Sparkles, ShieldCheck, Pencil, Check, X, Repeat, Eye, EyeOff, Loader2, Zap } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { updateUsername, updatePlayerSettings, type NotificationPrefs } from "@/lib/actions/account";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { NotificationPrefsSection } from "@/components/account/notification-prefs-section";
+import { LevelBadge } from "@/components/ui/level-badge";
+import { getLevelColor } from "@/lib/level-system";
 
 interface AccountShellProps {
   username: string;
@@ -22,6 +24,13 @@ interface AccountShellProps {
   acceptsTrades: boolean;
   profileVisible: boolean;
   notificationPrefs: NotificationPrefs;
+  level?: number;
+  xp?: number;
+  xpInLevel?: number;
+  xpForLevel?: number;
+  xpProgress?: number;
+  equippedAbilityKey?: string | null;
+  abilitiesCount?: number;
 }
 
 export function AccountShell({
@@ -36,6 +45,13 @@ export function AccountShell({
   acceptsTrades: initialAcceptsTrades,
   profileVisible: initialProfileVisible,
   notificationPrefs,
+  level = 1,
+  xp = 0,
+  xpInLevel = 0,
+  xpForLevel = 0,
+  xpProgress = 0,
+  equippedAbilityKey = null,
+  abilitiesCount = 0,
 }: AccountShellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(username);
@@ -213,7 +229,41 @@ export function AccountShell({
           </div>
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-3">
+        {/* Level & XP Card */}
+        <div className="mt-4 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-900/10 to-purple-900/10 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-amber-400" />
+              <span className="text-sm font-bold text-zinc-200">Level &amp; XP</span>
+            </div>
+            <LevelBadge level={level} size="sm" />
+          </div>
+
+          {/* XP Progress bar */}
+          <div className="mb-2">
+            <div className="mb-1.5 flex items-center justify-between text-xs text-zinc-500">
+              <span>{xpInLevel.toLocaleString("de-DE")} / {xpForLevel.toLocaleString("de-DE")} XP</span>
+              <span className={`font-bold ${getLevelColor(level)}`}>{Math.round(xpProgress)}%</span>
+            </div>
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/5">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-500 to-purple-500 transition-all duration-700"
+                style={{ width: `${Math.min(100, xpProgress)}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 text-xs text-zinc-500">
+            <span>Gesamt: <span className="font-semibold text-zinc-300">{xp.toLocaleString("de-DE")} XP</span></span>
+            {abilitiesCount > 0 && (
+              <span>
+                Fähigkeit: <span className="font-semibold text-amber-300">{equippedAbilityKey ?? "keine"}</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
           <Link
             href="/garderobe"
             onMouseEnter={sound.hover}

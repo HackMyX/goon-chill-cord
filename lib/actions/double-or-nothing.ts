@@ -190,5 +190,14 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
     link: "/",
   });
 
+  // Award XP on win (fire-and-forget)
+  if (won) {
+    try {
+      const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
+      const xpCfg = await getXpConfig();
+      void awardXp(user.id, xpCfg.sources.don_win ?? 20, "don_win", `Einsatz: ${stake.toLocaleString("de-DE")} CR`);
+    } catch { /* non-fatal */ }
+  }
+
   return { success: true, won, amount: stake, newCredits: updatedRows[0].credits, remainingFlips, remainingHourlyFlips };
 }

@@ -20,6 +20,8 @@ export interface PublicProfile {
   discordAvatarUrl: string | null;
   verified: boolean;
   warningStrikes: number;
+  level: number;
+  xp: number;
   viewerIsElevated: boolean;
   equippedByCategory: Record<string, { id: string; name: string; rarity: Rarity }>;
   rarityCounts: Record<Rarity, number>;
@@ -57,7 +59,7 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
     admin.from("profiles").select("role").eq("id", user.id).single(),
     admin
       .from("profiles")
-      .select("id, username, role, credits, streak_days, cases_opened, created_at, gender, verified, active_name_style_key, warning_strikes")
+      .select("id, username, role, credits, streak_days, cases_opened, created_at, gender, verified, active_name_style_key, warning_strikes, level, xp")
       .eq("id", targetUserId)
       .single(),
     admin
@@ -145,6 +147,8 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
       discordAvatarUrl,
       verified: (profile.verified as boolean | null) ?? false,
       warningStrikes: Number(profile.warning_strikes ?? 0),
+      level: Number((profile as unknown as Record<string, unknown>).level ?? 1),
+      xp: Number((profile as unknown as Record<string, unknown>).xp ?? 0),
       viewerIsElevated,
       equippedByCategory,
       rarityCounts,

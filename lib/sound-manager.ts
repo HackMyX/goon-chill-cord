@@ -1,6 +1,8 @@
 "use client";
 
-export type FxSound = "win" | "ultraWin" | "click" | "error" | "flip" | "save";
+import type { SoundConfig } from "@/lib/sound-config";
+
+export type FxSound = "win" | "ultraWin" | "click" | "error" | "flip" | "save" | "levelUp" | "xpGain" | "abilityEquip";
 // "hit" is an interrupt channel, not a queued Fx one, on purpose — sustained
 // melee (clicking as fast as ATTACK_COOLDOWN allows) needs every landed hit
 // to play immediately, the same way tick/hover never queue. Routing it
@@ -8,19 +10,31 @@ export type FxSound = "win" | "ultraWin" | "click" | "error" | "flip" | "save";
 // behind the swings during any fight longer than one punch.
 export type InterruptSound = "tick" | "hover" | "hit";
 
-const FX_SRC: Record<FxSound, string> = {
+const DEFAULT_FX_SRC: Record<FxSound, string> = {
   win: "/sounds/win.wav",
   ultraWin: "/sounds/ultra-win.wav",
   click: "/sounds/click.wav",
   error: "/sounds/error.wav",
   flip: "/sounds/flip.wav",
   save: "/sounds/save.wav",
+  levelUp: "/sounds/win.wav",
+  xpGain: "/sounds/tick.wav",
+  abilityEquip: "/sounds/save.wav",
 };
 
-const INTERRUPT_SRC: Record<InterruptSound, string> = {
+const DEFAULT_INTERRUPT_SRC: Record<InterruptSound, string> = {
   tick: "/sounds/tick.wav",
   hover: "/sounds/hover.wav",
   hit: "/sounds/hit.wav",
+};
+
+const DEFAULT_FX_VOL: Record<FxSound, number> = {
+  win: 0.35, ultraWin: 0.35, click: 0.18, error: 0.35, flip: 0.35, save: 0.20,
+  levelUp: 0.40, xpGain: 0.15, abilityEquip: 0.25,
+};
+
+const DEFAULT_INTERRUPT_VOL: Record<InterruptSound, number> = {
+  tick: 0.18, hover: 0.10, hit: 0.28,
 };
 
 const HOVER_THROTTLE_MS = 70;
@@ -48,15 +62,29 @@ class SoundManager {
   private playing = false;
   private lastHoverAt = 0;
   private _volume = 1;
+  private _config: SoundConfig | null = null;
+  private _disabledEvents = new Set<string>();
+
+  loadConfig(config: SoundConfig): void {
+    this._config = config;
+    // Clear cached audio elements so new files/volumes take effect
+    this.interruptAudio.clear();
+    this.fxPool.clear();
+    // Rebuild disabled set
+    this._disabledEvents.clear();
+    for (const [key, val] of Object.entries(config)) {
+      if (!val.enabled) this._disabledEvents.add(key);
+    }
+  }
 
   setVolume(v: number): void {
     this._volume = Math.max(0, Math.min(1, v));
     for (const [name, audio] of this.interruptAudio) {
-      const base = name === "hover" ? 0.10 : name === "hit" ? 0.28 : 0.18;
+      const base = this._config?.[name as InterruptSound]?.volume ?? DEFAULT_INTERRUPT_VOL[name as InterruptSound] ?? 0.18;
       audio.volume = base * this._volume;
     }
     for (const [name, audio] of this.fxPool) {
-      const base = name === "click" ? 0.18 : name === "save" ? 0.20 : 0.35;
+      const base = this._config?.[name as FxSound]?.volume ?? DEFAULT_FX_VOL[name as FxSound] ?? 0.35;
       audio.volume = base * this._volume;
     }
   }
@@ -65,10 +93,12 @@ class SoundManager {
     if (typeof window === "undefined") return null;
     let audio = this.interruptAudio.get(name);
     if (!audio) {
-      audio = new Audio(INTERRUPT_SRC[name]);
+      const src = this._config?.[name]?.file ?? DEFAULT_INTERRUPT_SRC[name];
+      audio = new Audio(src);
+      const vol = this._config?.[name]?.volume ?? DEFAULT_INTERRUPT_VOL[name];
       // hover/tick fire constantly (mouse movement, reel spin) — kept quiet
       // so a session of moving the mouse around doesn't wear the ears down.
-      audio.volume = (name === "hover" ? 0.10 : name === "hit" ? 0.28 : 0.18) * this._volume;
+      audio.volume = vol * this._volume;
       this.interruptAudio.set(name, audio);
     }
     return audio;
@@ -78,8 +108,10 @@ class SoundManager {
     if (typeof window === "undefined") return null;
     let audio = this.fxPool.get(name);
     if (!audio) {
-      audio = new Audio(FX_SRC[name]);
-      audio.volume = (name === "click" ? 0.18 : name === "save" ? 0.20 : 0.35) * this._volume;
+      const src = this._config?.[name]?.file ?? DEFAULT_FX_SRC[name];
+      audio = new Audio(src);
+      const vol = this._config?.[name]?.volume ?? DEFAULT_FX_VOL[name];
+      audio.volume = vol * this._volume;
       this.fxPool.set(name, audio);
     }
     return audio;
@@ -101,6 +133,7 @@ class SoundManager {
   }
 
   private playInterrupt(name: InterruptSound): void {
+    if (this._disabledEvents.has(name)) return;
     try {
       const audio = this.getInterruptAudio(name);
       if (!audio) return;
@@ -112,6 +145,7 @@ class SoundManager {
   }
 
   play(name: FxSound): void {
+    if (this._disabledEvents.has(name)) return;
     this.queue.push(name);
     if (!this.playing) void this.drainQueue();
   }
@@ -165,6 +199,10 @@ export function useSoundManager() {
     error: () => soundManager.play("error"),
     flip: () => soundManager.play("flip"),
     save: () => soundManager.play("save"),
+    levelUp: () => soundManager.play("levelUp"),
+    xpGain: () => soundManager.play("xpGain"),
+    abilityEquip: () => soundManager.play("abilityEquip"),
     setVolume: (v: number) => soundManager.setVolume(v),
+    loadConfig: (cfg: SoundConfig) => soundManager.loadConfig(cfg),
   };
 }

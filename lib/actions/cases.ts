@@ -260,6 +260,13 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
 
   revalidatePath("/");
 
+  // Award XP for case opening — fire-and-forget
+  try {
+    const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
+    const xpCfg = await getXpConfig();
+    void awardXp(user.id, xpCfg.sources.case_open ?? 30, "case_open", tier.label);
+  } catch { /* non-fatal */ }
+
   // ── Name style bonus drop ─────────────────────────────────────────────────
   // Only runs if this tier has name styles enabled AND the rarity config says drop is active.
   let wonStyleKey: string | null = null;
@@ -442,6 +449,13 @@ export async function openCaseBatch(tierId: string, count: number): Promise<Open
   } catch { /* ignore */ }
 
   revalidatePath("/");
+
+  // Award XP for batch case opening — fire-and-forget
+  try {
+    const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
+    const xpCfg = await getXpConfig();
+    void awardXp(user.id, (xpCfg.sources.case_open ?? 30) * safeCount, "case_open", `${safeCount}× ${tier.label}`);
+  } catch { /* non-fatal */ }
 
   // ── Batch name style drops ───────────────────────────────────────────────
   // For each rolled rarity, attempt a name style drop (best-effort).

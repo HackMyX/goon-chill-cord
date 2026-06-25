@@ -9,7 +9,7 @@ import {
 import type { BalanceStudioData, BalanceCaseTierRow, BalanceMonsterRow } from "@/lib/actions/balance-studio";
 import {
   saveEconomySettings, saveGamesSettings, saveItemSettings,
-  applyItemPriceMultipliers, saveWorldSettings,
+  applyItemPriceMultipliers, saveWorldSettings, saveXpSources,
 } from "@/lib/actions/balance-studio";
 import type { MineLevel } from "@/lib/mine-config";
 import type { Rarity } from "@/lib/cases";
@@ -756,15 +756,108 @@ function WorldSection({ data, onChange }: {
   );
 }
 
+// ─── XP Sources Section ───────────────────────────────────────────────────────
+
+function XpSourcesSection({ data, onChange }: {
+  data: BalanceStudioData;
+  onChange: (d: Partial<BalanceStudioData>) => void;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+  const [ok, setOk] = useState(false);
+
+  const save = () => {
+    setError(""); setOk(false);
+    start(async () => {
+      const res = await saveXpSources({
+        xpMineCollectPer100Cr: data.xpMineCollectPer100Cr,
+        xpStreakPerDay: data.xpStreakPerDay,
+        xpSnakePerScorePoint: data.xpSnakePerScorePoint,
+        xpPlinkoPerDrop: data.xpPlinkoPerDrop,
+        xpDonWin: data.xpDonWin,
+        xpCaseOpen: data.xpCaseOpen,
+        xpWorldKill: data.xpWorldKill,
+        xpBpTierClaim: data.xpBpTierClaim,
+        xpPvpKill: data.xpPvpKill,
+      });
+      if (res.success) setOk(true); else setError(res.error ?? "Fehler");
+    });
+  };
+
+  const XP_FIELDS: Array<{
+    key: keyof BalanceStudioData;
+    label: string;
+    hint: string;
+    step?: number;
+  }> = [
+    { key: "xpMineCollectPer100Cr",   label: "Mine: XP pro 100 CR",       hint: "Beim Mine-Einsammeln" },
+    { key: "xpStreakPerDay",           label: "Streak: XP × Streak-Tage",  hint: "Streak-Tag-Zahl × Wert" },
+    { key: "xpSnakePerScorePoint",     label: "Snake: XP pro Score-Punkt", hint: "Pro Apfel (0.5 = 1 Apfel → 0.5 XP)", step: 0.1 },
+    { key: "xpPlinkoPerDrop",          label: "Plinko: XP pro Drop",       hint: "Jeder Ball-Wurf" },
+    { key: "xpDonWin",                 label: "DON: XP pro Gewinn",        hint: "Nur bei Gewinn" },
+    { key: "xpCaseOpen",               label: "Case: XP pro Case",         hint: "Beim Öffnen einer Case" },
+    { key: "xpWorldKill",              label: "World: XP pro Monster-Kill",hint: "PvE World Kill" },
+    { key: "xpBpTierClaim",            label: "Battle Pass: XP pro Tier",  hint: "Battle Pass Tier einlösen" },
+    { key: "xpPvpKill",                label: "World: XP pro PvP-Kill",    hint: "PvP World Kill" },
+  ];
+
+  return (
+    <SectionCard title="XP-Quellen (Balance)" icon={Zap}>
+      <p className="mb-4 text-xs text-zinc-500">
+        Definiert wie viel XP jede Aktivität gibt. Level-Aufbau und Belohnungen werden im Admin-Panel unter
+        &ldquo;Level & XP&rdquo; konfiguriert.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {XP_FIELDS.map(({ key, label, hint, step }) => (
+          <div key={key} className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-zinc-300">{label}</span>
+            <span className="text-[10px] text-zinc-600">{hint}</span>
+            <input
+              type="number"
+              value={data[key] as number}
+              step={step ?? 1}
+              min={0}
+              onChange={(e) => onChange({ [key]: Number(e.target.value) })}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+            />
+          </div>
+        ))}
+      </div>
+
+      {error && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+        </div>
+      )}
+      {ok && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-400">
+          <CheckCircle2 className="h-4 w-4 shrink-0" /> XP-Quellen gespeichert!
+        </div>
+      )}
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={save}
+          disabled={pending}
+          className="flex items-center gap-2 rounded-xl bg-purple-600/80 px-4 py-2 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50"
+        >
+          {pending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          XP-Balance speichern
+        </button>
+      </div>
+    </SectionCard>
+  );
+}
+
 // ─── Main Balance Studio ──────────────────────────────────────────────────────
 
-type StudioTab = "economy" | "games" | "items" | "world";
+type StudioTab = "economy" | "games" | "items" | "world" | "xp";
 
 const STUDIO_TABS: { id: StudioTab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Mine", icon: TrendingUp },
   { id: "games",   label: "Spiele & DON",   icon: Gamepad2   },
   { id: "items",   label: "Items & Cases",  icon: Package    },
   { id: "world",   label: "Welt & Kampf",   icon: Globe      },
+  { id: "xp",      label: "XP-Balance",     icon: Zap        },
 ];
 
 export function BalanceStudio({ initialData }: { initialData: BalanceStudioData }) {
@@ -816,6 +909,7 @@ export function BalanceStudio({ initialData }: { initialData: BalanceStudioData 
       {tab === "games"   && <GamesSection data={data} onChange={onChange} />}
       {tab === "items"   && <ItemsSection data={data} onChange={onChange} />}
       {tab === "world"   && <WorldSection data={data} onChange={onChange} />}
+      {tab === "xp"      && <XpSourcesSection data={data} onChange={onChange} />}
     </div>
   );
 }

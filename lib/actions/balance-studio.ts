@@ -105,6 +105,16 @@ export interface BalanceStudioData {
   // Shop
   shopMultiplierMin: number;
   shopMultiplierMax: number;
+  // XP sources
+  xpMineCollectPer100Cr: number;
+  xpStreakPerDay: number;
+  xpSnakePerScorePoint: number;
+  xpPlinkoPerDrop: number;
+  xpDonWin: number;
+  xpCaseOpen: number;
+  xpWorldKill: number;
+  xpBpTierClaim: number;
+  xpPvpKill: number;
   // Item stats (for health panel, readonly)
   itemStats: BalanceItemStats[];
 }
@@ -122,7 +132,7 @@ export async function getBalanceStudioData(): Promise<BalanceStudioData | null> 
   const [
     siteRow, mineRow, streakRow, donRow, snakeRow, plinkoRow,
     worldRow, charRow, killRow, monsterRows, caseRows, nameStyleRows,
-    shopRow, itemStatsRows,
+    shopRow, xpRow, itemStatsRows,
   ] = await Promise.all([
     admin.from("site_config").select("starting_credits, currency_name").eq("id", "default").single(),
     admin.from("mine_config").select("levels").eq("id", "default").single(),
@@ -137,6 +147,7 @@ export async function getBalanceStudioData(): Promise<BalanceStudioData | null> 
     admin.from("case_tiers").select("id,label,price,rarity_weights,group_id").order("group_id").order("price"),
     admin.from("name_style_rarity_config").select("rarity,base_shop_price_cr,max_shop_price_cr,case_drop_weight,case_drop_enabled").order("base_shop_price_cr"),
     admin.from("shop_settings").select("auto_generate_price_multiplier_min,auto_generate_price_multiplier_max").eq("id", "default").single(),
+    admin.from("xp_config").select("sources").eq("id", "default").maybeSingle(),
     admin.from("items").select("rarity, price_cr").then((res) => {
       if (!res.data) return { data: [] as BalanceItemStats[] };
       const map: Record<string, { count: number; sum: number; min: number; max: number }> = {};
@@ -172,6 +183,8 @@ export async function getBalanceStudioData(): Promise<BalanceStudioData | null> 
   if (!site || !mine || !streak || !don || !snake || !plinko || !world || !char || !kill || !shop) {
     return null;
   }
+
+  const xpSources = (xpRow?.data?.sources as Record<string, number> | null) ?? {};
 
   const modes = snake.modes_config as Record<string, Record<string, unknown>>;
   const snakeModes: BalanceStudioData["snakeModes"] = {};
@@ -226,6 +239,15 @@ export async function getBalanceStudioData(): Promise<BalanceStudioData | null> 
     nameStyles: ((nameStyleRows.data ?? []) as BalanceNameStyleRow[]),
     shopMultiplierMin: Number(shop.auto_generate_price_multiplier_min),
     shopMultiplierMax: Number(shop.auto_generate_price_multiplier_max),
+    xpMineCollectPer100Cr: Number(xpSources.mine_collect_per_100cr ?? 1),
+    xpStreakPerDay: Number(xpSources.streak_per_day ?? 8),
+    xpSnakePerScorePoint: Number(xpSources.snake_per_score_point ?? 0.5),
+    xpPlinkoPerDrop: Number(xpSources.plinko_per_drop ?? 5),
+    xpDonWin: Number(xpSources.don_win ?? 20),
+    xpCaseOpen: Number(xpSources.case_open ?? 30),
+    xpWorldKill: Number(xpSources.world_kill ?? 10),
+    xpBpTierClaim: Number(xpSources.bp_tier_claim ?? 50),
+    xpPvpKill: Number(xpSources.pvp_kill ?? 25),
     itemStats: (itemStatsRows.data ?? []) as BalanceItemStats[],
   };
 }
@@ -429,6 +451,44 @@ export async function saveWorldSettings(data: {
         }).eq("id", m.id)
       ),
     ]);
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+export async function saveXpSources(data: {
+  xpMineCollectPer100Cr: number;
+  xpStreakPerDay: number;
+  xpSnakePerScorePoint: number;
+  xpPlinkoPerDrop: number;
+  xpDonWin: number;
+  xpCaseOpen: number;
+  xpWorldKill: number;
+  xpBpTierClaim: number;
+  xpPvpKill: number;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = await requireAdmin();
+    const { data: existing } = await admin.from("xp_config").select("sources,levels").eq("id", "default").maybeSingle();
+    const sources = {
+      mine_collect_per_100cr: data.xpMineCollectPer100Cr,
+      streak_per_day: data.xpStreakPerDay,
+      snake_per_score_point: data.xpSnakePerScorePoint,
+      plinko_per_drop: data.xpPlinkoPerDrop,
+      don_win: data.xpDonWin,
+      case_open: data.xpCaseOpen,
+      world_kill: data.xpWorldKill,
+      bp_tier_claim: data.xpBpTierClaim,
+      pvp_kill: data.xpPvpKill,
+    };
+    await admin.from("xp_config").upsert({
+      id: "default",
+      sources,
+      levels: existing?.levels ?? [],
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "id" });
     revalidatePath("/admin");
     return { success: true };
   } catch (e) {

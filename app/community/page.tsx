@@ -31,7 +31,7 @@ export default async function CommunityPage() {
   const [{ data: profiles }, { data: inventory }] = await Promise.all([
     admin
       .from("profiles")
-      .select("id, username, credits, role, created_at, gender, streak_days, verified, active_name_style_key")
+      .select("id, username, credits, role, created_at, gender, streak_days, verified, active_name_style_key, level")
       .or(`profile_visible.eq.true,id.eq.${user.id}`)
       .order("credits", { ascending: false }),
     admin
@@ -76,6 +76,7 @@ export default async function CommunityPage() {
     streakDays: (p.streak_days as number) ?? 0,
     gender: (p.gender as "m" | "w") ?? "m",
     verified: (p.verified as boolean | null) ?? false,
+    level: Number((p as unknown as Record<string, unknown>).level ?? 1),
     equippedByCategory: equippedByUser.get(p.id) ?? {},
     rarityCounts:
       rarityCountsByUser.get(p.id) ?? { normal: 0, selten: 0, mythisch: 0, ultra: 0 },

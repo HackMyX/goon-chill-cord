@@ -23,6 +23,8 @@ import {
   subscribeToMonsterCrossAttack,
 } from "@/lib/world-realtime";
 import type { PetTypeConfig } from "@/lib/pets";
+import { AbilityEffectAura, type AbilityEffectType } from "@/components/world/ability-aura";
+import { createClient } from "@/lib/supabase/client";
 
 /** Everything world-shell.tsx's HUD needs from a single throttled tick —
  * bundled into one object instead of a growing positional-argument list,
@@ -260,6 +262,39 @@ export function Player({
   const speedMultiplier = getPerkMultiplier(equippedByCategory, "speed_boost", characterConfig.perkMultiplierCap);
   const jumpMultiplier = getPerkMultiplier(equippedByCategory, "jump_boost", characterConfig.perkMultiplierCap);
   const hpRegenMultiplier = getPerkMultiplier(equippedByCategory, "hp_regen_boost", characterConfig.perkMultiplierCap);
+
+  // Equipped ability visual effect + runtime boosts
+  const [abilityEffectType, setAbilityEffectType] = useState<AbilityEffectType>(null);
+  const abilityHpRegenBoost = useRef(0); // extra HP regen multiplier from world_hp_regen ability
+
+  useEffect(() => {
+    const supabase = createClient();
+    async function fetchAbility() {
+      try {
+        const { data: p } = await supabase
+          .from("profiles")
+          .select("equipped_ability_key")
+          .eq("id", userId)
+          .single();
+        const key = (p?.equipped_ability_key as string | null) ?? null;
+        if (!key) return;
+        const { data: def } = await supabase
+          .from("ability_definitions")
+          .select("effect_type, effect_value")
+          .eq("key", key)
+          .eq("enabled", true)
+          .single();
+        if (!def) return;
+        const et = def.effect_type as string;
+        setAbilityEffectType(et);
+        if (et === "world_hp_regen") {
+          abilityHpRegenBoost.current = (def.effect_value as number) ?? 0.5;
+        }
+      } catch { /* non-fatal */ }
+    }
+    void fetchAbility();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   // Pre-allocated scratch objects — reused every frame, never replaced.
   const velocity = useRef(new THREE.Vector3());
@@ -664,9 +699,10 @@ export function Player({
     else hpRegenTimer.current += delta;
     prevHp.current = combatRef.current.hp;
     if (hpRegenTimer.current >= characterConfig.hpRegenDelayAfterHitSec) {
+      const totalRegenMult = hpRegenMultiplier * (1 + abilityHpRegenBoost.current);
       combatRef.current.hp = Math.min(
         combatRef.current.maxHp,
-        combatRef.current.hp + characterConfig.hpRegenPerSec * hpRegenMultiplier * delta
+        combatRef.current.hp + characterConfig.hpRegenPerSec * totalRegenMult * delta
       );
       prevHp.current = combatRef.current.hp;
     }
@@ -1205,6 +1241,9 @@ export function Player({
             monsterRegistryRef={monsterRegistryRef}
             petTypes={petTypes}
           />
+          {/* Ability visual aura — always a sibling of CharacterModel so it
+              moves with the player group but isn't affected by death-pose rotation. */}
+          <AbilityEffectAura effectType={abilityEffectType} />
         </group>
       </group>
       {/* Slash VFX — deliberately a *sibling* of the group above, not a

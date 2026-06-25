@@ -27,6 +27,7 @@ function rowToTier(r: Record<string, unknown>): BattlePassTier {
     rewardItemRarity: r.reward_item_rarity as Rarity | null,
     rewardXpBoost: r.reward_xp_boost as number | null,
     rewardNameStyleKey: r.reward_name_style_key as string | null,
+    rewardAbilityKey: (r.reward_ability_key as string | null) ?? null,
     rewardQuantity: (r.reward_quantity as number | null) ?? 1,
     highlightTier: (r.highlight_tier as boolean | null) ?? false,
     description: r.description as string | null,
@@ -506,7 +507,25 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
       }
       rewardMsg = `Name-Style: ${styleKey}`;
     }
+  } else if (rewardType === "ability") {
+    const abilityKey = (t.reward_ability_key as string | null);
+    if (abilityKey) {
+      await admin.from("user_abilities").insert({
+        user_id: user.id,
+        ability_key: abilityKey,
+        source: "bp_tier",
+        source_detail: `Battle Pass Tier ${tierNum}`,
+      });
+      rewardMsg = `Fähigkeit erhalten: ${abilityKey}`;
+    }
   }
+
+  // Award XP for tier claim — fire-and-forget
+  try {
+    const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
+    const xpCfg = await getXpConfig();
+    void awardXp(user.id, xpCfg.sources.bp_tier_claim ?? 50, "bp_tier_claim", `Tier ${tierNum}`);
+  } catch { /* non-fatal */ }
 
   await admin.from("user_bp_tier_claims").insert({
     user_id: user.id,

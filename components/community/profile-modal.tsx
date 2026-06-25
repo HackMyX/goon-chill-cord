@@ -18,6 +18,7 @@ import { getPublicProfile, type PublicProfile } from "@/lib/actions/community";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { getBadgeStyle } from "@/lib/badges";
+import { LevelBadge } from "@/components/ui/level-badge";
 import { subscribeToPresence } from "@/lib/presence-client";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -281,6 +282,10 @@ function ModalContent({ userId, onClose }: ProfileModalProps) {
                       {profile.role === "admin" ? <Crown className="h-3 w-3" /> : profile.role === "moderator" ? <Shield className="h-3 w-3" /> : <User className="h-3 w-3" />}
                       {ROLE_LABEL[profile.role] ?? "Spieler"}
                     </div>
+                    {/* Level badge */}
+                    {profile.level > 0 && (
+                      <LevelBadge level={profile.level} size="sm" />
+                    )}
                   </div>
                 </div>
 

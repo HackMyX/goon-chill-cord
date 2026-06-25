@@ -389,6 +389,16 @@ export async function submitSnakeScore(
     });
   }
 
+  // Award XP: xp_per_score_point × score (fire-and-forget)
+  if (score > 0) {
+    try {
+      const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
+      const xpCfg = await getXpConfig();
+      const xpPerPoint = xpCfg.sources.snake_per_score_point ?? 0.5;
+      void awardXp(user.id, Math.max(1, Math.round(score * xpPerPoint)), "snake_game", `Score: ${score} (${speedMode})`);
+    } catch { /* non-fatal */ }
+  }
+
   revalidatePath("/snake");
   return {
     success: true,

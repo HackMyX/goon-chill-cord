@@ -295,6 +295,14 @@ export async function claimDailyReward(): Promise<ClaimResult> {
   // Advance battle-pass progress — fire-and-forget, never blocks the streak claim.
   void advanceBattlePassProgress(user.id);
 
+  // Award XP — fire-and-forget, never blocks the streak claim.
+  try {
+    const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
+    const xpCfg = await getXpConfig();
+    const xpPerDay = xpCfg.sources.streak_per_day ?? 8;
+    void awardXp(user.id, Math.round(decision.newStreak * xpPerDay), "streak_claim", `${decision.newStreak} Tage`);
+  } catch { /* non-fatal */ }
+
   revalidatePath("/");
   revalidatePath("/account");
 

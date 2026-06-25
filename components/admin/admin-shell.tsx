@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Zap, Volume2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CasesAdminTab } from "@/components/admin/case-group-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -32,6 +32,9 @@ import { CleanupConfigEditor } from "@/components/admin/cleanup-config-editor";
 import { BadgesTab } from "@/components/admin/badges-tab";
 import { NameStylesTab } from "@/components/admin/name-styles-tab";
 import { BalanceStudioTab } from "@/components/admin/balance-studio-tab";
+import { LevelConfigEditor } from "@/components/admin/level-config-editor";
+import { AbilityAdminTab } from "@/components/admin/ability-admin-tab";
+import { SoundConfigEditor } from "@/components/admin/sound-config-editor";
 import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
@@ -52,6 +55,8 @@ import type { WorldSessionConfig } from "@/lib/world-session-config";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import type { SiteConfig } from "@/lib/site-config";
+import type { XpConfig } from "@/lib/level-system";
+import type { SoundConfig } from "@/lib/sound-config";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { createClient } from "@/lib/supabase/client";
 
@@ -151,9 +156,11 @@ interface AdminShellProps {
   battlePasses: BattlePass[];
   battlePassMigrationNeeded?: boolean;
   plinkoConfig: PlinkoConfig;
+  xpConfig: XpConfig;
+  soundConfig: SoundConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "sounds";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "balance", label: "⚡ Balance Studio", icon: SlidersHorizontal },
@@ -180,6 +187,9 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "battlepass", label: "Battle Pass", icon: Sparkles },
   { id: "badges", label: "Badges", icon: Crown },
   { id: "namestyles", label: "Name-Styles", icon: Wand2 },
+  { id: "level_xp", label: "Level & XP", icon: TrendingUp },
+  { id: "abilities", label: "Fähigkeiten", icon: Zap },
+  { id: "sounds", label: "Sound Manager", icon: Volume2 },
 ];
 
 export function AdminShell({
@@ -211,6 +221,8 @@ export function AdminShell({
   battlePasses,
   battlePassMigrationNeeded = false,
   plinkoConfig,
+  xpConfig,
+  soundConfig,
 }: AdminShellProps) {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>(() => {
@@ -492,6 +504,23 @@ export function AdminShell({
         {tab === "badges" && <BadgesTab profiles={profiles.map(p => ({ id: p.id, username: p.username, role: p.role }))} />}
 
         {tab === "namestyles" && <NameStylesTab profiles={profiles} />}
+
+        {tab === "level_xp" && (
+          <LevelConfigEditor
+            initialConfig={xpConfig}
+            profiles={profiles.map((p) => ({ id: p.id, username: p.username }))}
+          />
+        )}
+
+        {tab === "abilities" && (
+          <AbilityAdminTab
+            profiles={profiles.map((p) => ({ id: p.id, username: p.username }))}
+          />
+        )}
+
+        {tab === "sounds" && (
+          <SoundConfigEditor initialConfig={soundConfig} />
+        )}
 
         {tab === "ki" && (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">

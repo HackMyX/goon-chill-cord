@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AccountShell } from "@/components/account/account-shell";
+import { getMyLevelInfo } from "@/lib/actions/level-system";
+import { getMyAbilities } from "@/lib/actions/abilities";
 
 export default async function AccountPage() {
   const supabase = await createClient();
@@ -19,10 +21,14 @@ export default async function AccountPage() {
 
   if (!profile) redirect("/");
 
-  const { count: inventoryCount } = await supabase
-    .from("inventory")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id);
+  const [{ count: inventoryCount }, levelInfo, userAbilities] = await Promise.all([
+    supabase
+      .from("inventory")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id),
+    getMyLevelInfo().catch(() => null),
+    getMyAbilities().catch(() => []),
+  ]);
 
   // Notification prefs live in a new column — fetch separately so the page
   // still works before the migration (scripts/add-notification-prefs.sql)
@@ -54,6 +60,13 @@ export default async function AccountPage() {
       acceptsTrades={profile.accepts_trades ?? true}
       profileVisible={profile.profile_visible ?? true}
       notificationPrefs={notificationPrefs}
+      level={levelInfo?.level ?? 1}
+      xp={levelInfo?.xp ?? 0}
+      xpInLevel={levelInfo?.xpInCurrentLevel ?? 0}
+      xpForLevel={levelInfo?.xpForCurrentLevel ?? 0}
+      xpProgress={levelInfo?.progressPercent ?? 0}
+      equippedAbilityKey={levelInfo?.equippedAbilityKey ?? null}
+      abilitiesCount={userAbilities.length}
     />
   );
 }

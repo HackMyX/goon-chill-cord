@@ -12,6 +12,9 @@ import { SupportButton } from "@/components/support/ticket-button";
 import { FpRegistrar } from "@/components/auth/fp-registrar";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getPetConfigs } from "@/lib/actions/pets";
+import { getSoundConfig } from "@/lib/actions/sound-config";
+import { SoundConfigLoader } from "@/components/layout/sound-config-loader";
+import { LevelUpPopup } from "@/components/layout/level-up-popup";
 import { PatchnotePopupLoader } from "@/components/layout/patchnote-popup-loader";
 import { GlobalBroadcast } from "@/components/global/global-broadcast";
 import { GenderGate } from "@/components/auth/gender-gate";
@@ -57,7 +60,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [siteConfig, petConfigs] = await Promise.all([getSiteConfig(), getPetConfigs()]);
+  const [siteConfig, petConfigs, soundConfig] = await Promise.all([getSiteConfig(), getPetConfigs(), getSoundConfig()]);
   return (
     <html
       lang="de"
@@ -76,6 +79,8 @@ export default async function RootLayout({
             </ConfirmDialogProvider>
           </PetConfigProvider>
         </SiteConfigProvider>
+        <SoundConfigLoader config={soundConfig} />
+        <LevelUpPopup />
         <GlobalBroadcast />
         <GenderGate />
         <SupportButton />

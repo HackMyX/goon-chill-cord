@@ -76,6 +76,10 @@ const REQUIRED_TABLES = [
   "name_styles", "user_name_styles", "name_style_rarity_config",
   // Battle Pass
   "battle_passes", "battle_pass_tiers", "user_battle_passes", "user_bp_tier_claims",
+  // Level & XP system
+  "xp_config", "xp_events", "ability_definitions", "user_abilities",
+  // Sound
+  "sound_config",
 ] as const;
 
 /** Tables that are optional (future features, not yet fully live). WARNUNG if missing. */
@@ -98,6 +102,8 @@ const SINGLETON_CONFIGS: Array<{ id: string; table: string; name: string; catego
   { id: "cfg_snake",       table: "snake_config",       name: "snake_config (default)",     category: "Snake-Spiel" },
   { id: "cfg_plinko",      table: "plinko_config",      name: "plinko_config (default)",    category: "Plinko" },
   { id: "cfg_killstreak",  table: "kill_streak_config", name: "kill_streak_config (default)",category: "World" },
+  { id: "cfg_xp",          table: "xp_config",          name: "xp_config (default)",         category: "Level & XP" },
+  { id: "cfg_sound",       table: "sound_config",        name: "sound_config (default)",      category: "Sound Manager" },
 ];
 
 /**
@@ -228,6 +234,12 @@ const COLUMN_CHECKS: Array<{
   { id: "col_monster_rewardmin",     category: "World",       table: "monster_types",     col: "reward_min",             detail: "node scripts/full-db-sync.cjs" },
   { id: "col_monster_rewardmax",     category: "World",       table: "monster_types",     col: "reward_max",             detail: "node scripts/full-db-sync.cjs" },
   { id: "col_monster_spawnweight",   category: "World",       table: "monster_types",     col: "spawn_weight",           detail: "node scripts/full-db-sync.cjs" },
+  // Level & XP system — profiles columns (2026-06-25)
+  { id: "col_profiles_xp",           category: "Level & XP",  table: "profiles",           col: "xp",                     detail: "node scripts/add-level-xp-abilities.cjs" },
+  { id: "col_profiles_level",        category: "Level & XP",  table: "profiles",           col: "level",                  detail: "node scripts/add-level-xp-abilities.cjs" },
+  { id: "col_profiles_ability_key",  category: "Level & XP",  table: "profiles",           col: "equipped_ability_key",   detail: "node scripts/add-level-xp-abilities.cjs" },
+  // Battle Pass tier — ability reward (2026-06-25)
+  { id: "col_bpt_ability_key",       category: "Battle Pass", table: "battle_pass_tiers",  col: "reward_ability_key",     detail: "node scripts/add-level-xp-abilities.cjs" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -858,7 +870,76 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
     results.push(warn("balance_mine", "Balance Studio", "Mine-Konfiguration", String(e)));
   }
 
-  // ── 29. Storage Buckets ───────────────────────────────────────────────────
+  // ── 29. Level & XP System ────────────────────────────────────────────────
+  try {
+    const { data: xpCfg, error: xpErr } = await admin
+      .from("xp_config").select("sources,levels").eq("id", "default").maybeSingle();
+    if (xpErr || !xpCfg) {
+      results.push(warn("xp_cfg_row", "Level & XP", "xp_config (default)", "Kein Konfigurationseintrag — node scripts/add-level-xp-abilities.cjs ausführen"));
+    } else {
+      const levels = (xpCfg as { levels?: unknown[] }).levels ?? [];
+      results.push(Array.isArray(levels) && levels.length === 50
+        ? ok("xp_cfg_row", "Level & XP", "xp_config (default)", `50 Level konfiguriert`)
+        : warn("xp_cfg_row", "Level & XP", "xp_config (default)", `${Array.isArray(levels) ? levels.length : 0}/50 Level — node scripts/add-level-xp-abilities.cjs`));
+    }
+  } catch (e) {
+    results.push(warn("xp_cfg_row", "Level & XP", "xp_config (default)", String(e)));
+  }
+
+  try {
+    const { count: xpEventsCount } = await admin.from("xp_events").select("*", { count: "exact", head: true });
+    results.push(ok("xp_events_count", "Level & XP", "xp_events", `${xpEventsCount ?? 0} XP-Events insgesamt`));
+  } catch (e) {
+    results.push(warn("xp_events_count", "Level & XP", "xp_events", String(e)));
+  }
+
+  try {
+    const { count: abilityDefCount } = await admin
+      .from("ability_definitions").select("*", { count: "exact", head: true }).eq("enabled", true);
+    const { count: abilityDefTotal } = await admin
+      .from("ability_definitions").select("*", { count: "exact", head: true });
+    results.push((abilityDefTotal ?? 0) >= 20
+      ? ok("ability_defs", "Level & XP", "ability_definitions", `${abilityDefCount ?? 0} aktiv, ${abilityDefTotal ?? 0} gesamt`)
+      : warn("ability_defs", "Level & XP", "ability_definitions", `Nur ${abilityDefTotal ?? 0} Fähigkeiten — node scripts/add-level-xp-abilities.cjs`));
+  } catch (e) {
+    results.push(warn("ability_defs", "Level & XP", "ability_definitions", String(e)));
+  }
+
+  try {
+    const { count: userAbilityCount } = await admin.from("user_abilities").select("*", { count: "exact", head: true });
+    results.push(ok("user_abilities_count", "Level & XP", "user_abilities", `${userAbilityCount ?? 0} Fähigkeiten vergeben`));
+  } catch (e) {
+    results.push(warn("user_abilities_count", "Level & XP", "user_abilities", String(e)));
+  }
+
+  try {
+    const { data: profiles } = await admin
+      .from("profiles").select("xp,level").order("xp", { ascending: false }).limit(1);
+    const top = (profiles ?? [])[0] as { xp?: number; level?: number } | undefined;
+    results.push(ok("xp_top_user", "Level & XP", "Höchster Level-Spieler",
+      top ? `Level ${top.level ?? 1}, ${(top.xp ?? 0).toLocaleString("de-DE")} XP` : "Noch niemand hat XP"));
+  } catch (e) {
+    results.push(warn("xp_top_user", "Level & XP", "Höchster Level-Spieler", String(e)));
+  }
+
+  // ── 29b. Sound Manager ────────────────────────────────────────────────────
+  try {
+    const { data: soundCfg, error: soundErr } = await admin
+      .from("sound_config").select("config").eq("id", "default").maybeSingle();
+    if (soundErr || !soundCfg) {
+      results.push(warn("sound_cfg_row", "Sound Manager", "sound_config (default)", "Kein Konfigurationseintrag — node scripts/add-level-xp-abilities.cjs ausführen"));
+    } else {
+      const cfg = soundCfg as { config?: Record<string, unknown> };
+      const eventCount = Object.keys(cfg.config ?? {}).length;
+      results.push(eventCount >= 12
+        ? ok("sound_cfg_row", "Sound Manager", "sound_config (default)", `${eventCount} Sound-Events konfiguriert`)
+        : warn("sound_cfg_row", "Sound Manager", "sound_config (default)", `${eventCount}/12 Events konfiguriert`));
+    }
+  } catch (e) {
+    results.push(warn("sound_cfg_row", "Sound Manager", "sound_config (default)", String(e)));
+  }
+
+  // ── 30. Storage Buckets ───────────────────────────────────────────────────
   try {
     const { data: buckets, error: bucketsErr } = await admin.storage.listBuckets();
     if (bucketsErr) {
