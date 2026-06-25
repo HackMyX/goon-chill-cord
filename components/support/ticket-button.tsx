@@ -20,6 +20,8 @@ import {
   Paperclip,
   Trophy,
   Shield,
+  PlusCircle,
+  RefreshCw,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -39,25 +41,34 @@ import { GlobalChatPanel } from "@/components/global/global-chat-panel";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { StyledUsername } from "@/components/ui/styled-username";
 
+type TicketListFilter = "all" | "open" | "in_progress" | "closed";
+
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: "Offen",
   in_progress: "In Bearbeitung",
-  resolved: "Gelöst/Geschlossen",
-  closed: "Gelöst/Geschlossen",
+  resolved: "Gelöst",
+  closed: "Geschlossen",
 };
 
 const STATUS_STYLE: Record<TicketStatus, string> = {
   open: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
   in_progress: "text-blue-300 bg-blue-500/10 border-blue-500/30",
-  resolved: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
-  closed: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
+  resolved: "text-purple-300 bg-purple-500/10 border-purple-500/30",
+  closed: "text-zinc-400 bg-zinc-500/10 border-zinc-500/30",
+};
+
+const STATUS_DOT: Record<TicketStatus, string> = {
+  open: "bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.6)]",
+  in_progress: "bg-blue-400 shadow-[0_0_5px_rgba(96,165,250,0.6)]",
+  resolved: "bg-purple-400 shadow-[0_0_5px_rgba(167,139,250,0.6)]",
+  closed: "bg-zinc-500",
 };
 
 const STATUS_ICON: Record<TicketStatus, typeof MessageCircle> = {
   open: MessageCircle,
   in_progress: Clock,
   resolved: CheckCircle2,
-  closed: CheckCircle2,
+  closed: XCircle,
 };
 
 function StatusBadge({ status }: { status: TicketStatus }) {
@@ -73,20 +84,33 @@ function StatusBadge({ status }: { status: TicketStatus }) {
 type PanelView = "list" | "new" | "detail";
 type Tab = "support" | "ai" | "chat" | "admin-ai";
 
-const CATEGORY_META: Record<TicketCategory, { label: string; caption: string; icon: typeof Bug; placeholder: string }> = {
+const CATEGORY_META: Record<TicketCategory, { label: string; shortLabel: string; caption: string; icon: typeof Bug; placeholder: string; color: string }> = {
   bug: {
     label: "Problem melden",
+    shortLabel: "Problem",
     caption: "Etwas funktioniert nicht wie erwartet? Melde Bugs direkt an den Support.",
     icon: Bug,
     placeholder: "Details zum Problem — je mehr Infos, desto schneller können wir helfen…",
+    color: "border-orange-500/35 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20 hover:border-orange-500/55",
   },
   suggestion: {
     label: "Verbesserungsvorschlag",
+    shortLabel: "Idee",
     caption: "Du hast eine Idee? Schick sie den Admins.",
     icon: Lightbulb,
     placeholder: "Beschreibe deine Idee — was soll sich ändern oder neu dazukommen?",
+    color: "border-amber-500/35 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/55",
   },
 };
+
+function isImageUrl(url: string): boolean {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    return /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/.test(path);
+  } catch {
+    return /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(url);
+  }
+}
 
 export function SupportButton() {
   return (
@@ -107,6 +131,7 @@ function SupportButtonInner() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [detail, setDetail] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [ticketFilter, setTicketFilter] = useState<TicketListFilter>("open");
 
   const [category, setCategory] = useState<TicketCategory>("bug");
   const [subject, setSubject] = useState("");
@@ -124,8 +149,7 @@ function SupportButtonInner() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sound = useSoundManager();
 
-  // Realtime: subscribe to new messages on the currently-open ticket so the
-  // user sees staff replies without having to reload the support widget.
+  // Realtime: subscribe to new messages on the currently-open ticket
   useEffect(() => {
     if (view !== "detail" || !detail?.id) return;
     const supabase = createClient();
@@ -150,7 +174,26 @@ function SupportButtonInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, detail?.id]);
 
-  // Auto-scroll to bottom when messages change
+  // Realtime: refresh ticket list when any of user's tickets update
+  useEffect(() => {
+    if (!visible || view !== "list") return;
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      const channel = supabase
+        .channel("my-tickets-list")
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "tickets", filter: `user_id=eq.${user.id}` },
+          () => { loadTickets(); }
+        )
+        .subscribe();
+      return () => { void supabase.removeChannel(channel); };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, view]);
+
+  // Auto-scroll when messages change
   useEffect(() => {
     if (view === "detail" && detail?.messages.length) {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
@@ -158,8 +201,8 @@ function SupportButtonInner() {
   }, [view, detail?.messages.length]);
 
   // Resize state
-  const [panelW, setPanelW] = useState(352);
-  const [panelH, setPanelH] = useState(560);
+  const [panelW, setPanelW] = useState(360);
+  const [panelH, setPanelH] = useState(580);
   const isResizing = useRef(false);
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
 
@@ -276,12 +319,7 @@ function SupportButtonInner() {
       } catch { /* ignore upload errors — ticket still created without attachment */ }
     }
 
-    const res = await createTicket({
-      subject: subject.trim(),
-      description: description.trim(),
-      category,
-      attachmentUrl,
-    });
+    const res = await createTicket({ subject: subject.trim(), description: description.trim(), category, attachmentUrl });
     setSubmitting(false);
     if (res.success) {
       sound.save();
@@ -327,16 +365,33 @@ function SupportButtonInner() {
     ...(isStaffUser ? [{ id: "admin-ai" as Tab, icon: Shield, label: userRole === "admin" ? "Admin KI" : "Mod KI" }] : []),
   ];
 
+  // Ticket list filtering
+  const filteredTickets = ticketFilter === "all" ? tickets
+    : ticketFilter === "closed" ? tickets.filter(t => t.status === "closed" || t.status === "resolved")
+    : tickets.filter(t => t.status === ticketFilter);
+
+  const countFor = (f: TicketListFilter) =>
+    f === "all" ? tickets.length
+    : f === "closed" ? tickets.filter(t => t.status === "closed" || t.status === "resolved").length
+    : tickets.filter(t => t.status === f).length;
+
+  const openCount = countFor("open");
+  const inProgCount = countFor("in_progress");
+
   return (
     <>
       {!open && (
         <div className="fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6">
           <div className="flex flex-col items-center gap-2">
-            {/* Pills centered above button */}
             <div className="pointer-events-none flex flex-col items-center gap-1 whitespace-nowrap">
               <span className="rounded-xl bg-purple-600 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_0_14px_rgba(147,51,234,0.75),0_2px_8px_rgba(0,0,0,0.4)]">
                 Hilfe & Chat
               </span>
+              {(openCount + inProgCount) > 0 && (
+                <span className="rounded-xl border border-blue-400/40 bg-blue-500/20 px-2.5 py-0.5 text-[10px] font-bold text-blue-300">
+                  {openCount + inProgCount} Ticket{(openCount + inProgCount) !== 1 ? "s" : ""} aktiv
+                </span>
+              )}
               <span className="rounded-xl border border-amber-400/40 bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.25)]">
                 🏆 Gute Reports = Credits!
               </span>
@@ -348,6 +403,11 @@ function SupportButtonInner() {
             >
               <span className="absolute inset-0 animate-ping rounded-full bg-purple-400 opacity-10" />
               <MessageCircle className="h-6 w-6" />
+              {(openCount + inProgCount) > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[9px] font-black text-white">
+                  {openCount + inProgCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -360,7 +420,7 @@ function SupportButtonInner() {
             className="fixed bottom-0 right-0 z-50 flex flex-col overflow-hidden border border-white/10 bg-[#0b0814] shadow-[0_8px_40px_rgba(0,0,0,0.65)] sm:bottom-6 sm:right-6 sm:rounded-2xl"
             style={{ width: panelW, height: panelH, maxHeight: "95vh", maxWidth: "100vw" }}
           >
-            {/* Resize handle — drag to expand top-left */}
+            {/* Resize handle */}
             <div
               onMouseDown={startResize}
               title="Größe ändern"
@@ -388,6 +448,11 @@ function SupportButtonInner() {
                 {tab === "chat" && "Global Chat"}
                 {tab === "admin-ai" && (userRole === "admin" ? "Admin-Assistent" : "Mod-Assistent")}
               </span>
+              {tab === "support" && view === "list" && (
+                <button onClick={loadTickets} title="Aktualisieren" className="rounded-lg p-1.5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              )}
               <button onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200">
                 <X className="h-4 w-4" />
               </button>
@@ -419,7 +484,7 @@ function SupportButtonInner() {
                 <div className="flex flex-col">
                   {view === "list" && (
                     <>
-                      {/* ── Action buttons — always visible at top ── */}
+                      {/* Action buttons — icon above text so all labels fit */}
                       <div className="border-b border-white/10 bg-black/20 p-3">
                         <div className="grid grid-cols-2 gap-2">
                           {(Object.entries(CATEGORY_META) as [TicketCategory, typeof CATEGORY_META.bug][]).map(([cat, meta]) => {
@@ -428,57 +493,129 @@ function SupportButtonInner() {
                               <button
                                 key={cat}
                                 onClick={() => openNew(cat)}
-                                className="flex items-center justify-center gap-1.5 rounded-xl border border-purple-400/35 bg-purple-500/12 px-3 py-2.5 text-xs font-bold text-purple-300 transition-all hover:bg-purple-500/25 hover:border-purple-400/60 hover:shadow-[0_0_12px_rgba(168,85,247,0.2)]"
+                                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border px-2 py-3 text-center text-xs font-bold transition-all hover:shadow-[0_0_12px_rgba(168,85,247,0.15)] ${meta.color}`}
                               >
-                                <CatIcon className="h-3.5 w-3.5 shrink-0" />
-                                {meta.label}
+                                <CatIcon className="h-4 w-4 shrink-0" />
+                                <span className="leading-tight">{meta.label}</span>
                               </button>
                             );
                           })}
                         </div>
-                        {/* Compact reward hint */}
                         <p className="mt-2 text-center text-[10px] text-amber-400/70 font-medium">
                           🏆 Gute Reports &amp; Ideen werden mit Credits belohnt!
                         </p>
                       </div>
 
-                      {/* ── Ticket list ── */}
-                      {loading && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-zinc-500" /></div>}
-                      {!loading && tickets.length === 0 && (
-                        <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-                          <MessageCircle className="h-8 w-8 text-zinc-700" />
-                          <p className="text-sm text-zinc-500">Noch keine Tickets. Erstelle deinen ersten Bericht!</p>
-                        </div>
-                      )}
-                      {!loading && tickets.length > 0 && (
-                        <>
-                          <div className="px-4 pt-3 pb-1">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Deine Tickets</p>
-                          </div>
-                          {tickets.map((ticket) => {
-                            const meta = CATEGORY_META[ticket.category];
-                            const CatIcon = meta.icon;
+                      {/* Status filter tabs */}
+                      {tickets.length > 0 && (
+                        <div className="flex border-b border-white/[0.06] bg-black/10 shrink-0">
+                          {([
+                            { f: "all" as TicketListFilter, label: "Alle" },
+                            { f: "open" as TicketListFilter, label: "Offen" },
+                            { f: "in_progress" as TicketListFilter, label: "In Bearb." },
+                            { f: "closed" as TicketListFilter, label: "Gelöst" },
+                          ]).map(({ f, label }) => {
+                            const cnt = countFor(f);
                             return (
                               <button
-                                key={ticket.id}
-                                onClick={() => openDetail(ticket)}
-                                className="flex flex-col gap-1.5 border-b border-white/[0.05] px-4 py-3 text-left transition-colors hover:bg-purple-500/[0.05] last:border-b-0"
+                                key={f}
+                                onClick={() => setTicketFilter(f)}
+                                className={`flex flex-1 flex-col items-center py-1.5 text-[10px] font-bold transition-colors ${
+                                  ticketFilter === f
+                                    ? "border-b-2 border-purple-400 text-purple-300"
+                                    : "text-zinc-600 hover:text-zinc-400"
+                                }`}
                               >
-                                <div className="flex items-start justify-between gap-2">
-                                  <p className="flex items-center gap-1.5 text-sm font-semibold leading-tight text-zinc-200">
-                                    <CatIcon className="h-3 w-3 shrink-0 text-zinc-500" />
-                                    {ticket.subject}
-                                  </p>
-                                  <StatusBadge status={ticket.status} />
-                                </div>
-                                <p className="text-[11px] text-zinc-500">
-                                  {new Date(ticket.updatedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                                  {" · "}{ticket.messageCount} Nachricht{ticket.messageCount !== 1 ? "en" : ""}
-                                </p>
+                                {label}
+                                {cnt > 0 && (
+                                  <span className={`text-[9px] tabular-nums ${ticketFilter === f ? "text-purple-400" : "text-zinc-700"}`}>
+                                    {cnt}
+                                  </span>
+                                )}
                               </button>
                             );
                           })}
-                          {/* Reward showcase — at the bottom of the ticket list */}
+                        </div>
+                      )}
+
+                      {/* Ticket list */}
+                      {loading && (
+                        <div className="flex justify-center py-10">
+                          <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+                        </div>
+                      )}
+
+                      {!loading && tickets.length === 0 && (
+                        <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.03]">
+                            <MessageCircle className="h-6 w-6 text-zinc-700" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-zinc-400">Noch keine Tickets</p>
+                            <p className="mt-1 text-xs text-zinc-600">Erstelle einen Bericht oder schick uns eine Idee!</p>
+                          </div>
+                          <button
+                            onClick={() => openNew("bug")}
+                            className="flex items-center gap-1.5 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-bold text-orange-300 hover:bg-orange-500/20"
+                          >
+                            <PlusCircle className="h-3.5 w-3.5" />
+                            Erstes Ticket erstellen
+                          </button>
+                        </div>
+                      )}
+
+                      {!loading && tickets.length > 0 && (
+                        <>
+                          {filteredTickets.length === 0 ? (
+                            <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                              <CheckCircle2 className="h-7 w-7 text-zinc-700" />
+                              <p className="text-xs text-zinc-500">
+                                {ticketFilter === "open" ? "Keine offenen Tickets." :
+                                 ticketFilter === "in_progress" ? "Keine Tickets in Bearbeitung." :
+                                 "Keine abgeschlossenen Tickets."}
+                              </p>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="px-4 pt-3 pb-1 flex items-center justify-between">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                                  {ticketFilter === "all" ? "Alle Tickets" :
+                                   ticketFilter === "open" ? "Offene Tickets" :
+                                   ticketFilter === "in_progress" ? "In Bearbeitung" :
+                                   "Abgeschlossene Tickets"}
+                                </p>
+                                <span className="text-[10px] text-zinc-700">{filteredTickets.length}</span>
+                              </div>
+                              {filteredTickets.map((ticket) => {
+                                const meta = CATEGORY_META[ticket.category];
+                                const CatIcon = meta.icon;
+                                return (
+                                  <button
+                                    key={ticket.id}
+                                    onClick={() => openDetail(ticket)}
+                                    className="flex flex-col gap-1.5 border-b border-white/[0.05] px-4 py-3 text-left transition-colors hover:bg-purple-500/[0.05] last:border-b-0"
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[ticket.status]}`} />
+                                        <CatIcon className="h-3 w-3 shrink-0 text-zinc-500" />
+                                        <p className="truncate text-sm font-semibold leading-tight text-zinc-200">
+                                          {ticket.subject}
+                                        </p>
+                                      </div>
+                                      <StatusBadge status={ticket.status} />
+                                    </div>
+                                    <p className="pl-5 text-[11px] text-zinc-600">
+                                      {new Date(ticket.updatedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                      {" · "}{ticket.messageCount} Nachricht{ticket.messageCount !== 1 ? "en" : ""}
+                                      {ticket.category === "bug" ? " · 🐛 Bug" : " · 💡 Idee"}
+                                    </p>
+                                  </button>
+                                );
+                              })}
+                            </>
+                          )}
+                          {/* Reward showcase */}
                           <div className="mx-3 my-3 overflow-hidden rounded-xl border border-amber-400/25 bg-amber-500/8">
                             <div className="flex items-center gap-2 px-3 py-2">
                               <Trophy className="h-3.5 w-3.5 text-amber-400 shrink-0" />
@@ -492,20 +629,30 @@ function SupportButtonInner() {
 
                   {view === "new" && (
                     <form onSubmit={handleCreate} className="flex flex-col gap-3 p-4">
-                      {/* Reward banner — prominent, before the form */}
-                      <div className="overflow-hidden rounded-xl border border-amber-400/35 bg-gradient-to-r from-amber-500/15 to-amber-600/10 shadow-[0_0_16px_rgba(245,158,11,0.1)]">
+                      {/* Category info banner */}
+                      <div className={`overflow-hidden rounded-xl border ${CATEGORY_META[category].color.split(" ").slice(0, 2).join(" ")}`}>
+                        <div className="flex items-center gap-2.5 px-3 py-2">
+                          {(() => { const Icon = CATEGORY_META[category].icon; return <Icon className="h-4 w-4 shrink-0" />; })()}
+                          <span className="text-sm font-bold">{CATEGORY_META[category].label}</span>
+                        </div>
+                        <p className="px-3 pb-3 text-[11px] leading-relaxed opacity-80">{CATEGORY_META[category].caption}</p>
+                      </div>
+
+                      {/* Reward banner */}
+                      <div className="overflow-hidden rounded-xl border border-amber-400/35 bg-gradient-to-r from-amber-500/15 to-amber-600/10">
                         <div className="flex items-center gap-2.5 px-3 pt-3 pb-1">
-                          <Trophy className="h-5 w-5 text-amber-400 shrink-0" />
-                          <span className="text-sm font-extrabold text-amber-300">Credits-Belohnung möglich!</span>
+                          <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
+                          <span className="text-xs font-extrabold text-amber-300">Credits-Belohnung möglich!</span>
                         </div>
                         <p className="px-3 pb-3 text-[11px] leading-relaxed text-amber-200/75">
                           {category === "suggestion"
-                            ? "Gute Verbesserungsideen werden vom Team mit individuellen Credits belohnt. Je konkreter dein Vorschlag, desto größer die Chance!"
+                            ? "Gute Verbesserungsideen werden mit individuellen Credits belohnt. Je konkreter dein Vorschlag, desto größer die Chance!"
                             : "Hilfreiche Bug-Reports helfen uns enorm — als Dankeschön gibt es individuelle Credits-Belohnungen für präzise Meldungen!"}
                         </p>
                       </div>
+
                       <label className="flex flex-col gap-1">
-                        <span className="text-xs font-semibold text-zinc-400">Betreff</span>
+                        <span className="text-xs font-semibold text-zinc-400">Betreff *</span>
                         <input
                           value={subject}
                           onChange={(e) => setSubject(e.target.value)}
@@ -513,9 +660,11 @@ function SupportButtonInner() {
                           placeholder="Kurze Beschreibung…"
                           className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-purple-400/60"
                         />
+                        <span className="text-right text-[10px] text-zinc-700">{subject.length}/120</span>
                       </label>
+
                       <label className="flex flex-col gap-1">
-                        <span className="text-xs font-semibold text-zinc-400">Beschreibung</span>
+                        <span className="text-xs font-semibold text-zinc-400">Beschreibung *</span>
                         <textarea
                           value={description}
                           onChange={(e) => setDescription(e.target.value)}
@@ -524,35 +673,40 @@ function SupportButtonInner() {
                           placeholder={CATEGORY_META[category].placeholder}
                           className="resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-purple-400/60"
                         />
+                        <span className="text-right text-[10px] text-zinc-700">{description.length}/2000</span>
                       </label>
+
                       {/* File attachment */}
                       <div className="flex flex-col gap-1">
                         <span className="text-xs font-semibold text-zinc-400">Screenshot / Anhang (optional)</span>
                         <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-white/15 bg-black/20 px-3 py-2 text-xs text-zinc-500 hover:border-purple-400/40 hover:text-zinc-300 transition-colors">
                           <Paperclip className="h-3.5 w-3.5 shrink-0" />
-                          {attachmentFile ? attachmentFile.name : "Datei auswählen…"}
-                          <input
-                            type="file"
-                            accept="image/*,.pdf"
-                            onChange={handleFileChange}
-                            className="sr-only"
-                          />
+                          {attachmentFile ? attachmentFile.name : "Datei auswählen (Bild, PDF)…"}
+                          <input type="file" accept="image/*,.pdf" onChange={handleFileChange} className="sr-only" />
                         </label>
                         {attachmentPreview && (
-                          <img src={attachmentPreview} alt="Vorschau" className="max-h-28 rounded-lg object-cover" />
+                          <img src={attachmentPreview} alt="Vorschau" className="mt-1 max-h-28 rounded-lg object-cover" />
+                        )}
+                        {attachmentFile && !attachmentPreview && (
+                          <p className="text-[11px] text-zinc-500 flex items-center gap-1">
+                            <Paperclip className="h-3 w-3" />
+                            {attachmentFile.name}
+                          </p>
                         )}
                       </div>
-                      {formError && <p className="text-xs text-red-400">{formError}</p>}
+
+                      {formError && <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{formError}</p>}
                       {formSuccess && (
-                        <p className="flex items-center gap-1.5 text-xs text-emerald-400">
+                        <p className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
                           <CheckCheck className="h-3.5 w-3.5" />
-                          {category === "suggestion" ? "Vorschlag wurde gesendet!" : "Ticket wurde gesendet!"}
+                          {category === "suggestion" ? "Vorschlag gesendet! Danke für deine Idee." : "Ticket gesendet! Wir melden uns so schnell wie möglich."}
                         </p>
                       )}
+
                       <button
                         type="submit"
                         disabled={submitting || !subject.trim() || !description.trim()}
-                        className="flex items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50"
+                        className="flex items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50 transition-colors"
                       >
                         {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                         {submitting ? "Wird gesendet…" : category === "suggestion" ? "Vorschlag senden" : "Ticket senden"}
@@ -565,18 +719,24 @@ function SupportButtonInner() {
                       {loading && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-zinc-500" /></div>}
                       {!loading && detail && (
                         <>
+                          {/* Status bar */}
                           <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-2">
                             <StatusBadge status={detail.status} />
-                            {detail.status !== "closed" && detail.status !== "resolved" && (
-                              <button onClick={handleClose} className="text-[11px] text-zinc-500 hover:text-red-400">
-                                Ticket schließen
-                              </button>
-                            )}
+                            <div className="flex items-center gap-3">
+                              <span className="text-[10px] text-zinc-600">
+                                {detail.category === "bug" ? "🐛 Bug" : "💡 Idee"}
+                              </span>
+                              {detail.status !== "closed" && detail.status !== "resolved" && (
+                                <button onClick={handleClose} className="text-[11px] text-zinc-500 hover:text-red-400 transition-colors">
+                                  Ticket schließen
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          {/* Reward celebration banner */}
+
+                          {/* Reward banner */}
                           {detail.rewardGrantedAt && (
                             <div className="relative overflow-hidden border-b border-amber-400/30 bg-gradient-to-r from-amber-500/20 to-amber-600/10 px-4 py-3">
-                              <div className="absolute inset-0 -translate-x-full animate-[mine-shimmer_3s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-amber-400/10 to-transparent" />
                               <div className="relative flex items-center gap-3">
                                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
                                   <Trophy className="h-5 w-5 text-amber-400" />
@@ -592,29 +752,58 @@ function SupportButtonInner() {
                               </div>
                             </div>
                           )}
+
+                          {/* Reward pending banner */}
+                          {detail.rewardPending && !detail.rewardGrantedAt && (
+                            <div className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+                              <div className="flex items-center gap-2">
+                                <Trophy className="h-3.5 w-3.5 animate-pulse text-amber-400 shrink-0" />
+                                <span className="text-xs font-bold text-amber-300">
+                                  Belohnung angepinnt{detail.rewardCredits ? ` — +${detail.rewardCredits} Credits` : ""}
+                                </span>
+                                <span className="ml-auto text-[10px] text-amber-500">wird bei Lösung ausgezahlt</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Original description + attachment */}
                           <div className="border-b border-white/[0.05] bg-white/[0.02] px-4 py-3">
-                            <p className="text-xs text-zinc-500">Deine Beschreibung:</p>
-                            <p className="mt-1 text-sm leading-relaxed text-zinc-300">{detail.description}</p>
+                            <p className="text-xs text-zinc-500 mb-1">Deine Beschreibung:</p>
+                            <p className="text-sm leading-relaxed text-zinc-300">{detail.description}</p>
                             {detail.attachmentUrl && (
-                              <a
-                                href={detail.attachmentUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mt-2 flex items-center gap-1.5 text-[11px] text-purple-400 hover:text-purple-300"
-                              >
-                                <Paperclip className="h-3 w-3" />
-                                Anhang ansehen
-                              </a>
+                              <div className="mt-2">
+                                {isImageUrl(detail.attachmentUrl) ? (
+                                  <a href={detail.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={detail.attachmentUrl}
+                                      alt="Anhang"
+                                      className="max-h-40 rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity border border-white/10"
+                                    />
+                                  </a>
+                                ) : (
+                                  <a
+                                    href={detail.attachmentUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1.5 text-[11px] text-purple-400 hover:text-purple-300"
+                                  >
+                                    <Paperclip className="h-3 w-3" />
+                                    Anhang ansehen
+                                  </a>
+                                )}
+                              </div>
                             )}
                           </div>
+
+                          {/* Messages thread */}
                           <div className="flex flex-col gap-0.5 px-3 py-2">
                             {detail.messages.length === 0 && (
-                              <p className="py-4 text-center text-xs text-zinc-600">Noch keine Antworten.</p>
+                              <p className="py-4 text-center text-xs text-zinc-600">Noch keine Antworten vom Team.</p>
                             )}
                             {detail.messages.map((msg) => (
                               <div
                                 key={msg.id}
-                                className={`rounded-xl px-3 py-2 ${msg.isStaff ? "ml-4 bg-purple-500/10" : "mr-4 bg-white/[0.03]"}`}
+                                className={`rounded-xl px-3 py-2 ${msg.isStaff ? "ml-4 bg-purple-500/10 border border-purple-500/15" : "mr-4 bg-white/[0.03]"}`}
                               >
                                 <div className="flex items-center gap-1.5">
                                   <span className={`text-[10px] font-bold ${msg.isStaff ? "text-purple-300" : "text-zinc-400"}`}>
@@ -635,6 +824,8 @@ function SupportButtonInner() {
                             )}
                             <div ref={messagesEndRef} />
                           </div>
+
+                          {/* Reply form */}
                           {detail.status !== "closed" && detail.status !== "resolved" && (
                             <form onSubmit={handleReply} className="border-t border-white/10 p-3">
                               <div className="flex gap-2">
@@ -654,6 +845,22 @@ function SupportButtonInner() {
                                 </button>
                               </div>
                             </form>
+                          )}
+
+                          {(detail.status === "closed" || detail.status === "resolved") && (
+                            <div className="border-t border-white/[0.05] p-4">
+                              <p className="text-center text-xs text-zinc-600">
+                                Dieses Ticket ist geschlossen.
+                                {detail.closedByUsername && ` Geschlossen von ${detail.closedByUsername}.`}
+                              </p>
+                              <button
+                                onClick={() => { setView("list"); setDetail(null); loadTickets(); }}
+                                className="mx-auto mt-2 flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                              >
+                                <ChevronLeft className="h-3 w-3" />
+                                Zurück zur Übersicht
+                              </button>
+                            </div>
                           )}
                         </>
                       )}

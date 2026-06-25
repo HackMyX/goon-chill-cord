@@ -22,6 +22,7 @@ import {
   modDeleteTicket, modSetTicketPriority, modUpdateTicketStatus, modGrantTicketReward,
   modEscalateTicket, getMyEffectivePermissions,
 } from "@/lib/actions/mod";
+import { addInternalNote, getInternalNotes, type InternalNote } from "@/lib/actions/tickets";
 import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage } from "@/lib/mod";
 import { ADMIN_MOD_PERMISSIONS } from "@/lib/mod";
 
@@ -43,6 +44,15 @@ function timeAgo(iso: string): string {
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function isImageUrl(url: string): boolean {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    return /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/.test(path);
+  } catch {
+    return /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(url);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -662,6 +672,10 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   const [showReward, setShowReward] = useState(false);
   const [rewardCredits, setRewardCredits] = useState(500);
   const [rewardNote, setRewardNote] = useState("");
+  const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
+  const [newNote, setNewNote] = useState("");
+  const [addingNote, setAddingNote] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
   const isActionable = t.status === "open" || t.status === "in_progress";
   const isInProgress = t.status === "in_progress";
   const isClosed = t.status === "closed" || t.status === "resolved";
@@ -698,7 +712,14 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   useEffect(() => {
     if (!open || msgs !== null) return;
     setLoadingMsgs(true);
-    getTicketMessages(t.id).then((list) => { setMsgs(list); setLoadingMsgs(false); });
+    Promise.all([
+      getTicketMessages(t.id),
+      getInternalNotes(t.id),
+    ]).then(([list, notes]) => {
+      setMsgs(list);
+      setInternalNotes(notes);
+      setLoadingMsgs(false);
+    });
   }, [open, t.id, msgs]);
 
   function showFlash(text: string, ok: boolean) {
@@ -783,6 +804,20 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
     });
   }
 
+  async function handleAddNote() {
+    if (!newNote.trim()) return;
+    setAddingNote(true);
+    const res = await addInternalNote(t.id, newNote.trim());
+    setAddingNote(false);
+    if (res.success) {
+      setNewNote("");
+      const notes = await getInternalNotes(t.id);
+      setInternalNotes(notes);
+    } else {
+      showFlash(res.error ?? "Fehler beim Speichern.", false);
+    }
+  }
+
   const statusCls = isActionable
     ? isInProgress
       ? "border-amber-500/20 bg-amber-500/5"
@@ -814,7 +849,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
             {alreadyRewarded && <Trophy className="h-3 w-3 shrink-0 text-amber-400" aria-label="Bereits belohnt" />}
             {t.attachmentUrl && <Paperclip className="h-3 w-3 shrink-0 text-zinc-500" aria-label="Hat Anhang" />}
           </div>
-          <span className="text-[11px] text-zinc-500">von <StyledUsername name={t.username} styleKey={t.nameStyleKey} size="sm" disablePopup /></span>
+          <span className="text-[11px] text-zinc-500">von <span className="font-semibold text-zinc-300">{t.username}</span></span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {isInProgress && (
@@ -833,7 +868,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           {/* Meta */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="text-[11px] text-zinc-500">
-              von <strong className="text-zinc-300"><StyledUsername name={t.username} styleKey={t.nameStyleKey} size="sm" disablePopup /></strong>
+              von <strong className="text-zinc-300">{t.username}</strong>
               {" · "}{new Date(t.createdAt).toLocaleString("de-DE")}
             </span>
             <CategoryBadge category={t.category} />
@@ -888,15 +923,27 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-3">
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{t.message}</p>
             {t.attachmentUrl && (
-              <a
-                href={t.attachmentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 flex items-center gap-1.5 text-[11px] text-purple-400 hover:text-purple-300"
-              >
-                <Paperclip className="h-3 w-3" />
-                Anhang ansehen
-              </a>
+              <div className="mt-2">
+                {isImageUrl(t.attachmentUrl) ? (
+                  <a href={t.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={t.attachmentUrl}
+                      alt="Anhang"
+                      className="max-h-48 rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity border border-white/10"
+                    />
+                  </a>
+                ) : (
+                  <a
+                    href={t.attachmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-[11px] text-purple-400 hover:text-purple-300"
+                  >
+                    <Paperclip className="h-3 w-3" />
+                    Anhang ansehen
+                  </a>
+                )}
+              </div>
             )}
           </div>
 
@@ -915,7 +962,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                   }`}>
                     <p className="whitespace-pre-wrap">{m.message}</p>
                     <p className={`mt-1 text-[10px] ${m.isStaff ? "text-sky-400/70 text-right" : "text-zinc-600"}`}>
-                      {m.isStaff ? "Staff" : <StyledUsername name={m.username} styleKey={m.nameStyleKey} size="sm" disablePopup />} · {timeAgo(m.createdAt)}
+                      {m.isStaff ? "Staff" : m.username} · {timeAgo(m.createdAt)}
                     </p>
                   </div>
                 </div>
@@ -1101,6 +1148,49 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
             </div>
           )}
 
+          {/* Internal notes (staff only) */}
+          <div className="mt-3 border-t border-white/5 pt-3">
+            <button
+              onClick={() => setShowNotes((v) => !v)}
+              className="flex items-center gap-1.5 text-[11px] font-bold text-sky-400 hover:text-sky-300 transition-colors"
+            >
+              <NotepadText className="h-3.5 w-3.5" />
+              Interne Notizen ({internalNotes.length})
+              <ChevronDown className={`h-3 w-3 transition-transform ${showNotes ? "rotate-180" : ""}`} />
+            </button>
+            {showNotes && (
+              <div className="mt-2 flex flex-col gap-2">
+                {internalNotes.length === 0 && (
+                  <p className="text-[11px] text-zinc-600">Noch keine internen Notizen.</p>
+                )}
+                {internalNotes.map((note) => (
+                  <div key={note.id} className="rounded-lg border border-sky-500/15 bg-sky-500/5 px-3 py-2">
+                    <p className="text-[10px] font-bold text-sky-400">{note.username} · {timeAgo(note.createdAt)}</p>
+                    <p className="mt-0.5 text-xs text-zinc-300">{note.note}</p>
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <textarea
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    rows={2}
+                    maxLength={1000}
+                    placeholder="Interne Notiz (nur für Staff sichtbar)…"
+                    className="flex-1 resize-none rounded-lg border border-white/8 bg-black/20 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-sky-400/40 placeholder:text-zinc-600"
+                  />
+                  <button
+                    onClick={handleAddNote}
+                    disabled={addingNote || !newNote.trim()}
+                    className="flex shrink-0 items-center gap-1 self-end rounded-lg border border-sky-500/30 bg-sky-500/15 px-2.5 py-1.5 text-[11px] font-bold text-sky-300 hover:bg-sky-500/25 disabled:opacity-50"
+                  >
+                    {addingNote ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    Speichern
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {flash && (
             <p className={`mt-2 text-xs font-medium ${flash.ok ? "text-emerald-400" : "text-red-400"}`}>
               {flash.text}
@@ -1164,6 +1254,18 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
     const timer = setTimeout(() => onTicketOpened?.(), 600);
     return () => clearTimeout(timer);
   }, [openTicketId, onTicketOpened]);
+
+  // Realtime: refresh ticket list on any ticket INSERT/UPDATE
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("mod-tickets-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "tickets" }, () => onRefresh())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tickets" }, () => onRefresh())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const bugTickets = tickets.filter((t) => t.category === "bug");
   const suggestionTickets = tickets.filter((t) => t.category === "suggestion");

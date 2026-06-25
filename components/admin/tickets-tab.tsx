@@ -21,6 +21,9 @@ import {
   Trophy,
   Coins,
   ArrowUpRight,
+  Paperclip,
+  NotepadText,
+  Search,
 } from "lucide-react";
 import {
   getAdminTickets,
@@ -32,13 +35,26 @@ import {
   deleteTicketsBulk,
   deleteTicketsByDateRange,
   adminGrantTicketReward,
+  addInternalNote,
+  getInternalNotes,
   type Ticket,
   type TicketDetail,
   type TicketStatus,
   type TicketCategory,
   type TicketPriority,
+  type InternalNote,
 } from "@/lib/actions/tickets";
+import { createClient } from "@/lib/supabase/client";
 import { useSoundManager } from "@/lib/sound-manager";
+
+function isImageUrl(url: string): boolean {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    return /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/.test(path);
+  } catch {
+    return /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(url);
+  }
+}
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: "Offen",
@@ -162,6 +178,10 @@ function TicketRow({
   const [rewardNote, setRewardNote] = useState("");
   const [rewarding, setRewarding] = useState(false);
   const [rewardMessage, setRewardMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
+  const [showNotes, setShowNotes] = useState(false);
+  const [newNote, setNewNote] = useState("");
+  const [addingNote, setAddingNote] = useState(false);
   const sound = useSoundManager();
 
   async function handleExpand() {
@@ -171,9 +191,22 @@ function TicketRow({
       setLoadingDetail(true);
       const d = await getTicketDetail(ticket.id);
       setDetail(d);
+      if (d?.internalNotes) setInternalNotes(d.internalNotes);
       setLoadingDetail(false);
     } else {
       setExpanded(false);
+    }
+  }
+
+  async function handleAddNote() {
+    if (!newNote.trim()) return;
+    setAddingNote(true);
+    const res = await addInternalNote(ticket.id, newNote.trim());
+    setAddingNote(false);
+    if (res.success) {
+      setNewNote("");
+      const notes = await getInternalNotes(ticket.id);
+      setInternalNotes(notes);
     }
   }
 
@@ -417,17 +450,32 @@ function TicketRow({
                 </form>
               )}
 
-              {/* Attachment link */}
+              {/* Attachment — inline preview for images, link for other files */}
               {detail.attachmentUrl && (
-                <div className="border-t border-white/[0.06] px-4 py-2">
-                  <a
-                    href={detail.attachmentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-[11px] text-purple-400 hover:text-purple-300"
-                  >
-                    📎 Anhang ansehen
-                  </a>
+                <div className="border-t border-white/[0.06] px-4 py-3">
+                  <p className="mb-1.5 text-[11px] font-semibold text-zinc-500 flex items-center gap-1">
+                    <Paperclip className="h-3 w-3" />
+                    Anhang
+                  </p>
+                  {isImageUrl(detail.attachmentUrl) ? (
+                    <a href={detail.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={detail.attachmentUrl}
+                        alt="Anhang"
+                        className="max-h-56 rounded-xl object-cover cursor-pointer hover:opacity-90 transition-opacity border border-white/10"
+                      />
+                    </a>
+                  ) : (
+                    <a
+                      href={detail.attachmentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-[11px] text-purple-300 hover:bg-purple-500/20 transition-colors"
+                    >
+                      <Paperclip className="h-3 w-3" />
+                      Datei öffnen
+                    </a>
+                  )}
                 </div>
               )}
 
@@ -513,6 +561,50 @@ function TicketRow({
                   </>
                 )}
               </div>
+
+              {/* Internal notes */}
+              <div className="border-t border-white/[0.06] px-4 py-3">
+                <button
+                  onClick={() => setShowNotes((v) => !v)}
+                  className="flex items-center gap-1.5 text-[11px] font-bold text-sky-400 hover:text-sky-300 transition-colors"
+                >
+                  <NotepadText className="h-3.5 w-3.5" />
+                  Interne Notizen ({internalNotes.length})
+                  <ChevronDown className={`h-3 w-3 transition-transform ${showNotes ? "rotate-180" : ""}`} />
+                </button>
+                {showNotes && (
+                  <div className="mt-2 flex flex-col gap-2">
+                    {internalNotes.length === 0 && (
+                      <p className="text-[11px] text-zinc-600">Noch keine internen Notizen für dieses Ticket.</p>
+                    )}
+                    {internalNotes.map((note) => (
+                      <div key={note.id} className="rounded-lg border border-sky-500/15 bg-sky-500/5 px-3 py-2">
+                        <p className="text-[10px] font-bold text-sky-400">
+                          {note.username} · {new Date(note.createdAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-zinc-300">{note.note}</p>
+                      </div>
+                    ))}
+                    <div className="flex gap-2 pt-1">
+                      <textarea
+                        value={newNote}
+                        onChange={(e) => setNewNote(e.target.value)}
+                        rows={2}
+                        maxLength={1000}
+                        placeholder="Interne Notiz hinzufügen (nur für Staff sichtbar)…"
+                        className="flex-1 resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-sky-400/40"
+                      />
+                      <button
+                        onClick={handleAddNote}
+                        disabled={addingNote || !newNote.trim()}
+                        className="flex shrink-0 items-center gap-1 self-end rounded-lg border border-sky-500/30 bg-sky-500/15 px-3 py-1.5 text-[11px] font-bold text-sky-300 hover:bg-sky-500/25 disabled:opacity-50 transition-colors"
+                      >
+                        {addingNote ? <Loader2 className="h-3 w-3 animate-spin" /> : "Speichern"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -545,6 +637,7 @@ export function TicketsTab({
   const [dateDeleteConfirm, setDateDeleteConfirm] = useState(false);
   // auto-open a specific ticket from deep-link
   const [autoOpenId, setAutoOpenId] = useState<string | null>(openTicketId ?? null);
+  const [searchQuery, setSearchQuery] = useState("");
   const sound = useSoundManager();
 
   const load = useCallback(async () => {
@@ -562,6 +655,18 @@ export function TicketsTab({
 
   useEffect(() => { load(); }, [load]);
 
+  // Realtime: refresh on any ticket INSERT/UPDATE
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("admin-tickets-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "tickets" }, () => load())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tickets" }, () => load())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // When a deep-link ticket loads, switch filter to "all" so it's visible
   useEffect(() => {
     if (autoOpenId && tickets.length > 0) {
@@ -574,9 +679,15 @@ export function TicketsTab({
   }, [autoOpenId, tickets, onTicketOpened]);
 
   const byCategory = categoryFilter === "all" ? tickets : tickets.filter((t) => t.category === categoryFilter);
-  const displayed = filter === "escalated"
+  const byStatus = filter === "escalated"
     ? byCategory.filter((t) => t.escalatedToAdmin)
     : filter === "all" ? byCategory : byCategory.filter((t) => t.status === filter);
+  const displayed = searchQuery.trim()
+    ? byStatus.filter((t) =>
+        t.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.username.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : byStatus;
 
   const countFor = (s: FilterStatus) =>
     s === "escalated" ? byCategory.filter((t) => t.escalatedToAdmin).length
@@ -653,6 +764,22 @@ export function TicketsTab({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Tickets suchen (Betreff, Nutzer)…"
+          className="w-full rounded-xl border border-white/10 bg-black/30 py-2 pl-9 pr-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-purple-400/50"
+        />
+        {searchQuery && (
+          <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
       {/* Category filter */}
       <div className="flex flex-wrap items-center gap-2">
         {(["all", "bug", "suggestion"] as FilterCategory[]).map((c) => {

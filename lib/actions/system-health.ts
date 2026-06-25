@@ -90,6 +90,7 @@ const OPTIONAL_TABLES: Array<{ name: string; migration: string; feature: string 
   { name: "name_style_rarity_config",migration: "scripts/add-name-style-rarity-config.cjs",                      feature: "Name Styles (Seltenheiten-Konfiguration)" },
   { name: "pet_rarity_overrides",    migration: "scripts/add-pet-rarity-overrides.cjs",                          feature: "Pets (Rarität-Stats pro Tierart)" },
   { name: "case_groups",             migration: "scripts/add-case-groups.cjs",                                    feature: "Cases (dynamische Gruppen — Admin kann unbegrenzt neue Cases erstellen)" },
+  { name: "ticket_internal_notes",   migration: "scripts/add-ticket-notes.cjs",                                   feature: "Tickets (interne Mod-Notizen — nur für Staff sichtbar)" },
 ];
 
 /** Config singleton rows that must exist. */

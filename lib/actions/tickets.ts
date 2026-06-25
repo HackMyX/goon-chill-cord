@@ -39,8 +39,18 @@ export interface TicketMessage {
   createdAt: string;
 }
 
+export interface InternalNote {
+  id: string;
+  ticketId: string;
+  userId: string;
+  username: string;
+  note: string;
+  createdAt: string;
+}
+
 export interface TicketDetail extends Ticket {
   messages: TicketMessage[];
+  internalNotes: InternalNote[];
   attachmentUrl?: string | null;
   rewardCredits?: number | null;
   rewardNote?: string | null;
@@ -151,8 +161,31 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
   const userIds = Array.from(new Set((messages ?? []).map((m) => m.user_id)));
   const usernames = await fetchUsernames(admin, userIds);
 
+  // Load internal notes for staff only
+  let internalNotesList: InternalNote[] = [];
+  if (isModerator(profile)) {
+    const { data: notes } = await admin
+      .from("ticket_internal_notes")
+      .select("id, ticket_id, user_id, note, created_at")
+      .eq("ticket_id", ticketId)
+      .order("created_at", { ascending: true });
+    if (notes?.length) {
+      const noteUserIds = Array.from(new Set((notes).map((n: { user_id: string }) => n.user_id)));
+      const noteUsernames = await fetchUsernames(admin, noteUserIds);
+      internalNotesList = (notes).map((n: { id: string; ticket_id: string; user_id: string; note: string; created_at: string }) => ({
+        id: n.id,
+        ticketId: n.ticket_id,
+        userId: n.user_id,
+        username: noteUsernames.get(n.user_id)?.username ?? "Unbekannt",
+        note: n.note,
+        createdAt: n.created_at,
+      }));
+    }
+  }
+
   return {
     ...ticket,
+    internalNotes: internalNotesList,
     attachmentUrl: (data as Record<string, unknown>).attachment_url as string | null ?? null,
     rewardCredits: (data as Record<string, unknown>).reward_credits as number | null ?? null,
     rewardNote: (data as Record<string, unknown>).reward_note as string | null ?? null,
@@ -172,6 +205,52 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
       };
     }),
   };
+}
+
+// ─── Internal notes (staff only) ──────────────────────────────────────────────
+
+export async function getInternalNotes(ticketId: string): Promise<InternalNote[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  if (!isModerator(profile)) return [];
+  const { data } = await admin
+    .from("ticket_internal_notes")
+    .select("id, ticket_id, user_id, note, created_at")
+    .eq("ticket_id", ticketId)
+    .order("created_at", { ascending: true });
+  if (!data?.length) return [];
+  const noteUserIds = Array.from(new Set(data.map((n: { user_id: string }) => n.user_id)));
+  const noteUsernames = await fetchUsernames(admin, noteUserIds);
+  return data.map((n: { id: string; ticket_id: string; user_id: string; note: string; created_at: string }) => ({
+    id: n.id,
+    ticketId: n.ticket_id,
+    userId: n.user_id,
+    username: noteUsernames.get(n.user_id)?.username ?? "Unbekannt",
+    note: n.note,
+    createdAt: n.created_at,
+  }));
+}
+
+export async function addInternalNote(
+  ticketId: string,
+  note: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
+  const trimmed = note.trim().slice(0, 1000);
+  if (!trimmed) return { success: false, error: "Notiz darf nicht leer sein." };
+  const { error } = await admin
+    .from("ticket_internal_notes")
+    .insert({ ticket_id: ticketId, user_id: user.id, note: trimmed });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }
 
 export async function addTicketMessage(input: {
