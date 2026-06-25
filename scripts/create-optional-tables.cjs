@@ -22,7 +22,7 @@ const migrations = [
   `CREATE TABLE IF NOT EXISTS trade_items (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     trade_id uuid NOT NULL,
-    inventory_id uuid REFERENCES user_inventory(id) ON DELETE SET NULL,
+    inventory_id uuid REFERENCES inventory(id) ON DELETE SET NULL,
     side text NOT NULL DEFAULT 'from' CHECK (side IN ('from', 'to')),
     created_at timestamptz NOT NULL DEFAULT now()
   )`,

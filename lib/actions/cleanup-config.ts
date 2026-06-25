@@ -36,10 +36,10 @@ export async function getCleanupRules(): Promise<CleanupRule[]> {
 
     const byKey = new Map((data ?? []).map((r: Record<string, unknown>) => [r.source_key as string, r]));
 
-    // Seed any missing keys so the health check sees rows for all expected sources.
+    // Seed any missing keys so subsequent health checks see rows for all expected sources.
     const missingKeys = ALL_CLEANUP_KEYS.filter((k) => !byKey.has(k));
     if (missingKeys.length > 0) {
-      void admin.from("cleanup_config").upsert(
+      await admin.from("cleanup_config").upsert(
         missingKeys.map((key) => ({
           source_key: key,
           enabled: false,

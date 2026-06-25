@@ -123,19 +123,18 @@ function CleanupRuleRow({
         <div className="flex items-center gap-2">
           {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />}
           <button
+            type="button"
+            role="switch"
+            aria-checked={rule.enabled}
             onClick={handleToggle}
             disabled={saving}
-            className={`relative h-6 w-11 rounded-full border transition-colors disabled:opacity-50 ${
-              rule.enabled
-                ? "border-purple-500/50 bg-purple-500/40"
-                : "border-white/10 bg-white/5"
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 focus:outline-none ${
+              rule.enabled ? "bg-purple-500" : "bg-white/10"
             }`}
           >
             <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full border transition-transform ${
-                rule.enabled
-                  ? "translate-x-[22px] border-purple-400 bg-purple-300"
-                  : "translate-x-0 border-white/20 bg-zinc-500"
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-200 ${
+                rule.enabled ? "left-[22px]" : "left-0.5"
               }`}
             />
           </button>
