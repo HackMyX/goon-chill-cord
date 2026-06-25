@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import {
   Disc3, Trophy, Zap, Clock, Coins, ChevronDown, BarChart3,
-  Star, Crown, User, RefreshCw, Bot, Pause, Play, TrendingDown, TrendingUp,
+  Star, Crown, User, RefreshCw, Bot, Pause, Play, TrendingDown, TrendingUp, ArrowLeft,
 } from "lucide-react";
 import { PlinkoBoard } from "./plinko-board";
 import {
@@ -23,6 +24,8 @@ interface Props {
   config: PlinkoConfig;
   initialCredits: number;
   initialUsedThisHour: number;
+  isAdmin?: boolean;
+  isModerator?: boolean;
 }
 
 interface PlayResult {
@@ -240,7 +243,7 @@ function SessionDots({ history }: { history: PlayResult[] }) {
   );
 }
 
-export function PlinkoShell({ config, initialCredits, initialUsedThisHour }: Props) {
+export function PlinkoShell({ config, initialCredits, initialUsedThisHour, isAdmin = false, isModerator = false }: Props) {
   const [credits, setCredits] = useState(initialCredits);
   const [usedThisHour, setUsedThisHour] = useState(initialUsedThisHour);
   const [activeRisk, setActiveRisk] = useState(config.riskLevels[0]?.key ?? "low");
@@ -326,7 +329,7 @@ export function PlinkoShell({ config, initialCredits, initialUsedThisHour }: Pro
   const sessionNet = sessionHistory.reduce((s, h) => s + h.payout - h.betAmount, 0);
 
   return (
-    <div className="relative mx-auto max-w-5xl min-h-dvh">
+    <div className="flex h-dvh flex-col overflow-hidden">
       {/* Ambient background glow */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full opacity-20"
@@ -347,54 +350,66 @@ export function PlinkoShell({ config, initialCredits, initialUsedThisHour }: Pro
         </div>
       )}
 
-      <div className="relative grid gap-4 lg:grid-cols-[1fr_340px]">
-
-        {/* ── LEFT: Board + controls ──────────────────────────────────────── */}
-        <div className="flex flex-col gap-4">
-
-          {/* Header */}
-          <div className="flex items-center justify-between rounded-2xl border border-purple-500/20 bg-purple-500/[0.04] px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/20">
-                <Disc3 className="h-5 w-5 text-purple-300" style={{ animation: animating ? "spin 0.4s linear infinite" : "none" }} />
-                {animating && <div className="absolute inset-0 animate-ping rounded-xl bg-purple-500/25" />}
-              </div>
-              <div>
-                <h1 className="text-lg font-black tracking-tight text-zinc-100">Plinko</h1>
-                <p className="text-[11px] text-zinc-500">Lass den Ball fallen — Glück entscheidet!</p>
-              </div>
+      {/* ── Mini Header ── */}
+      <header className="flex-none flex items-center justify-between border-b border-white/8 bg-[#07021a]/95 backdrop-blur-xl px-4 py-2.5 z-20">
+        <div className="flex items-center gap-2">
+          <Link
+            href="/"
+            className="rounded-lg p-1.5 text-zinc-500 hover:text-zinc-200 hover:bg-white/8 transition-colors"
+            aria-label="Zurück"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <div className="flex items-center gap-2">
+            <div className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/20">
+              <Disc3
+                className="h-4 w-4 text-purple-300"
+                style={{ animation: animating ? "spin 0.4s linear infinite" : "none" }}
+              />
+              {animating && <div className="absolute inset-0 animate-ping rounded-lg bg-purple-500/20" />}
             </div>
-            <div className="flex flex-col items-end gap-0.5">
-              <div className="flex items-center gap-1.5 text-sm font-bold text-amber-300">
-                <Coins className="h-4 w-4" />
-                <AnimatedCredits value={credits} /> CR
-              </div>
-              <div className="flex items-center gap-1 text-[11px] text-zinc-500">
-                <Clock className="h-3 w-3" />
-                {remaining}/{config.hourlyBallLimit} /h
-                {config.dailyBallLimit > 0 && <span className="ml-1 text-zinc-600">· {config.dailyBallLimit}/Tag</span>}
-              </div>
-            </div>
+            <span className="font-black text-base text-zinc-100 tracking-tight">Plinko</span>
           </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 text-sm font-bold text-amber-300">
+            <Coins className="h-3.5 w-3.5" />
+            <AnimatedCredits value={credits} /> CR
+          </div>
+          <div className="hidden sm:flex items-center gap-1 text-[11px] text-zinc-500">
+            <Clock className="h-3 w-3" />
+            {remaining}/{config.hourlyBallLimit}/h
+            {config.dailyBallLimit > 0 && <span className="ml-1">· {config.dailyBallLimit}/Tag</span>}
+          </div>
+        </div>
+      </header>
+
+      {/* ── Main content ── */}
+      <div className="flex-1 overflow-y-auto lg:overflow-hidden">
+        <div className="h-full lg:grid lg:grid-cols-[1fr_320px] gap-3 p-3">
+
+          {/* ── LEFT: Board + controls ─────────────────────────────────── */}
+          <div className="flex flex-col gap-2.5 mb-3 lg:mb-0 lg:overflow-hidden lg:min-h-0 lg:h-full">
 
           {/* Risk selector */}
-          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${config.riskLevels.length}, 1fr)` }}>
+          <div className="flex-none grid gap-1.5" style={{ gridTemplateColumns: `repeat(${config.riskLevels.length}, 1fr)` }}>
             {config.riskLevels.map((r) => (
               <button
                 key={r.key}
                 onClick={() => { setActiveRisk(r.key); sound.click?.(); }}
-                className={`flex flex-col items-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-bold transition-all ${
+                className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
                   activeRisk === r.key ? RISK_ACTIVE[r.key] ?? "border-purple-400 bg-purple-500/20 text-purple-300" : `${RISK_COLORS[r.key] ?? "text-zinc-400 border-white/10 bg-white/5"} hover:opacity-80`
                 }`}
               >
-                <span className="text-lg">{r.emoji}</span>
+                <span className="text-base">{r.emoji}</span>
                 <span>{r.label}</span>
-                <span className="text-[10px] opacity-70">max {Math.max(...r.multipliers)}x</span>
+                <span className="hidden sm:inline text-[10px] opacity-60">max {Math.max(...r.multipliers)}x</span>
               </button>
             ))}
           </div>
 
-          {/* Board */}
+          {/* Board — fills all remaining space on desktop */}
+          <div className="flex-none lg:flex-1 lg:min-h-0 rounded-2xl overflow-hidden" style={{ minHeight: "min(55vw, 360px)" }}>
           <PlinkoBoard
             rows={config.rows}
             riskLevel={riskDef!}
@@ -412,24 +427,20 @@ export function PlinkoShell({ config, initialCredits, initialUsedThisHour }: Pro
             }}
           />
 
-          {/* Multiplier bar */}
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Multiplikatoren</span>
-            <MultiplierBar mults={riskDef?.multipliers ?? []} highlightIdx={!animating ? currentBucket : null} />
+          </div>{/* end board wrapper */}
+
+          {/* Multiplier bar — compact */}
+          <div className="flex-none flex items-center gap-2">
+            <span className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-zinc-600">Mult</span>
+            <div className="flex-1">
+              <MultiplierBar mults={riskDef?.multipliers ?? []} highlightIdx={!animating ? currentBucket : null} />
+            </div>
           </div>
 
-          {/* ── Bet controls ── */}
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-zinc-400">Einsatz</span>
-              <span className="text-[11px] text-zinc-600">
-                Min: {fmt(config.minBetCr)} CR
-                {config.maxBetCr > 0 && ` · Max: ${fmt(config.maxBetCr)} CR`}
-              </span>
-            </div>
-
-            {/* Bet input row */}
+          {/* ── Bet controls — compact row ── */}
+          <div className="flex-none rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 flex flex-col gap-2">
             <div className="flex items-center gap-2">
+              <span className="shrink-0 text-xs font-bold text-zinc-400">Einsatz</span>
               <div className="relative flex-1">
                 <input
                   type="number"
@@ -440,21 +451,19 @@ export function PlinkoShell({ config, initialCredits, initialUsedThisHour }: Pro
                     const v = Math.max(config.minBetCr, Number(e.target.value) || config.minBetCr);
                     setBetAmount(config.maxBetCr > 0 ? Math.min(v, config.maxBetCr) : v);
                   }}
-                  className="w-full rounded-xl border border-white/15 bg-black/40 py-2.5 pl-3 pr-12 text-sm font-bold text-zinc-100 outline-none focus:border-purple-400/60"
+                  className="w-full rounded-lg border border-white/15 bg-black/40 py-1.5 pl-3 pr-10 text-sm font-bold text-zinc-100 outline-none focus:border-purple-400/60"
                 />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-zinc-500">CR</span>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">CR</span>
               </div>
               <button onClick={() => setBetAmount((b) => Math.max(config.minBetCr, Math.floor(b / 2)))}
-                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:border-white/20 transition-colors">½</button>
+                className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-zinc-400 hover:text-zinc-200 transition-colors">½</button>
               <button onClick={() => setBetAmount((b) => Math.min(effectiveMax, b * 2))}
-                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:border-white/20 transition-colors">×2</button>
+                className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-zinc-400 hover:text-zinc-200 transition-colors">×2</button>
               <button onClick={() => setBetAmount(effectiveMax || config.minBetCr)}
-                className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-xs font-bold text-amber-400 hover:bg-amber-500/20 transition-colors">MAX</button>
+                className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-xs font-bold text-amber-400 hover:bg-amber-500/20 transition-colors">MAX</button>
             </div>
-
-            {/* Quick bet buttons */}
             {config.quickBetAmounts.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1">
                 {config.quickBetAmounts.map((amt) => (
                   <button
                     key={amt}
@@ -463,11 +472,11 @@ export function PlinkoShell({ config, initialCredits, initialUsedThisHour }: Pro
                       setBetAmount(Math.min(clamped, credits));
                       sound.click?.();
                     }}
-                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
-                      betAmount === amt ? "border-purple-400/60 bg-purple-500/20 text-purple-300" : "border-white/10 bg-white/5 text-zinc-400 hover:text-zinc-200 hover:border-white/20"
+                    className={`rounded-md border px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                      betAmount === amt ? "border-purple-400/60 bg-purple-500/20 text-purple-300" : "border-white/10 bg-white/5 text-zinc-500 hover:text-zinc-300"
                     }`}
                   >
-                    {amt >= 1_000_000 ? `${amt / 1_000_000}M` : amt >= 1_000 ? `${amt / 1_000}K` : fmt(amt)} CR
+                    {amt >= 1_000_000 ? `${amt / 1_000_000}M` : amt >= 1_000 ? `${amt / 1_000}K` : fmt(amt)}
                   </button>
                 ))}
               </div>
@@ -475,13 +484,13 @@ export function PlinkoShell({ config, initialCredits, initialUsedThisHour }: Pro
           </div>
 
           {/* Drop button + auto-bet */}
-          <div className="flex gap-2">
+          <div className="flex-none flex gap-2">
             <button
               onClick={doDropBall}
               disabled={!canPlay}
-              className={`relative flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-2xl py-4 text-base font-black transition-all disabled:opacity-40 ${
+              className={`relative flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-xl py-3 text-sm font-black transition-all disabled:opacity-40 ${
                 canPlay
-                  ? "bg-gradient-to-r from-purple-700 via-violet-600 to-purple-700 text-white shadow-[0_0_30px_rgba(139,92,246,0.5)] hover:shadow-[0_0_50px_rgba(139,92,246,0.7)] hover:scale-[1.02] active:scale-[0.98]"
+                  ? "bg-gradient-to-r from-purple-700 via-violet-600 to-purple-700 text-white shadow-[0_0_24px_rgba(139,92,246,0.5)] hover:shadow-[0_0_40px_rgba(139,92,246,0.7)] hover:scale-[1.01] active:scale-[0.98]"
                   : "bg-zinc-800 text-zinc-500"
               }`}
             >
@@ -491,24 +500,16 @@ export function PlinkoShell({ config, initialCredits, initialUsedThisHour }: Pro
                 </div>
               )}
               {pending || animating ? (
-                <>
-                  <Disc3 className="h-5 w-5 animate-spin" />
-                  {animating ? "Ball fällt…" : "Wird berechnet…"}
-                </>
+                <><Disc3 className="h-4 w-4 animate-spin" />{animating ? "Ball fällt…" : "Wird berechnet…"}</>
               ) : (
-                <>
-                  <Zap className="h-5 w-5" />
-                  Fallen lassen — {fmt(betAmount)} CR
-                </>
+                <><Zap className="h-4 w-4" />Fallen lassen — {fmt(betAmount)} CR</>
               )}
             </button>
-
-            {/* Auto-bet toggle */}
             {config.autoBetEnabled && (
               <button
                 onClick={() => setAutoBet((a) => !a)}
                 title={autoBet ? "Auto-Bet stoppen" : "Auto-Bet starten"}
-                className={`flex items-center gap-1.5 rounded-2xl border px-4 text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-all ${
                   autoBet
                     ? "border-amber-400/50 bg-amber-500/20 text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.3)] animate-pulse"
                     : "border-white/10 bg-white/5 text-zinc-400 hover:text-zinc-200"
@@ -521,49 +522,49 @@ export function PlinkoShell({ config, initialCredits, initialUsedThisHour }: Pro
           </div>
 
           {error && (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-400">{error}</div>
+            <div className="flex-none rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</div>
           )}
           {remaining === 0 && !error && (
-            <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5 text-sm text-orange-400">
-              <Clock className="mr-1.5 inline h-3.5 w-3.5" />
-              Stündliches Limit erreicht — komm später wieder!
+            <div className="flex-none rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-400">
+              <Clock className="mr-1 inline h-3 w-3" />Stündliches Limit erreicht!
             </div>
           )}
 
-          {/* Session dot timeline */}
+          {/* Session dots — only on mobile / when space allows */}
           {sessionHistory.length > 0 && (
-            <div className="rounded-xl border border-white/8 bg-white/[0.01] px-3 py-2">
-              <div className="mb-1 text-[10px] text-zinc-600 uppercase tracking-widest">Session ({sessionHistory.length} Spiele)</div>
+            <div className="flex-none rounded-xl border border-white/8 bg-white/[0.01] px-3 py-1.5">
+              <div className="mb-1 text-[9px] text-zinc-600 uppercase tracking-widest">Session ({sessionHistory.length})</div>
               <SessionDots history={sessionHistory} />
             </div>
           )}
 
-          {/* Personal stats */}
-          {config.showHistory && <PersonalStatsPanel />}
-        </div>
+          {config.showHistory && (
+            <div className="flex-none lg:hidden"><PersonalStatsPanel /></div>
+          )}
 
-        {/* ── RIGHT: Sidebar ─────────────────────────────────────────────── */}
-        <div className="flex flex-col gap-4">
+          </div>{/* end LEFT column */}
 
-          {/* Last result */}
-          <div className={`rounded-2xl border p-4 transition-all ${
-            lastResult
-              ? lastResult.multiplier >= 2
-                ? "border-emerald-500/40 bg-emerald-500/[0.06] shadow-[0_0_30px_rgba(52,211,153,0.2)]"
-                : lastResult.multiplier < 1
-                  ? "border-red-500/30 bg-red-500/[0.04]"
-                  : "border-purple-500/30 bg-purple-500/[0.04]"
-              : "border-white/8 bg-white/[0.02]"
-          }`}>
-            <div className="mb-2 flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-amber-400" />
-              <span className="text-xs font-bold text-zinc-300">Letztes Ergebnis</span>
-            </div>
-            {lastResult ? (
-              <div className="flex flex-col gap-2">
+          {/* ── RIGHT: Sidebar ─────────────────────────────────────────── */}
+          <div className="flex flex-col gap-3 lg:overflow-y-auto lg:h-full pb-3" style={{ scrollbarWidth: "thin" }}>
+
+            {/* Last result */}
+            <div className={`rounded-2xl border p-3 transition-all ${
+              lastResult
+                ? lastResult.multiplier >= 2
+                  ? "border-emerald-500/40 bg-emerald-500/[0.06] shadow-[0_0_24px_rgba(52,211,153,0.2)]"
+                  : lastResult.multiplier < 1
+                    ? "border-red-500/30 bg-red-500/[0.04]"
+                    : "border-purple-500/30 bg-purple-500/[0.04]"
+                : "border-white/8 bg-white/[0.02]"
+            }`}>
+              <div className="mb-2 flex items-center gap-2">
+                <Trophy className="h-3.5 w-3.5 text-amber-400" />
+                <span className="text-xs font-bold text-zinc-300">Letztes Ergebnis</span>
+              </div>
+              {lastResult ? (
                 <div className="text-center">
                   <div
-                    className="text-5xl font-black transition-all"
+                    className="text-4xl font-black transition-all"
                     style={{
                       color: lastResult.multiplier >= 2 ? "#10b981" : lastResult.multiplier < 1 ? "#ef4444" : "#6366f1",
                       textShadow: `0 0 20px ${lastResult.multiplier >= 2 ? "#10b981" : lastResult.multiplier < 1 ? "#ef4444" : "#6366f1"}`,
@@ -571,90 +572,89 @@ export function PlinkoShell({ config, initialCredits, initialUsedThisHour }: Pro
                   >
                     {lastResult.multiplier}x
                   </div>
-                  <div className={`mt-1 text-sm font-bold ${lastResult.payout >= lastResult.betAmount ? "text-emerald-400" : "text-red-400"}`}>
+                  <div className={`mt-0.5 text-sm font-bold ${lastResult.payout >= lastResult.betAmount ? "text-emerald-400" : "text-red-400"}`}>
                     {lastResult.payout >= lastResult.betAmount ? "+" : ""}{fmt(lastResult.payout - lastResult.betAmount)} CR
                   </div>
-                  <div className="text-[11px] text-zinc-500">
-                    {lastResult.riskEmoji} {lastResult.riskLabel} · Einsatz: {fmt(lastResult.betAmount)} CR · Auszahlung: {fmt(lastResult.payout)} CR
+                  <div className="text-[10px] text-zinc-500 mt-0.5">
+                    {lastResult.riskEmoji} {lastResult.riskLabel} · {fmt(lastResult.betAmount)} → {fmt(lastResult.payout)} CR
                   </div>
                 </div>
+              ) : (
+                <p className="text-center text-sm text-zinc-600">Noch kein Spiel</p>
+              )}
+            </div>
+
+            {/* Session stats */}
+            {sessionHistory.length > 0 && (
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <BarChart3 className="h-3.5 w-3.5 text-purple-400" />
+                  <span className="text-xs font-bold text-zinc-300">Session Stats</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { label: "Spiele", val: sessionHistory.length },
+                    { label: "Bälle/h", val: `${usedThisHour}/${config.hourlyBallLimit}` },
+                    { label: "Best Mult", val: `${Math.max(...sessionHistory.map((h) => h.multiplier))}x` },
+                    {
+                      label: "Netto",
+                      val: `${sessionNet >= 0 ? "+" : ""}${fmt(sessionNet)} CR`,
+                      color: sessionNet >= 0 ? "text-emerald-400" : "text-red-400",
+                    },
+                  ].map(({ label, val, color }) => (
+                    <div key={label} className="rounded-lg border border-white/8 bg-black/20 px-2 py-1.5 text-center">
+                      <div className="text-[9px] text-zinc-600">{label}</div>
+                      <div className={`text-xs font-bold ${color ?? "text-zinc-200"}`}>{val}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ) : (
-              <p className="text-center text-sm text-zinc-600">Noch kein Spiel</p>
             )}
-          </div>
 
-          {/* Session stats */}
-          {sessionHistory.length > 0 && (
-            <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-purple-400" />
-                <span className="text-xs font-bold text-zinc-300">Session Stats</span>
+            {/* History / Leaderboard tabs */}
+            {(config.showHistory || config.showLeaderboard) && (
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-3">
+                <div className="mb-2.5 flex gap-1">
+                  {config.showHistory && (
+                    <button
+                      onClick={() => setActiveTab("verlauf")}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${activeTab === "verlauf" ? "bg-purple-500/20 text-purple-300" : "text-zinc-500 hover:text-zinc-300"}`}
+                    >
+                      <ChevronDown className="h-3 w-3" />Mein Verlauf
+                    </button>
+                  )}
+                  {config.showLeaderboard && (
+                    <button
+                      onClick={() => setActiveTab("leaderboard")}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${activeTab === "leaderboard" ? "bg-amber-500/20 text-amber-300" : "text-zinc-500 hover:text-zinc-300"}`}
+                    >
+                      <Crown className="h-3 w-3" />Top Wins
+                    </button>
+                  )}
+                </div>
+                {activeTab === "verlauf" && config.showHistory && <HistoryPanel />}
+                {activeTab === "leaderboard" && config.showLeaderboard && <LeaderboardPanel config={config} />}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "Spiele", val: sessionHistory.length },
-                  { label: "Bälle/h", val: `${usedThisHour}/${config.hourlyBallLimit}` },
-                  { label: "Best Mult", val: `${Math.max(...sessionHistory.map((h) => h.multiplier))}x` },
-                  {
-                    label: "Netto",
-                    val: `${sessionNet >= 0 ? "+" : ""}${fmt(sessionNet)} CR`,
-                    color: sessionNet >= 0 ? "text-emerald-400" : "text-red-400",
-                  },
-                ].map(({ label, val, color }) => (
-                  <div key={label} className="rounded-lg border border-white/8 bg-black/20 px-2 py-1.5 text-center">
-                    <div className="text-[10px] text-zinc-600">{label}</div>
-                    <div className={`text-sm font-bold ${color ?? "text-zinc-200"}`}>{val}</div>
-                  </div>
-                ))}
-              </div>
+            )}
+
+            {/* Personal stats — desktop sidebar */}
+            {config.showHistory && (
+              <div className="hidden lg:block"><PersonalStatsPanel /></div>
+            )}
+
+            {/* Info footer */}
+            <div className="rounded-xl border border-white/8 bg-white/[0.01] px-3 py-2">
+              <p className="text-[10px] text-zinc-600">
+                Einsatz: <span className="text-zinc-400">{fmt(config.minBetCr)}–{config.maxBetCr > 0 ? fmt(config.maxBetCr) : "∞"} CR</span> ·
+                Limit: <span className="text-zinc-400">{config.hourlyBallLimit}/h</span>
+                {config.dailyBallLimit > 0 && <> · <span className="text-zinc-400">{config.dailyBallLimit}/Tag</span></>}
+                {config.maxWinCr > 0 && <> · Max: <span className="text-amber-400">{fmt(config.maxWinCr)} CR</span></>}
+              </p>
             </div>
-          )}
+          </div>{/* end RIGHT sidebar */}
 
-          {/* Tabbed: verlauf / leaderboard */}
-          {(config.showHistory || config.showLeaderboard) && (
-            <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
-              <div className="mb-3 flex gap-1">
-                {config.showHistory && (
-                  <button
-                    onClick={() => setActiveTab("verlauf")}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${activeTab === "verlauf" ? "bg-purple-500/20 text-purple-300" : "text-zinc-500 hover:text-zinc-300"}`}
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" />
-                    Mein Verlauf
-                  </button>
-                )}
-                {config.showLeaderboard && (
-                  <button
-                    onClick={() => setActiveTab("leaderboard")}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${activeTab === "leaderboard" ? "bg-amber-500/20 text-amber-300" : "text-zinc-500 hover:text-zinc-300"}`}
-                  >
-                    <Crown className="h-3.5 w-3.5" />
-                    Top Wins
-                  </button>
-                )}
-              </div>
-
-              {activeTab === "verlauf" && config.showHistory && (
-                <HistoryPanel />
-              )}
-              {activeTab === "leaderboard" && config.showLeaderboard && (
-                <LeaderboardPanel config={config} />
-              )}
-            </div>
-          )}
-
-          {/* Info */}
-          <div className="rounded-xl border border-white/8 bg-white/[0.01] px-3 py-2.5">
-            <p className="text-[11px] text-zinc-600">
-              Einsatz: <span className="text-zinc-400">{fmt(config.minBetCr)}–{config.maxBetCr > 0 ? fmt(config.maxBetCr) : "∞"} CR</span> ·
-              Limit: <span className="text-zinc-400">{config.hourlyBallLimit}/h</span>
-              {config.dailyBallLimit > 0 && <> · <span className="text-zinc-400">{config.dailyBallLimit}/Tag</span></>}
-              {config.maxWinCr > 0 && <> · Max Win: <span className="text-amber-400">{fmt(config.maxWinCr)} CR</span></>}
-            </p>
-          </div>
-        </div>
-      </div>
+        </div>{/* end grid */}
+      </div>{/* end scroll area */}
 
       <style>{`
         @keyframes shimmer {

@@ -12,7 +12,7 @@ export default async function PlinkoPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits")
+    .select("credits, role")
     .eq("id", user.id)
     .single();
 
@@ -23,7 +23,7 @@ export default async function PlinkoPage() {
 
   if (!config.enabled) {
     return (
-      <main className="flex min-h-[60vh] items-center justify-center px-4">
+      <main className="flex min-h-dvh items-center justify-center px-4">
         <div className="text-center">
           <div className="text-5xl mb-4">🎰</div>
           <h1 className="text-2xl font-black text-zinc-200">Plinko ist aktuell deaktiviert.</h1>
@@ -33,13 +33,16 @@ export default async function PlinkoPage() {
     );
   }
 
+  const isAdmin = profile?.role === "admin";
+  const isModerator = profile?.role === "moderator";
+
   return (
-    <main className="min-h-screen px-4 py-8">
-      <PlinkoShell
-        config={config}
-        initialCredits={profile?.credits ?? 0}
-        initialUsedThisHour={usedThisHour}
-      />
-    </main>
+    <PlinkoShell
+      config={config}
+      initialCredits={profile?.credits ?? 0}
+      initialUsedThisHour={usedThisHour}
+      isAdmin={isAdmin}
+      isModerator={isModerator}
+    />
   );
 }

@@ -36,25 +36,25 @@ export interface DonConfig {
 }
 
 export const DEFAULT_UPGRADE_TIERS: DonUpgradeTier[] = [
-  { tier: 1, name: "Bronze-Upgrade", bonusHourlyFlips: 5,  costCr: 8000   },
-  { tier: 2, name: "Silber-Upgrade", bonusHourlyFlips: 10, costCr: 35000  },
-  { tier: 3, name: "Gold-Upgrade",   bonusHourlyFlips: 15, costCr: 120000 },
-  { tier: 4, name: "Platin-Upgrade", bonusHourlyFlips: 20, costCr: 400000 },
+  { tier: 1, name: "Bronze-Upgrade", bonusHourlyFlips: 10, costCr: 15000  },
+  { tier: 2, name: "Silber-Upgrade", bonusHourlyFlips: 20, costCr: 60000  },
+  { tier: 3, name: "Gold-Upgrade",   bonusHourlyFlips: 35, costCr: 200000 },
+  { tier: 4, name: "Platin-Upgrade", bonusHourlyFlips: 55, costCr: 650000 },
 ];
 
 export const DEFAULT_DON_CONFIG: DonConfig = {
   enabled: true,
-  dailyFlipLimit: 50,
+  dailyFlipLimit: 80,
   hourlyFlipLimit: null,
   cooldownSec: 0,
   winChance: 0.5,
-  minBet: 100,
+  minBet: 2000,
   maxBet: null,
-  quickAmounts: [500, 2000, 10000, 50000, 250000],
+  quickAmounts: [2000, 10000, 50000, 250000, 1000000],
   sectionTitle: "Double or Nothing",
   sectionSubtitle: "Riskiere deine Credits — 50/50 Chance auf das Doppelte",
   showRemainingSpins: true,
   allowAllIn: false,
-  upgradeEnabled: false,
+  upgradeEnabled: true,
   upgradeTiers: DEFAULT_UPGRADE_TIERS,
 };

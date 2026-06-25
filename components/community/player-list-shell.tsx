@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { ArrowLeft, Users, Search, Crown, Shield, Flame, BadgeCheck } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { ProfileModal } from "@/components/community/profile-modal";
@@ -68,9 +69,32 @@ function useOnlineUserIds(): Set<string> {
   return onlineIds;
 }
 
-export function PlayerListShell({ players: initialPlayers, credits: initialCredits, streakDays, viewerId, isAdmin = false, isModerator = false }: PlayerListShellProps) {
+export function PlayerListShell(props: PlayerListShellProps) {
+  return (
+    <Suspense fallback={null}>
+      <PlayerListShellInner {...props} />
+    </Suspense>
+  );
+}
+
+function PlayerListShellInner({ players: initialPlayers, credits: initialCredits, streakDays, viewerId, isAdmin = false, isModerator = false }: PlayerListShellProps) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Auto-open profile modal when ?u=userId is in the URL
+  useEffect(() => {
+    const uid = searchParams.get("u");
+    if (uid) {
+      setSelectedId(uid);
+      // Clean the URL without causing a navigation / scroll reset
+      const url = new URL(window.location.href);
+      url.searchParams.delete("u");
+      router.replace(url.pathname + (url.search || ""), { scroll: false });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {

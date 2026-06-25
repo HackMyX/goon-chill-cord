@@ -15,13 +15,14 @@ const OBFUSCATED_CHARS =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()+-=[]{}|;':,./<>?";
 
 const SIZE_MAP = {
-  "2xs": "text-[9px]  leading-none font-semibold",
-  xs:    "text-[10px] leading-none font-semibold",
-  sm:    "text-xs font-bold",
-  md:    "text-sm font-bold",
-  lg:    "text-base font-bold",
-  xl:    "text-xl font-bold",
-  "2xl": "text-2xl font-black",
+  "2xs":  "text-[9px]  leading-none font-semibold",
+  xs:     "text-[10px] leading-none font-semibold",
+  sm:     "text-xs font-bold",
+  md:     "text-sm font-bold",
+  lg:     "text-base font-bold",
+  xl:     "text-xl font-bold",
+  "2xl":  "text-2xl font-black",
+  hero:   "text-4xl sm:text-5xl lg:text-6xl font-black leading-tight tracking-tight",
 } as const;
 
 type Size = keyof typeof SIZE_MAP;

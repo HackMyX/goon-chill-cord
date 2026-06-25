@@ -77,7 +77,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   siteName: "Goon'n Chill Cord",
   logoUrl: null,
   logoIconName: DEFAULT_SITE_LOGO_ICON,
-  startingCredits: 500,
+  startingCredits: 20000,
   currencyName: "CR",
   damageLabel: "DMG",
   armorLabel: "AP",

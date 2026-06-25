@@ -1,42 +1,125 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls, ContactShadows } from "@react-three/drei";
-import * as THREE from "three";
-import { X, Loader2, ShieldCheck, BadgeCheck, Package, Calendar } from "lucide-react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import type * as THREE from "three";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  X, Loader2, ShieldCheck, BadgeCheck, Package,
+  Calendar, Coins, Flame, Star, Copy, Check,
+  AlertTriangle, Crown, Shield, User,
+} from "lucide-react";
 import { CharacterModel } from "@/components/world/character-model";
-import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
+import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, type Rarity } from "@/lib/cases";
 import { getPublicProfile, type PublicProfile } from "@/lib/actions/community";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { getBadgeStyle } from "@/lib/badges";
+import type { EquippedItem } from "@/lib/rarity-colors";
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 interface ProfileModalProps {
   userId: string;
   onClose: () => void;
 }
 
-function totalItems(counts: PublicProfile["rarityCounts"]): number {
+function fmt(n: number) { return new Intl.NumberFormat("de-DE").format(n); }
+
+function totalItems(counts: Record<Rarity, number>): number {
   return RARITY_ORDER.reduce((sum, r) => sum + counts[r], 0);
 }
 
-/** The caller (player-list-shell.tsx) renders this with `key={userId}` —
- * that's deliberate, not decorative: it makes React fully remount the
- * component (fresh `profile`/`error` state) whenever a different player's
- * profile opens, instead of this effect having to manually reset state at
- * the top of its body before firing the new fetch. */
-export function ProfileModal({ userId, onClose }: ProfileModalProps) {
-  const [mounted, setMounted] = useState(false);
+const ROLE_LABEL: Record<string, string> = {
+  admin: "Admin", moderator: "Moderator", user: "Spieler",
+};
+const ROLE_COLOR: Record<string, string> = {
+  admin:     "text-amber-300 border-amber-500/40 bg-amber-500/10",
+  moderator: "text-sky-300   border-sky-500/40   bg-sky-500/10",
+  user:      "text-zinc-400  border-zinc-700/40  bg-zinc-800/40",
+};
+
+// ── Rotating 3D character ──────────────────────────────────────────────────────
+
+function SpinGroup({ children }: { children: React.ReactNode }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((_, dt) => { if (ref.current) ref.current.rotation.y += dt * 0.55; });
+  return <group ref={ref}>{children}</group>;
+}
+
+function ProfileCharacter({ gender, equipped }: {
+  gender: "m" | "w";
+  equipped: Record<string, EquippedItem | undefined>;
+}) {
+  return (
+    <Canvas dpr={[1, 1.5]} camera={{ position: [0, 1.6, 3.4], fov: 42 }}>
+      <Suspense fallback={null}>
+        <color attach="background" args={["#07021a"]} />
+        <ambientLight intensity={0.85} color="#c4b5fd" />
+        <directionalLight position={[3, 5, 4]} intensity={1.2} />
+        <directionalLight position={[-2, 2, -2]} intensity={0.3} color="#818cf8" />
+        <SpinGroup>
+          <group position={[0, -1.35, 0]}>
+            <CharacterModel equippedByCategory={equipped} gender={gender} />
+          </group>
+        </SpinGroup>
+      </Suspense>
+    </Canvas>
+  );
+}
+
+// ── Rarity bar chart ───────────────────────────────────────────────────────────
+
+const RARITY_BAR_COLOR: Record<Rarity, string> = {
+  normal:   "#6366f1",
+  selten:   "#a855f7",
+  mythisch: "#f59e0b",
+  ultra:    "#ec4899",
+};
+
+function RarityBars({ counts }: { counts: Record<Rarity, number> }) {
+  const total = totalItems(counts);
+  if (total === 0) return <p className="text-xs text-zinc-600">Keine Items</p>;
+  return (
+    <div className="space-y-2">
+      {RARITY_ORDER.map((rarity) => {
+        const count = counts[rarity];
+        if (count === 0) return null;
+        const pct = Math.round((count / total) * 100);
+        const style = RARITY_STYLES[rarity];
+        const barColor = RARITY_BAR_COLOR[rarity];
+        return (
+          <div key={rarity} className="flex items-center gap-2">
+            <span className={`w-[68px] shrink-0 rounded-full border px-2 py-0.5 text-center text-[10px] font-bold ${style.border} ${style.bg} ${style.text}`}>
+              {RARITY_LABELS[rarity]}
+            </span>
+            <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
+              <motion.div
+                className="h-full rounded-full"
+                style={{ background: barColor, boxShadow: `0 0 8px ${barColor}80` }}
+                initial={{ width: 0 }}
+                animate={{ width: `${pct}%` }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+              />
+            </div>
+            <span className="w-7 text-right text-[10px] font-bold text-zinc-400">{count}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Modal content ──────────────────────────────────────────────────────────────
+
+function ModalContent({ userId, onClose }: ProfileModalProps) {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [canvasReady, setCanvasReady] = useState(false);
   const { currencyName } = useSiteConfig();
-
-  useEffect(() => {
-    const timeout = setTimeout(() => setMounted(true), 0);
-    return () => clearTimeout(timeout);
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -45,154 +128,284 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
       if (res.success && res.profile) setProfile(res.profile);
       else setError(res.error ?? "Profil konnte nicht geladen werden.");
     });
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [userId]);
 
+  // Delay canvas mount so modal animation doesn't stutter on low-end devices
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const t = setTimeout(() => setCanvasReady(true), 280);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", fn);
+    return () => window.removeEventListener("keydown", fn);
   }, [onClose]);
 
-  if (!mounted) return null;
+  const handleCopyId = () => {
+    if (!profile) return;
+    navigator.clipboard.writeText(profile.id).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    });
+  };
 
-  return createPortal(
+  const total = profile ? totalItems(profile.rarityCounts) : 0;
+
+  return (
     <div
-      className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[400] flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={onClose}
     >
-      <div
-        className="relative w-[min(94vw,520px)] rounded-2xl border border-purple-500/30 bg-[#0b0814] shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+      {/* Backdrop */}
+      <motion.div
+        className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+      />
+
+      {/* Card */}
+      <motion.div
+        className="relative z-10 w-full sm:max-w-3xl overflow-hidden rounded-t-3xl sm:rounded-3xl border border-white/10 bg-[#08050f] shadow-[0_32px_96px_rgba(0,0,0,0.95)] max-h-[96dvh]"
+        initial={{ opacity: 0, y: 60 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        transition={{ type: "spring", stiffness: 320, damping: 26 }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Close */}
         <button
           onClick={onClose}
-          className="absolute -top-3 -right-3 z-10 rounded-full border border-white/10 bg-[#16121f] p-1.5 text-zinc-300 transition-colors hover:bg-white/10"
+          className="absolute right-3 top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
+          aria-label="Schließen"
         >
           <X className="h-4 w-4" />
         </button>
 
+        {/* Loading / error state */}
         {!profile ? (
-          <div className="flex h-72 items-center justify-center">
-            {error ? (
-              <p className="text-sm text-zinc-500">{error}</p>
-            ) : (
-              <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
-            )}
+          <div className="flex h-72 flex-col items-center justify-center gap-4">
+            {error
+              ? <p className="max-w-xs text-center text-sm text-zinc-500">{error}</p>
+              : <>
+                  <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+                  <p className="text-xs text-zinc-600">Lade Profil…</p>
+                </>
+            }
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-0 sm:grid-cols-[180px_1fr]">
-            <div className="h-56 overflow-hidden rounded-t-2xl border-b border-white/10 bg-[#08050f] sm:h-auto sm:rounded-l-2xl sm:rounded-tr-none sm:border-b-0 sm:border-r">
-              {/* Explicit shadow map type, not the bare `shadows` shorthand
-                  — see components/world/world-shell.tsx's matching comment
-                  for why (the shorthand's default type is deprecated and
-                  spams a console warning on every shadow pass). */}
-              <Canvas shadows={{ type: THREE.PCFShadowMap }} camera={{ position: [0, 1.6, 3.4], fov: 42 }}>
-                <Suspense fallback={null}>
-                  <color attach="background" args={["#08050f"]} />
-                  <ambientLight intensity={0.6} color="#a78bfa" />
-                  <directionalLight position={[3, 5, 3]} intensity={1.1} castShadow />
-                  <pointLight position={[-3, 2, -2]} intensity={10} color="#8b5cf6" />
-                  <group position={[0, -1.3, 0]}>
-                    <CharacterModel
-                      equippedByCategory={profile.equippedByCategory}
-                      gender={profile.gender}
-                    />
-                  </group>
-                  <ContactShadows position={[0, -1.3, 0]} opacity={0.5} scale={4} blur={2} far={3} />
-                  <OrbitControls
-                    target={[0, 0.1, 0]}
-                    enablePan={false}
-                    minDistance={2}
-                    maxDistance={4.5}
-                    autoRotate
-                    autoRotateSpeed={1.4}
-                  />
-                </Suspense>
-              </Canvas>
+          <div className="overflow-y-auto max-h-[96dvh]" style={{ scrollbarWidth: "thin" }}>
+            {/* ── Header gradient band ── */}
+            <div className="relative h-20 overflow-hidden shrink-0">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-900/70 via-[#08050f]/20 to-indigo-900/50" />
+              <div className="absolute inset-0" style={{
+                backgroundImage: "radial-gradient(ellipse at 10% 60%, rgba(124,58,237,0.5) 0%, transparent 55%), radial-gradient(ellipse at 85% 15%, rgba(59,130,246,0.35) 0%, transparent 50%)",
+              }} />
+              {/* Subtle grid */}
+              <svg className="absolute inset-0 opacity-[0.07]" width="100%" height="100%">
+                <defs>
+                  <pattern id="pm-grid" width="28" height="28" patternUnits="userSpaceOnUse">
+                    <path d="M 28 0 L 0 0 0 28" fill="none" stroke="white" strokeWidth="0.5" />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#pm-grid)" />
+              </svg>
             </div>
 
-            <div className="p-5">
-              <div className="mb-3 flex items-center gap-3">
-                {profile.discordAvatarUrl ? (
-                  <Image
-                    src={profile.discordAvatarUrl}
-                    alt=""
-                    width={48}
-                    height={48}
-                    unoptimized
-                    className="h-12 w-12 rounded-full border border-white/10"
-                  />
-                ) : (
-                  <div className="h-12 w-12 rounded-full bg-purple-500/20" />
+            {/* ── 2-col layout ── */}
+            <div className="flex flex-col sm:flex-row">
+
+              {/* ── Left column: avatar + 3D character ── */}
+              <div className="flex flex-col items-center gap-4 px-5 pb-5 sm:w-56 sm:shrink-0 sm:border-r sm:border-white/5">
+                {/* Avatar overlapping the header */}
+                <div className="-mt-10 flex flex-col items-center gap-3">
+                  <div className="relative">
+                    {profile.discordAvatarUrl ? (
+                      <Image
+                        src={profile.discordAvatarUrl}
+                        alt=""
+                        width={76}
+                        height={76}
+                        unoptimized
+                        className="h-[76px] w-[76px] rounded-full border-[3px] border-[#08050f] object-cover shadow-2xl ring-2 ring-purple-500/30"
+                      />
+                    ) : (
+                      <div className="flex h-[76px] w-[76px] items-center justify-center rounded-full border-[3px] border-[#08050f] bg-gradient-to-br from-purple-500/40 to-indigo-600/40 text-2xl font-black text-purple-200 shadow-2xl ring-2 ring-purple-500/30">
+                        {profile.username.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="absolute bottom-1 right-1 h-3.5 w-3.5 rounded-full border-2 border-[#08050f] bg-emerald-500 shadow" />
+                  </div>
+
+                  {/* Name + verified icon */}
+                  <div className="flex flex-col items-center gap-1 text-center">
+                    <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                      <StyledUsername name={profile.username} styleKey={profile.nameStyleKey} size="xl" disablePopup />
+                      {profile.role === "admin" && (
+                        <ShieldCheck className="h-4 w-4 shrink-0 text-amber-400 drop-shadow-[0_0_7px_rgba(251,191,36,0.6)]" />
+                      )}
+                      {profile.verified && profile.role !== "admin" && (
+                        <BadgeCheck className="h-4 w-4 shrink-0 text-blue-400 drop-shadow-[0_0_7px_rgba(59,130,246,0.6)]" />
+                      )}
+                    </div>
+                    {profile.discordName && (
+                      <p className="text-[11px] text-zinc-500">Discord: {profile.discordName}</p>
+                    )}
+                    {/* Role pill */}
+                    <div className={`mt-0.5 flex items-center gap-1.5 rounded-full border px-3 py-0.5 text-[11px] font-bold ${ROLE_COLOR[profile.role] ?? ROLE_COLOR.user}`}>
+                      {profile.role === "admin" ? <Crown className="h-3 w-3" /> : profile.role === "moderator" ? <Shield className="h-3 w-3" /> : <User className="h-3 w-3" />}
+                      {ROLE_LABEL[profile.role] ?? "Spieler"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3D character */}
+                <div className="w-full overflow-hidden rounded-2xl border border-white/5 bg-[#07021a]" style={{ height: 200 }}>
+                  {canvasReady && (
+                    <ProfileCharacter
+                      gender={profile.gender}
+                      equipped={profile.equippedByCategory as Record<string, EquippedItem | undefined>}
+                    />
+                  )}
+                </div>
+
+                {/* Badges */}
+                {profile.badges.length > 0 && (
+                  <div className="w-full">
+                    <p className="mb-1.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">Abzeichen</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {profile.badges.map((ub) => {
+                        const bs = getBadgeStyle(ub.badgeKey);
+                        return (
+                          <span
+                            key={ub.id}
+                            title={ub.badge.description ?? ub.badge.label}
+                            className="rounded-full border px-2.5 py-0.5 text-[10px] font-bold transition-all hover:brightness-125"
+                            style={{ background: bs.bg, color: bs.text, borderColor: bs.border, boxShadow: `0 0 8px ${bs.glow}` }}
+                          >
+                            {ub.badge.label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
-                <div>
-                  <p className="flex items-center gap-1.5 text-lg font-bold text-zinc-100">
-                    <StyledUsername name={profile.username} styleKey={profile.nameStyleKey ?? undefined} size="lg" disablePopup />
-                    {profile.verified && (
-                      <BadgeCheck className="h-4 w-4 text-blue-400 drop-shadow-[0_0_6px_rgba(59,130,246,0.7)]" aria-label="Verifiziert" />
+
+                {/* Admin: UUID + warning strikes */}
+                {profile.viewerIsElevated && (
+                  <div className="w-full space-y-2">
+                    {profile.warningStrikes > 0 && (
+                      <div className="flex items-center gap-1.5 rounded-xl border border-red-800/40 bg-red-950/30 px-3 py-2 text-[11px] text-red-400">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        {profile.warningStrikes} Verwarnung{profile.warningStrikes !== 1 ? "en" : ""}
+                      </div>
                     )}
-                    {profile.role === "admin" && (
-                      <ShieldCheck className="h-4 w-4 text-amber-400" aria-label="Admin" />
-                    )}
-                  </p>
-                  {profile.discordName && (
-                    <p className="text-xs text-zinc-500">Discord: {profile.discordName}</p>
-                  )}
-                </div>
+                    <div className="rounded-xl border border-amber-900/30 bg-amber-950/15 px-3 py-2">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-amber-700">User ID</span>
+                        <button
+                          onClick={handleCopyId}
+                          className="rounded p-0.5 text-amber-700/70 transition-colors hover:text-amber-400"
+                          title="ID kopieren"
+                        >
+                          {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                      </div>
+                      <p className="break-all font-mono text-[9px] leading-4 text-amber-600/80">{profile.id}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="mb-4 grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-lg bg-white/[0.03] px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Credits</p>
-                  <p className="font-bold text-purple-300">
-                    {new Intl.NumberFormat("de-DE").format(profile.credits)} {currencyName}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-white/[0.03] px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Items</p>
-                  <p className="font-bold text-zinc-200">{totalItems(profile.rarityCounts)}</p>
-                </div>
-              </div>
+              {/* ── Right column: stats + inventory ── */}
+              <div className="flex flex-1 flex-col gap-4 px-5 pb-5 pt-4 sm:pt-5">
 
-              <div className="mb-4 flex flex-wrap gap-1.5">
-                {RARITY_ORDER.map((rarity) => {
-                  const count = profile.rarityCounts[rarity];
-                  if (count === 0) return null;
-                  const style = RARITY_STYLES[rarity];
-                  return (
-                    <span
-                      key={rarity}
-                      className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${style.border} ${style.bg} ${style.text}`}
+                {/* Key stats */}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {[
+                    { label: "Credits",   value: fmt(profile.credits),       icon: Coins,   color: "text-amber-300",  glow: "rgba(245,158,11,0.3)"  },
+                    { label: "Streak",    value: `${profile.streakDays}T`,   icon: Flame,   color: "text-orange-400", glow: "rgba(251,146,60,0.3)"  },
+                    { label: "Cases",     value: fmt(profile.casesOpened),   icon: Package, color: "text-purple-400", glow: "rgba(168,85,247,0.3)"  },
+                    { label: "Items",     value: fmt(total),                 icon: Star,    color: "text-blue-400",   glow: "rgba(96,165,250,0.3)"  },
+                  ].map(({ label, value, icon: Icon, color, glow }, i) => (
+                    <motion.div
+                      key={label}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.06 }}
+                      className="flex flex-col items-center gap-1 rounded-xl border border-white/8 bg-white/[0.02] py-3"
+                      style={{ boxShadow: `inset 0 0 30px ${glow}` }}
                     >
-                      {RARITY_LABELS[rarity]} ×{count}
-                    </span>
-                  );
-                })}
-              </div>
+                      <Icon className={`h-4 w-4 ${color}`} />
+                      <span className={`text-lg font-black leading-none ${color}`}>{value}</span>
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-600">{label}</span>
+                    </motion.div>
+                  ))}
+                </div>
 
-              <div className="space-y-1.5 text-xs text-zinc-500">
-                <p className="flex items-center gap-1.5">
-                  <Package className="h-3.5 w-3.5" />
-                  {profile.casesOpened} Cases geöffnet
-                </p>
-                <p className="flex items-center gap-1.5">
-                  <Calendar className="h-3.5 w-3.5" />
-                  Mitglied seit{" "}
-                  {new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(
-                    new Date(profile.memberSince)
-                  )}
+                {/* Member since */}
+                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                  <Calendar className="h-3.5 w-3.5 shrink-0" />
+                  Mitglied seit {new Intl.DateTimeFormat("de-DE", { dateStyle: "long" }).format(new Date(profile.memberSince))}
+                </div>
+
+                {/* Rarity breakdown */}
+                <div className="rounded-2xl border border-white/8 bg-white/[0.015] p-4">
+                  <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                    Item-Sammlung <span className="normal-case text-zinc-500">({fmt(total)} gesamt)</span>
+                  </p>
+                  <RarityBars counts={profile.rarityCounts} />
+                </div>
+
+                {/* Equipped items */}
+                {Object.keys(profile.equippedByCategory).length > 0 && (
+                  <div className="rounded-2xl border border-white/8 bg-white/[0.015] p-4">
+                    <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Ausgerüstet</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(profile.equippedByCategory).map(([, item]) => {
+                        if (!item) return null;
+                        const style = RARITY_STYLES[item.rarity as Rarity];
+                        return (
+                          <span
+                            key={item.id}
+                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${style.border} ${style.bg} ${style.text}`}
+                          >
+                            {item.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Currency label */}
+                <p className="mt-auto text-[10px] text-zinc-700">
+                  Credits werden in <span className="text-zinc-500">{currencyName}</span> angezeigt
                 </p>
               </div>
             </div>
           </div>
         )}
-      </div>
-    </div>,
-    document.body
+      </motion.div>
+    </div>
+  );
+}
+
+// ── Portal wrapper ─────────────────────────────────────────────────────────────
+
+export function ProfileModal({ userId, onClose }: ProfileModalProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(t);
+  }, []);
+  if (!mounted) return null;
+  return createPortal(
+    <AnimatePresence>
+      <ModalContent key={userId} userId={userId} onClose={onClose} />
+    </AnimatePresence>,
+    document.body,
   );
 }

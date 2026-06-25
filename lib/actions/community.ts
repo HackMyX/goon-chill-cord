@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isModerator } from "@/lib/admin";
 import type { Rarity } from "@/lib/cases";
+import type { UserBadge, BadgeDefinition } from "@/lib/badges";
 
 export interface PublicProfile {
   id: string;
@@ -11,14 +12,18 @@ export interface PublicProfile {
   nameStyleKey: string | null;
   role: string;
   credits: number;
+  streakDays: number;
   casesOpened: number;
   memberSince: string;
   gender: "m" | "w";
   discordName: string | null;
   discordAvatarUrl: string | null;
   verified: boolean;
+  warningStrikes: number;
+  viewerIsElevated: boolean;
   equippedByCategory: Record<string, { id: string; name: string; rarity: Rarity }>;
   rarityCounts: Record<Rarity, number>;
+  badges: UserBadge[];
 }
 
 export interface GetPublicProfileResult {
@@ -48,10 +53,11 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
 
   const admin = createAdminClient();
 
-  const [{ data: profile }, { data: inventory }, { data: authUser }] = await Promise.all([
+  const [{ data: viewerProfile }, { data: profile }, { data: inventory }, { data: authUser }, { data: badgeRows }] = await Promise.all([
+    admin.from("profiles").select("role").eq("id", user.id).single(),
     admin
       .from("profiles")
-      .select("id, username, role, credits, cases_opened, created_at, gender, verified, active_name_style_key")
+      .select("id, username, role, credits, streak_days, cases_opened, created_at, gender, verified, active_name_style_key, warning_strikes")
       .eq("id", targetUserId)
       .single(),
     admin
@@ -60,9 +66,16 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
       .eq("user_id", targetUserId)
       .order("obtained_at", { ascending: true }),
     admin.auth.admin.getUserById(targetUserId),
+    admin
+      .from("user_badges")
+      .select("id, user_id, badge_key, granted_at, badge_definitions(key, label, color, icon, description)")
+      .eq("user_id", targetUserId)
+      .order("granted_at", { ascending: true }),
   ]);
 
   if (!profile) return { success: false, error: "Profil nicht gefunden." };
+
+  const viewerIsElevated = isAdmin(viewerProfile) || isModerator(viewerProfile);
 
   const metadata = authUser?.user?.user_metadata as Record<string, unknown> | undefined;
   const discordName =
@@ -79,6 +92,24 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
     obtained_at: string | null;
     item: { id: string; name: string; rarity: Rarity; type: string } | null;
   }[];
+
+  // Map badge rows to UserBadge type
+  const badges: UserBadge[] = (badgeRows ?? []).map((row: Record<string, unknown>) => {
+    const def = row.badge_definitions as Record<string, unknown> | null;
+    return {
+      id: row.id as string,
+      userId: row.user_id as string,
+      badgeKey: row.badge_key as string,
+      grantedAt: row.granted_at as string,
+      badge: {
+        key: (def?.key as string) ?? (row.badge_key as string),
+        label: (def?.label as string) ?? (row.badge_key as string),
+        color: (def?.color as string) ?? "#888888",
+        icon: (def?.icon as string) ?? "tag",
+        description: (def?.description as string | null) ?? null,
+      } as BadgeDefinition,
+    };
+  });
 
   const equippedByCategory: PublicProfile["equippedByCategory"] = {};
   const rarityCounts: Record<Rarity, number> = { normal: 0, selten: 0, mythisch: 0, ultra: 0 };
@@ -105,15 +136,19 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
       username: profile.username,
       nameStyleKey: (profile.active_name_style_key as string | null) ?? null,
       role: profile.role,
-      credits: profile.credits,
-      casesOpened: profile.cases_opened,
+      credits: Number(profile.credits ?? 0),
+      streakDays: Number(profile.streak_days ?? 0),
+      casesOpened: Number(profile.cases_opened ?? 0),
       memberSince: profile.created_at,
       gender: (profile.gender as "m" | "w") ?? "m",
       discordName,
       discordAvatarUrl,
       verified: (profile.verified as boolean | null) ?? false,
+      warningStrikes: Number(profile.warning_strikes ?? 0),
+      viewerIsElevated,
       equippedByCategory,
       rarityCounts,
+      badges,
     },
   };
 }

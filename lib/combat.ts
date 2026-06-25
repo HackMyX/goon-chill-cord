@@ -87,10 +87,10 @@ export const JUMP_COOLDOWN_SEC = 0.4;
  * the session, but only once you've actually disengaged — otherwise
  * trading hits with an enemy would net-heal through the fight itself. */
 export const HP_REGEN_PER_SEC = 3;
-export const HP_REGEN_DELAY_AFTER_HIT_SEC = 4;
+export const HP_REGEN_DELAY_AFTER_HIT_SEC = 2.5;
 /** Grace window after a respawn so a fresh spawn can't be immediately
  * re-hit by whatever was already standing on the spawn point. */
-export const RESPAWN_INVULNERABLE_SEC = 1.5;
+export const RESPAWN_INVULNERABLE_SEC = 1.8;
 
 /** Melee range — generous enough to not feel finicky, small enough that
  * "am I in range" is an obvious, readable circle around the player (see
@@ -120,7 +120,7 @@ export const ATTACK_RANGE = 2.7;
 export const ATTACK_CONE_HALF_ANGLE = 1.05;
 /** Fixed cadence for every weapon (and bare fists) — see FIST_DAMAGE's
  * doc comment for how this and the damage numbers were balanced together. */
-export const ATTACK_COOLDOWN = 0.45;
+export const ATTACK_COOLDOWN = 0.40;
 
 /** Effective radius of "something standing roughly where you're aiming",
  * world units — the minimum half-width a punch/swing is forgiving of,
@@ -182,7 +182,7 @@ export function capsuleHitTest(
  * Stacked multiplicatively (a sprint-jump-attack is rare but should feel
  * like the biggest hit available) and applied on top of whatever
  * `getEquippedDamage` already returned, never replacing it. */
-export const SPRINT_DAMAGE_MULTIPLIER = 1.2;
+export const SPRINT_DAMAGE_MULTIPLIER = 1.25;
 export const AIRBORNE_DAMAGE_MULTIPLIER = 1.35;
 
 /** Optional 3rd/4th params let an admin-configured value (lib/character-
@@ -219,7 +219,7 @@ export function momentumMultiplier(
  * possible hit (162 raw) caps at ~57 — survivable, a real "that hurt" hit,
  * but never an unavoidable instant kill regardless of gear.
  */
-export const PVP_DAMAGE_MULTIPLIER = 0.35;
+export const PVP_DAMAGE_MULTIPLIER = 0.40;
 
 /** Single chokepoint for "how much HP does a landed PvP hit actually cost
  * the target" — lib/actions/pvp.ts' attemptPvpHit rolls this server-side,

@@ -103,6 +103,8 @@ export function PlinkoBoard({
   // All animation state in a single mutable ref — always fresh inside RAF
   const st = useRef({
     ballX: 0, ballY: 0,
+    ballVx: 0, ballVy: 0,     // physics velocity (pixels/frame)
+    physicsRow: -1,           // last pin row crossed (-1 = above first row)
     progress: 0,
     phase: "idle" as "idle" | "dropping" | "landed",
     path: [] as number[],
@@ -449,42 +451,68 @@ export function PlinkoBoard({
       const cfg = configRef.current;
 
       if (s.phase === "dropping") {
-        const speed = Math.max(0.02, Math.min(0.35, (cfg.animationSpeed ?? 1) * 0.07));
-        const prevProgress = s.progress;
-        s.progress += speed;
+        const speedMult = Math.max(0.5, Math.min(2.5, cfg.animationSpeed ?? 1));
+        const GRAVITY = 0.32 * speedMult;
 
-        const curStep = Math.floor(s.progress);
-        const prevStep = Math.floor(prevProgress);
+        // Physics integration — gravity accelerates ball, air drag slows horizontal
+        s.ballVy += GRAVITY;
+        s.ballVx *= 0.96;
+        s.ballX += s.ballVx;
+        s.ballY += s.ballVy;
 
-        if (curStep > prevStep && curStep >= 1 && curStep <= r) {
-          const row = curStep - 1;
-          const col = s.path[curStep] ?? 0;
-          const { x, y } = getPinPos(row, col, W, H, r);
-          const key = `${row},${col}`;
-          s.litPins.set(key, 1.0);
-          spawnPinHit(x, y);
-          setTimeout(() => { s.litPins.delete(key); }, 380);
+        // Check if ball crossed into the next pin row
+        const nextRow = s.physicsRow + 1;
+        if (nextRow < r) {
+          const rowY = getPinPos(nextRow, 0, W, H, r).y;
+          if (s.ballY >= rowY) {
+            s.physicsRow = nextRow;
+            // path[nextRow+1] is the column index at this row (path[1]=col@row0, path[2]=col@row1…)
+            const col = s.path[nextRow + 1] ?? 0;
+            const pin = getPinPos(nextRow, col, W, H, r);
+
+            // Snap to pin contact point (pin physically redirects the ball)
+            s.ballX = pin.x;
+            s.ballY = rowY;
+
+            // Flash the hit pin
+            const key = `${nextRow},${col}`;
+            s.litPins.set(key, 1.0);
+            spawnPinHit(pin.x, rowY);
+            setTimeout(() => { s.litPins.delete(key); }, 380);
+
+            // Calculate velocity to follow a parabolic arc toward next target
+            const isLast = nextRow + 1 >= r;
+            const tx = isLast
+              ? getBucketX(s.bucket, W, r)
+              : getPinPos(nextRow + 1, s.path[nextRow + 2] ?? 0, W, H, r).x;
+            const ty = isLast
+              ? (H - BUCKET_H - 6 - BALL_R)
+              : getPinPos(nextRow + 1, 0, W, H, r).y;
+
+            const dy = ty - rowY;
+            const vy0 = Math.max(s.ballVy * 0.5, 2.0 * speedMult);
+            // Solve dy = vy0*t + 0.5*G*t^2 for t, then vx = dx/t
+            const disc = vy0 * vy0 + 2 * GRAVITY * dy;
+            const frames = disc > 0
+              ? (-vy0 + Math.sqrt(disc)) / GRAVITY
+              : Math.sqrt(2 * dy / (GRAVITY + 0.001));
+            s.ballVx = (tx - pin.x) / Math.max(frames, 4);
+            s.ballVy = vy0;
+          }
         }
 
-        if (s.progress >= r + 1) {
-          s.progress = r + 1;
+        // Check bucket landing zone
+        const bucketY = H - BUCKET_H - 6 - BALL_R;
+        if (s.ballY >= bucketY) {
           s.phase = "landed";
+          s.ballX = getBucketX(s.bucket, W, r);
+          s.ballY = bucketY;
           s.glowBucket = s.bucket;
-          const bx = getBucketX(s.bucket, W, r);
-          const by = H - BUCKET_H - 6 - BALL_R;
-          s.ballX = bx; s.ballY = by;
           s.landFlash = 30;
-          spawnBucketBurst(bx, by + BALL_R, multColor(s.mult), s.mult);
+          spawnBucketBurst(s.ballX, s.ballY + BALL_R, multColor(s.mult), s.mult);
           trailRef.current = [];
           onEndRef.current?.();
         } else {
-          const frac = easeInOut(s.progress - Math.floor(s.progress));
-          const step = Math.floor(s.progress);
-          const p0 = getBallAtStep(step, W, H, r, s.path, s.bucket);
-          const p1 = getBallAtStep(step + 1, W, H, r, s.path, s.bucket);
-          s.ballX = lerpN(p0.x, p1.x, frac);
-          s.ballY = lerpN(p0.y, p1.y, frac);
-
           trailRef.current.unshift({ x: s.ballX, y: s.ballY, life: 1 });
           const maxTr = Math.max(2, Math.min(15, cfg.trailLength ?? 7));
           if (trailRef.current.length > maxTr) trailRef.current.length = maxTr;
@@ -495,7 +523,7 @@ export function PlinkoBoard({
 
           // Pin proximity glow
           s.pinNear.clear();
-          for (const nr of [Math.floor(s.progress) - 1, Math.floor(s.progress), Math.floor(s.progress) + 1]) {
+          for (const nr of [s.physicsRow, s.physicsRow + 1, s.physicsRow + 2]) {
             if (nr < 0 || nr >= r) continue;
             const numPins = nr + 2;
             for (let col = 0; col < numPins; col++) {
@@ -535,6 +563,9 @@ export function PlinkoBoard({
     s.mult = multiplier ?? 1;
     s.progress = 0;
     s.phase = "dropping";
+    s.physicsRow = -1;
+    s.ballVx = 0;
+    s.ballVy = 1.0;
     s.glowBucket = -1;
     s.litPins.clear();
     s.pinNear.clear();
@@ -553,8 +584,15 @@ export function PlinkoBoard({
     const container = containerRef.current;
     if (!canvas || !container) return;
     const ro = new ResizeObserver(() => {
-      const w = Math.floor(container.clientWidth);
-      const h = Math.round(w * 1.22);
+      const availW = Math.floor(container.clientWidth);
+      const availH = Math.floor(container.clientHeight);
+      // Respect both dimensions: contain the canvas within the container
+      let w = availW;
+      let h = Math.round(w * 1.22);
+      if (availH > 0 && h > availH) {
+        h = availH;
+        w = Math.round(h / 1.22);
+      }
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w; canvas.height = h;
         for (const star of starsRef.current) {
@@ -568,12 +606,12 @@ export function PlinkoBoard({
   }, []);
 
   return (
-    <div ref={containerRef} className="relative w-full rounded-2xl">
+    <div ref={containerRef} className="relative flex h-full w-full items-center justify-center rounded-2xl">
       <canvas
         ref={canvasRef}
         width={420}
         height={512}
-        className="w-full rounded-2xl border border-purple-500/25"
+        className="max-h-full max-w-full rounded-2xl border border-purple-500/25"
         style={{ display: "block" }}
       />
     </div>
