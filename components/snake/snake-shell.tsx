@@ -51,6 +51,7 @@ interface GameState {
   frameCount: number;
   deathFlashFrames: number;
   lastMoveTime: number;
+  speedBonusMs: number; // extra ms added to speed after golden apple (positive = slower)
   // Grind-only
   shrinkCount: number;
   applesUntilShrink: number;
@@ -168,8 +169,8 @@ const DIR_MAP: Record<string, Dir> = {
   ArrowLeft: "LEFT", KeyA: "LEFT", ArrowRight: "RIGHT", KeyD: "RIGHT",
 };
 
-function getSpeedMs(score: number, modeCfg: SnakeModeConfig): number {
-  return Math.max(modeCfg.minSpeedMs, modeCfg.initialSpeedMs - score * modeCfg.speedIncreasePerApple);
+function getSpeedMs(score: number, modeCfg: SnakeModeConfig, speedBonusMs = 0): number {
+  return Math.max(modeCfg.minSpeedMs, modeCfg.initialSpeedMs - score * modeCfg.speedIncreasePerApple) + speedBonusMs;
 }
 
 function lerpColor(c1: string, c2: string, t: number): string {
@@ -224,7 +225,7 @@ function drawFrame(
   const theme = THEMES[g.mode];
 
   // Smooth movement progress (0→1 within current tick)
-  const speedMs = getSpeedMs(g.score, modeCfg);
+  const speedMs = getSpeedMs(g.score, modeCfg, g.speedBonusMs);
   const tickProgress = g.phase === "playing"
     ? Math.min(1, (now - g.lastMoveTime) / speedMs)
     : 1;
@@ -905,7 +906,7 @@ export function SnakeShell({
     phase: "idle", mode: "x1",
     particles: [], ambientParticles: [], floatingTexts: [],
     bonusFlashFrames: 0, comboMultLeft: 0, frameCount: 0,
-    deathFlashFrames: 0, lastMoveTime: 0,
+    deathFlashFrames: 0, lastMoveTime: 0, speedBonusMs: 0,
     shrinkCount: 0, applesUntilShrink: 10, shrinkFlashFrames: 0,
     speedTrails: [],
   });
@@ -996,7 +997,18 @@ export function SnakeShell({
         g.score++;
         let crBase = modeCfg.creditsPerApple;
         const goldenPos = g.goldenApple ? { ...g.goldenApple } : null;
-        if (ateGolden) { crBase = Math.round(crBase * modeCfg.goldenAppleCrMultiplier); g.goldenApple = null; }
+        if (ateGolden) {
+          crBase = Math.round(crBase * modeCfg.goldenAppleCrMultiplier);
+          g.goldenApple = null;
+          // Tail loss: remove N blocks from the back
+          if (modeCfg.goldenAppleTailLoss > 0 && g.snake.length > modeCfg.goldenAppleTailLoss + 1) {
+            g.snake = g.snake.slice(0, g.snake.length - modeCfg.goldenAppleTailLoss);
+          }
+          // Speed reduction bonus persists until end of game
+          if (modeCfg.goldenAppleSpeedReduction > 0) {
+            g.speedBonusMs = modeCfg.goldenAppleSpeedReduction;
+          }
+        }
         if (g.comboMultLeft > 0) { crBase *= 2; g.comboMultLeft--; if (g.comboMultLeft === 0) setComboActive(false); }
         g.creditsEarned += crBase;
 
@@ -1110,7 +1122,7 @@ export function SnakeShell({
       if (g.shrinkFlashFrames > 0) g.shrinkFlashFrames--;
 
       if (g.phase === "playing") {
-        const speedMs = getSpeedMs(g.score, modeCfg);
+        const speedMs = getSpeedMs(g.score, modeCfg, g.speedBonusMs);
         if (now - g.lastMoveTime >= speedMs) {
           doTick(g, modeCfg, W, cell, theme, now);
         }
@@ -1244,7 +1256,7 @@ export function SnakeShell({
     g.phase = "playing"; g.mode = mode;
     g.particles = []; g.floatingTexts = [];
     g.bonusFlashFrames = 0; g.comboMultLeft = 0;
-    g.deathFlashFrames = 0; g.lastMoveTime = performance.now();
+    g.deathFlashFrames = 0; g.lastMoveTime = performance.now(); g.speedBonusMs = 0;
     g.shrinkCount = 0;
     g.applesUntilShrink = (modeCfg as SnakeGrindConfig).shrinkEveryN ?? 10;
     g.shrinkFlashFrames = 0;

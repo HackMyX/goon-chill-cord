@@ -8,17 +8,22 @@ export interface PlinkoRiskLevel {
 export interface PlinkoConfig {
   enabled: boolean;
   hourlyBallLimit: number;
+  dailyBallLimit: number;
   ballCostCr: number;
   rows: number;
   riskLevels: PlinkoRiskLevel[];
   maxWinCr: number;
   announceBigWins: boolean;
   bigWinThreshold: number;
+  showHistory: boolean;
+  showLeaderboard: boolean;
+  leaderboardSize: number;
 }
 
 export const DEFAULT_PLINKO_CONFIG: PlinkoConfig = {
   enabled: true,
   hourlyBallLimit: 20,
+  dailyBallLimit: 0,
   ballCostCr: 100,
   rows: 8,
   riskLevels: [
@@ -29,4 +34,7 @@ export const DEFAULT_PLINKO_CONFIG: PlinkoConfig = {
   maxWinCr: 0,
   announceBigWins: true,
   bigWinThreshold: 1000,
+  showHistory: true,
+  showLeaderboard: true,
+  leaderboardSize: 10,
 };

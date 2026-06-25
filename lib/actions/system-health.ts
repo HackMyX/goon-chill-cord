@@ -141,6 +141,24 @@ const COLUMN_CHECKS: Array<{
   { id: "col_tickets_reward_pending", category: "Tickets",        table: "tickets",             col: "reward_pending",          detail: "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS reward_pending boolean NOT NULL DEFAULT false;" },
   // Tickets — escalate to admin (2026-06-25)
   { id: "col_tickets_escalated",  category: "Tickets",            table: "tickets",             col: "escalated_to_admin",      detail: "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS escalated_to_admin boolean NOT NULL DEFAULT false;" },
+  // Battle Pass v2 — theme & visibility (2026-06-25)
+  { id: "col_bp_theme",           category: "Battle Pass",        table: "battle_passes",       col: "theme",                   detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS theme text NOT NULL DEFAULT 'default';" },
+  { id: "col_bp_accentcolor",     category: "Battle Pass",        table: "battle_passes",       col: "accent_color",            detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS accent_color text NOT NULL DEFAULT '#7c3aed';" },
+  { id: "col_bp_bannerimg",       category: "Battle Pass",        table: "battle_passes",       col: "banner_image_url",        detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS banner_image_url text;" },
+  { id: "col_bp_shopvisible",     category: "Battle Pass",        table: "battle_passes",       col: "show_in_shop",            detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS show_in_shop boolean NOT NULL DEFAULT true;" },
+  { id: "col_bp_dashvisible",     category: "Battle Pass",        table: "battle_passes",       col: "show_on_dashboard",       detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS show_on_dashboard boolean NOT NULL DEFAULT true;" },
+  // Battle Pass tier v2 — new reward types & metadata (2026-06-25)
+  { id: "col_bpt_badgetext",      category: "Battle Pass",        table: "battle_pass_tiers",   col: "reward_badge_text",       detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS reward_badge_text text;" },
+  { id: "col_bpt_itemrarity",     category: "Battle Pass",        table: "battle_pass_tiers",   col: "reward_item_rarity",      detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS reward_item_rarity text;" },
+  { id: "col_bpt_xpboost",        category: "Battle Pass",        table: "battle_pass_tiers",   col: "reward_xp_boost",         detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS reward_xp_boost integer;" },
+  { id: "col_bpt_quantity",       category: "Battle Pass",        table: "battle_pass_tiers",   col: "reward_quantity",         detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS reward_quantity integer NOT NULL DEFAULT 1;" },
+  { id: "col_bpt_highlight",      category: "Battle Pass",        table: "battle_pass_tiers",   col: "highlight_tier",          detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS highlight_tier boolean NOT NULL DEFAULT false;" },
+  { id: "col_bpt_description",    category: "Battle Pass",        table: "battle_pass_tiers",   col: "description",             detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS description text;" },
+  // Plinko v2 — daily limit, leaderboard & history toggles (2026-06-25)
+  { id: "col_plinko_dailylimit",  category: "Plinko",             table: "plinko_config",       col: "daily_ball_limit",        detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS daily_ball_limit integer NOT NULL DEFAULT 0;" },
+  { id: "col_plinko_showhistory", category: "Plinko",             table: "plinko_config",       col: "show_history",            detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS show_history boolean NOT NULL DEFAULT true;" },
+  { id: "col_plinko_showleader",  category: "Plinko",             table: "plinko_config",       col: "show_leaderboard",        detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS show_leaderboard boolean NOT NULL DEFAULT true;" },
+  { id: "col_plinko_leadersize",  category: "Plinko",             table: "plinko_config",       col: "leaderboard_size",        detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS leaderboard_size integer NOT NULL DEFAULT 10;" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

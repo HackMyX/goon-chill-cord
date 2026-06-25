@@ -17,6 +17,8 @@ export interface SnakeModeConfig {
   goldenAppleEnabled: boolean;
   goldenAppleCrMultiplier: number;
   goldenAppleLifeApples: number;
+  goldenAppleTailLoss: number;       // snake blocks removed when golden apple eaten (0 = none)
+  goldenAppleSpeedReduction: number; // ms added to speed interval after eating golden apple (0 = no change)
   startLength: number;
   particlesEnabled: boolean;
   leaderboardSize: number;
@@ -54,6 +56,8 @@ export const DEFAULT_X1_CONFIG: SnakeModeConfig = {
   goldenAppleEnabled: true,
   goldenAppleCrMultiplier: 5,
   goldenAppleLifeApples: 8,
+  goldenAppleTailLoss: 0,
+  goldenAppleSpeedReduction: 0,
   startLength: 3,
   particlesEnabled: true,
   leaderboardSize: 20,
@@ -75,6 +79,8 @@ export const DEFAULT_X2_CONFIG: SnakeModeConfig = {
   goldenAppleEnabled: true,
   goldenAppleCrMultiplier: 5,
   goldenAppleLifeApples: 6,
+  goldenAppleTailLoss: 0,
+  goldenAppleSpeedReduction: 0,
   startLength: 3,
   particlesEnabled: true,
   leaderboardSize: 20,
@@ -96,6 +102,8 @@ export const DEFAULT_GRIND_CONFIG: SnakeGrindConfig = {
   goldenAppleEnabled: true,
   goldenAppleCrMultiplier: 4,
   goldenAppleLifeApples: 15,
+  goldenAppleTailLoss: 0,
+  goldenAppleSpeedReduction: 0,
   startLength: 3,
   particlesEnabled: true,
   leaderboardSize: 20,
@@ -120,6 +128,8 @@ export const DEFAULT_FARM_CONFIG: SnakeModeConfig = {
   goldenAppleEnabled: false,
   goldenAppleCrMultiplier: 1,
   goldenAppleLifeApples: 0,
+  goldenAppleTailLoss: 0,
+  goldenAppleSpeedReduction: 0,
   startLength: 5,
   particlesEnabled: true,
   leaderboardSize: 20,

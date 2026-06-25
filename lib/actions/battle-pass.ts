@@ -6,7 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { logDebugEvent } from "@/lib/debug-log-server";
-import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType } from "@/lib/battle-pass";
+import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType, BpTheme } from "@/lib/battle-pass";
+import type { Rarity } from "@/lib/cases";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,12 @@ function rowToTier(r: Record<string, unknown>): BattlePassTier {
     rewardCredits: r.reward_credits as number | null,
     rewardItemId: r.reward_item_id as string | null,
     rewardBadgeKey: r.reward_badge_key as string | null,
+    rewardBadgeText: r.reward_badge_text as string | null,
+    rewardItemRarity: r.reward_item_rarity as Rarity | null,
+    rewardXpBoost: r.reward_xp_boost as number | null,
+    rewardQuantity: (r.reward_quantity as number | null) ?? 1,
+    highlightTier: (r.highlight_tier as boolean | null) ?? false,
+    description: r.description as string | null,
     icon: r.icon as string,
   };
 }
@@ -39,6 +46,11 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
     tierCount: r.tier_count as number,
     spinChanceBoost: r.spin_chance_boost as number,
     bannerColor: r.banner_color as string,
+    theme: (r.theme as BpTheme | null) ?? "default",
+    accentColor: (r.accent_color as string | null) ?? "#7c3aed",
+    bannerImageUrl: r.banner_image_url as string | null,
+    showInShop: (r.show_in_shop as boolean | null) ?? true,
+    showOnDashboard: (r.show_on_dashboard as boolean | null) ?? true,
     tiers,
     createdAt: r.created_at as string,
   };
@@ -46,7 +58,6 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
 
 // ── user-facing ─────────────────────────────────────────────────────────────
 
-/** Returns the currently active pass + the logged-in user's status (null if not logged in). */
 export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
   const admin = createAdminClient();
 
@@ -68,7 +79,6 @@ export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
   const tiers = (tierRows ?? []).map((r) => rowToTier(r as Record<string, unknown>));
   const pass = rowToPass(passRow as Record<string, unknown>, tiers);
 
-  // User status
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { pass, userStatus: null };
@@ -97,7 +107,6 @@ export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
   return { pass, userStatus };
 }
 
-/** Purchase the premium pass. Deducts CR, creates/updates user_battle_passes row. */
 export async function purchaseBattlePass(passId: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -118,7 +127,6 @@ export async function purchaseBattlePass(passId: string): Promise<{ success: boo
     return { success: false, error: `Nicht genug ${currencyName}. Benötigt: ${passRow.price_cr.toLocaleString("de-DE")} ${currencyName}.` };
   }
 
-  // Check if already purchased
   const { data: existing } = await admin
     .from("user_battle_passes")
     .select("id, has_premium")
@@ -168,8 +176,7 @@ export async function purchaseBattlePass(passId: string): Promise<{ success: boo
   return { success: true };
 }
 
-/** Claim a tier reward (if eligible). */
-export async function claimBpTier(tierId: string): Promise<{ success: boolean; error?: string; reward?: string }> {
+export async function claimBpTier(tierId: string): Promise<{ success: boolean; error?: string; reward?: string; rewardType?: BpRewardType }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Du musst eingeloggt sein." };
@@ -191,7 +198,6 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
 
   const passId = pass.id as string;
 
-  // Check if already claimed
   const { data: existing } = await admin
     .from("user_bp_tier_claims")
     .select("id")
@@ -200,7 +206,6 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
     .maybeSingle();
   if (existing) return { success: false, error: "Bereits abgeholt." };
 
-  // Get user's pass status
   const { data: ubp } = await admin
     .from("user_battle_passes")
     .select("has_premium, progress_days")
@@ -210,8 +215,9 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
 
   const progressDays = ubp?.progress_days ?? 0;
   const hasPremium = ubp?.has_premium ?? false;
-  const tierNum = (tier as Record<string, unknown>).tier_number as number;
-  const isPremium = (tier as Record<string, unknown>).is_premium as boolean;
+  const t = tier as Record<string, unknown>;
+  const tierNum = t.tier_number as number;
+  const isPremium = t.is_premium as boolean;
 
   if (progressDays < tierNum) {
     return { success: false, error: `Noch nicht freigeschaltet — du brauchst ${tierNum} Login-Tage.` };
@@ -220,12 +226,12 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
     return { success: false, error: "Nur für Premium-Pass-Inhaber." };
   }
 
-  // Grant reward
-  const rewardType = (tier as Record<string, unknown>).reward_type as string;
+  const rewardType = t.reward_type as BpRewardType;
+  const quantity = (t.reward_quantity as number | null) ?? 1;
   let rewardMsg = "";
 
   if (rewardType === "credits") {
-    const amount = ((tier as Record<string, unknown>).reward_credits as number | null) ?? 0;
+    const amount = Math.round(((t.reward_credits as number | null) ?? 0) * quantity);
     if (amount > 0) {
       const { data: prof } = await admin.from("profiles").select("credits").eq("id", user.id).single();
       if (prof) {
@@ -233,9 +239,44 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
       }
       rewardMsg = `+${amount.toLocaleString("de-DE")} Credits`;
     }
+  } else if (rewardType === "item") {
+    const itemId = t.reward_item_id as string | null;
+    if (itemId) {
+      const { data: item } = await admin.from("items").select("name, rarity").eq("id", itemId).maybeSingle();
+      const count = Math.max(1, quantity);
+      for (let i = 0; i < count; i++) {
+        await admin.from("inventory").insert({ user_id: user.id, item_id: itemId, equipped: false });
+      }
+      rewardMsg = item ? `${item.name} (${item.rarity})${count > 1 ? ` ×${count}` : ""}` : "Item erhalten";
+    }
+  } else if (rewardType === "random_item") {
+    const rarity = t.reward_item_rarity as Rarity | null;
+    let query = admin.from("items").select("id, name, rarity").eq("type", "cosmetic");
+    if (rarity) query = query.eq("rarity", rarity);
+    const { data: items } = await query;
+    if (items && items.length > 0) {
+      const picked = items[Math.floor(Math.random() * items.length)];
+      await admin.from("inventory").insert({ user_id: user.id, item_id: picked.id, equipped: false });
+      rewardMsg = `Zufällig: ${picked.name} (${picked.rarity})`;
+    }
+  } else if (rewardType === "badge") {
+    const badgeText = (t.reward_badge_text as string | null) ?? (t.reward_badge_key as string | null) ?? "";
+    if (badgeText) {
+      rewardMsg = `Badge: ${badgeText}`;
+    }
+  } else if (rewardType === "xp_boost") {
+    const days = (t.reward_xp_boost as number | null) ?? 1;
+    if (days > 0 && ubp) {
+      const newDays = Math.min((ubp.progress_days as number) + days, (pass.tier_count as number) ?? 30);
+      await admin
+        .from("user_battle_passes")
+        .update({ progress_days: newDays })
+        .eq("user_id", user.id)
+        .eq("pass_id", passId);
+      rewardMsg = `+${days} Fortschrittstag${days !== 1 ? "e" : ""}`;
+    }
   }
 
-  // Record claim
   await admin.from("user_bp_tier_claims").insert({
     user_id: user.id,
     pass_id: passId,
@@ -252,10 +293,9 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
 
   revalidatePath("/battlepass");
   revalidatePath("/");
-  return { success: true, reward: rewardMsg };
+  return { success: true, reward: rewardMsg, rewardType };
 }
 
-/** Called by the daily-streak claim to advance the user's battlepass progress. */
 export async function advanceBattlePassProgress(userId: string): Promise<void> {
   try {
     const admin = createAdminClient();
@@ -295,7 +335,6 @@ export async function advanceBattlePassProgress(userId: string): Promise<void> {
   }
 }
 
-/** Check if the logged-in user has an active premium pass (for spin-boost). */
 export async function getUserBattlePassBoost(): Promise<number> {
   try {
     const supabase = await createClient();
@@ -325,6 +364,51 @@ export async function getUserBattlePassBoost(): Promise<number> {
   }
 }
 
+export interface BpStats {
+  totalUsers: number;
+  premiumUsers: number;
+  totalCrSpent: number;
+  claimsCount: number;
+}
+
+export async function getBpStats(passId: string): Promise<BpStats> {
+  try {
+    const admin = createAdminClient();
+    const [{ count: totalUsers }, { count: premiumUsers }, { data: purchaseData }, { count: claimsCount }] = await Promise.all([
+      admin.from("user_battle_passes").select("*", { count: "exact", head: true }).eq("pass_id", passId),
+      admin.from("user_battle_passes").select("*", { count: "exact", head: true }).eq("pass_id", passId).eq("has_premium", true),
+      admin.from("battle_passes").select("price_cr").eq("id", passId).single(),
+      admin.from("user_bp_tier_claims").select("*", { count: "exact", head: true }).eq("pass_id", passId),
+    ]);
+    const priceCr = (purchaseData?.price_cr as number | null) ?? 0;
+    return {
+      totalUsers: totalUsers ?? 0,
+      premiumUsers: premiumUsers ?? 0,
+      totalCrSpent: (premiumUsers ?? 0) * priceCr,
+      claimsCount: claimsCount ?? 0,
+    };
+  } catch {
+    return { totalUsers: 0, premiumUsers: 0, totalCrSpent: 0, claimsCount: 0 };
+  }
+}
+
+// ── item search for tier editor ───────────────────────────────────────────────
+
+export async function searchBpItems(
+  query: string,
+  rarity?: Rarity
+): Promise<{ id: string; name: string; rarity: Rarity; type: string }[]> {
+  const user = await requireAdminUser();
+  if (!user) return [];
+
+  const admin = createAdminClient();
+  let q = admin.from("items").select("id, name, rarity, type").order("name");
+  if (query.trim()) q = q.ilike("name", `%${query.trim()}%`);
+  if (rarity) q = q.eq("rarity", rarity);
+  const { data } = await q.limit(30);
+  return (data ?? []) as { id: string; name: string; rarity: Rarity; type: string }[];
+}
+
 // ── admin CRUD ───────────────────────────────────────────────────────────────
 
 async function requireAdminUser() {
@@ -343,10 +427,7 @@ export async function adminListBattlePasses(): Promise<BattlePass[]> {
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    // Table likely doesn't exist yet — return empty, migration banner will show
-    return [];
-  }
+  if (error) return [];
   if (!passes) return [];
 
   const passIds = passes.map((p) => p.id as string);
@@ -367,7 +448,7 @@ export async function adminListBattlePasses(): Promise<BattlePass[]> {
 export async function checkBattlePassMigration(): Promise<boolean> {
   const admin = createAdminClient();
   const { error } = await admin.from("battle_passes").select("id").limit(0);
-  return !!error; // true = migration needed
+  return !!error;
 }
 
 export interface AdminPassInput {
@@ -381,6 +462,11 @@ export interface AdminPassInput {
   tierCount: number;
   spinChanceBoost: number;
   bannerColor: string;
+  theme: BpTheme;
+  accentColor: string;
+  bannerImageUrl: string | null;
+  showInShop: boolean;
+  showOnDashboard: boolean;
 }
 
 export async function adminCreateBattlePass(
@@ -401,16 +487,21 @@ export async function adminCreateBattlePass(
       is_active: false,
       start_date: input.startDate || null,
       end_date: input.endDate || null,
-      tier_count: Math.max(1, Math.min(30, Math.round(input.tierCount))),
+      tier_count: Math.max(1, Math.min(50, Math.round(input.tierCount))),
       spin_chance_boost: Math.min(0.5, Math.max(0, input.spinChanceBoost)),
       banner_color: input.bannerColor || "#7c3aed",
+      theme: input.theme || "default",
+      accent_color: input.accentColor || "#7c3aed",
+      banner_image_url: input.bannerImageUrl || null,
+      show_in_shop: input.showInShop,
+      show_on_dashboard: input.showOnDashboard,
     })
     .select("id")
     .single();
 
   if (error || !data) {
-    void logDebugEvent({ scope: "adminCreateBattlePass", message: "Battlepass-Erstellung fehlgeschlagen", level: "error", detail: error?.message, context: { code: error?.code, hint: error?.hint } });
-    return { success: false, error: error?.message ? `DB-Fehler: ${error.message}` : "Erstellen fehlgeschlagen — Tabellen fehlen möglicherweise (Migration ausführen)." };
+    void logDebugEvent({ scope: "adminCreateBattlePass", message: "Battlepass-Erstellung fehlgeschlagen", level: "error", detail: error?.message, context: { code: error?.code } });
+    return { success: false, error: error?.message ? `DB-Fehler: ${error.message}` : "Erstellen fehlgeschlagen." };
   }
   revalidatePath("/admin");
   return { success: true, id: data.id as string };
@@ -434,9 +525,14 @@ export async function adminUpdateBattlePass(
       enabled: input.enabled,
       start_date: input.startDate || null,
       end_date: input.endDate || null,
-      tier_count: Math.max(1, Math.min(30, Math.round(input.tierCount))),
+      tier_count: Math.max(1, Math.min(50, Math.round(input.tierCount))),
       spin_chance_boost: Math.min(0.5, Math.max(0, input.spinChanceBoost)),
       banner_color: input.bannerColor || "#7c3aed",
+      theme: input.theme || "default",
+      accent_color: input.accentColor || "#7c3aed",
+      banner_image_url: input.bannerImageUrl || null,
+      show_in_shop: input.showInShop,
+      show_on_dashboard: input.showOnDashboard,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -447,9 +543,7 @@ export async function adminUpdateBattlePass(
   return { success: true };
 }
 
-export async function adminDeleteBattlePass(
-  id: string
-): Promise<{ success: boolean; error?: string }> {
+export async function adminDeleteBattlePass(id: string): Promise<{ success: boolean; error?: string }> {
   const user = await requireAdminUser();
   if (!user) return { success: false, error: "Kein Zugriff." };
 
@@ -460,17 +554,12 @@ export async function adminDeleteBattlePass(
   return { success: true };
 }
 
-/** Activate a pass (deactivates all others first). */
-export async function adminSetPassActive(
-  id: string,
-  active: boolean
-): Promise<{ success: boolean; error?: string }> {
+export async function adminSetPassActive(id: string, active: boolean): Promise<{ success: boolean; error?: string }> {
   const user = await requireAdminUser();
   if (!user) return { success: false, error: "Kein Zugriff." };
 
   const admin = createAdminClient();
   if (active) {
-    // Deactivate all others
     await admin.from("battle_passes").update({ is_active: false }).neq("id", id);
   }
   const { error } = await admin
@@ -490,6 +579,14 @@ export interface AdminTierInput {
   isPremium: boolean;
   rewardType: BpRewardType;
   rewardCredits: number | null;
+  rewardItemId: string | null;
+  rewardBadgeKey: string | null;
+  rewardBadgeText: string | null;
+  rewardItemRarity: Rarity | null;
+  rewardXpBoost: number | null;
+  rewardQuantity: number;
+  highlightTier: boolean;
+  description: string | null;
   icon: string;
 }
 
@@ -510,8 +607,14 @@ export async function adminUpsertBpTier(
       is_premium: input.isPremium,
       reward_type: input.rewardType,
       reward_credits: input.rewardType === "credits" ? (input.rewardCredits ?? 100) : null,
-      reward_item_id: null,
-      reward_badge_key: null,
+      reward_item_id: (input.rewardType === "item") ? input.rewardItemId : null,
+      reward_badge_key: input.rewardBadgeKey,
+      reward_badge_text: (input.rewardType === "badge") ? (input.rewardBadgeText ?? "") : null,
+      reward_item_rarity: (input.rewardType === "random_item") ? input.rewardItemRarity : null,
+      reward_xp_boost: (input.rewardType === "xp_boost") ? (input.rewardXpBoost ?? 1) : null,
+      reward_quantity: Math.max(1, input.rewardQuantity),
+      highlight_tier: input.highlightTier,
+      description: input.description?.trim() || null,
       icon: input.icon.trim() || "🎁",
     }, { onConflict: "pass_id,tier_number" });
 

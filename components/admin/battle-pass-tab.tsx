@@ -1,40 +1,212 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Plus, Edit2, Trash2, Zap, Eye, EyeOff, ChevronDown, ChevronUp,
-  Save, X, CheckCircle, Gift, Coins, Check, Star, AlertTriangle, Copy, ExternalLink,
+  Plus, Trash2, Zap, Eye, EyeOff, ChevronDown, ChevronUp,
+  Save, X, Check, Star, AlertTriangle, Copy, ExternalLink,
+  Gift, Coins, Trophy, Package, Sparkles, TrendingUp, Users,
+  ShoppingBag, Crown, Palette, Search, BarChart2, Calendar,
 } from "lucide-react";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
 import {
   adminListBattlePasses, adminCreateBattlePass, adminUpdateBattlePass,
   adminDeleteBattlePass, adminSetPassActive, adminUpsertBpTier,
-  type AdminPassInput, type AdminTierInput,
+  getBpStats, searchBpItems,
+  type AdminPassInput, type AdminTierInput, type BpStats,
 } from "@/lib/actions/battle-pass";
-import type { BattlePass, BattlePassTier, BpRewardType } from "@/lib/battle-pass";
+import { BP_THEMES } from "@/lib/battle-pass";
+import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
+import type { BattlePass, BattlePassTier, BpRewardType, BpTheme } from "@/lib/battle-pass";
+import type { Rarity } from "@/lib/cases";
 
-const REWARD_ICONS: Record<string, string> = {
-  credits: "💰", item: "📦", badge: "🏆",
+const REWARD_ICONS: Record<BpRewardType, React.ReactNode> = {
+  credits: <Coins className="h-3.5 w-3.5" />,
+  item: <Package className="h-3.5 w-3.5" />,
+  random_item: <Sparkles className="h-3.5 w-3.5" />,
+  badge: <Trophy className="h-3.5 w-3.5" />,
+  xp_boost: <TrendingUp className="h-3.5 w-3.5" />,
 };
 
-const TIER_EMOJIS = ["🎁","💰","⚡","🔥","🌟","💎","👑","🎯","🎲","🚀","✨","🎪","🌈","💫","🛡️","⚔️","🎭","🎨","🎵","🎮"];
+const REWARD_LABELS: Record<BpRewardType, string> = {
+  credits: "Credits",
+  item: "Spezifisches Item",
+  random_item: "Zufälliges Item",
+  badge: "Badge / Titel",
+  xp_boost: "XP Boost (Tage)",
+};
+
+const TIER_EMOJIS = ["🎁","💰","⚡","🔥","🌟","💎","👑","🎯","🎲","🚀","✨","🎪","🌈","💫","🛡️","⚔️","🎭","🎨","🎵","🎮","🏆","⭐","🎀","🔮","🐉"];
+
+// ── Stats display ─────────────────────────────────────────────────────────────
+
+function StatsDisplay({ passId }: { passId: string }) {
+  const [stats, setStats] = useState<BpStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    getBpStats(passId).then((s) => {
+      if (active) { setStats(s); setLoading(false); }
+    });
+    return () => { active = false; };
+  }, [passId]);
+
+  if (loading) return <div className="text-xs text-zinc-500">Lade Statistiken…</div>;
+  if (!stats) return null;
+
+  const convRate = stats.totalUsers > 0 ? Math.round((stats.premiumUsers / stats.totalUsers) * 100) : 0;
+
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {[
+        { icon: <Users className="h-4 w-4 text-blue-400" />, label: "Gesamt-User", value: stats.totalUsers },
+        { icon: <Crown className="h-4 w-4 text-amber-400" />, label: "Premium-Käufer", value: stats.premiumUsers },
+        { icon: <Coins className="h-4 w-4 text-emerald-400" />, label: "CR eingenommen", value: `${stats.totalCrSpent.toLocaleString("de-DE")} CR` },
+        { icon: <Gift className="h-4 w-4 text-purple-400" />, label: "Claims gesamt", value: stats.claimsCount },
+      ].map((s) => (
+        <div key={s.label} className="flex flex-col gap-1 rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="flex items-center gap-1.5">
+            {s.icon}
+            <span className="text-[10px] text-zinc-500">{s.label}</span>
+          </div>
+          <span className="text-lg font-bold text-zinc-100">{s.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Theme selector ────────────────────────────────────────────────────────────
+
+function ThemeSelector({ value, onChange }: { value: BpTheme; onChange: (t: BpTheme) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {(Object.entries(BP_THEMES) as [BpTheme, (typeof BP_THEMES)[BpTheme]][]).map(([key, theme]) => (
+        <button
+          key={key}
+          onClick={() => onChange(key)}
+          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${
+            value === key
+              ? "border-white/30 bg-white/10 text-zinc-100 shadow-lg scale-105"
+              : "border-white/10 text-zinc-400 hover:border-white/20 hover:text-zinc-300"
+          }`}
+          style={{ borderColor: value === key ? theme.accent : undefined, boxShadow: value === key ? `0 0 10px ${theme.glow}` : undefined }}
+        >
+          <span className="h-3 w-3 rounded-full shrink-0" style={{ background: theme.accent }} />
+          {theme.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Item picker ───────────────────────────────────────────────────────────────
+
+function ItemPickerModal({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (id: string, name: string, rarity: Rarity) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [rarity, setRarity] = useState<Rarity | "">("");
+  const [results, setResults] = useState<{ id: string; name: string; rarity: Rarity; type: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      setLoading(true);
+      const r = await searchBpItems(query, rarity as Rarity || undefined);
+      setResults(r);
+      setLoading(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, rarity]);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0e0b18] p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-bold text-zinc-100">Item auswählen</h3>
+          <button onClick={onClose} className="rounded-full p-1 text-zinc-500 hover:text-zinc-300 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mb-3 flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Item suchen…"
+              className="w-full rounded-lg border border-white/10 bg-black/30 py-2 pl-9 pr-3 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+              autoFocus
+            />
+          </div>
+          <select
+            value={rarity}
+            onChange={(e) => setRarity(e.target.value as Rarity | "")}
+            className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+          >
+            <option value="">Alle</option>
+            {RARITY_ORDER.map((r) => (
+              <option key={r} value={r}>{RARITY_LABELS[r]}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="max-h-72 overflow-y-auto space-y-1" style={{ scrollbarWidth: "thin" }}>
+          {loading && <p className="py-4 text-center text-xs text-zinc-500">Suche…</p>}
+          {!loading && results.length === 0 && (
+            <p className="py-4 text-center text-xs text-zinc-500">Keine Items gefunden.</p>
+          )}
+          {results.map((item) => {
+            const style = RARITY_STYLES[item.rarity];
+            return (
+              <button
+                key={item.id}
+                onClick={() => { onSelect(item.id, item.name, item.rarity); onClose(); }}
+                className="flex w-full items-center gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-left hover:bg-white/[0.05] hover:border-white/10 transition-colors"
+              >
+                <Package className={`h-4 w-4 shrink-0 ${style.text}`} />
+                <span className="flex-1 text-sm text-zinc-200">{item.name}</span>
+                <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${style.border} ${style.bg} ${style.text}`}>
+                  {RARITY_LABELS[item.rarity]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Tier preview track ────────────────────────────────────────────────────────
 
 function TierPreview({ pass }: { pass: BattlePass }) {
   const tierMap = new Map(pass.tiers.map((t) => [t.tierNumber, t]));
+  const theme = BP_THEMES[pass.theme ?? "default"];
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 p-4">
+    <div
+      className="rounded-xl border p-4"
+      style={{ background: theme.gradient, borderColor: `${theme.accent}33` }}
+    >
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h3 className="text-sm font-bold text-zinc-100">{pass.name}</h3>
-          <p className="text-xs text-zinc-500">{pass.seasonLabel}</p>
+          <p className="text-xs" style={{ color: theme.accent }}>{pass.seasonLabel}</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
+          <span className="rounded-full border px-2 py-0.5 text-[10px] font-bold" style={{ borderColor: `${theme.accent}50`, color: theme.accent }}>
             {pass.priceCr.toLocaleString("de-DE")} CR
           </span>
           {pass.spinChanceBoost > 0 && (
@@ -42,6 +214,7 @@ function TierPreview({ pass }: { pass: BattlePass }) {
               +{(pass.spinChanceBoost * 100).toFixed(1)}% Spin
             </span>
           )}
+          {pass.showInShop && <ShoppingBag className="h-3.5 w-3.5 text-zinc-400" />}
         </div>
       </div>
       <div
@@ -50,20 +223,23 @@ function TierPreview({ pass }: { pass: BattlePass }) {
       >
         {Array.from({ length: pass.tierCount }, (_, i) => i + 1).map((n) => {
           const tier = tierMap.get(n);
+          const isHighlight = tier?.highlightTier;
           return (
             <div
               key={n}
-              className={`shrink-0 flex flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 ${
+              className={`shrink-0 flex flex-col items-center gap-0.5 rounded-lg border px-2 transition-all ${
+                isHighlight ? "py-3 scale-110" : "py-1.5"
+              } ${
                 tier?.isPremium === false
                   ? "border-purple-400/40 bg-purple-500/10"
                   : tier
                     ? "border-amber-400/30 bg-amber-500/10"
                     : "border-white/10 bg-white/[0.02]"
               }`}
-              style={{ minWidth: "48px" }}
+              style={{ minWidth: isHighlight ? "56px" : "44px" }}
             >
-              <span className="text-[11px] text-zinc-500">{n}</span>
-              <span className="text-base leading-none">{tier?.icon ?? "·"}</span>
+              <span className="text-[9px] text-zinc-500">{n}</span>
+              <span className={isHighlight ? "text-xl leading-none" : "text-base leading-none"}>{tier?.icon ?? "·"}</span>
               {tier && (
                 <span className={`text-[8px] font-bold ${tier.isPremium ? "text-amber-400" : "text-purple-300"}`}>
                   {tier.isPremium ? "PRO" : "FREE"}
@@ -75,16 +251,13 @@ function TierPreview({ pass }: { pass: BattlePass }) {
       </div>
       <div className="mt-2 flex gap-4 text-[10px] text-zinc-500">
         <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded border border-purple-400/40 bg-purple-500/10" />
-          Kostenlos
+          <span className="inline-block h-2 w-2 rounded border border-purple-400/40 bg-purple-500/10" />Kostenlos
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded border border-amber-400/30 bg-amber-500/10" />
-          Premium
+          <span className="inline-block h-2 w-2 rounded border border-amber-400/30 bg-amber-500/10" />Premium
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded border border-white/10 bg-white/[0.02]" />
-          Nicht konfiguriert
+          <span className="inline-block h-2 w-2 rounded border border-white/10 bg-white/[0.02]" />Leer
         </span>
       </div>
     </div>
@@ -111,6 +284,16 @@ function TierEditorModal({
   const [isPremium, setIsPremium] = useState(existing?.isPremium ?? true);
   const [rewardType, setRewardType] = useState<BpRewardType>(existing?.rewardType ?? "credits");
   const [rewardCredits, setRewardCredits] = useState(existing?.rewardCredits ?? 100);
+  const [rewardItemId, setRewardItemId] = useState<string | null>(existing?.rewardItemId ?? null);
+  const [rewardItemName, setRewardItemName] = useState<string>("");
+  const [rewardItemRarity, setRewardItemRarity] = useState<Rarity | null>(existing?.rewardItemRarity ?? null);
+  const [rewardBadgeKey, setRewardBadgeKey] = useState(existing?.rewardBadgeKey ?? "");
+  const [rewardBadgeText, setRewardBadgeText] = useState(existing?.rewardBadgeText ?? "");
+  const [rewardXpBoost, setRewardXpBoost] = useState(existing?.rewardXpBoost ?? 1);
+  const [rewardQuantity, setRewardQuantity] = useState(existing?.rewardQuantity ?? 1);
+  const [highlightTier, setHighlightTier] = useState(existing?.highlightTier ?? false);
+  const [description, setDescription] = useState(existing?.description ?? "");
+  const [showItemPicker, setShowItemPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
@@ -124,6 +307,14 @@ function TierEditorModal({
       isPremium,
       rewardType,
       rewardCredits: rewardType === "credits" ? rewardCredits : null,
+      rewardItemId: rewardType === "item" ? rewardItemId : null,
+      rewardBadgeKey: rewardBadgeKey || null,
+      rewardBadgeText: rewardType === "badge" ? (rewardBadgeText || null) : null,
+      rewardItemRarity: rewardType === "random_item" ? rewardItemRarity : null,
+      rewardXpBoost: rewardType === "xp_boost" ? rewardXpBoost : null,
+      rewardQuantity: Math.max(1, rewardQuantity),
+      highlightTier,
+      description: description.trim() || null,
       icon: icon.trim() || "🎁",
     };
     const res = await adminUpsertBpTier(passId, input);
@@ -139,111 +330,224 @@ function TierEditorModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0e0b18] p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-bold text-zinc-100">Tier {tierNumber} bearbeiten</h3>
-          <button onClick={onClose} className="rounded-full p-1 text-zinc-500 hover:text-zinc-300 transition-colors">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          <label className="flex flex-col gap-1 text-xs text-zinc-400">
-            Name
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs text-zinc-400">
-            Icon (Emoji)
-            <div className="flex gap-2">
-              <input
-                value={icon}
-                onChange={(e) => setIcon(e.target.value)}
-                className="w-20 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xl outline-none focus:border-purple-400/60"
-                maxLength={4}
-              />
-              <div className="flex flex-wrap gap-1">
-                {TIER_EMOJIS.slice(0, 10).map((e) => (
-                  <button
-                    key={e}
-                    onClick={() => setIcon(e)}
-                    className={`rounded border px-1.5 py-1 text-sm transition-colors ${icon === e ? "border-purple-400/60 bg-purple-500/20" : "border-white/10 hover:border-white/30"}`}
-                  >{e}</button>
-                ))}
-              </div>
-            </div>
-          </label>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => setIsPremium(false)}
-              className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${!isPremium ? "border-purple-400/60 bg-purple-500/20 text-purple-200" : "border-white/10 text-zinc-400 hover:border-white/30"}`}
-            >
-              Kostenlos (Alle)
-            </button>
-            <button
-              onClick={() => setIsPremium(true)}
-              className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${isPremium ? "border-amber-400/60 bg-amber-500/20 text-amber-200" : "border-white/10 text-zinc-400 hover:border-white/30"}`}
-            >
-              Premium
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+        <div
+          className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0e0b18] p-5 shadow-2xl max-h-[90vh] overflow-y-auto"
+          style={{ scrollbarWidth: "thin" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="font-bold text-zinc-100">Tier {tierNumber} bearbeiten</h3>
+            <button onClick={onClose} className="rounded-full p-1 text-zinc-500 hover:text-zinc-300 transition-colors">
+              <X className="h-4 w-4" />
             </button>
           </div>
 
-          <label className="flex flex-col gap-1 text-xs text-zinc-400">
-            Belohnungstyp
-            <select
-              value={rewardType}
-              onChange={(e) => setRewardType(e.target.value as BpRewardType)}
-              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
-            >
-              <option value="credits">Credits</option>
-              <option value="item">Item (geplant)</option>
-              <option value="badge">Badge (geplant)</option>
-            </select>
-          </label>
+          <div className="space-y-3">
+            {/* Name + Icon */}
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                Name
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                Icon (Emoji)
+                <input
+                  value={icon}
+                  onChange={(e) => setIcon(e.target.value)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xl outline-none focus:border-purple-400/60"
+                  maxLength={4}
+                />
+              </label>
+            </div>
 
-          {rewardType === "credits" && (
+            {/* Emoji grid */}
+            <div className="flex flex-wrap gap-1">
+              {TIER_EMOJIS.map((e) => (
+                <button
+                  key={e}
+                  onClick={() => setIcon(e)}
+                  className={`rounded border px-1.5 py-1 text-sm transition-colors ${icon === e ? "border-purple-400/60 bg-purple-500/20" : "border-white/10 hover:border-white/30"}`}
+                >{e}</button>
+              ))}
+            </div>
+
+            {/* Beschreibung */}
             <label className="flex flex-col gap-1 text-xs text-zinc-400">
-              Credits-Betrag
+              Beschreibung (optional)
               <input
-                type="number"
-                value={rewardCredits}
-                onChange={(e) => setRewardCredits(Number(e.target.value) || 0)}
-                min={1}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Flavor-Text für den Tier…"
                 className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
               />
             </label>
-          )}
-        </div>
 
-        {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
+            {/* Free / Premium toggle */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsPremium(false)}
+                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${!isPremium ? "border-purple-400/60 bg-purple-500/20 text-purple-200" : "border-white/10 text-zinc-400 hover:border-white/30"}`}
+              >
+                ✦ Kostenlos (Alle)
+              </button>
+              <button
+                onClick={() => setIsPremium(true)}
+                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${isPremium ? "border-amber-400/60 bg-amber-500/20 text-amber-200" : "border-white/10 text-zinc-400 hover:border-white/30"}`}
+              >
+                👑 Premium only
+              </button>
+            </div>
 
-        <div className="mt-4 flex gap-2">
-          <button
-            onClick={onClose}
-            className="flex-1 rounded-lg border border-white/10 py-2 text-sm text-zinc-400 hover:border-white/30 transition-colors"
-          >
-            Abbrechen
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-purple-600 py-2 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-50 transition-colors"
-          >
-            <Save className="h-4 w-4" />
-            {saving ? "…" : "Speichern"}
-          </button>
+            {/* Highlight toggle */}
+            <button
+              onClick={() => setHighlightTier((v) => !v)}
+              className={`w-full flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${highlightTier ? "border-yellow-400/60 bg-yellow-500/15 text-yellow-200" : "border-white/10 text-zinc-400 hover:border-white/20"}`}
+            >
+              <Star className="h-3.5 w-3.5" />
+              {highlightTier ? "⭐ Milestone-Tier (hervorgehoben)" : "Als Milestone-Tier markieren"}
+            </button>
+
+            {/* Reward type */}
+            <label className="flex flex-col gap-1 text-xs text-zinc-400">
+              Belohnungstyp
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                {(Object.entries(REWARD_LABELS) as [BpRewardType, string][]).map(([rt, label]) => (
+                  <button
+                    key={rt}
+                    onClick={() => setRewardType(rt)}
+                    className={`flex items-center gap-1.5 rounded-lg border px-2 py-2 text-[11px] font-semibold transition-colors ${
+                      rewardType === rt ? "border-purple-400/60 bg-purple-500/20 text-purple-200" : "border-white/10 text-zinc-400 hover:border-white/25"
+                    }`}
+                  >
+                    {REWARD_ICONS[rt]}
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </label>
+
+            {/* Conditional reward fields */}
+            {rewardType === "credits" && (
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Credits-Betrag
+                  <input type="number" value={rewardCredits} onChange={(e) => setRewardCredits(Number(e.target.value) || 0)} min={1}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Menge (Multiplikator)
+                  <input type="number" value={rewardQuantity} onChange={(e) => setRewardQuantity(Math.max(1, Number(e.target.value) || 1))} min={1}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+                </label>
+              </div>
+            )}
+
+            {rewardType === "item" && (
+              <div className="space-y-2">
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Ausgewähltes Item
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100">
+                      {rewardItemId ? (
+                        <span className="text-purple-300">{rewardItemName || rewardItemId}</span>
+                      ) : (
+                        <span className="text-zinc-500">Kein Item ausgewählt</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setShowItemPicker(true)}
+                      className="flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/15 px-3 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-500/25 transition-colors"
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      Suchen
+                    </button>
+                  </div>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Menge
+                  <input type="number" value={rewardQuantity} onChange={(e) => setRewardQuantity(Math.max(1, Number(e.target.value) || 1))} min={1}
+                    className="w-24 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+                </label>
+              </div>
+            )}
+
+            {rewardType === "random_item" && (
+              <div className="space-y-2">
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Seltenheit (leer = alle)
+                  <select
+                    value={rewardItemRarity ?? ""}
+                    onChange={(e) => setRewardItemRarity((e.target.value as Rarity) || null)}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+                  >
+                    <option value="">Alle Seltenheiten</option>
+                    {RARITY_ORDER.map((r) => (
+                      <option key={r} value={r}>{RARITY_LABELS[r]}</option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-[10px] text-zinc-500">Ein zufälliges Item aus dem Shop wird vergeben, gefiltert nach Seltenheit.</p>
+              </div>
+            )}
+
+            {rewardType === "badge" && (
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Badge-Text (sichtbar)
+                  <input value={rewardBadgeText} onChange={(e) => setRewardBadgeText(e.target.value)}
+                    placeholder="z.B. Season 1 Veteran"
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Badge-Key (intern)
+                  <input value={rewardBadgeKey} onChange={(e) => setRewardBadgeKey(e.target.value)}
+                    placeholder="z.B. bp_s1_veteran"
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+                </label>
+              </div>
+            )}
+
+            {rewardType === "xp_boost" && (
+              <div className="space-y-2">
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Bonus-Tage (Fortschritt)
+                  <input type="number" value={rewardXpBoost} onChange={(e) => setRewardXpBoost(Math.max(1, Number(e.target.value) || 1))} min={1}
+                    className="w-32 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+                </label>
+                <p className="text-[10px] text-zinc-500">Fügt dem User zusätzliche Fortschrittstage hinzu (überspringt Tiers).</p>
+              </div>
+            )}
+          </div>
+
+          {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
+
+          <div className="mt-4 flex gap-2">
+            <button onClick={onClose} className="flex-1 rounded-lg border border-white/10 py-2 text-sm text-zinc-400 hover:border-white/30 transition-colors">Abbrechen</button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-purple-600 py-2 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-50 transition-colors"
+            >
+              <Save className="h-4 w-4" />
+              {saving ? "…" : "Speichern"}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {showItemPicker && (
+        <ItemPickerModal
+          onSelect={(id, name, _rarity) => { setRewardItemId(id); setRewardItemName(name); }}
+          onClose={() => setShowItemPicker(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -268,6 +572,11 @@ function PassEditor({
   const [tierCount, setTierCount] = useState(pass.tierCount);
   const [spinBoost, setSpinBoost] = useState(pass.spinChanceBoost);
   const [bannerColor, setBannerColor] = useState(pass.bannerColor);
+  const [theme, setTheme] = useState<BpTheme>(pass.theme ?? "default");
+  const [accentColor, setAccentColor] = useState(pass.accentColor ?? "#7c3aed");
+  const [bannerImageUrl, setBannerImageUrl] = useState(pass.bannerImageUrl ?? "");
+  const [showInShop, setShowInShop] = useState(pass.showInShop ?? true);
+  const [showOnDashboard, setShowOnDashboard] = useState(pass.showOnDashboard ?? true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -276,6 +585,7 @@ function PassEditor({
   const [activating, setActivating] = useState(false);
   const [editingTier, setEditingTier] = useState<{ num: number; existing: BattlePassTier | null } | null>(null);
   const [showPreview, setShowPreview] = useState(true);
+  const [showStats, setShowStats] = useState(false);
   const sound = useSoundManager();
   const router = useRouter();
 
@@ -293,6 +603,11 @@ function PassEditor({
       tierCount,
       spinChanceBoost: spinBoost,
       bannerColor,
+      theme,
+      accentColor,
+      bannerImageUrl: bannerImageUrl.trim() || null,
+      showInShop,
+      showOnDashboard,
     };
     const res = await adminUpdateBattlePass(pass.id, input);
     setSaving(false);
@@ -343,7 +658,7 @@ function PassEditor({
 
   return (
     <div className="space-y-4">
-      {/* Pass header info */}
+      {/* Basic info */}
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
           Pass-Name
@@ -351,7 +666,7 @@ function PassEditor({
             className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
-          Season-Label (z.B. "Woche 3")
+          Season-Label (z.B. "Season 1")
           <input value={seasonLabel} onChange={(e) => setSeasonLabel(e.target.value)}
             className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
@@ -361,8 +676,8 @@ function PassEditor({
             className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
-          Tiers (1–30)
-          <input type="number" value={tierCount} onChange={(e) => setTierCount(Math.max(1, Math.min(30, Number(e.target.value) || 1)))} min={1} max={30}
+          Anzahl Tiers (1–50)
+          <input type="number" value={tierCount} onChange={(e) => setTierCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} min={1} max={50}
             className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
@@ -376,7 +691,7 @@ function PassEditor({
             className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
-          Spin-Boost (0.0–0.5)
+          Spin-Boost Premium (0–0.5)
           <div className="flex items-center gap-2">
             <input type="number" value={spinBoost} step={0.005} min={0} max={0.5}
               onChange={(e) => setSpinBoost(Math.min(0.5, Math.max(0, Number(e.target.value))))}
@@ -385,11 +700,11 @@ function PassEditor({
           </div>
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
-          Banner-Farbe
+          Banner-Farbe (legacy)
           <div className="flex items-center gap-2">
             <input type="color" value={bannerColor} onChange={(e) => setBannerColor(e.target.value)}
               className="h-9 w-14 cursor-pointer rounded-lg border border-white/10 bg-black/30 p-1" />
-            <span className="text-sm text-zinc-300">{bannerColor}</span>
+            <span className="text-xs text-zinc-400">{bannerColor}</span>
           </div>
         </label>
       </div>
@@ -400,17 +715,68 @@ function PassEditor({
           className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60 resize-none" />
       </label>
 
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => setEnabled((e) => !e)}
-          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
-            enabled ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-200" : "border-white/10 text-zinc-400 hover:border-white/30"
-          }`}
-        >
-          {enabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-          {enabled ? "Sichtbar" : "Versteckt"}
-        </button>
+      {/* Banner image */}
+      <label className="flex flex-col gap-1 text-xs text-zinc-400">
+        Banner-Bild URL (optional)
+        <input value={bannerImageUrl} onChange={(e) => setBannerImageUrl(e.target.value)}
+          placeholder="https://…/banner.png"
+          className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+      </label>
 
+      {/* Theme selector */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
+          <Palette className="h-3.5 w-3.5" />Design-Theme
+        </p>
+        <ThemeSelector value={theme} onChange={setTheme} />
+      </div>
+
+      {/* Accent color */}
+      <label className="flex flex-col gap-1 text-xs text-zinc-400">
+        Akzentfarbe (für Theme-Override)
+        <div className="flex items-center gap-2">
+          <input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)}
+            className="h-9 w-14 cursor-pointer rounded-lg border border-white/10 bg-black/30 p-1" />
+          <span className="text-sm" style={{ color: accentColor }}>{accentColor}</span>
+        </div>
+      </label>
+
+      {/* Visibility toggles */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-zinc-400">Sichtbarkeit</p>
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => setEnabled((e) => !e)}
+            className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2.5 text-xs font-semibold transition-colors ${
+              enabled ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-200" : "border-white/10 text-zinc-500 hover:border-white/30"
+            }`}
+          >
+            {enabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            {enabled ? "Aktiv" : "Deaktiviert"}
+          </button>
+          <button
+            onClick={() => setShowInShop((v) => !v)}
+            className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2.5 text-xs font-semibold transition-colors ${
+              showInShop ? "border-blue-400/60 bg-blue-500/20 text-blue-200" : "border-white/10 text-zinc-500 hover:border-white/30"
+            }`}
+          >
+            <ShoppingBag className="h-4 w-4" />
+            {showInShop ? "Im Shop" : "Kein Shop"}
+          </button>
+          <button
+            onClick={() => setShowOnDashboard((v) => !v)}
+            className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2.5 text-xs font-semibold transition-colors ${
+              showOnDashboard ? "border-violet-400/60 bg-violet-500/20 text-violet-200" : "border-white/10 text-zinc-500 hover:border-white/30"
+            }`}
+          >
+            <BarChart2 className="h-4 w-4" />
+            {showOnDashboard ? "Dashboard" : "Kein Dashboard"}
+          </button>
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={handleToggleActive}
           disabled={activating}
@@ -441,14 +807,26 @@ function PassEditor({
           }`}
         >
           <Trash2 className="h-4 w-4" />
-          {deleting ? "…" : deleteConfirm ? "Sicher?" : "Löschen"}
+          {deleting ? "…" : deleteConfirm ? "Sicher löschen?" : "Löschen"}
         </button>
 
         {status === "saved" && <span className="text-sm font-semibold text-emerald-400">✓ Gespeichert</span>}
         {error && <span className="text-sm text-red-400">{error}</span>}
       </div>
 
-      {/* Tier preview */}
+      {/* Stats */}
+      <div>
+        <button
+          className="mb-2 flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
+          onClick={() => setShowStats((s) => !s)}
+        >
+          {showStats ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          Statistiken
+        </button>
+        {showStats && <StatsDisplay passId={pass.id} />}
+      </div>
+
+      {/* Preview */}
       <div>
         <button
           className="mb-2 flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
@@ -457,30 +835,42 @@ function PassEditor({
           {showPreview ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           Pass-Vorschau
         </button>
-        {showPreview && <TierPreview pass={pass} />}
+        {showPreview && (
+          <TierPreview
+            pass={{
+              ...pass,
+              name, seasonLabel, bannerColor, priceCr,
+              tierCount, spinChanceBoost: spinBoost,
+              theme, accentColor, showInShop,
+            }}
+          />
+        )}
       </div>
 
-      {/* Tier grid editor */}
+      {/* Tier editor grid */}
       <div>
-        <p className="mb-2 text-xs font-semibold text-zinc-400">Tiers bearbeiten — klicke einen Tier an</p>
+        <p className="mb-2 text-xs font-semibold text-zinc-400">Tier-Belohnungen konfigurieren</p>
         <div className="flex flex-wrap gap-1.5">
           {Array.from({ length: tierCount }, (_, i) => i + 1).map((n) => {
             const tier = tierMap.get(n);
+            const isHighlight = tier?.highlightTier;
             return (
               <button
                 key={n}
                 onClick={() => setEditingTier({ num: n, existing: tier ?? null })}
-                className={`flex flex-col items-center gap-0.5 rounded-lg border px-2 py-2 text-center transition-all hover:scale-105 ${
+                className={`flex flex-col items-center gap-0.5 rounded-lg border transition-all hover:scale-105 ${
+                  isHighlight ? "px-3 py-3 ring-1 ring-yellow-400/40" : "px-2 py-2"
+                } ${
                   tier?.isPremium === false
                     ? "border-purple-400/40 bg-purple-500/10 hover:border-purple-400/70"
                     : tier
                       ? "border-amber-400/30 bg-amber-500/10 hover:border-amber-400/60"
                       : "border-white/10 bg-white/[0.02] hover:border-white/30"
                 }`}
-                style={{ minWidth: "48px" }}
+                style={{ minWidth: "44px" }}
               >
                 <span className="text-[9px] text-zinc-500">{n}</span>
-                <span className="text-base leading-none">{tier?.icon ?? "+"}</span>
+                <span className={isHighlight ? "text-xl leading-none" : "text-base leading-none"}>{tier?.icon ?? "+"}</span>
                 {tier && (
                   <span className={`text-[8px] font-bold ${tier.isPremium ? "text-amber-400" : "text-purple-300"}`}>
                     {tier.isPremium ? "PRO" : "FREE"}
@@ -512,8 +902,10 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
   const [seasonLabel, setSeasonLabel] = useState("Season 1");
   const [priceCr, setPriceCr] = useState(2000);
   const [tierCount, setTierCount] = useState(20);
+  const [theme, setTheme] = useState<BpTheme>("default");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showThemeSelect, setShowThemeSelect] = useState(false);
   const sound = useSoundManager();
   const router = useRouter();
 
@@ -521,6 +913,7 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
     if (!name.trim()) return;
     setCreating(true);
     setError(null);
+    const selectedTheme = BP_THEMES[theme];
     const res = await adminCreateBattlePass({
       name,
       seasonLabel,
@@ -531,7 +924,12 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
       endDate: null,
       tierCount,
       spinChanceBoost: 0.02,
-      bannerColor: "#7c3aed",
+      bannerColor: selectedTheme.accent,
+      theme,
+      accentColor: selectedTheme.accent,
+      bannerImageUrl: null,
+      showInShop: true,
+      showOnDashboard: true,
     });
     setCreating(false);
     if (res.success) {
@@ -565,9 +963,19 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
           Anzahl Tiers
-          <input type="number" value={tierCount} onChange={(e) => setTierCount(Math.max(1, Math.min(30, Number(e.target.value) || 1)))} min={1} max={30}
+          <input type="number" value={tierCount} onChange={(e) => setTierCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} min={1} max={50}
             className="w-24 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
+        <div className="flex flex-col gap-1 text-xs text-zinc-400">
+          Theme
+          <button
+            onClick={() => setShowThemeSelect((s) => !s)}
+            className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 hover:border-white/20 transition-colors"
+          >
+            <span className="h-3 w-3 rounded-full" style={{ background: BP_THEMES[theme].accent }} />
+            {BP_THEMES[theme].label}
+          </button>
+        </div>
         <div className="flex items-end">
           <button
             onClick={handleCreate}
@@ -579,22 +987,19 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
           </button>
         </div>
       </div>
+      {showThemeSelect && (
+        <div className="mt-3">
+          <ThemeSelector value={theme} onChange={(t) => { setTheme(t); setShowThemeSelect(false); }} />
+        </div>
+      )}
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
     </div>
   );
 }
 
-// ── Main tab ──────────────────────────────────────────────────────────────────
+// ── Migration banner ──────────────────────────────────────────────────────────
 
 const MIGRATION_SQL = `-- In Supabase SQL Editor ausführen:
-
-ALTER TABLE profiles
-  ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS don_upgrade_tier integer NOT NULL DEFAULT 0;
-
-ALTER TABLE don_config
-  ADD COLUMN IF NOT EXISTS upgrade_enabled boolean NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS upgrade_tiers jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS battle_passes (
   id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -608,6 +1013,11 @@ CREATE TABLE IF NOT EXISTS battle_passes (
   tier_count integer NOT NULL DEFAULT 20,
   spin_chance_boost numeric(4,3) NOT NULL DEFAULT 0.020,
   banner_color text NOT NULL DEFAULT '#7c3aed',
+  theme text NOT NULL DEFAULT 'default',
+  accent_color text NOT NULL DEFAULT '#7c3aed',
+  banner_image_url text,
+  show_in_shop boolean NOT NULL DEFAULT true,
+  show_on_dashboard boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -621,6 +1031,10 @@ CREATE TABLE IF NOT EXISTS battle_pass_tiers (
   reward_type text NOT NULL DEFAULT 'credits',
   reward_credits integer DEFAULT 100,
   reward_item_id text, reward_badge_key text,
+  reward_badge_text text, reward_item_rarity text,
+  reward_xp_boost integer, reward_quantity integer NOT NULL DEFAULT 1,
+  highlight_tier boolean NOT NULL DEFAULT false,
+  description text,
   icon text NOT NULL DEFAULT '🎁',
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(pass_id, tier_number)
@@ -646,11 +1060,6 @@ CREATE TABLE IF NOT EXISTS user_bp_tier_claims (
   UNIQUE(user_id, tier_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_ubp_user ON user_battle_passes(user_id);
-CREATE INDEX IF NOT EXISTS idx_ubp_pass ON user_battle_passes(pass_id);
-CREATE INDEX IF NOT EXISTS idx_ubtc_user ON user_bp_tier_claims(user_id);
-CREATE INDEX IF NOT EXISTS idx_bpt_pass_num ON battle_pass_tiers(pass_id, tier_number);
-
 ALTER TABLE battle_passes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE battle_pass_tiers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_battle_passes ENABLE ROW LEVEL SECURITY;
@@ -673,8 +1082,7 @@ function MigrationBanner() {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-amber-200 mb-1">Datenbank-Migration erforderlich</p>
           <p className="text-xs text-amber-400/80 mb-3">
-            Die Battle-Pass-Tabellen existieren noch nicht in deiner Supabase-Datenbank.
-            Führe die SQL-Migration aus, bevor du Pässe erstellen kannst.
+            Die Battle-Pass-Tabellen existieren noch nicht. Führe die SQL-Migration aus.
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -691,7 +1099,7 @@ function MigrationBanner() {
               className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-400 hover:border-white/30 hover:text-zinc-200 transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Supabase SQL-Editor öffnen
+              Supabase öffnen
             </a>
           </div>
           <details className="mt-3">
@@ -704,9 +1112,10 @@ function MigrationBanner() {
   );
 }
 
+// ── Main tab ──────────────────────────────────────────────────────────────────
+
 export function BattlePassTab({ initialPasses, migrationNeeded = false }: { initialPasses: BattlePass[]; migrationNeeded?: boolean }) {
   const [passes, setPasses] = useState(initialPasses);
-  const [showMigration, setShowMigration] = useState(migrationNeeded);
   const sound = useSoundManager();
   const router = useRouter();
 
@@ -722,12 +1131,12 @@ export function BattlePassTab({ initialPasses, migrationNeeded = false }: { init
       <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
         <h2 className="mb-1 text-base font-bold text-zinc-100">Battle Pass System</h2>
         <p className="text-xs text-zinc-500">
-          Erstelle wöchentliche oder saisonale Pässe mit Tier-Belohnungen. Premium-Käufer schalten alle Tiers
-          frei und erhalten einen Spin-Bonus. Nur ein Pass kann gleichzeitig aktiv sein.
+          Erstelle saisonale Pässe mit Tier-Belohnungen. Premium-Käufer schalten alle Tiers frei und erhalten Spin-Bonus.
+          Belohnungstypen: Credits, spezifische Items, zufällige Items nach Seltenheit, Badges/Titel, Fortschritts-Boosts.
         </p>
       </div>
 
-      {showMigration && <MigrationBanner />}
+      {migrationNeeded && <MigrationBanner />}
 
       {activePass && (
         <div className="rounded-xl border border-purple-500/30 bg-purple-500/[0.06] p-4">
@@ -737,6 +1146,11 @@ export function BattlePassTab({ initialPasses, migrationNeeded = false }: { init
             <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
               {activePass.seasonLabel}
             </span>
+            {activePass.showInShop && (
+              <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-300 flex items-center gap-1">
+                <ShoppingBag className="h-2.5 w-2.5" /> Shop
+              </span>
+            )}
           </div>
           <TierPreview pass={activePass} />
         </div>
@@ -759,6 +1173,10 @@ export function BattlePassTab({ initialPasses, migrationNeeded = false }: { init
                     {pass.isActive && (
                       <span className="h-2 w-2 rounded-full bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.8)]" />
                     )}
+                    <span
+                      className="h-3 w-3 rounded-full shrink-0"
+                      style={{ background: BP_THEMES[pass.theme ?? "default"].accent }}
+                    />
                     <span className="font-semibold text-zinc-100">{pass.name}</span>
                     <span className="text-xs text-zinc-500">{pass.seasonLabel}</span>
                   </div>
@@ -768,11 +1186,13 @@ export function BattlePassTab({ initialPasses, migrationNeeded = false }: { init
                   <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">
                     {pass.tiers.length}/{pass.tierCount} Tiers
                   </span>
-                  {pass.isActive ? (
+                  {pass.isActive && (
                     <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">AKTIV</span>
-                  ) : !pass.enabled ? (
-                    <span className="rounded-full bg-zinc-500/20 px-2 py-0.5 text-[10px] text-zinc-500">AUS</span>
-                  ) : null}
+                  )}
+                  {!pass.enabled && (
+                    <span className="rounded-full bg-zinc-500/20 px-2 py-0.5 text-[10px] text-zinc-500">DEAKTIVIERT</span>
+                  )}
+                  {pass.showInShop && <ShoppingBag className="h-3.5 w-3.5 text-blue-400" />}
                 </div>
               }
             >
