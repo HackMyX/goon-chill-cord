@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -30,6 +30,7 @@ import { BattlePassTab } from "@/components/admin/battle-pass-tab";
 import { AiConfigEditor } from "@/components/admin/ai-config-editor";
 import { CleanupConfigEditor } from "@/components/admin/cleanup-config-editor";
 import { BadgesTab } from "@/components/admin/badges-tab";
+import { NameStylesTab } from "@/components/admin/name-styles-tab";
 import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
@@ -85,6 +86,8 @@ export interface ProfileRow {
   cases_opened: number;
   support_banned?: boolean;
   verified?: boolean;
+  warning_strikes?: number;
+  warning_note?: string;
 }
 
 export interface ItemRow {
@@ -131,7 +134,7 @@ interface AdminShellProps {
   plinkoConfig: PlinkoConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -156,6 +159,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "cleanup", label: "Verlaufs-Bereinigung", icon: Trash2 },
   { id: "battlepass", label: "Battle Pass", icon: Sparkles },
   { id: "badges", label: "Badges", icon: Crown },
+  { id: "namestyles", label: "Name-Styles", icon: Wand2 },
 ];
 
 export function AdminShell({
@@ -475,6 +479,8 @@ export function AdminShell({
         {tab === "battlepass" && <BattlePassTab initialPasses={battlePasses} migrationNeeded={battlePassMigrationNeeded} />}
 
         {tab === "badges" && <BadgesTab profiles={profiles.map(p => ({ id: p.id, username: p.username, role: p.role }))} />}
+
+        {tab === "namestyles" && <NameStylesTab profiles={profiles} />}
 
         {tab === "ki" && (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">

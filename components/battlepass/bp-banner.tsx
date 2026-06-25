@@ -152,11 +152,11 @@ export function BpBanner({ pass, userStatus, onPurchase }: BpBannerProps) {
           }}
         />
 
-        <div className="relative z-10 mx-auto max-w-7xl px-4 py-5 lg:py-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:gap-6">
+        <div className="relative z-10 mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-5 lg:py-6">
+          <div className="flex flex-col gap-4 sm:gap-5 lg:flex-row lg:items-center lg:gap-6 min-w-0">
 
             {/* ── LEFT: Pass info ───────────────────────────────────── */}
-            <div className="flex min-w-0 flex-col gap-2 lg:w-[260px] lg:shrink-0">
+            <div className="flex min-w-0 w-full flex-col gap-2 lg:w-[260px] lg:shrink-0">
               {/* Active badge + pass name row */}
               <div className="flex items-center gap-2 flex-wrap">
                 {pass.isActive && (
@@ -194,7 +194,7 @@ export function BpBanner({ pass, userStatus, onPurchase }: BpBannerProps) {
               </p>
 
               {/* Pass name */}
-              <h2 className="text-2xl font-black leading-tight tracking-tight text-white lg:text-3xl">
+              <h2 className="text-xl font-black leading-tight tracking-tight text-white sm:text-2xl lg:text-3xl">
                 {pass.name}
               </h2>
 

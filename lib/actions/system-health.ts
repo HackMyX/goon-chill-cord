@@ -85,6 +85,8 @@ const OPTIONAL_TABLES: Array<{ name: string; migration: string; feature: string 
   { name: "trade_items",        migration: "CREATE TABLE IF NOT EXISTS trade_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), trade_id uuid NOT NULL, inventory_id uuid, side text NOT NULL DEFAULT 'from', created_at timestamptz NOT NULL DEFAULT now()); ALTER TABLE trade_items ENABLE ROW LEVEL SECURITY;", feature: "Handel (Trade-Items)" },
   { name: "ip_duplicate_ignore","migration": "Supabase SQL Editor",                feature: "Security (IP-Ignore-Liste)" },
   { name: "shop_category_day_rules","migration": "Supabase SQL Editor",            feature: "Shop (Tagesregeln)" },
+  { name: "name_styles",            migration: "Supabase SQL Editor",              feature: "Name Styles" },
+  { name: "user_name_styles",       migration: "Supabase SQL Editor",              feature: "Name Styles (User-Zuweisungen)" },
 ];
 
 /** Config singleton rows that must exist. */
@@ -167,6 +169,10 @@ const COLUMN_CHECKS: Array<{
   { id: "col_bpt_iselite",        category: "Battle Pass",        table: "battle_pass_tiers",   col: "is_elite",                detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS is_elite boolean NOT NULL DEFAULT false;" },
   { id: "col_ubp_haselite",       category: "Battle Pass",        table: "user_battle_passes",  col: "has_elite",               detail: "ALTER TABLE user_battle_passes ADD COLUMN IF NOT EXISTS has_elite boolean NOT NULL DEFAULT false;" },
   { id: "col_ubp_elitepurchased", category: "Battle Pass",        table: "user_battle_passes",  col: "elite_purchased_at",      detail: "ALTER TABLE user_battle_passes ADD COLUMN IF NOT EXISTS elite_purchased_at timestamptz;" },
+  // Name Styles — new feature columns on profiles
+  { id: "col_profiles_active_name_style", category: "Name Styles", table: "profiles", col: "active_name_style_key", detail: "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS active_name_style_key text;" },
+  { id: "col_profiles_warning_strikes",   category: "Name Styles", table: "profiles", col: "warning_strikes",       detail: "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS warning_strikes integer NOT NULL DEFAULT 0;" },
+  { id: "col_profiles_warning_note",      category: "Name Styles", table: "profiles", col: "warning_note",          detail: "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS warning_note text;" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -595,6 +601,29 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
       : ok("user_badges", "Badges", "user_badges", `${ubCount ?? 0} vergebene Badge(s)`));
   } catch (e) {
     results.push(err("user_badges", "Badges", "user_badges", String(e)));
+  }
+
+  // ── 22. Name Styles ───────────────────────────────────────────────────────
+  try {
+    const { count: nsCount, error: nsErr } = await admin
+      .from("name_styles")
+      .select("*", { count: "exact", head: true });
+    results.push(nsErr
+      ? err("name_styles_count", "Name Styles", "name_styles", nsErr.message)
+      : ok("name_styles_count", "Name Styles", "name_styles", `${nsCount ?? 0} Style(s) definiert`));
+  } catch (e) {
+    results.push(err("name_styles_count", "Name Styles", "name_styles", String(e)));
+  }
+
+  try {
+    const { count: unsCount, error: unsErr } = await admin
+      .from("user_name_styles")
+      .select("*", { count: "exact", head: true });
+    results.push(unsErr
+      ? err("user_name_styles_count", "Name Styles", "user_name_styles", unsErr.message)
+      : ok("user_name_styles_count", "Name Styles", "user_name_styles", `${unsCount ?? 0} User-Zuweisung(en)`));
+  } catch (e) {
+    results.push(err("user_name_styles_count", "Name Styles", "user_name_styles", String(e)));
   }
 
   return results;

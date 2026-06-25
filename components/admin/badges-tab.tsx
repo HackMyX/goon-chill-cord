@@ -228,7 +228,7 @@ function BadgeDefinitionsSection({
             setShowCreate((v) => !v);
             setCreateError(null);
           }}
-          className="flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-xs font-medium text-purple-300 transition-colors hover:border-purple-400/50 hover:bg-purple-500/20"
+          className="flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs font-medium text-purple-300 transition-colors hover:border-purple-400/50 hover:bg-purple-500/20 min-h-[36px]"
         >
           <Plus className="h-3.5 w-3.5" />
           Neues Badge
@@ -371,7 +371,7 @@ function BadgeDefinitionsSection({
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); startEdit(def); }}
-                    className="flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs text-zinc-400 transition-colors hover:border-purple-400/30 hover:text-purple-300"
+                    className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-zinc-400 transition-colors hover:border-purple-400/30 hover:text-purple-300 min-h-[36px]"
                   >
                     <Edit2 className="h-3 w-3" />
                     Bearbeiten
@@ -383,7 +383,7 @@ function BadgeDefinitionsSection({
                         type="button"
                         onClick={() => handleDelete(def.key)}
                         disabled={deleting}
-                        className="flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-400 transition-colors hover:bg-red-500/20"
+                        className="flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-500/20 min-h-[36px]"
                       >
                         {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                         Ja
@@ -391,7 +391,7 @@ function BadgeDefinitionsSection({
                       <button
                         type="button"
                         onClick={() => { sound.click(); setConfirmDeleteKey(null); }}
-                        className="rounded-lg border border-white/10 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+                        className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 min-h-[36px]"
                       >
                         Nein
                       </button>
@@ -400,7 +400,7 @@ function BadgeDefinitionsSection({
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); sound.click(); setConfirmDeleteKey(def.key); setEditingKey(null); }}
-                      className="flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs text-zinc-500 transition-colors hover:border-red-500/30 hover:text-red-400"
+                      className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-zinc-500 transition-colors hover:border-red-500/30 hover:text-red-400 min-h-[36px]"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
@@ -666,11 +666,11 @@ function BadgesVergabeSection({
           </div>
 
           {/* Grant new badge */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={selectedBadgeKey}
               onChange={(e) => setSelectedBadgeKey(e.target.value)}
-              className="flex-1 rounded-lg border border-white/10 bg-[#0e0b18] px-3 py-2 text-sm text-white focus:border-purple-400/50 focus:outline-none"
+              className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#0e0b18] px-3 py-2.5 text-sm text-white focus:border-purple-400/50 focus:outline-none min-h-[44px]"
             >
               <option value="">-- Badge auswählen --</option>
               {grantableBadges.map((d) => (
@@ -683,7 +683,7 @@ function BadgesVergabeSection({
               type="button"
               onClick={handleGrant}
               disabled={!selectedBadgeKey || granting}
-              className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-purple-500 disabled:opacity-40"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2.5 text-xs font-medium text-white transition-colors hover:bg-purple-500 disabled:opacity-40 min-h-[44px]"
             >
               {granting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
               Vergeben

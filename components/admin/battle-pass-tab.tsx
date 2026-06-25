@@ -129,7 +129,7 @@ function ItemPickerModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0e0b18] p-5 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0e0b18] p-4 sm:p-5 shadow-2xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -139,21 +139,21 @@ function ItemPickerModal({
           </button>
         </div>
 
-        <div className="mb-3 flex gap-2">
-          <div className="relative flex-1">
+        <div className="mb-3 flex gap-2 flex-wrap sm:flex-nowrap">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Item suchen…"
-              className="w-full rounded-lg border border-white/10 bg-black/30 py-2 pl-9 pr-3 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+              className="w-full rounded-lg border border-white/10 bg-black/30 py-2.5 pl-9 pr-3 text-sm text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]"
               autoFocus
             />
           </div>
           <select
             value={rarity}
             onChange={(e) => setRarity(e.target.value as Rarity | "")}
-            className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+            className="w-full sm:w-auto rounded-lg border border-white/10 bg-black/30 px-2 py-2.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]"
           >
             <option value="">Alle</option>
             {RARITY_ORDER.map((r) => (
@@ -347,12 +347,12 @@ function AutoFillModal({
             <div className="space-y-2">
               {([
                 { key: "rewardMixCredits" as const, label: "Credits", color: "accent-emerald-400" },
-                { key: "rewardMixRandomItem" as const, label: "Zufälliges Item", color: "accent-purple-400" },
+                { key: "rewardMixRandomItem" as const, label: "Zuf. Item", color: "accent-purple-400" },
                 { key: "rewardMixXpBoost" as const, label: "XP Boost", color: "accent-blue-400" },
                 { key: "rewardMixBadge" as const, label: "Badge", color: "accent-amber-400" },
               ]).map(({ key, label, color }) => (
-                <div key={key} className="flex items-center gap-3">
-                  <span className="w-28 shrink-0 text-[11px] text-zinc-400">{label}</span>
+                <div key={key} className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 text-[11px] text-zinc-400">{label}</span>
                   <input
                     type="range"
                     min={0}
@@ -361,7 +361,7 @@ function AutoFillModal({
                     onChange={(e) => setRewardMix(key, Number(e.target.value))}
                     className={`flex-1 ${color}`}
                   />
-                  <span className="w-10 shrink-0 text-right text-[11px] text-zinc-300">{config[key]}%</span>
+                  <span className="w-8 shrink-0 text-right text-[11px] text-zinc-300">{config[key]}%</span>
                 </div>
               ))}
             </div>
@@ -376,8 +376,8 @@ function AutoFillModal({
               </span>
             </div>
             <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <span className="w-28 shrink-0 text-[11px] text-purple-300">✦ Kostenlos</span>
+              <div className="flex items-center gap-2">
+                <span className="w-16 shrink-0 text-[11px] text-purple-300">✦ Kostenlos</span>
                 <input
                   type="range"
                   min={0}
@@ -386,17 +386,17 @@ function AutoFillModal({
                   onChange={(e) => setTrackRatio("freeRatio", Number(e.target.value))}
                   className="flex-1 accent-purple-400"
                 />
-                <span className="w-10 shrink-0 text-right text-[11px] text-zinc-300">{config.freeRatio}%</span>
+                <span className="w-8 shrink-0 text-right text-[11px] text-zinc-300">{config.freeRatio}%</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="w-28 shrink-0 text-[11px] text-amber-300">👑 Premium</span>
-                <div className="flex-1 rounded bg-white/5 py-1 px-2 text-[10px] text-zinc-500">
-                  {premiumRatio}% (automatisch = 100 − Kostenlos − Elite)
+              <div className="flex items-center gap-2">
+                <span className="w-16 shrink-0 text-[11px] text-amber-300">👑 Premium</span>
+                <div className="flex-1 rounded bg-white/5 py-1 px-2 text-[10px] text-zinc-500 truncate">
+                  {premiumRatio}% (auto)
                 </div>
-                <span className="w-10 shrink-0 text-right text-[11px] text-zinc-300">{premiumRatio}%</span>
+                <span className="w-8 shrink-0 text-right text-[11px] text-zinc-300">{premiumRatio}%</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="w-28 shrink-0 text-[11px] text-violet-300">💎 Elite</span>
+              <div className="flex items-center gap-2">
+                <span className="w-16 shrink-0 text-[11px] text-violet-300">💎 Elite</span>
                 <input
                   type="range"
                   min={0}
@@ -405,7 +405,7 @@ function AutoFillModal({
                   onChange={(e) => setTrackRatio("eliteRatio", Number(e.target.value))}
                   className="flex-1 accent-violet-400"
                 />
-                <span className="w-10 shrink-0 text-right text-[11px] text-zinc-300">{config.eliteRatio}%</span>
+                <span className="w-8 shrink-0 text-right text-[11px] text-zinc-300">{config.eliteRatio}%</span>
               </div>
             </div>
           </div>
@@ -699,20 +699,20 @@ function TierEditorModal({
             </label>
 
             {/* Free / Premium / Elite 3-button toggle */}
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 sm:gap-2">
               <button
                 onClick={() => setTrack("free")}
-                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                className={`flex-1 rounded-lg border px-2 py-2.5 text-[10px] sm:text-xs font-semibold transition-colors min-h-[44px] ${
                   track === "free"
                     ? "border-purple-400/60 bg-purple-500/20 text-purple-200"
                     : "border-white/10 text-zinc-400 hover:border-white/30"
                 }`}
               >
-                ✦ Kostenlos (Alle)
+                ✦ Kostenlos
               </button>
               <button
                 onClick={() => setTrack("premium")}
-                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                className={`flex-1 rounded-lg border px-2 py-2.5 text-[10px] sm:text-xs font-semibold transition-colors min-h-[44px] ${
                   track === "premium"
                     ? "border-amber-400/60 bg-amber-500/20 text-amber-200"
                     : "border-white/10 text-zinc-400 hover:border-white/30"
@@ -722,7 +722,7 @@ function TierEditorModal({
               </button>
               <button
                 onClick={() => setTrack("elite")}
-                className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                className={`flex-1 rounded-lg border px-2 py-2.5 text-[10px] sm:text-xs font-semibold transition-colors min-h-[44px] ${
                   track === "elite"
                     ? "border-violet-400/60 bg-violet-500/20 text-violet-200"
                     : "border-white/10 text-zinc-400 hover:border-white/30"
@@ -992,7 +992,7 @@ function PassEditor({
   return (
     <div className="space-y-4">
       {/* Basic info */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
           Pass-Name
           <input value={name} onChange={(e) => setName(e.target.value)}
@@ -1116,7 +1116,7 @@ function PassEditor({
       {/* Visibility toggles */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-zinc-400">Sichtbarkeit</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button
             onClick={() => setEnabled((e) => !e)}
             className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-2.5 text-xs font-semibold transition-colors ${
@@ -1344,26 +1344,26 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
   return (
     <div className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] p-4">
       <h3 className="mb-3 text-sm font-bold text-zinc-200">Neuen Battle Pass erstellen</h3>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
           Name
           <input value={name} onChange={(e) => setName(e.target.value)}
-            className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+            className="w-full sm:w-auto rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
           Season-Label
           <input value={seasonLabel} onChange={(e) => setSeasonLabel(e.target.value)}
-            className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+            className="w-full sm:w-auto rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
           Preis (CR)
           <input type="number" value={priceCr} onChange={(e) => setPriceCr(Number(e.target.value) || 0)} min={0}
-            className="w-28 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+            className="w-full sm:w-28 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
           Anzahl Tiers
           <input type="number" value={tierCount} onChange={(e) => setTierCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} min={1} max={50}
-            className="w-24 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+            className="w-full sm:w-24 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
         <div className="flex flex-col gap-1 text-xs text-zinc-400">
           Theme

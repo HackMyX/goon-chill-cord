@@ -59,13 +59,13 @@ export default async function Home() {
       .eq("user_id", user.id),
     supabase
       .from("profiles")
-      .select("id, username, credits")
+      .select("id, username, credits, active_name_style_key")
       .or(`profile_visible.eq.true,id.eq.${user.id}`)
       .order("credits", { ascending: false })
       .limit(10),
     supabase
       .from("profiles")
-      .select("id, username, streak_days")
+      .select("id, username, streak_days, active_name_style_key")
       .or(`profile_visible.eq.true,id.eq.${user.id}`)
       .gt("streak_days", 0)
       .order("streak_days", { ascending: false })
@@ -86,11 +86,17 @@ export default async function Home() {
       initialCredits={profile?.credits ?? 0}
       inventoryCount={inventoryCount ?? 0}
       streakDays={profile?.streak_days ?? 0}
-      leaderboard={topProfiles ?? []}
+      leaderboard={(topProfiles ?? []).map((p) => ({
+        id: p.id,
+        username: p.username,
+        credits: p.credits,
+        active_name_style_key: (p as Record<string, unknown>).active_name_style_key as string | undefined,
+      }))}
       streakLeaderboard={(streakProfiles ?? []).map((p) => ({
         id: p.id,
         username: p.username,
         streak_days: p.streak_days ?? 0,
+        active_name_style_key: (p as Record<string, unknown>).active_name_style_key as string | undefined,
       }))}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}

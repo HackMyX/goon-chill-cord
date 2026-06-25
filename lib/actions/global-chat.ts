@@ -17,11 +17,13 @@ export interface GlobalChatMessage {
   createdAt: string;
   avatarUrl: string | null;
   badges?: string[];
+  nameStyleKey?: string;
 }
 
 function rowToMsg(r: Record<string, unknown>): GlobalChatMessage {
   const metadata = (r.metadata as Record<string, unknown>) ?? null;
   const badges = metadata?.badges as string[] | undefined;
+  const nameStyleKey = metadata?.name_style_key as string | undefined;
   return {
     id: r.id as string,
     userId: r.user_id as string | null,
@@ -33,6 +35,7 @@ function rowToMsg(r: Record<string, unknown>): GlobalChatMessage {
     createdAt: r.created_at as string,
     avatarUrl: (r.avatar_url as string) ?? null,
     badges: Array.isArray(badges) ? badges : undefined,
+    nameStyleKey,
   };
 }
 
@@ -212,7 +215,7 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Nicht eingeloggt." };
 
-  const { data: profile } = await supabase.from("profiles").select("username, role, temp_banned_until, avatar_url").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("username, role, temp_banned_until, avatar_url, active_name_style_key").eq("id", user.id).single();
   if (!profile) return { success: false, error: "Profil nicht gefunden." };
 
   if (profile.temp_banned_until && new Date(profile.temp_banned_until) > new Date()) {
@@ -272,7 +275,13 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
     content: trimmed,
     is_system: false,
     avatar_url: (profile as Record<string, unknown>).avatar_url ?? null,
-    metadata: badgeKeys.length > 0 ? { badges: badgeKeys } : null,
+    metadata: (() => {
+      const nameStyleKey = (profile as Record<string, unknown>).active_name_style_key as string | null | undefined;
+      const meta: Record<string, unknown> = {};
+      if (badgeKeys.length > 0) meta.badges = badgeKeys;
+      if (nameStyleKey) meta.name_style_key = nameStyleKey;
+      return Object.keys(meta).length > 0 ? meta : null;
+    })(),
   });
 
   if (error) return { success: false, error: error.message };

@@ -19,6 +19,8 @@ import { debugLog, debugWarn } from "@/lib/debug";
 import { RARITY_ORDER, type Rarity } from "@/lib/cases";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { NameStyleSection } from "@/components/wardrobe/name-style-section";
+import { getMyNameStyles, type UserNameStyleRow } from "@/lib/actions/name-styles";
 
 export interface InventoryRow {
   id: string;
@@ -46,6 +48,7 @@ interface WardrobeShellProps {
   initialInventory: InventoryRow[];
   initialGender: "m" | "w";
   genderLocked: boolean;
+  username: string;
   /** Admins are exempt from the gender lock (lib/actions/wardrobe.ts
    * enforces this server-side) — they need to freely flip between both
    * bodies to test the male/female Garderobe and World rendering. */
@@ -192,6 +195,7 @@ export function WardrobeShell({
   initialInventory,
   initialGender,
   genderLocked: initialGenderLocked,
+  username,
   isAdmin = false,
   isModerator = false,
 }: WardrobeShellProps) {
@@ -199,6 +203,9 @@ export function WardrobeShell({
   useRealtimeProfile((row) => {
     if (typeof row.credits === "number") setCredits(row.credits);
   });
+  useEffect(() => {
+    getMyNameStyles().then(setNameStyleData);
+  }, []);
   const [inventory, setInventory] = useState(initialInventory);
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY.id);
   const [gender, setGender] = useState<"m" | "w">(initialGender);
@@ -208,6 +215,10 @@ export function WardrobeShell({
   const [equippedOnly, setEquippedOnly] = useState(false);
   const [sort, setSort] = useState<SortKey>("rarity-desc");
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [nameStyleData, setNameStyleData] = useState<{
+    owned: UserNameStyleRow[];
+    activeKey: string | null;
+  } | null>(null);
   const sound = useSoundManager();
   const confirm = useConfirm();
 
@@ -518,6 +529,21 @@ export function WardrobeShell({
             )}
           </div>
         </div>
+
+        {nameStyleData && (
+          <div className="mt-6">
+            <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
+              <span>🎨</span>
+              Name-Styles
+            </h2>
+            <NameStyleSection
+              initialOwned={nameStyleData.owned}
+              initialActiveKey={nameStyleData.activeKey}
+              username={username}
+              credits={credits}
+            />
+          </div>
+        )}
       </main>
 
       {previewRow && (

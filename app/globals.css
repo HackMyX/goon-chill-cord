@@ -697,3 +697,134 @@
   height: 0;
 }
 .patchnote-richtext-editable .ProseMirror-focused { outline: none; }
+/* ═══════════════════════════════════════════════════════════════════════════════
+   NAME STYLE ANIMATIONS
+   Keyframes for the StyledUsername component (ns-* classes)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Shimmer: gradient background-position sweep ─────────────────────────────── */
+@keyframes ns-shimmer-kf {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+.ns-shimmer {
+  background-size: 400% auto;
+  animation: ns-shimmer-kf var(--ns-dur, 2s) linear infinite;
+}
+
+/* ── Pulse: glow breathing ───────────────────────────────────────────────────── */
+@keyframes ns-pulse-kf {
+  0%, 100% { opacity: 1; filter: brightness(1); }
+  50%       { opacity: 0.8; filter: brightness(1.35); }
+}
+.ns-pulse {
+  animation: ns-pulse-kf var(--ns-dur, 2s) ease-in-out infinite;
+}
+
+/* ── Wave: gradient position wave ────────────────────────────────────────────── */
+@keyframes ns-wave-kf {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.ns-wave {
+  background-size: 300% 300%;
+  animation: ns-wave-kf var(--ns-dur, 3s) ease infinite;
+}
+
+/* ── Rainbow: hue-rotate full cycle ─────────────────────────────────────────── */
+@keyframes ns-rainbow-kf {
+  0%   { filter: hue-rotate(0deg) brightness(1.1); }
+  100% { filter: hue-rotate(360deg) brightness(1.1); }
+}
+.ns-rainbow {
+  animation: ns-rainbow-kf var(--ns-dur, 3s) linear infinite;
+}
+
+/* ── Prismatic: wide spectrum sweep ─────────────────────────────────────────── */
+@keyframes ns-prismatic-kf {
+  0%   { background-position: 0% 50%; filter: hue-rotate(0deg); }
+  50%  { background-position: 100% 50%; filter: hue-rotate(180deg); }
+  100% { background-position: 0% 50%; filter: hue-rotate(360deg); }
+}
+.ns-prismatic {
+  background-image: linear-gradient(90deg, #ff0000, #ff8800, #ffff00, #00ff00, #00ffff, #0000ff, #8800ff, #ff0000) !important;
+  background-size: 400% auto;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  animation: ns-prismatic-kf var(--ns-dur, 2.5s) linear infinite;
+}
+
+/* ── Flicker: irregular brightness flicker ──────────────────────────────────── */
+@keyframes ns-flicker-kf {
+  0%,100% { opacity: 1;    filter: brightness(1); }
+  10%      { opacity: 0.85; filter: brightness(1.4); }
+  20%      { opacity: 1;    filter: brightness(0.9); }
+  30%      { opacity: 0.9;  filter: brightness(1.6); }
+  40%      { opacity: 1;    filter: brightness(1); }
+  60%      { opacity: 0.7;  filter: brightness(1.8); }
+  70%      { opacity: 1;    filter: brightness(1.1); }
+  90%      { opacity: 0.85; filter: brightness(1.3); }
+}
+.ns-flicker {
+  animation: ns-flicker-kf var(--ns-dur, 0.8s) steps(1) infinite;
+}
+
+/* ── Glitch: RGB split offset ────────────────────────────────────────────────── */
+@keyframes ns-glitch-kf {
+  0%,100% { text-shadow: 2px 0 #ff0000, -2px 0 #00ffff; transform: translate(0); }
+  10%      { text-shadow: -3px 0 #ff0000, 3px 0 #00ffff; transform: translate(-1px, 1px); }
+  20%      { text-shadow: 3px 0 #ff0000, -3px 0 #00ffff; transform: translate(1px, -1px); }
+  30%      { text-shadow: 0px 0 #ff0000, 0px 0 #00ffff; transform: translate(0); }
+  40%      { text-shadow: -4px 0 #ff0000, 4px 0 #00ffff; transform: translate(2px, 0); }
+  50%      { text-shadow: 4px 0 #ff0000, -4px 0 #00ffff; transform: translate(-2px, 0); }
+  60%      { text-shadow: 2px 0 #ff00ff, -2px 0 #00ff00; transform: translate(1px, 1px); }
+  70%      { text-shadow: 0 0 #ff0000, 0 0 #00ffff; transform: translate(0); }
+  80%      { text-shadow: -2px 0 #ff0000, 2px 0 #00ffff; transform: translate(-1px, -1px); }
+  90%      { text-shadow: 3px 1px #ff0000, -3px -1px #00ffff; transform: translate(1px, 0); }
+}
+.ns-glitch {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  animation: ns-glitch-kf var(--ns-dur, 0.4s) steps(1) infinite;
+}
+
+/* ── Matrix: scanline flicker ────────────────────────────────────────────────── */
+@keyframes ns-matrix-kf {
+  0%,100% { opacity: 1;   filter: brightness(1); }
+  25%      { opacity: 0.9; filter: brightness(1.3); }
+  50%      { opacity: 1;   filter: brightness(0.8); }
+  75%      { opacity: 0.85;filter: brightness(1.5); }
+}
+.ns-matrix {
+  color: #00ff41 !important;
+  -webkit-text-fill-color: #00ff41 !important;
+  font-family: monospace !important;
+  text-shadow: 0 0 8px #00ff41, 0 0 20px #00ff41, 0 0 40px #003b00;
+  animation: ns-matrix-kf var(--ns-dur, 1.2s) steps(1) infinite;
+}
+
+/* ── Hologram: shimmer + translucent ─────────────────────────────────────────── */
+@keyframes ns-hologram-kf {
+  0%   { opacity: 0.85; filter: brightness(0.9) saturate(1.5); }
+  33%  { opacity: 1;    filter: brightness(1.4) saturate(2); }
+  66%  { opacity: 0.9;  filter: brightness(1.1) saturate(1.8); }
+  100% { opacity: 0.85; filter: brightness(0.9) saturate(1.5); }
+}
+.ns-hologram {
+  background-size: 300% auto;
+  animation: ns-shimmer-kf var(--ns-dur, 2s) linear infinite,
+             ns-hologram-kf calc(var(--ns-dur, 2s) * 1.5) ease-in-out infinite;
+}
+
+/* ── Obfuscated: matrix glow (character cycling done in JS) ─────────────────── */
+.ns-obfuscated {
+  color: #00ff41 !important;
+  -webkit-text-fill-color: #00ff41 !important;
+  font-family: monospace !important;
+  font-weight: bold !important;
+  text-shadow: 0 0 8px #00ff41, 0 0 20px #00ff41;
+  letter-spacing: 0.05em;
+}

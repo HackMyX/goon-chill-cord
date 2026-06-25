@@ -159,7 +159,7 @@ function CleanupRuleRow({
             max={3650}
             value={days}
             onChange={(e) => setDays(Math.max(1, Math.min(3650, Number(e.target.value) || 30)))}
-            className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-0.5 text-center text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+            className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-center text-xs text-zinc-100 outline-none focus:border-purple-400/60 min-h-[36px]"
           />
           Tage
         </label>
@@ -168,7 +168,7 @@ function CleanupRuleRow({
           <button
             onClick={handleSaveDays}
             disabled={saving}
-            className="flex items-center gap-1 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-xs font-semibold text-purple-300 hover:bg-purple-500/20 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-500/20 disabled:opacity-50 transition-colors min-h-[36px]"
           >
             {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
             Speichern
@@ -179,7 +179,7 @@ function CleanupRuleRow({
           onClick={handleRunNow}
           disabled={running || saving}
           title={`Jetzt löschen: Alles älter als ${days} Tage`}
-          className="ml-auto flex items-center gap-1 rounded-lg border border-red-500/25 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+          className="sm:ml-auto flex items-center gap-1 rounded-lg border border-red-500/25 bg-red-500/10 px-2.5 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors min-h-[36px]"
         >
           {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
           Jetzt ausführen
@@ -278,17 +278,17 @@ export function CleanupConfigEditor({ rules: initialRules }: { rules: CleanupRul
       </div>
 
       {/* All-run button */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={handleRunAll}
           disabled={runningAll || activeCount === 0}
-          className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-50 transition-colors min-h-[44px]"
         >
           {runningAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
           Alle aktiven Regeln ausführen ({activeCount})
         </button>
         {allResult && (
-          <span className={`text-xs font-medium ${
+          <span className={`text-xs font-medium break-words ${
             allResult.type === "success"
               ? "text-emerald-400"
               : allResult.type === "warning"

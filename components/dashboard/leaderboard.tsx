@@ -5,18 +5,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Crown, Trophy, Medal, Coins, Flame, Zap } from "lucide-react";
 import { useRealtimeAllProfiles } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 export interface LeaderboardEntry {
   id: string;
   username: string;
   credits: number;
   streak_days?: number;
+  active_name_style_key?: string;
 }
 
 export interface StreakEntry {
   id: string;
   username: string;
   streak_days: number;
+  active_name_style_key?: string;
 }
 
 interface LeaderboardProps {
@@ -112,12 +115,14 @@ export function Leaderboard({
   useRealtimeAllProfiles((row) => {
     if (typeof row.id !== "string" || typeof row.username !== "string") return;
 
+    const activeNameStyleKey = row.active_name_style_key as string | undefined;
+
     // Update credits leaderboard
     if (typeof row.credits === "number") {
       setCreditEntries((curr) => {
         const without = curr.filter((e) => e.id !== row.id);
         if (row.profile_visible === false) return without;
-        return [...without, { id: row.id, username: row.username as string, credits: row.credits as number }]
+        return [...without, { id: row.id, username: row.username as string, credits: row.credits as number, active_name_style_key: activeNameStyleKey }]
           .sort((a, b) => b.credits - a.credits)
           .slice(0, 10);
       });
@@ -128,7 +133,7 @@ export function Leaderboard({
       setStreakEntries((curr) => {
         const without = curr.filter((e) => e.id !== row.id);
         if (row.profile_visible === false || row.streak_days === 0) return without;
-        return [...without, { id: row.id, username: row.username as string, streak_days: row.streak_days as number }]
+        return [...without, { id: row.id, username: row.username as string, streak_days: row.streak_days as number, active_name_style_key: activeNameStyleKey }]
           .sort((a, b) => b.streak_days - a.streak_days)
           .slice(0, 10);
       });
@@ -254,7 +259,11 @@ export function Leaderboard({
                             {isCredits ? cfg?.label : sCfg?.label}
                           </span>
                           <span className={`font-black ${isFirst ? "text-base" : "text-sm"} text-zinc-50 w-full truncate`}>
-                            {entry.username}
+                            <StyledUsername
+                              name={entry.username}
+                              styleKey={entry.active_name_style_key}
+                              size={isFirst ? "lg" : "md"}
+                            />
                           </span>
                           {isCredits ? (
                             <span className={`text-xs font-bold ${textClass} tabular-nums`}>
@@ -326,7 +335,11 @@ export function Leaderboard({
 
                       {/* Name */}
                       <span className="flex-1 truncate text-sm font-semibold text-zinc-100">
-                        {entry.username}
+                        <StyledUsername
+                          name={entry.username}
+                          styleKey={entry.active_name_style_key}
+                          size="sm"
+                        />
                       </span>
 
                       {/* Value */}

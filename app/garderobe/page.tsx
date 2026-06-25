@@ -50,6 +50,7 @@ export default async function GarderobePage() {
       initialInventory={inventoryRows}
       initialGender={(profile?.gender as "m" | "w") ?? "m"}
       genderLocked={(profile?.gender_locked ?? false) && !isAdmin(profile)}
+      username={profile?.username ?? ""}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}
     />

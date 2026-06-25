@@ -8,6 +8,7 @@ import { CharacterModel, type CharacterLimbRefs } from "@/components/world/chara
 import { angleDelta } from "@/components/world/player";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { getPublicLoadout, type RemoteLoadout } from "@/lib/actions/world";
+import { StyledUsername } from "@/components/ui/styled-username";
 import {
   subscribeToWorldRoster,
   subscribeToWorldTransforms,
@@ -364,7 +365,12 @@ function RemotePlayerAvatar({
                 ? "0 0 8px rgba(251,191,36,0.6)"
                 : "0 1px 4px rgba(0,0,0,0.9)",
             }}>
-              {loadout.username}
+              <StyledUsername
+                name={loadout.username}
+                styleKey={loadout.nameStyleKey}
+                size="sm"
+                staticMode={true}
+              />
             </div>
 
             {/* Badge row — only rendered when there is at least one badge */}
