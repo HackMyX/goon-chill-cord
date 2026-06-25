@@ -813,9 +813,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
             {alreadyRewarded && <Trophy className="h-3 w-3 shrink-0 text-amber-400" aria-label="Bereits belohnt" />}
             {t.attachmentUrl && <Paperclip className="h-3 w-3 shrink-0 text-zinc-500" aria-label="Hat Anhang" />}
           </div>
-          <span className="text-[11px] text-zinc-500 sm:hidden">von {t.username}</span>
-        </div>
-        <span className="hidden text-[11px] text-zinc-500 sm:block">von {t.username}</span>
+          <span className="text-[11px] text-zinc-500">von {t.username}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {isInProgress && (
