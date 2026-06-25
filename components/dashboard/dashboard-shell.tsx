@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
 import {
   Package, ShoppingBag, Shirt, Globe, Joystick, Pickaxe, Coins,
   Users, Repeat, Gavel, ClipboardList, X, ChevronRight,
@@ -21,6 +21,9 @@ import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { DEFAULT_HOMEPAGE_CONFIG, type HomepageConfig, type HomepageCardId } from "@/lib/site-config";
 import type { LucideIcon } from "lucide-react";
+import { BpBanner } from "@/components/battlepass/bp-banner";
+import { getActiveBattlePass } from "@/lib/actions/battle-pass";
+import type { ActiveBpView } from "@/lib/battle-pass";
 
 // Animated number that counts up when the value changes
 function AnimatedNumber({ value, className }: { value: number; className?: string }) {
@@ -193,6 +196,15 @@ export function DashboardShell({
   const onlineCount = useOnlineCount();
   const { siteName, logoUrl, logoIconName, currencyName } = useSiteConfig();
   const LogoIcon = resolveSiteLogoIcon(logoIconName);
+
+  const [bpView, setBpView] = useState<ActiveBpView | null>(null);
+  useEffect(() => {
+    getActiveBattlePass().then((view) => {
+      if (view && view.pass.showOnDashboard && view.pass.isActive) {
+        setBpView(view);
+      }
+    }).catch(() => { /* ignore */ });
+  }, []);
 
   const [announcementDismissed, setAnnouncementDismissed] = useState(true);
   useEffect(() => {
@@ -405,6 +417,14 @@ export function DashboardShell({
             </motion.div>
           </div>
         </section>
+
+        {/* ── BATTLE PASS BANNER ─────────────────────────────────────── */}
+        {bpView && (
+          <BpBanner
+            pass={bpView.pass}
+            userStatus={bpView.userStatus}
+          />
+        )}
 
         {/* ── FEATURE CARDS ──────────────────────────────────────────── */}
         {cfg.showFeatureCards && visibleCards.length > 0 && (

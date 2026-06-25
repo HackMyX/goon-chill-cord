@@ -8,6 +8,7 @@ export interface RemoteLoadout {
   username: string;
   gender: "m" | "w";
   verified: boolean;
+  role: "user" | "moderator" | "admin";
   equippedByCategory: Record<string, EquippedItem>;
 }
 
@@ -37,7 +38,7 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
   const admin = createAdminClient();
 
   const [{ data: profile }, { data: inventory }] = await Promise.all([
-    admin.from("profiles").select("username, gender, verified").eq("id", targetUserId).single(),
+    admin.from("profiles").select("username, gender, verified, role").eq("id", targetUserId).single(),
     admin
       .from("inventory")
       .select(
@@ -68,6 +69,7 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
       username: profile.username,
       gender: (profile.gender as "m" | "w") ?? "m",
       verified: (profile.verified as boolean | null) ?? false,
+      role: (profile.role as "user" | "moderator" | "admin") ?? "user",
       equippedByCategory,
     },
   };

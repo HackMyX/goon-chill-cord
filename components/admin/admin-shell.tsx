@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseTierEditor } from "@/components/admin/case-tier-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -29,6 +29,7 @@ import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { BattlePassTab } from "@/components/admin/battle-pass-tab";
 import { AiConfigEditor } from "@/components/admin/ai-config-editor";
 import { CleanupConfigEditor } from "@/components/admin/cleanup-config-editor";
+import { BadgesTab } from "@/components/admin/badges-tab";
 import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
@@ -130,7 +131,7 @@ interface AdminShellProps {
   plinkoConfig: PlinkoConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -154,6 +155,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "patchnotes", label: "Patch Notes", icon: FileText },
   { id: "cleanup", label: "Verlaufs-Bereinigung", icon: Trash2 },
   { id: "battlepass", label: "Battle Pass", icon: Sparkles },
+  { id: "badges", label: "Badges", icon: Crown },
 ];
 
 export function AdminShell({
@@ -399,7 +401,7 @@ export function AdminShell({
             <p className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] px-4 py-3 text-xs text-zinc-400">
               Diese Pet-Spezies sind fest — jede equipte Pet-Item wird anhand ihres Namens einer
               dieser Spezies zugeordnet (Hund/Katze/Phönix/Drache/Geist, alles andere fällt unter
-              „Sonstiges Haustier“). Pets greifen Monster in ihrem Aggro-Radius eigenständig an.
+              „Sonstiges Haustier"). Pets greifen Monster in ihrem Aggro-Radius eigenständig an.
             </p>
             {petTypes.map((type) => (
               <PetConfigEditor key={type.id} type={type} />
@@ -471,6 +473,8 @@ export function AdminShell({
         {tab === "cleanup" && <CleanupConfigEditor rules={cleanupRules} />}
 
         {tab === "battlepass" && <BattlePassTab initialPasses={battlePasses} migrationNeeded={battlePassMigrationNeeded} />}
+
+        {tab === "badges" && <BadgesTab profiles={profiles.map(p => ({ id: p.id, username: p.username, role: p.role }))} />}
 
         {tab === "ki" && (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">

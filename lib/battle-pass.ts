@@ -9,16 +9,17 @@ export interface BattlePassTier {
   tierNumber: number;
   name: string;
   isPremium: boolean;
+  isElite: boolean;
   rewardType: BpRewardType;
   rewardCredits: number | null;
   rewardItemId: string | null;
   rewardBadgeKey: string | null;
-  rewardBadgeText: string | null;    // displayed badge/title text
-  rewardItemRarity: Rarity | null;   // for random_item: filter by rarity
-  rewardXpBoost: number | null;      // for xp_boost: extra progress days
-  rewardQuantity: number;            // multiplier for credits / count for items
-  highlightTier: boolean;            // milestone tier (larger display)
-  description: string | null;        // optional flavor text
+  rewardBadgeText: string | null;
+  rewardItemRarity: Rarity | null;
+  rewardXpBoost: number | null;
+  rewardQuantity: number;
+  highlightTier: boolean;
+  description: string | null;
   icon: string;
 }
 
@@ -28,6 +29,8 @@ export interface BattlePass {
   seasonLabel: string;
   description: string | null;
   priceCr: number;
+  elitePriceCr: number;
+  eliteEnabled: boolean;
   enabled: boolean;
   isActive: boolean;
   startDate: string | null;
@@ -47,6 +50,7 @@ export interface BattlePass {
 export interface UserBpStatus {
   passId: string;
   hasPremium: boolean;
+  hasElite: boolean;
   progressDays: number;
   claimedTierIds: string[];
 }
@@ -87,4 +91,34 @@ export const BP_THEMES: Record<BpTheme, { label: string; gradient: string; accen
     accent: "#818cf8",
     glow: "rgba(129,140,248,0.4)",
   },
+};
+
+// ── Auto-fill config ──────────────────────────────────────────────────────────
+
+export interface BpAutoFillConfig {
+  creditMin: number;
+  creditMax: number;
+  milestoneTierInterval: number;
+  rewardMixCredits: number;
+  rewardMixRandomItem: number;
+  rewardMixXpBoost: number;
+  rewardMixBadge: number;
+  freeRatio: number;
+  eliteRatio: number;
+  rarityProgression: boolean;
+  creditProgression: boolean;
+}
+
+export const DEFAULT_AUTOFILL_CONFIG: BpAutoFillConfig = {
+  creditMin: 200,
+  creditMax: 5000,
+  milestoneTierInterval: 5,
+  rewardMixCredits: 60,
+  rewardMixRandomItem: 25,
+  rewardMixXpBoost: 10,
+  rewardMixBadge: 5,
+  freeRatio: 40,
+  eliteRatio: 30,
+  rarityProgression: true,
+  creditProgression: true,
 };

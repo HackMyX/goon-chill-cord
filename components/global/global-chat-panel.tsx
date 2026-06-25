@@ -5,6 +5,7 @@ import { Send, Loader2, MessageSquare, Crown, Shield, Zap, Trash2 } from "lucide
 import { createClient } from "@/lib/supabase/client";
 import { getGlobalChatMessages, sendGlobalChatMessage, clearGlobalChat, type GlobalChatMessage } from "@/lib/actions/global-chat";
 import { useSoundManager } from "@/lib/sound-manager";
+import { getBadgeStyle } from "@/lib/badges";
 
 const ROLE_BADGE: Record<string, { label: string; color: string } | undefined> = {
   admin:     { label: "Admin", color: "text-amber-300" },
@@ -29,6 +30,51 @@ const ROLE_INITIAL_BG: Record<string, string> = {
   moderator: "bg-sky-500/20 text-sky-300",
   user:      "bg-zinc-700 text-zinc-300",
 };
+
+/** Priority order for badge display — higher index = shown first */
+const BADGE_PRIORITY = ["admin", "mod", "elite", "premium", "vip", "og", "verified", "streaker", "helper"];
+
+function pickDisplayBadge(badges: string[], role: string): string | null {
+  // If role is admin or moderator, prefer the matching badge regardless
+  if (role === "admin" && badges.includes("admin")) return "admin";
+  if (role === "moderator" && badges.includes("mod")) return "mod";
+
+  // Return the highest-priority badge the user has
+  for (const key of BADGE_PRIORITY) {
+    if (badges.includes(key)) return key;
+  }
+  return null;
+}
+
+function ChatBadgePill({ badgeKey }: { badgeKey: string }) {
+  const style = getBadgeStyle(badgeKey);
+  // Map badge key to a short display label
+  const BADGE_LABELS: Record<string, string> = {
+    admin:    "Admin",
+    mod:      "Mod",
+    elite:    "Elite",
+    premium:  "Premium",
+    vip:      "VIP",
+    og:       "OG",
+    verified: "Verified",
+    streaker: "Streaker",
+    helper:   "Helper",
+  };
+  const label = BADGE_LABELS[badgeKey] ?? badgeKey;
+
+  return (
+    <span
+      className="inline-flex items-center rounded px-1 py-px text-[8px] font-bold leading-none shrink-0"
+      style={{
+        background: style.bg,
+        color: style.text,
+        border: `1px solid ${style.border}`,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
@@ -129,6 +175,8 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
     const id = row.id as string;
     // Capture the optimistic ID before the state update
     const optId = pendingOptimisticRef.current;
+    const metadata = (row.metadata as Record<string, unknown>) ?? null;
+    const badges = metadata?.badges as string[] | undefined;
 
     setMessages((prev) => {
       // Remove the optimistic placeholder if present
@@ -144,9 +192,10 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
           role: (row.role as string) ?? "user",
           content: row.content as string,
           isSystem: (row.is_system as boolean) ?? false,
-          metadata: (row.metadata as Record<string, unknown>) ?? null,
+          metadata,
           createdAt: row.created_at as string,
           avatarUrl: (row.avatar_url as string) ?? null,
+          badges: Array.isArray(badges) ? badges : undefined,
         },
       ];
     });
@@ -235,6 +284,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
           metadata: null,
           createdAt: new Date().toISOString(),
           avatarUrl: currentUser.avatarUrl,
+          // No badges on optimistic — the real message will carry the snapshot
         },
       ]);
       setTimeout(scrollToBottom, 30);
@@ -353,6 +403,9 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
           }
 
           const isSpecial = msg.role === "admin" || msg.role === "moderator";
+          const displayBadge = msg.badges && msg.badges.length > 0
+            ? pickDisplayBadge(msg.badges, msg.role)
+            : null;
 
           return (
             <div
@@ -375,6 +428,9 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
                       <span className="ml-1 opacity-60 font-normal">({badge.label})</span>
                     )}
                   </span>
+                  {displayBadge && (
+                    <ChatBadgePill badgeKey={displayBadge} />
+                  )}
                   <span className="text-[9px] text-zinc-600 ml-auto shrink-0">
                     {isOptimistic ? "Sendet…" : formatTime(msg.createdAt)}
                   </span>

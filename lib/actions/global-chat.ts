@@ -16,9 +16,12 @@ export interface GlobalChatMessage {
   metadata: Record<string, unknown> | null;
   createdAt: string;
   avatarUrl: string | null;
+  badges?: string[];
 }
 
 function rowToMsg(r: Record<string, unknown>): GlobalChatMessage {
+  const metadata = (r.metadata as Record<string, unknown>) ?? null;
+  const badges = metadata?.badges as string[] | undefined;
   return {
     id: r.id as string,
     userId: r.user_id as string | null,
@@ -26,9 +29,10 @@ function rowToMsg(r: Record<string, unknown>): GlobalChatMessage {
     role: (r.role as string) ?? "user",
     content: r.content as string,
     isSystem: (r.is_system as boolean) ?? false,
-    metadata: (r.metadata as Record<string, unknown>) ?? null,
+    metadata,
     createdAt: r.created_at as string,
     avatarUrl: (r.avatar_url as string) ?? null,
+    badges: Array.isArray(badges) ? badges : undefined,
   };
 }
 
@@ -247,6 +251,20 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
     return { success: false, error: `Zu schnell! Warte ${cfg.messageCooldownSec}s bevor du die nächste Nachricht sendest.` };
   }
 
+  // Fetch user's badges as a snapshot for display in the chat message
+  let badgeKeys: string[] = [];
+  try {
+    const { data: userBadges } = await admin
+      .from("user_badges")
+      .select("badge_key")
+      .eq("user_id", user.id);
+    if (userBadges && userBadges.length > 0) {
+      badgeKeys = userBadges.map((b: Record<string, unknown>) => b.badge_key as string).filter(Boolean);
+    }
+  } catch {
+    // If user_badges table doesn't exist yet, silently skip
+  }
+
   const { error } = await admin.from("global_chat_messages").insert({
     user_id: user.id,
     username: profile.username ?? "Unbekannt",
@@ -254,6 +272,7 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
     content: trimmed,
     is_system: false,
     avatar_url: (profile as Record<string, unknown>).avatar_url ?? null,
+    metadata: badgeKeys.length > 0 ? { badges: badgeKeys } : null,
   });
 
   if (error) return { success: false, error: error.message };

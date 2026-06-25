@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { Trash2, Play, Clock, CheckCircle2, AlertCircle, Loader2, RotateCcw, Info } from "lucide-react";
-import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import {
   updateCleanupRule,
   runCleanupNow,
@@ -30,6 +29,8 @@ function timeAgo(iso: string | null): string {
   return `vor ${Math.floor(h / 24)}d`;
 }
 
+type FlashState = { text: string; type: "success" | "warning" | "error" };
+
 function CleanupRuleRow({
   rule,
   onChange,
@@ -39,13 +40,15 @@ function CleanupRuleRow({
 }) {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
-  const [flash, setFlash] = useState<{ text: string; ok: boolean } | null>(null);
+  const [flash, setFlash] = useState<FlashState | null>(null);
   const [days, setDays] = useState(rule.retentionDays);
   const sound = useSoundManager();
 
-  function showFlash(text: string, ok: boolean) {
-    setFlash({ text, ok });
-    if (ok) sound.save(); else sound.error();
+  function showFlash(text: string, type: FlashState["type"]) {
+    setFlash({ text, type });
+    if (type === "success") sound.save();
+    else if (type === "error") sound.error();
+    else sound.click();
     setTimeout(() => setFlash(null), 3500);
   }
 
@@ -57,9 +60,9 @@ function CleanupRuleRow({
     setSaving(false);
     if (res.success) {
       onChange({ ...rule, enabled: newEnabled });
-      showFlash(newEnabled ? "Aktiviert." : "Deaktiviert.", true);
+      showFlash(newEnabled ? "Aktiviert." : "Deaktiviert.", "success");
     } else {
-      showFlash(res.error ?? "Fehler.", false);
+      showFlash(res.error ?? "Fehler.", "error");
     }
   }
 
@@ -70,9 +73,9 @@ function CleanupRuleRow({
     setSaving(false);
     if (res.success) {
       onChange({ ...rule, retentionDays: days });
-      showFlash(`Aufbewahrung: ${days} Tage gespeichert.`, true);
+      showFlash(`Aufbewahrung: ${days} Tage gespeichert.`, "success");
     } else {
-      showFlash(res.error ?? "Fehler.", false);
+      showFlash(res.error ?? "Fehler.", "error");
     }
   }
 
@@ -83,9 +86,13 @@ function CleanupRuleRow({
     setRunning(false);
     if (res.success) {
       onChange({ ...rule, lastRunAt: new Date().toISOString(), lastRunDeleted: res.deleted, retentionDays: days });
-      showFlash(`${res.deleted} Einträge gelöscht.`, true);
+      if (res.deleted === 0) {
+        showFlash(`Keine alten Einträge gefunden (alle Daten jünger als ${days} Tage).`, "warning");
+      } else {
+        showFlash(`${res.deleted} Einträge gelöscht.`, "success");
+      }
     } else {
-      showFlash(res.error ?? "Fehler.", false);
+      showFlash(res.error ?? "Fehler.", "error");
     }
   }
 
@@ -180,8 +187,16 @@ function CleanupRuleRow({
       </div>
 
       {flash && (
-        <p className={`mt-2 flex items-center gap-1 text-[11px] font-medium ${flash.ok ? "text-emerald-400" : "text-red-400"}`}>
-          {flash.ok ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+        <p className={`mt-2 flex items-center gap-1 text-[11px] font-medium ${
+          flash.type === "success"
+            ? "text-emerald-400"
+            : flash.type === "warning"
+            ? "text-amber-400"
+            : "text-red-400"
+        }`}>
+          {flash.type === "success" && <CheckCircle2 className="h-3 w-3" />}
+          {flash.type === "warning" && <Clock className="h-3 w-3" />}
+          {flash.type === "error" && <AlertCircle className="h-3 w-3" />}
           {flash.text}
         </p>
       )}
@@ -192,7 +207,7 @@ function CleanupRuleRow({
 export function CleanupConfigEditor({ rules: initialRules }: { rules: CleanupRule[] }) {
   const [rules, setRules] = useState(initialRules);
   const [runningAll, startRunAll] = useTransition();
-  const [allResult, setAllResult] = useState<string | null>(null);
+  const [allResult, setAllResult] = useState<{ text: string; type: "success" | "warning" | "error" } | null>(null);
   const sound = useSoundManager();
 
   function handleRuleChange(updated: CleanupRule) {
@@ -206,8 +221,19 @@ export function CleanupConfigEditor({ rules: initialRules }: { rules: CleanupRul
       const res = await runAllEnabledCleanups();
       if (res.success) {
         const total = res.results.reduce((s, r) => s + r.deleted, 0);
-        setAllResult(`Alle aktiven Regeln ausgeführt: ${total} Einträge gelöscht.`);
-        sound.save();
+        if (total === 0) {
+          setAllResult({
+            text: "Keine alten Einträge gefunden — alle Daten sind jünger als die Aufbewahrungsfristen.",
+            type: "warning",
+          });
+          sound.click();
+        } else {
+          setAllResult({
+            text: `Alle aktiven Regeln ausgeführt: ${total} Einträge gelöscht.`,
+            type: "success",
+          });
+          sound.save();
+        }
         // Update lastRunAt/lastRunDeleted in local state
         setRules((prev) =>
           prev.map((rule) => {
@@ -221,7 +247,7 @@ export function CleanupConfigEditor({ rules: initialRules }: { rules: CleanupRul
           })
         );
       } else {
-        setAllResult("Fehler beim Ausführen.");
+        setAllResult({ text: "Fehler beim Ausführen.", type: "error" });
         sound.error();
       }
     });
@@ -230,57 +256,63 @@ export function CleanupConfigEditor({ rules: initialRules }: { rules: CleanupRul
   const activeCount = rules.filter((r) => r.enabled).length;
 
   return (
-    <CollapsibleAdminRow
-      header={
-        <div className="flex items-center gap-2">
-          <Trash2 className="h-5 w-5 text-red-400" />
-          <span className="text-base font-bold text-zinc-100">Verlaufs-Bereinigung</span>
-          {activeCount > 0 && (
-            <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[11px] font-bold text-purple-300">
-              {activeCount} aktiv
-            </span>
-          )}
-        </div>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        {/* Info banner */}
-        <div className="flex items-start gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.04] px-4 py-3 text-[11px] text-zinc-400">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-400" />
-          <span>
-            Aktivierte Regeln löschen beim „Alle ausführen" automatisch alle Einträge die älter als die
-            eingestellte Anzahl Tage sind. <strong className="text-zinc-300">„Jetzt ausführen"</strong>{" "}
-            löscht sofort unabhängig vom aktiviert/deaktiviert Status.
-            Benachrichtigungen: es werden nur <em>gelesene</em> gelöscht.
-          </span>
-        </div>
-
-        {/* All-run button */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleRunAll}
-            disabled={runningAll || activeCount === 0}
-            className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
-          >
-            {runningAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-            Alle aktiven Regeln ausführen ({activeCount})
-          </button>
-          {allResult && (
-            <span className="text-xs font-medium text-emerald-400">{allResult}</span>
-          )}
-        </div>
-
-        {/* Rules */}
-        <div className="flex flex-col gap-2.5">
-          {rules.map((rule) => (
-            <CleanupRuleRow
-              key={rule.sourceKey}
-              rule={rule}
-              onChange={handleRuleChange}
-            />
-          ))}
-        </div>
+    <div className="flex flex-col gap-4">
+      {/* Section header */}
+      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 mb-0">
+        <h2 className="text-base font-bold text-zinc-100 mb-1">Verlaufs-Bereinigung</h2>
+        <p className="text-xs text-zinc-500">
+          Konfiguriere automatische Lösch-Regeln für alte Protokolldaten. Aktivierte Regeln löschen beim
+          "Alle ausführen" Einträge die älter als N Tage sind. "Jetzt ausführen" löscht sofort (unabhängig vom aktiv/deaktiviert Status).
+        </p>
       </div>
-    </CollapsibleAdminRow>
+
+      {/* Info banner */}
+      <div className="flex items-start gap-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.04] px-4 py-3 text-[11px] text-zinc-400">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-400" />
+        <span>
+          Aktivierte Regeln löschen beim „Alle ausführen" automatisch alle Einträge die älter als die
+          eingestellte Anzahl Tage sind. <strong className="text-zinc-300">„Jetzt ausführen"</strong>{" "}
+          löscht sofort unabhängig vom aktiviert/deaktiviert Status.
+          Benachrichtigungen: es werden nur <em>gelesene</em> gelöscht.
+        </span>
+      </div>
+
+      {/* All-run button */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleRunAll}
+          disabled={runningAll || activeCount === 0}
+          className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+        >
+          {runningAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          Alle aktiven Regeln ausführen ({activeCount})
+        </button>
+        {allResult && (
+          <span className={`text-xs font-medium ${
+            allResult.type === "success"
+              ? "text-emerald-400"
+              : allResult.type === "warning"
+              ? "text-amber-400"
+              : "text-red-400"
+          }`}>
+            {allResult.type === "success" && <CheckCircle2 className="inline h-3 w-3 mr-1" />}
+            {allResult.type === "warning" && <Clock className="inline h-3 w-3 mr-1" />}
+            {allResult.type === "error" && <AlertCircle className="inline h-3 w-3 mr-1" />}
+            {allResult.text}
+          </span>
+        )}
+      </div>
+
+      {/* Rules */}
+      <div className="flex flex-col gap-2.5">
+        {rules.map((rule) => (
+          <CleanupRuleRow
+            key={rule.sourceKey}
+            rule={rule}
+            onChange={handleRuleChange}
+          />
+        ))}
+      </div>
+    </div>
   );
 }

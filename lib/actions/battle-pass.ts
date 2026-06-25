@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { logDebugEvent } from "@/lib/debug-log-server";
-import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType, BpTheme } from "@/lib/battle-pass";
+import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType, BpTheme, BpAutoFillConfig } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -18,6 +18,7 @@ function rowToTier(r: Record<string, unknown>): BattlePassTier {
     tierNumber: r.tier_number as number,
     name: r.name as string,
     isPremium: r.is_premium as boolean,
+    isElite: (r.is_elite as boolean | null) ?? false,
     rewardType: r.reward_type as BpRewardType,
     rewardCredits: r.reward_credits as number | null,
     rewardItemId: r.reward_item_id as string | null,
@@ -39,6 +40,8 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
     seasonLabel: r.season_label as string,
     description: r.description as string | null,
     priceCr: r.price_cr as number,
+    elitePriceCr: (r.elite_price_cr as number | null) ?? 0,
+    eliteEnabled: (r.elite_enabled as boolean | null) ?? false,
     enabled: r.enabled as boolean,
     isActive: r.is_active as boolean,
     startDate: r.start_date as string | null,
@@ -86,7 +89,7 @@ export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
   const [{ data: ubpRow }, { data: claimRows }] = await Promise.all([
     admin
       .from("user_battle_passes")
-      .select("has_premium, progress_days")
+      .select("has_premium, has_elite, progress_days")
       .eq("user_id", user.id)
       .eq("pass_id", pass.id)
       .maybeSingle(),
@@ -100,6 +103,7 @@ export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
   const userStatus: UserBpStatus = {
     passId: pass.id,
     hasPremium: ubpRow?.has_premium ?? false,
+    hasElite: ubpRow?.has_elite ?? false,
     progressDays: ubpRow?.progress_days ?? 0,
     claimedTierIds: (claimRows ?? []).map((r) => r.tier_id as string),
   };
@@ -168,6 +172,82 @@ export async function purchaseBattlePass(passId: string): Promise<{ success: boo
       user_id: user.id,
       action: "battle_pass_purchase",
       payload: { passId, cost: passRow.price_cr, newCredits },
+    });
+  } catch { /* ignore */ }
+
+  revalidatePath("/battlepass");
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function purchaseEliteBattlePass(passId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Du musst eingeloggt sein." };
+
+  const admin = createAdminClient();
+  const [{ data: passRow }, { data: profile }, { currencyName }] = await Promise.all([
+    admin.from("battle_passes").select("id, elite_price_cr, elite_enabled, enabled, is_active").eq("id", passId).single(),
+    admin.from("profiles").select("credits").eq("id", user.id).single(),
+    getSiteConfig(),
+  ]);
+
+  if (!passRow || !passRow.enabled || !passRow.is_active) {
+    return { success: false, error: "Dieser Pass ist nicht verfügbar." };
+  }
+  if (!(passRow.elite_enabled as boolean)) {
+    return { success: false, error: "Der Elite-Pass ist nicht verfügbar." };
+  }
+  if (!profile) return { success: false, error: "Profil nicht gefunden." };
+
+  const elitePriceCr = (passRow.elite_price_cr as number | null) ?? 0;
+  if (profile.credits < elitePriceCr) {
+    return { success: false, error: `Nicht genug ${currencyName}. Benötigt: ${elitePriceCr.toLocaleString("de-DE")} ${currencyName}.` };
+  }
+
+  const { data: existing } = await admin
+    .from("user_battle_passes")
+    .select("id, has_elite")
+    .eq("user_id", user.id)
+    .eq("pass_id", passId)
+    .maybeSingle();
+
+  if (existing?.has_elite) {
+    return { success: false, error: "Du hast den Elite-Pass bereits." };
+  }
+
+  const newCredits = profile.credits - elitePriceCr;
+
+  const { error: creditError } = await admin
+    .from("profiles")
+    .update({ credits: newCredits })
+    .eq("id", user.id)
+    .gte("credits", elitePriceCr);
+
+  if (creditError) return { success: false, error: `Nicht genug ${currencyName}.` };
+
+  const now = new Date().toISOString();
+  if (existing) {
+    await admin
+      .from("user_battle_passes")
+      .update({ has_elite: true, elite_purchased_at: now })
+      .eq("id", existing.id);
+  } else {
+    await admin.from("user_battle_passes").insert({
+      user_id: user.id,
+      pass_id: passId,
+      has_premium: false,
+      has_elite: true,
+      progress_days: 0,
+      elite_purchased_at: now,
+    });
+  }
+
+  try {
+    await admin.from("audit_logs").insert({
+      user_id: user.id,
+      action: "battle_pass_elite_purchase",
+      payload: { passId, cost: elitePriceCr, newCredits },
     });
   } catch { /* ignore */ }
 
@@ -456,6 +536,8 @@ export interface AdminPassInput {
   seasonLabel: string;
   description: string;
   priceCr: number;
+  elitePriceCr: number;
+  eliteEnabled: boolean;
   enabled: boolean;
   startDate: string | null;
   endDate: string | null;
@@ -483,6 +565,8 @@ export async function adminCreateBattlePass(
       season_label: input.seasonLabel.trim(),
       description: input.description.trim() || null,
       price_cr: Math.max(0, Math.round(input.priceCr)),
+      elite_price_cr: Math.max(0, Math.round(input.elitePriceCr)),
+      elite_enabled: input.eliteEnabled,
       enabled: input.enabled,
       is_active: false,
       start_date: input.startDate || null,
@@ -522,6 +606,8 @@ export async function adminUpdateBattlePass(
       season_label: input.seasonLabel.trim(),
       description: input.description.trim() || null,
       price_cr: Math.max(0, Math.round(input.priceCr)),
+      elite_price_cr: Math.max(0, Math.round(input.elitePriceCr)),
+      elite_enabled: input.eliteEnabled,
       enabled: input.enabled,
       start_date: input.startDate || null,
       end_date: input.endDate || null,
@@ -577,6 +663,7 @@ export interface AdminTierInput {
   tierNumber: number;
   name: string;
   isPremium: boolean;
+  isElite: boolean;
   rewardType: BpRewardType;
   rewardCredits: number | null;
   rewardItemId: string | null;
@@ -605,6 +692,7 @@ export async function adminUpsertBpTier(
       tier_number: input.tierNumber,
       name: input.name.trim(),
       is_premium: input.isPremium,
+      is_elite: input.isElite ?? false,
       reward_type: input.rewardType,
       reward_credits: input.rewardType === "credits" ? (input.rewardCredits ?? 100) : null,
       reward_item_id: (input.rewardType === "item") ? input.rewardItemId : null,
@@ -622,4 +710,164 @@ export async function adminUpsertBpTier(
   revalidatePath("/admin");
   revalidatePath("/battlepass");
   return { success: true };
+}
+
+export async function adminAutoFillBpTiers(
+  passId: string,
+  config: BpAutoFillConfig
+): Promise<{ success: boolean; count: number; error?: string }> {
+  const user = await requireAdminUser();
+  if (!user) return { success: false, count: 0, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+
+  // Fetch pass to get tierCount
+  const { data: passRow, error: passError } = await admin
+    .from("battle_passes")
+    .select("id, tier_count")
+    .eq("id", passId)
+    .single();
+
+  if (passError || !passRow) {
+    return { success: false, count: 0, error: "Pass nicht gefunden." };
+  }
+
+  const tierCount = passRow.tier_count as number;
+
+  // Determine track boundaries
+  const freeCount = Math.ceil(tierCount * config.freeRatio / 100);
+  const eliteCount = Math.ceil(tierCount * config.eliteRatio / 100);
+  const premiumCount = tierCount - freeCount - eliteCount;
+
+  // Build all tier upsert rows
+  const rows: Record<string, unknown>[] = [];
+
+  for (let tierNumber = 1; tierNumber <= tierCount; tierNumber++) {
+    const isMilestone = tierNumber % config.milestoneTierInterval === 0;
+
+    // Determine track
+    let isPremium = false;
+    let isElite = false;
+    if (tierNumber <= freeCount) {
+      // free track
+    } else if (tierNumber <= freeCount + premiumCount) {
+      isPremium = true;
+    } else {
+      isElite = true;
+    }
+
+    // Determine reward type via deterministic hash
+    const hash = (tierNumber * 2654435761) % 100;
+    let rewardType: BpRewardType;
+    if (hash < config.rewardMixCredits) {
+      rewardType = "credits";
+    } else if (hash < config.rewardMixCredits + config.rewardMixRandomItem) {
+      rewardType = "random_item";
+    } else if (hash < config.rewardMixCredits + config.rewardMixRandomItem + config.rewardMixXpBoost) {
+      rewardType = "xp_boost";
+    } else {
+      rewardType = "badge";
+    }
+
+    // Credit amount
+    let rewardCredits: number | null = null;
+    if (rewardType === "credits") {
+      if (config.creditProgression) {
+        rewardCredits = Math.round(config.creditMin + (config.creditMax - config.creditMin) * (tierNumber / tierCount));
+      } else {
+        const range = config.creditMax - config.creditMin;
+        rewardCredits = config.creditMin + ((tierNumber * 1234567) % (range + 1));
+      }
+    }
+
+    // Rarity for random_item
+    let rewardItemRarity: Rarity | null = null;
+    if (rewardType === "random_item") {
+      if (config.rarityProgression) {
+        const pct = (tierNumber / tierCount) * 100;
+        if (pct <= 25) {
+          rewardItemRarity = "normal" as Rarity;
+        } else if (pct <= 60) {
+          rewardItemRarity = "selten" as Rarity;
+        } else if (pct <= 85) {
+          rewardItemRarity = "mythisch" as Rarity;
+        } else {
+          rewardItemRarity = "ultra" as Rarity;
+        }
+      } else {
+        rewardItemRarity = "selten" as Rarity;
+      }
+    }
+
+    // XP boost amount
+    const rewardXpBoost = rewardType === "xp_boost"
+      ? 1 + Math.floor(tierNumber / (tierCount / 3))
+      : null;
+
+    // Badge fields
+    const rewardBadgeKey = isMilestone ? "bp_milestone" : null;
+    const rewardBadgeText = (rewardType === "badge" && isMilestone) ? `Tier ${tierNumber} Meister` : null;
+
+    // Icon
+    let icon: string;
+    if (isMilestone) {
+      icon = "⭐";
+    } else if (rewardType === "credits") {
+      icon = "💰";
+    } else if (rewardType === "random_item") {
+      icon = "🎁";
+    } else if (rewardType === "xp_boost") {
+      icon = "⚡";
+    } else {
+      icon = "🏆";
+    }
+
+    const name = isMilestone ? `Meilenstein ${tierNumber}` : `Tier ${tierNumber}`;
+
+    rows.push({
+      pass_id: passId,
+      tier_number: tierNumber,
+      name,
+      is_premium: isPremium,
+      is_elite: isElite,
+      reward_type: rewardType,
+      reward_credits: rewardType === "credits" ? rewardCredits : null,
+      reward_item_id: null,
+      reward_badge_key: rewardBadgeKey,
+      reward_badge_text: rewardType === "badge" ? (rewardBadgeText ?? `Tier ${tierNumber} Meister`) : null,
+      reward_item_rarity: rewardType === "random_item" ? rewardItemRarity : null,
+      reward_xp_boost: rewardType === "xp_boost" ? rewardXpBoost : null,
+      reward_quantity: 1,
+      highlight_tier: isMilestone,
+      description: null,
+      icon,
+    });
+  }
+
+  // Batch upsert
+  const { error: upsertError } = await admin
+    .from("battle_pass_tiers")
+    .upsert(rows, { onConflict: "pass_id,tier_number" });
+
+  if (upsertError) {
+    void logDebugEvent({
+      scope: "adminAutoFillBpTiers",
+      message: "Auto-Fill fehlgeschlagen",
+      level: "error",
+      detail: upsertError.message,
+      context: { passId, tierCount },
+    });
+    return { success: false, count: 0, error: "Tier-Generierung fehlgeschlagen." };
+  }
+
+  void logDebugEvent({
+    scope: "adminAutoFillBpTiers",
+    message: `Auto-Fill erfolgreich: ${tierCount} Tiers generiert`,
+    level: "info",
+    context: { passId, tierCount, config },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/battlepass");
+  return { success: true, count: rows.length };
 }

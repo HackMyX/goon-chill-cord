@@ -285,13 +285,35 @@ function RemotePlayerAvatar({
   const hpPct = Math.max(0, Math.min(100, (displayHp / maxHp) * 100));
   const hpColor = hpPct > 50 ? "#4ade80" : hpPct > 20 ? "#facc15" : "#ef4444";
 
+  const isAdmin = loadout.role === "admin";
+  const isMod = loadout.role === "moderator";
+
+  // Container border + glow based on role
+  const containerBorderColor = isAdmin
+    ? "rgba(239,68,68,0.7)"
+    : isMod
+    ? "rgba(34,197,94,0.7)"
+    : loadout.verified
+    ? "rgba(168,85,247,0.6)"
+    : "rgba(255,255,255,0.1)";
+
+  const containerBoxShadow = isAdmin
+    ? "0 0 12px rgba(239,68,68,0.5), 0 0 24px rgba(239,68,68,0.2), inset 0 0 8px rgba(239,68,68,0.05)"
+    : isMod
+    ? "0 0 12px rgba(34,197,94,0.45), 0 0 24px rgba(34,197,94,0.15), inset 0 0 8px rgba(34,197,94,0.05)"
+    : loadout.verified
+    ? "0 0 10px rgba(168,85,247,0.35), 0 0 20px rgba(168,85,247,0.1)"
+    : "0 2px 8px rgba(0,0,0,0.5)";
+
+  const usernameColor = isAdmin ? "#fbbf24" : "#f4f4f5";
+
   return (
     <group ref={group} position={[0, 0, 0]}>
       <CharacterModel
         ref={limbs}
         equippedByCategory={equippedByCategory}
         gender={loadout.gender}
-        name={loadout.username}
+        name=""
       />
       {bloodBursts.map((b) => (
         <group key={b.id} position={[0, 1.1, 0]}>
@@ -299,7 +321,7 @@ function RemotePlayerAvatar({
           <FloatingDamageNumber amount={b.amount} />
         </group>
       ))}
-      {/* HP bar + name tag — HTML overlay in 3D space, always faces camera */}
+      {/* Name tag + HP bar — HTML overlay in 3D space, always faces camera */}
       <Html
         position={[0, 2.6, 0]}
         center
@@ -311,60 +333,143 @@ function RemotePlayerAvatar({
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "3px",
-          minWidth: "80px",
-          opacity: isDead ? 0.4 : 1,
+          gap: "5px",
+          opacity: isDead ? 0.35 : 1,
           transition: "opacity 0.3s",
         }}>
-          {/* Username + verified badge */}
+          {/* Card container */}
           <div style={{
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
-            gap: "3px",
-            color: "#e4e4e7",
-            fontSize: "11px",
-            fontWeight: 700,
-            fontFamily: "system-ui, sans-serif",
-            textShadow: "0 1px 4px rgba(0,0,0,0.9)",
-            whiteSpace: "nowrap",
-            letterSpacing: "0.02em",
+            gap: "5px",
+            padding: "6px 10px 7px",
+            background: "rgba(9,9,11,0.72)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+            border: `1px solid ${containerBorderColor}`,
+            borderRadius: "10px",
+            boxShadow: containerBoxShadow,
+            minWidth: "88px",
           }}>
-            {loadout.username}
-            {loadout.verified && (
-              <span style={{
-                color: "#3b82f6",
-                fontSize: "10px",
-                textShadow: "0 0 6px rgba(59,130,246,0.8)",
-              }}>✓</span>
-            )}
-          </div>
-          {/* HP bar */}
-          <div style={{
-            width: "72px",
-            height: "5px",
-            borderRadius: "3px",
-            background: "rgba(0,0,0,0.6)",
-            overflow: "hidden",
-            boxShadow: "0 0 0 1px rgba(255,255,255,0.12)",
-          }}>
+            {/* Username */}
             <div style={{
-              width: `${hpPct}%`,
-              height: "100%",
-              background: hpColor,
+              color: usernameColor,
+              fontSize: "11px",
+              fontWeight: 700,
+              fontFamily: "system-ui, sans-serif",
+              letterSpacing: "0.03em",
+              whiteSpace: "nowrap",
+              textShadow: isAdmin
+                ? "0 0 8px rgba(251,191,36,0.6)"
+                : "0 1px 4px rgba(0,0,0,0.9)",
+            }}>
+              {loadout.username}
+            </div>
+
+            {/* Badge row — only rendered when there is at least one badge */}
+            {(isAdmin || isMod || loadout.verified) && (
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                flexWrap: "nowrap",
+              }}>
+                {isAdmin && (
+                  <span style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "2px",
+                    padding: "1px 6px",
+                    background: "rgba(239,68,68,0.18)",
+                    border: "1px solid rgba(239,68,68,0.55)",
+                    borderRadius: "999px",
+                    color: "#fca5a5",
+                    fontSize: "8px",
+                    fontWeight: 700,
+                    fontFamily: "system-ui, sans-serif",
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    boxShadow: "0 0 6px rgba(239,68,68,0.4)",
+                    whiteSpace: "nowrap",
+                  }}>
+                    ⚡ Admin
+                  </span>
+                )}
+                {isMod && (
+                  <span style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "2px",
+                    padding: "1px 6px",
+                    background: "rgba(34,197,94,0.15)",
+                    border: "1px solid rgba(34,197,94,0.5)",
+                    borderRadius: "999px",
+                    color: "#86efac",
+                    fontSize: "8px",
+                    fontWeight: 700,
+                    fontFamily: "system-ui, sans-serif",
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    boxShadow: "0 0 6px rgba(34,197,94,0.3)",
+                    whiteSpace: "nowrap",
+                  }}>
+                    🛡 Mod
+                  </span>
+                )}
+                {loadout.verified && (
+                  <span style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "2px",
+                    padding: "1px 6px",
+                    background: "rgba(59,130,246,0.15)",
+                    border: "1px solid rgba(59,130,246,0.5)",
+                    borderRadius: "999px",
+                    color: "#93c5fd",
+                    fontSize: "8px",
+                    fontWeight: 700,
+                    fontFamily: "system-ui, sans-serif",
+                    letterSpacing: "0.04em",
+                    boxShadow: "0 0 6px rgba(59,130,246,0.35)",
+                    whiteSpace: "nowrap",
+                  }}>
+                    ✦ Verified
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* HP bar */}
+            <div style={{
+              width: "72px",
+              height: "5px",
               borderRadius: "3px",
-              transition: "width 0.15s ease, background 0.3s ease",
-              boxShadow: `0 0 6px ${hpColor}88`,
-            }} />
-          </div>
-          {/* HP text */}
-          <div style={{
-            color: hpColor,
-            fontSize: "9px",
-            fontWeight: 700,
-            fontFamily: "monospace",
-            textShadow: "0 1px 3px rgba(0,0,0,0.9)",
-          }}>
-            {isDead ? "☠ TOT" : `${displayHp}/${maxHp}`}
+              background: "rgba(0,0,0,0.6)",
+              overflow: "hidden",
+              boxShadow: "0 0 0 1px rgba(255,255,255,0.1)",
+            }}>
+              <div style={{
+                width: `${hpPct}%`,
+                height: "100%",
+                background: hpColor,
+                borderRadius: "3px",
+                transition: "width 0.15s ease, background 0.3s ease",
+                boxShadow: `0 0 6px ${hpColor}88`,
+              }} />
+            </div>
+
+            {/* HP text */}
+            <div style={{
+              color: hpColor,
+              fontSize: "9px",
+              fontWeight: 700,
+              fontFamily: "monospace",
+              textShadow: "0 1px 3px rgba(0,0,0,0.9)",
+              letterSpacing: "0.02em",
+            }}>
+              {isDead ? "☠ TOT" : `${displayHp}/${maxHp}`}
+            </div>
           </div>
         </div>
       </Html>

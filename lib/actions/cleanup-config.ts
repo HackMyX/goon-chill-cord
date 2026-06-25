@@ -184,7 +184,7 @@ export async function runAllEnabledCleanups(): Promise<{
     }
     return { success: true, results };
   } catch (e) {
-    return { success: false, results: [], };
+    return { success: false, results: [] };
   }
 }
 
@@ -192,90 +192,193 @@ export async function runAllEnabledCleanups(): Promise<{
 // Per-source delete logic
 // ---------------------------------------------------------------------------
 
+/** Postgres error code for "relation does not exist" (table missing). */
+const PG_UNDEFINED_TABLE = "42P01";
+
+/** Extract the Postgres error code from a Supabase/PostgREST error object. */
+function pgCode(err: unknown): string | undefined {
+  if (err && typeof err === "object") {
+    // Supabase client wraps the PG error in { code, message, details, hint }
+    const e = err as Record<string, unknown>;
+    if (typeof e.code === "string") return e.code;
+  }
+  return undefined;
+}
+
 async function deleteSource(key: CleanupSourceKey, cutoffIso: string): Promise<number> {
   const admin = createAdminClient();
 
   switch (key) {
     case "debug_logs": {
-      const { data } = await admin
-        .from("debug_logs")
-        .delete()
-        .lt("created_at", cutoffIso)
-        .select("id");
-      return data?.length ?? 0;
+      try {
+        const { data, error } = await admin
+          .from("debug_logs")
+          .delete()
+          .lt("created_at", cutoffIso)
+          .select("id");
+        if (error) {
+          if (pgCode(error) === PG_UNDEFINED_TABLE) return 0;
+          throw error;
+        }
+        return data?.length ?? 0;
+      } catch (e) {
+        if (pgCode(e) === PG_UNDEFINED_TABLE) return 0;
+        throw e;
+      }
     }
     case "global_chat_messages": {
-      const { data } = await admin
-        .from("global_chat_messages")
-        .delete()
-        .lt("created_at", cutoffIso)
-        .select("id");
-      return data?.length ?? 0;
+      try {
+        const { data, error } = await admin
+          .from("global_chat_messages")
+          .delete()
+          .lt("created_at", cutoffIso)
+          .select("id");
+        if (error) {
+          if (pgCode(error) === PG_UNDEFINED_TABLE) return 0;
+          throw error;
+        }
+        return data?.length ?? 0;
+      } catch (e) {
+        if (pgCode(e) === PG_UNDEFINED_TABLE) return 0;
+        throw e;
+      }
     }
     case "mod_actions": {
-      const { data } = await admin
-        .from("mod_actions")
-        .delete()
-        .lt("created_at", cutoffIso)
-        .select("id");
-      return data?.length ?? 0;
+      try {
+        const { data, error } = await admin
+          .from("mod_actions")
+          .delete()
+          .lt("created_at", cutoffIso)
+          .select("id");
+        if (error) {
+          if (pgCode(error) === PG_UNDEFINED_TABLE) return 0;
+          throw error;
+        }
+        return data?.length ?? 0;
+      } catch (e) {
+        if (pgCode(e) === PG_UNDEFINED_TABLE) return 0;
+        throw e;
+      }
     }
     case "login_events": {
-      const { data } = await admin
-        .from("login_events")
-        .delete()
-        .lt("created_at", cutoffIso)
-        .select("id");
-      return data?.length ?? 0;
+      try {
+        const { data, error } = await admin
+          .from("login_events")
+          .delete()
+          .lt("created_at", cutoffIso)
+          .select("id");
+        if (error) {
+          if (pgCode(error) === PG_UNDEFINED_TABLE) return 0;
+          throw error;
+        }
+        return data?.length ?? 0;
+      } catch (e) {
+        if (pgCode(e) === PG_UNDEFINED_TABLE) return 0;
+        throw e;
+      }
     }
     case "notifications": {
       // Only delete read notifications to avoid deleting unread ones
-      const { data } = await admin
-        .from("notifications")
-        .delete()
-        .lt("created_at", cutoffIso)
-        .eq("read", true)
-        .select("id");
-      return data?.length ?? 0;
+      try {
+        const { data, error } = await admin
+          .from("notifications")
+          .delete()
+          .lt("created_at", cutoffIso)
+          .eq("read", true)
+          .select("id");
+        if (error) {
+          if (pgCode(error) === PG_UNDEFINED_TABLE) return 0;
+          throw error;
+        }
+        return data?.length ?? 0;
+      } catch (e) {
+        if (pgCode(e) === PG_UNDEFINED_TABLE) return 0;
+        throw e;
+      }
     }
     case "audit_logs": {
-      const { data } = await admin
-        .from("audit_logs")
-        .delete()
-        .lt("created_at", cutoffIso)
-        .select("id");
-      return data?.length ?? 0;
+      try {
+        const { data, error } = await admin
+          .from("audit_logs")
+          .delete()
+          .lt("created_at", cutoffIso)
+          .select("id");
+        if (error) {
+          if (pgCode(error) === PG_UNDEFINED_TABLE) return 0;
+          throw error;
+        }
+        return data?.length ?? 0;
+      } catch (e) {
+        if (pgCode(e) === PG_UNDEFINED_TABLE) return 0;
+        throw e;
+      }
     }
     case "tickets_closed": {
       // Only delete closed tickets
-      const { data: rows } = await admin
-        .from("tickets")
-        .select("id")
-        .lt("created_at", cutoffIso)
-        .eq("status", "closed");
-      const ids = (rows ?? []).map((r: { id: string }) => r.id);
-      if (ids.length === 0) return 0;
-      await admin.from("ticket_messages").delete().in("ticket_id", ids);
-      const { data } = await admin.from("tickets").delete().in("id", ids).select("id");
-      return data?.length ?? 0;
+      try {
+        const { data: rows, error: selErr } = await admin
+          .from("tickets")
+          .select("id")
+          .lt("created_at", cutoffIso)
+          .eq("status", "closed");
+        if (selErr) {
+          if (pgCode(selErr) === PG_UNDEFINED_TABLE) return 0;
+          throw selErr;
+        }
+        const ids = (rows ?? []).map((r: { id: string }) => r.id);
+        if (ids.length === 0) return 0;
+        // Delete child messages first (ignore table-missing errors gracefully)
+        try {
+          await admin.from("ticket_messages").delete().in("ticket_id", ids);
+        } catch (e) {
+          if (pgCode(e) !== PG_UNDEFINED_TABLE) throw e;
+        }
+        const { data, error: delErr } = await admin.from("tickets").delete().in("id", ids).select("id");
+        if (delErr) {
+          if (pgCode(delErr) === PG_UNDEFINED_TABLE) return 0;
+          throw delErr;
+        }
+        return data?.length ?? 0;
+      } catch (e) {
+        if (pgCode(e) === PG_UNDEFINED_TABLE) return 0;
+        throw e;
+      }
     }
     case "trade_offers_done": {
-      const { data } = await admin
-        .from("trade_offers")
-        .delete()
-        .lt("created_at", cutoffIso)
-        .in("status", ["accepted", "declined", "cancelled"])
-        .select("id");
-      return data?.length ?? 0;
+      try {
+        const { data, error } = await admin
+          .from("trade_offers")
+          .delete()
+          .lt("created_at", cutoffIso)
+          .in("status", ["accepted", "declined", "cancelled"])
+          .select("id");
+        if (error) {
+          if (pgCode(error) === PG_UNDEFINED_TABLE) return 0;
+          throw error;
+        }
+        return data?.length ?? 0;
+      } catch (e) {
+        if (pgCode(e) === PG_UNDEFINED_TABLE) return 0;
+        throw e;
+      }
     }
     case "auctions_done": {
-      const { data } = await admin
-        .from("auctions")
-        .delete()
-        .lt("created_at", cutoffIso)
-        .in("status", ["sold", "expired", "cancelled"])
-        .select("id");
-      return data?.length ?? 0;
+      try {
+        const { data, error } = await admin
+          .from("auctions")
+          .delete()
+          .lt("created_at", cutoffIso)
+          .in("status", ["sold", "expired", "cancelled"])
+          .select("id");
+        if (error) {
+          if (pgCode(error) === PG_UNDEFINED_TABLE) return 0;
+          throw error;
+        }
+        return data?.length ?? 0;
+      } catch (e) {
+        if (pgCode(e) === PG_UNDEFINED_TABLE) return 0;
+        throw e;
+      }
     }
     default:
       return 0;

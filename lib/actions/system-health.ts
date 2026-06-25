@@ -68,6 +68,8 @@ const REQUIRED_TABLES = [
   "surveys", "survey_questions", "survey_answers", "survey_responses",
   // Config singletons
   "site_config", "streak_config", "world_config", "character_config",
+  // Badges
+  "badge_definitions", "user_badges",
 ] as const;
 
 /** Tables that are optional (feature may not be deployed). WARNUNG if missing. */
@@ -159,6 +161,12 @@ const COLUMN_CHECKS: Array<{
   { id: "col_plinko_showhistory", category: "Plinko",             table: "plinko_config",       col: "show_history",            detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS show_history boolean NOT NULL DEFAULT true;" },
   { id: "col_plinko_showleader",  category: "Plinko",             table: "plinko_config",       col: "show_leaderboard",        detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS show_leaderboard boolean NOT NULL DEFAULT true;" },
   { id: "col_plinko_leadersize",  category: "Plinko",             table: "plinko_config",       col: "leaderboard_size",        detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS leaderboard_size integer NOT NULL DEFAULT 10;" },
+  // Battle Pass elite tier (2026-06-25)
+  { id: "col_bp_elitepricecr",    category: "Battle Pass",        table: "battle_passes",       col: "elite_price_cr",          detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS elite_price_cr integer NOT NULL DEFAULT 0;" },
+  { id: "col_bp_eliteenabled",    category: "Battle Pass",        table: "battle_passes",       col: "elite_enabled",           detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS elite_enabled boolean NOT NULL DEFAULT false;" },
+  { id: "col_bpt_iselite",        category: "Battle Pass",        table: "battle_pass_tiers",   col: "is_elite",                detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS is_elite boolean NOT NULL DEFAULT false;" },
+  { id: "col_ubp_haselite",       category: "Battle Pass",        table: "user_battle_passes",  col: "has_elite",               detail: "ALTER TABLE user_battle_passes ADD COLUMN IF NOT EXISTS has_elite boolean NOT NULL DEFAULT false;" },
+  { id: "col_ubp_elitepurchased", category: "Battle Pass",        table: "user_battle_passes",  col: "elite_purchased_at",      detail: "ALTER TABLE user_battle_passes ADD COLUMN IF NOT EXISTS elite_purchased_at timestamptz;" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -565,6 +573,29 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
       ? warn("recent_warns", "Fehler (24h)", "Warn-Logs (letzten 24h)", `${count} Warnungen — ggf. prüfen`)
       : ok("recent_warns", "Fehler (24h)", "Warn-Logs (letzten 24h)", `${count ?? 0} Warnungen`));
   } catch { /* non-critical */ }
+
+  // ── 21. Badges ────────────────────────────────────────────────────────────
+  try {
+    const { count: defCount, error: defErr } = await admin
+      .from("badge_definitions")
+      .select("*", { count: "exact", head: true });
+    results.push(defErr
+      ? err("badge_definitions", "Badges", "badge_definitions", defErr.message)
+      : ok("badge_definitions", "Badges", "badge_definitions", `${defCount ?? 0} Badge-Definition(en)`));
+  } catch (e) {
+    results.push(err("badge_definitions", "Badges", "badge_definitions", String(e)));
+  }
+
+  try {
+    const { count: ubCount, error: ubErr } = await admin
+      .from("user_badges")
+      .select("*", { count: "exact", head: true });
+    results.push(ubErr
+      ? err("user_badges", "Badges", "user_badges", ubErr.message)
+      : ok("user_badges", "Badges", "user_badges", `${ubCount ?? 0} vergebene Badge(s)`));
+  } catch (e) {
+    results.push(err("user_badges", "Badges", "user_badges", String(e)));
+  }
 
   return results;
 }
