@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Zap, Eye, EyeOff, ChevronDown, ChevronUp,
   Save, X, Check, Star, AlertTriangle, Copy, ExternalLink,
   Gift, Coins, Trophy, Package, Sparkles, TrendingUp, Users,
-  ShoppingBag, Crown, Palette, Search, BarChart2, Calendar, Wand2,
+  ShoppingBag, Crown, Palette, Search, BarChart2, Calendar, Wand2, Pencil,
 } from "lucide-react";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -202,7 +202,7 @@ function AutoFillModal({
   passId: string;
   tierCount: number;
   onClose: () => void;
-  onDone: () => void;
+  onDone: () => Promise<void>;
 }) {
   const [config, setConfig] = useState<BpAutoFillConfig>({ ...DEFAULT_AUTOFILL_CONFIG });
   const [running, setRunning] = useState(false);
@@ -263,8 +263,9 @@ function AutoFillModal({
       const res = await adminAutoFillBpTiers(passId, config);
       if (res.success) {
         sound.save();
-        setResult({ success: true, message: `${tierCount} Tiers wurden automatisch befüllt.` });
-        onDone();
+        setResult({ success: true, message: `${res.count} Tiers generiert — klicke unten auf jeden Tier um ihn einzeln zu bearbeiten.` });
+        await onDone();
+        setTimeout(() => onClose(), 1500);
       } else {
         sound.error();
         setResult({ success: false, error: res.error ?? "Unbekannter Fehler" });
@@ -908,7 +909,7 @@ function PassEditor({
   onDelete,
 }: {
   pass: BattlePass;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
   onDelete: () => void;
 }) {
   const [name, setName] = useState(pass.name);
@@ -1390,7 +1391,8 @@ function PassEditor({
               <button
                 key={n}
                 onClick={() => setEditingTier({ num: n, existing: tier ?? null })}
-                className={`flex flex-col items-center gap-0.5 rounded-lg border transition-all hover:scale-105 ${
+                title={tier ? `Tier ${n} bearbeiten` : `Tier ${n} erstellen`}
+                className={`group relative flex flex-col items-center gap-0.5 rounded-lg border transition-all hover:scale-105 ${
                   isHighlight ? "px-3 py-3 ring-1 ring-yellow-400/40" : "px-2 py-2"
                 } ${
                   isEliteTier
@@ -1411,6 +1413,11 @@ function PassEditor({
                   }`}>
                     {isEliteTier ? "ELITE" : isPremiumTier ? "PRO" : "FREE"}
                   </span>
+                )}
+                {tier && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Pencil className="h-3 w-3 text-white" />
+                  </div>
                 )}
               </button>
             );
@@ -1433,7 +1440,7 @@ function PassEditor({
           passId={pass.id}
           tierCount={tierCount}
           onClose={() => setShowAutoFill(false)}
-          onDone={() => { onSaved(); router.refresh(); }}
+          onDone={async () => { await onSaved(); router.refresh(); }}
         />
       )}
     </div>
