@@ -295,7 +295,7 @@ export async function getTicketMessages(ticketId: string): Promise<TicketMessage
   const admin = createAdminClient();
   const { data } = await admin
     .from("ticket_messages")
-    .select("id, ticket_id, user_id, message, is_staff, created_at")
+    .select("id, ticket_id, user_id, message, is_staff, created_at, attachment_url")
     .eq("ticket_id", ticketId)
     .order("created_at", { ascending: true });
 
@@ -314,6 +314,7 @@ export async function getTicketMessages(ticketId: string): Promise<TicketMessage
     message: m.message ?? "",
     isStaff: m.is_staff ?? false,
     createdAt: m.created_at,
+    attachmentUrl: (m as Record<string, unknown>).attachment_url as string | null ?? null,
   }));
 }
 
@@ -341,7 +342,8 @@ export async function modMarkInProgress(
 
 export async function modReplyToTicket(
   ticketId: string,
-  message: string
+  message: string,
+  attachmentUrl?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { user, isAdminUser } = await requireMod();
@@ -349,12 +351,9 @@ export async function modReplyToTicket(
     if (!perms.canCloseTickets) return { success: false, error: "Keine Berechtigung." };
     if (!message.trim()) return { success: false, error: "Nachricht darf nicht leer sein." };
     const admin = createAdminClient();
-    const { error } = await admin.from("ticket_messages").insert({
-      ticket_id: ticketId,
-      user_id: user.id,
-      message: message.trim(),
-      is_staff: true,
-    });
+    const msgPayload: Record<string, unknown> = { ticket_id: ticketId, user_id: user.id, message: message.trim(), is_staff: true };
+    if (attachmentUrl) msgPayload.attachment_url = attachmentUrl;
+    const { error } = await admin.from("ticket_messages").insert(msgPayload);
     if (error) return { success: false, error: error.message };
     await admin.from("tickets").update({ updated_at: new Date().toISOString() }).eq("id", ticketId);
     const { data: ticket } = await admin.from("tickets").select("user_id").eq("id", ticketId).single();

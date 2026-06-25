@@ -48,7 +48,7 @@ function rarityGlow(rarity: Rarity | null): string {
     normal: "",
     selten: "rgba(59,130,246,0.25)",
     mythisch: "rgba(168,85,247,0.35)",
-    ultra: "rgba(245,158,11,0.4)",
+    ultra: "rgba(217,70,239,0.4)",
   };
   return map[rarity] ?? "";
 }

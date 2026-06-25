@@ -100,3 +100,16 @@ export async function deleteDebugLog(id: string): Promise<{ success: boolean; er
   if (error) return { success: false, error: "Löschen fehlgeschlagen." };
   return { success: true };
 }
+
+export async function resolveUserIdsToNames(ids: string[]): Promise<Record<string, string>> {
+  if (!ids.length) return {};
+  const user = await requireAdmin();
+  if (!user) return {};
+  const admin = createAdminClient();
+  const { data } = await admin.from("profiles").select("id, username").in("id", ids);
+  const result: Record<string, string> = {};
+  for (const row of data ?? []) {
+    if (row.id && row.username) result[row.id] = row.username as string;
+  }
+  return result;
+}

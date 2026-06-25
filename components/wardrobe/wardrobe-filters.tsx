@@ -126,11 +126,15 @@ export function WardrobeFilters({
               }}
               className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-all ${
                 active
-                  ? `${style.border} ${style.bg} ${style.text}`
+                  ? style.rainbow
+                    ? "ultra-border-animated"
+                    : `${style.border} ${style.bg} ${style.text}`
                   : "border-white/10 text-zinc-500 hover:border-white/25 hover:text-zinc-300"
               }`}
             >
-              {RARITY_LABELS[rarity]}
+              {active && style.rainbow
+                ? <span className="rainbow-text">{RARITY_LABELS[rarity]}</span>
+                : RARITY_LABELS[rarity]}
             </button>
           );
         })}

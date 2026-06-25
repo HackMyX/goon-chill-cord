@@ -8,7 +8,8 @@ import { TopBar } from "@/components/layout/top-bar";
 import { ProfileModal } from "@/components/community/profile-modal";
 import { PlayerCardAvatar } from "@/components/community/player-card-avatar";
 import { subscribeToPresence } from "@/lib/presence-client";
-import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, type Rarity } from "@/lib/cases";
+import { RARITY_LABELS, RARITY_ORDER, type Rarity } from "@/lib/cases";
+import { RarityChip } from "@/components/ui/rarity-chip";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useRealtimeProfile, useRealtimeAllProfiles } from "@/lib/use-realtime-profile";
@@ -297,14 +298,10 @@ function PlayerListShellInner({ players: initialPlayers, credits: initialCredits
                       {RARITY_ORDER.map((rarity) => {
                         const count = player.rarityCounts[rarity];
                         if (count === 0) return null;
-                        const style = RARITY_STYLES[rarity];
                         return (
-                          <span
-                            key={rarity}
-                            className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${style.border} ${style.bg} ${style.text}`}
-                          >
+                          <RarityChip key={rarity} rarity={rarity} className="px-2">
                             {RARITY_LABELS[rarity]} ×{count}
-                          </span>
+                          </RarityChip>
                         );
                       })}
                     </div>

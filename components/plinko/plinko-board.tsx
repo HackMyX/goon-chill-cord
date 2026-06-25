@@ -452,7 +452,7 @@ export function PlinkoBoard({
 
       if (s.phase === "dropping") {
         const speedMult = Math.max(0.5, Math.min(2.5, cfg.animationSpeed ?? 1));
-        const GRAVITY = 0.32 * speedMult;
+        const GRAVITY = 0.18 * speedMult;
 
         // Physics integration — gravity accelerates ball, air drag slows horizontal
         s.ballVy += GRAVITY;
@@ -470,11 +470,7 @@ export function PlinkoBoard({
             const col = s.path[nextRow + 1] ?? 0;
             const pin = getPinPos(nextRow, col, W, H, r);
 
-            // Snap to pin contact point (pin physically redirects the ball)
-            s.ballX = pin.x;
-            s.ballY = rowY;
-
-            // Flash the hit pin
+            // Flash the hit pin (no hard snap — ball continues from its actual position)
             const key = `${nextRow},${col}`;
             s.litPins.set(key, 1.0);
             spawnPinHit(pin.x, rowY);
@@ -489,14 +485,14 @@ export function PlinkoBoard({
               ? (H - BUCKET_H - 6 - BALL_R)
               : getPinPos(nextRow + 1, 0, W, H, r).y;
 
-            const dy = ty - rowY;
-            const vy0 = Math.max(s.ballVy * 0.5, 2.0 * speedMult);
+            const dy = ty - s.ballY;
+            const vy0 = Math.max(s.ballVy * 0.4, 1.5 * speedMult);
             // Solve dy = vy0*t + 0.5*G*t^2 for t, then vx = dx/t
             const disc = vy0 * vy0 + 2 * GRAVITY * dy;
             const frames = disc > 0
               ? (-vy0 + Math.sqrt(disc)) / GRAVITY
-              : Math.sqrt(2 * dy / (GRAVITY + 0.001));
-            s.ballVx = (tx - pin.x) / Math.max(frames, 4);
+              : Math.sqrt(2 * Math.max(dy, 1) / (GRAVITY + 0.001));
+            s.ballVx = (tx - s.ballX) / Math.max(frames, 6);
             s.ballVy = vy0;
           }
         }
@@ -565,7 +561,7 @@ export function PlinkoBoard({
     s.phase = "dropping";
     s.physicsRow = -1;
     s.ballVx = 0;
-    s.ballVy = 1.0;
+    s.ballVy = 0.5;
     s.glowBucket = -1;
     s.litPins.clear();
     s.pinNear.clear();

@@ -1,4 +1,4 @@
-import { RARITY_ORDER, RARITY_LABELS, RARITY_STYLES, type Rarity } from "@/lib/cases";
+import { RARITY_ORDER, RARITY_LABELS, RARITY_STYLES, rarityBarBgClass, type Rarity } from "@/lib/cases";
 
 function formatPct(n: number) {
   return n.toLocaleString("de-DE", { maximumFractionDigits: 2 });
@@ -20,7 +20,7 @@ export function ChanceBar({ weights }: ChanceBarProps) {
           <div
             key={rarity}
             style={{ flexGrow: pct, flexBasis: 0 }}
-            className={`flex min-w-10 flex-col items-center justify-center ${style.barBg} px-1 ${
+            className={`flex min-w-10 flex-col items-center justify-center ${rarityBarBgClass(rarity)} px-1 ${
               i === 0 ? "rounded-l-md" : ""
             } ${i === active.length - 1 ? "rounded-r-md" : ""}`}
           >

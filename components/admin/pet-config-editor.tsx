@@ -18,7 +18,7 @@ const RARITY_COLORS: Record<PetRarity, { border: string; bg: string; text: strin
   normal:   { border: "border-zinc-500/40",   bg: "bg-zinc-800/30",   text: "text-zinc-300",  badge: "bg-zinc-700 text-zinc-300",              glow: "" },
   selten:   { border: "border-sky-500/50",     bg: "bg-sky-900/20",    text: "text-sky-300",   badge: "bg-sky-500/20 text-sky-300 border border-sky-500/40",   glow: "shadow-[0_0_12px_rgba(14,165,233,0.25)]" },
   mythisch: { border: "border-purple-500/50",  bg: "bg-purple-900/20", text: "text-purple-300", badge: "bg-purple-500/20 text-purple-300 border border-purple-500/40", glow: "shadow-[0_0_14px_rgba(168,85,247,0.3)]" },
-  ultra:    { border: "border-amber-400/60",   bg: "bg-amber-900/20",  text: "text-amber-300",  badge: "bg-amber-400/20 text-amber-300 border border-amber-400/50",    glow: "shadow-[0_0_18px_rgba(251,191,36,0.35)]" },
+  ultra:    { border: "border-fuchsia-400/60",  bg: "bg-fuchsia-900/20", text: "text-fuchsia-300", badge: "bg-fuchsia-400/20 text-fuchsia-300 border border-fuchsia-400/50", glow: "shadow-[0_0_18px_rgba(217,70,239,0.35)]" },
 };
 
 const RARITY_STARS: Record<PetRarity, number> = {
@@ -304,7 +304,7 @@ export function PetConfigEditor({ type }: { type: PetTypeConfig }) {
                 title={`${PET_RARITY_LABELS[r]}: ${isOverride(r) ? "Individuell" : "Standard"}`}
                 className={`h-2 w-2 rounded-full ${
                   isOverride(r)
-                    ? r === "ultra" ? "bg-amber-400" : r === "mythisch" ? "bg-purple-400" : r === "selten" ? "bg-sky-400" : "bg-zinc-400"
+                    ? r === "ultra" ? "bg-fuchsia-400" : r === "mythisch" ? "bg-purple-400" : r === "selten" ? "bg-sky-400" : "bg-zinc-400"
                     : "bg-zinc-700"
                 }`}
               />

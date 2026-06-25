@@ -395,7 +395,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
                     : isReward
                     ? "bg-amber-500/15 text-amber-200 border border-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
                     : rarity === "ultra"
-                    ? "bg-amber-500/15 text-amber-200 border border-amber-500/30"
+                    ? "bg-fuchsia-500/15 text-fuchsia-200 border border-fuchsia-500/30"
                     : rarity === "mythisch"
                     ? "bg-purple-500/15 text-purple-200 border border-purple-500/30"
                     : "bg-blue-500/10 text-blue-200 border border-blue-500/20"

@@ -316,7 +316,10 @@ function TicketRow({
                 An Admin weitergeleitet
               </span>
             )}
-            <p className="break-words text-sm font-semibold text-zinc-200">{ticket.subject}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="break-words text-sm font-semibold text-zinc-200">{ticket.subject}</p>
+              {ticket.attachmentUrl && <Paperclip className="h-3 w-3 shrink-0 text-zinc-500" aria-label="Hat Anhang" />}
+            </div>
             <p className="text-[11px] text-zinc-500">
               {ticket.username} ·{" "}
               {new Date(ticket.updatedAt).toLocaleString("de-DE", {

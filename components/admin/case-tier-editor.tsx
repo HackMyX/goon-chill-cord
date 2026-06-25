@@ -13,14 +13,14 @@ const RARITY_FILTER_STYLES: Record<Rarity, { active: string; inactive: string }>
   normal:   { active: "border-blue-400/60 bg-blue-500/15 text-blue-200",    inactive: "border-white/10 text-zinc-500 hover:border-blue-400/40 hover:text-blue-400" },
   selten:   { active: "border-purple-400/60 bg-purple-500/15 text-purple-200", inactive: "border-white/10 text-zinc-500 hover:border-purple-400/40 hover:text-purple-400" },
   mythisch: { active: "border-amber-400/60 bg-amber-500/15 text-amber-200",  inactive: "border-white/10 text-zinc-500 hover:border-amber-400/40 hover:text-amber-400" },
-  ultra:    { active: "border-red-400/60 bg-red-500/15 text-red-200",        inactive: "border-white/10 text-zinc-500 hover:border-red-400/40 hover:text-red-400" },
+  ultra:    { active: "border-fuchsia-400/60 bg-fuchsia-500/15 text-fuchsia-200", inactive: "border-white/10 text-zinc-500 hover:border-fuchsia-400/40 hover:text-fuchsia-400" },
 };
 
 const RARITY_DOT: Record<Rarity, string> = {
   normal: "bg-blue-400",
   selten: "bg-purple-400",
   mythisch: "bg-amber-400",
-  ultra: "bg-red-400",
+  ultra: "bg-fuchsia-400",
 };
 
 export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: ItemRow[] }) {

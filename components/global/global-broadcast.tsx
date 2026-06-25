@@ -11,8 +11,8 @@ interface BroadcastPopup {
 }
 
 const RARITY_STYLE: Record<string, { border: string; bg: string; glow: string; icon: typeof Star }> = {
-  ultra:   { border: "border-amber-400/60",  bg: "bg-gradient-to-r from-amber-500/20 to-yellow-500/10",  glow: "shadow-[0_0_20px_rgba(245,158,11,0.4)]", icon: Trophy },
-  mythisch:{ border: "border-purple-400/60", bg: "bg-gradient-to-r from-purple-500/20 to-fuchsia-500/10", glow: "shadow-[0_0_20px_rgba(168,85,247,0.4)]",  icon: Sparkles },
+  ultra:   { border: "border-fuchsia-400/60", bg: "bg-gradient-to-r from-fuchsia-500/20 to-purple-500/10", glow: "shadow-[0_0_20px_rgba(217,70,239,0.4)]", icon: Trophy },
+  mythisch:{ border: "border-purple-400/60",  bg: "bg-gradient-to-r from-purple-500/20 to-fuchsia-500/10", glow: "shadow-[0_0_20px_rgba(168,85,247,0.4)]",  icon: Sparkles },
 };
 
 const DEFAULT_STYLE = { border: "border-blue-400/40", bg: "bg-blue-500/10", glow: "shadow-[0_0_12px_rgba(59,130,246,0.3)]", icon: Star };
@@ -69,7 +69,7 @@ export function GlobalBroadcast() {
             key={popup.id}
             className={`pointer-events-auto flex max-w-[280px] items-start gap-2.5 rounded-xl border px-3.5 py-2.5 backdrop-blur-md animate-in slide-in-from-left-4 fade-in duration-300 ${style.border} ${style.bg} ${style.glow}`}
           >
-            <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${popup.rarity === "ultra" ? "text-amber-300" : popup.rarity === "mythisch" ? "text-purple-300" : "text-blue-300"}`} />
+            <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${popup.rarity === "ultra" ? "text-fuchsia-300" : popup.rarity === "mythisch" ? "text-purple-300" : "text-blue-300"}`} />
             <p className="flex-1 text-xs font-semibold leading-snug text-zinc-100">{popup.content}</p>
             <button
               onClick={() => setPopups((p) => p.filter((x) => x.id !== popup.id))}

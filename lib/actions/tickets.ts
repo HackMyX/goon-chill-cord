@@ -26,6 +26,7 @@ export interface Ticket {
   updatedAt: string;
   messageCount: number;
   escalatedToAdmin?: boolean;
+  attachmentUrl?: string | null;
 }
 
 export interface TicketMessage {
@@ -121,7 +122,7 @@ export async function getUserTickets(): Promise<Ticket[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, attachment_url, ticket_messages(count)")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false })
     .limit(30);
@@ -358,7 +359,7 @@ export async function getAdminTickets(): Promise<Ticket[]> {
 
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, escalated_to_admin, ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, attachment_url, escalated_to_admin, ticket_messages(count)")
     .order("updated_at", { ascending: false })
     .limit(100);
 
@@ -654,5 +655,6 @@ function mapTicket(row: any, username?: string, closedByUsername?: string): Tick
     updatedAt: row.updated_at,
     messageCount: typeof msgCountRaw === "number" ? msgCountRaw : Number(msgCountRaw) || 0,
     escalatedToAdmin: (row.escalated_to_admin as boolean) ?? false,
+    attachmentUrl: (row.attachment_url as string | null) ?? null,
   };
 }

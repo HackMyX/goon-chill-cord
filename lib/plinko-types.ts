@@ -41,9 +41,9 @@ export const DEFAULT_PLINKO_CONFIG: PlinkoConfig = {
   quickBetAmounts: [500, 2000, 10000, 50000, 250000],
   rows: 12,
   riskLevels: [
-    { key: "low",    label: "Niedrig", emoji: "🟢", multipliers: [2.2, 1.6, 1.3, 1.1, 1.0, 0.9, 1.0, 1.1, 1.3, 1.6, 2.2] },
-    { key: "medium", label: "Mittel",  emoji: "🟡", multipliers: [12,  5,   2.5, 1.5, 0.7, 0.4, 0.7, 1.5, 2.5, 5,   12  ] },
-    { key: "high",   label: "Hoch",    emoji: "🔴", multipliers: [30,  12,  5,   2,   0.4, 0.2, 0.4, 2,   5,   12,  30  ] },
+    { key: "low",    label: "Niedrig", emoji: "🟢", multipliers: [5.0, 2.2, 1.6, 1.3, 1.1, 1.0, 0.9, 1.0, 1.1, 1.3, 1.6, 2.2, 5.0] },
+    { key: "medium", label: "Mittel",  emoji: "🟡", multipliers: [20,  12,  5,   2.5, 1.5, 0.7, 0.4, 0.7, 1.5, 2.5, 5,   12,  20 ] },
+    { key: "high",   label: "Hoch",    emoji: "🔴", multipliers: [100, 30,  12,  5,   2,   0.4, 0.2, 0.4, 2,   5,   12,  30,  100] },
   ],
   maxWinCr: 0,
   announceBigWins: true,

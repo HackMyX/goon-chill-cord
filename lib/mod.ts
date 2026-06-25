@@ -142,4 +142,5 @@ export interface TicketMessage {
   message: string;
   isStaff: boolean;
   createdAt: string;
+  attachmentUrl: string | null;
 }

@@ -620,11 +620,14 @@ function SupportButtonInner() {
                                       </div>
                                       <StatusBadge status={ticket.status} />
                                     </div>
-                                    <p className="pl-5 text-[11px] text-zinc-600">
-                                      {new Date(ticket.updatedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                                      {" · "}{ticket.messageCount} Nachricht{ticket.messageCount !== 1 ? "en" : ""}
-                                      {ticket.category === "bug" ? " · 🐛 Bug" : " · 💡 Idee"}
-                                    </p>
+                                    <div className="flex items-center gap-1.5 pl-5 text-[11px] text-zinc-600">
+                                      <span>
+                                        {new Date(ticket.updatedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                        {" · "}{ticket.messageCount} Nachricht{ticket.messageCount !== 1 ? "en" : ""}
+                                        {ticket.category === "bug" ? " · 🐛 Bug" : " · 💡 Idee"}
+                                      </span>
+                                      {ticket.attachmentUrl && <Paperclip className="h-3 w-3 shrink-0 text-zinc-500" aria-label="Hat Anhang" />}
+                                    </div>
                                   </button>
                                 );
                               })}

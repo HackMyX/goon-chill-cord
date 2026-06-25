@@ -32,7 +32,7 @@ export const RARITY_COLORS: Record<NameStyleRarity, { label: string; color: stri
   normal:   { label: "Normal",    color: "#a1a1aa", border: "border-zinc-600",   bg: "bg-zinc-900"         },
   selten:   { label: "Selten",    color: "#60a5fa", border: "border-blue-500/40", bg: "bg-blue-950/30"     },
   mythisch: { label: "Mythisch",  color: "#c084fc", border: "border-purple-500/40", bg: "bg-purple-950/30" },
-  ultra:    { label: "Ultra",     color: "#f59e0b", border: "border-amber-500/40", bg: "bg-amber-950/30"   },
+  ultra:    { label: "Ultra",     color: "#e879f9", border: "border-fuchsia-500/40", bg: "bg-fuchsia-950/30" },
 };
 
 /** CSS animation class per animation type — defined in globals.css */

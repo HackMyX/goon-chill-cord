@@ -31,21 +31,21 @@ const RARITY_GLOW: Record<Rarity, string> = {
   normal:   "shadow-[0_0_18px_rgba(59,130,246,0.2)] hover:shadow-[0_0_32px_rgba(59,130,246,0.45)]",
   selten:   "shadow-[0_0_18px_rgba(168,85,247,0.2)] hover:shadow-[0_0_32px_rgba(168,85,247,0.45)]",
   mythisch: "shadow-[0_0_24px_rgba(245,158,11,0.3)] hover:shadow-[0_0_44px_rgba(245,158,11,0.55)]",
-  ultra:    "shadow-[0_0_28px_rgba(239,68,68,0.3)] hover:shadow-[0_0_50px_rgba(239,68,68,0.6)]",
+  ultra:    "shadow-[0_0_28px_rgba(217,70,239,0.3)] hover:shadow-[0_0_50px_rgba(217,70,239,0.6)]",
 };
 
 const RARITY_CARD_BG: Record<Rarity, string> = {
   normal:   "bg-gradient-to-b from-blue-500/8 via-[#0a0a14] to-[#0a0a14]",
   selten:   "bg-gradient-to-b from-purple-500/10 via-[#0a0a14] to-[#0a0a14]",
   mythisch: "bg-gradient-to-b from-amber-500/14 via-[#0a0a14] to-[#0a0a14]",
-  ultra:    "bg-gradient-to-b from-red-500/14 via-[#0a0a14] to-[#0a0a14]",
+  ultra:    "bg-gradient-to-b from-fuchsia-500/12 via-[#0a0a14] to-[#0a0a14]",
 };
 
 const RARITY_BORDER: Record<Rarity, string> = {
   normal:   "border-blue-400/25 hover:border-blue-400/50",
   selten:   "border-purple-400/30 hover:border-purple-400/55",
   mythisch: "border-amber-400/45 hover:border-amber-400/70",
-  ultra:    "border-red-400/45 hover:border-red-400/70",
+  ultra:    "border-fuchsia-400/45 hover:border-fuchsia-400/70",
 };
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
@@ -154,7 +154,7 @@ function ShopCard({
         className="pointer-events-none absolute -top-8 left-1/2 h-24 w-2/3 -translate-x-1/2 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
         style={{
           background:
-            rarity === "ultra"   ? "radial-gradient(ellipse, rgba(239,68,68,0.2) 0%, transparent 70%)"
+            rarity === "ultra"   ? "radial-gradient(ellipse, rgba(217,70,239,0.2) 0%, transparent 70%)"
           : rarity === "mythisch"? "radial-gradient(ellipse, rgba(245,158,11,0.2) 0%, transparent 70%)"
           : rarity === "selten"  ? "radial-gradient(ellipse, rgba(168,85,247,0.15) 0%, transparent 70%)"
           : "radial-gradient(ellipse, rgba(59,130,246,0.12) 0%, transparent 70%)",
@@ -170,8 +170,10 @@ function ShopCard({
           </span>
         )}
         {rarity === "ultra" && (
-          <span className="flex items-center gap-1 rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
-            <Zap className="h-2.5 w-2.5" /> Ultra
+          <span className="relative flex items-center gap-1 overflow-hidden rounded-full bg-black/40 px-2 py-0.5 text-[10px] font-bold">
+            <span aria-hidden className="rainbow-border" />
+            <Zap className="h-2.5 w-2.5 rainbow-text" />
+            <span className="rainbow-text">Ultra</span>
           </span>
         )}
         {rarity === "mythisch" && !listing.featured && (

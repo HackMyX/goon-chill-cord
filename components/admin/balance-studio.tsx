@@ -94,7 +94,7 @@ function HealthPanel({ data }: { data: BalanceStudioData }) {
 
   const metrics = [
     { label: "Normal-Item", value: normalStats?.avgPrice ?? 0, income: l1Daily, base: "Mine L1/Tag", color: "text-zinc-300" },
-    { label: "Ultra-Item", value: ultraStats?.avgPrice ?? 0, income: l10Daily, base: "Mine L10/Tag", color: "text-amber-300" },
+    { label: "Ultra-Item", value: ultraStats?.avgPrice ?? 0, income: l10Daily, base: "Mine L10/Tag", color: "text-fuchsia-300" },
     { label: "Ultra-Nametag", value: ultraNametag?.base_shop_price_cr ?? 0, income: l10Daily, base: "Mine L10/Tag", color: "text-purple-300" },
   ];
 
@@ -431,11 +431,11 @@ function GamesSection({ data, onChange }: {
 // ─── Items Section ─────────────────────────────────────────────────────────────
 
 const RARITY_COLORS: Record<string, string> = {
-  normal: "text-zinc-300", selten: "text-blue-400", mythisch: "text-purple-400", ultra: "text-amber-400",
+  normal: "text-zinc-300", selten: "text-blue-400", mythisch: "text-purple-400", ultra: "text-fuchsia-400",
 };
 const RARITY_BADGE: Record<string, string> = {
   normal: "bg-zinc-700/50 text-zinc-300", selten: "bg-blue-500/20 text-blue-300",
-  mythisch: "bg-purple-500/20 text-purple-300", ultra: "bg-amber-500/20 text-amber-300",
+  mythisch: "bg-purple-500/20 text-purple-300", ultra: "bg-fuchsia-500/20 text-fuchsia-300",
 };
 
 function ItemsSection({ data, onChange }: {

@@ -45,6 +45,7 @@ const CARD_LABELS: Record<HomepageCardId, string> = {
   auctions: "Auktionshaus",
   surveys: "Umfragen",
   battlepass: "Battle Pass",
+  plinko: "Plinko",
 };
 
 const ANNOUNCEMENT_COLORS = [

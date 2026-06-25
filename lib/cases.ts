@@ -95,17 +95,33 @@ export const RARITY_STYLES: Record<
     pulseGlow: "animate-pulse shadow-[0_0_22px_rgba(245,158,11,0.55)]",
   },
   ultra: {
-    text: "text-red-400",
-    border: "border-red-500/60",
-    bg: "bg-red-500/15",
-    glow: "shadow-[0_0_14px_rgba(255,60,200,0.55)]",
-    barBg: "bg-red-600",
-    hoverRing: "hover:ring-2 hover:ring-red-400/70",
-    hoverGlow: "hover:shadow-[0_0_30px_rgba(239,68,68,0.6)]",
-    pulseGlow: "animate-pulse shadow-[0_0_24px_rgba(239,68,68,0.6)]",
+    text: "text-fuchsia-300",
+    border: "border-fuchsia-400/60",
+    bg: "bg-fuchsia-500/10",
+    glow: "shadow-[0_0_14px_rgba(217,70,239,0.55)]",
+    barBg: "rainbow-fill",
+    hoverRing: "hover:ring-2 hover:ring-fuchsia-400/70",
+    hoverGlow: "hover:shadow-[0_0_30px_rgba(217,70,239,0.55)]",
+    pulseGlow: "animate-pulse shadow-[0_0_24px_rgba(217,70,239,0.6)]",
     rainbow: true,
   },
 };
+
+/**
+ * Returns the correct Tailwind text class for a rarity — `rainbow-text` for
+ * ultra (animated RGB gradient), the static text class for all others.
+ */
+export function rarityTextClass(rarity: Rarity): string {
+  return RARITY_STYLES[rarity].rainbow ? "rainbow-text" : RARITY_STYLES[rarity].text;
+}
+
+/**
+ * Returns the correct Tailwind background class for a rarity progress bar —
+ * `rainbow-fill` for ultra, the static barBg class for all others.
+ */
+export function rarityBarBgClass(rarity: Rarity): string {
+  return RARITY_STYLES[rarity].rainbow ? "rainbow-fill" : RARITY_STYLES[rarity].barBg;
+}
 
 export interface CaseTier {
   id: string;

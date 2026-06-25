@@ -2,7 +2,7 @@ import { DEFAULT_SITE_LOGO_ICON } from "@/lib/site-logo-icons";
 
 export type HomepageCardId =
   | "shop" | "cases" | "garderobe" | "world" | "snake" | "mine"
-  | "don" | "community" | "trading" | "auctions" | "surveys" | "battlepass";
+  | "don" | "community" | "trading" | "auctions" | "surveys" | "battlepass" | "plinko";
 
 export interface HomepageConfig {
   heroTitle: string;
@@ -25,7 +25,7 @@ export interface HomepageConfig {
 
 export const ALL_HOMEPAGE_CARDS: HomepageCardId[] = [
   "shop", "cases", "garderobe", "world", "snake", "mine",
-  "don", "community", "trading", "auctions", "surveys", "battlepass",
+  "don", "community", "trading", "auctions", "surveys", "battlepass", "plinko",
 ];
 
 export const DEFAULT_HOMEPAGE_CONFIG: HomepageConfig = {

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { CharacterModel } from "@/components/world/character-model";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, type Rarity } from "@/lib/cases";
+import { RarityChip } from "@/components/ui/rarity-chip";
 import { getPublicProfile, type PublicProfile } from "@/lib/actions/community";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
@@ -76,7 +77,7 @@ const RARITY_BAR_COLOR: Record<Rarity, string> = {
   normal:   "#6366f1",
   selten:   "#a855f7",
   mythisch: "#f59e0b",
-  ultra:    "#ec4899",
+  ultra:    "#e879f9",
 };
 
 function RarityBars({ counts }: { counts: Record<Rarity, number> }) {
@@ -92,17 +93,26 @@ function RarityBars({ counts }: { counts: Record<Rarity, number> }) {
         const barColor = RARITY_BAR_COLOR[rarity];
         return (
           <div key={rarity} className="flex items-center gap-2">
-            <span className={`w-[68px] shrink-0 rounded-full border px-2 py-0.5 text-center text-[10px] font-bold ${style.border} ${style.bg} ${style.text}`}>
+            <RarityChip rarity={rarity} className="w-[68px] shrink-0 justify-center text-center px-2">
               {RARITY_LABELS[rarity]}
-            </span>
+            </RarityChip>
             <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
-              <motion.div
-                className="h-full rounded-full"
-                style={{ background: barColor, boxShadow: `0 0 8px ${barColor}80` }}
-                initial={{ width: 0 }}
-                animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.6, delay: 0.1 }}
-              />
+              {style.rainbow ? (
+                <motion.div
+                  className="h-full rounded-full rainbow-fill"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.6, delay: 0.1 }}
+                />
+              ) : (
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: barColor, boxShadow: `0 0 8px ${barColor}80` }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.6, delay: 0.1 }}
+                />
+              )}
             </div>
             <span className="w-7 text-right text-[10px] font-bold text-zinc-400">{count}</span>
           </div>
@@ -302,18 +312,17 @@ function ModalContent({ userId, onClose }: ProfileModalProps) {
                         {profile.warningStrikes} Verwarnung{profile.warningStrikes !== 1 ? "en" : ""}
                       </div>
                     )}
-                    <div className="rounded-xl border border-amber-900/30 bg-amber-950/15 px-3 py-2">
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="text-[9px] font-bold uppercase tracking-widest text-amber-700">User ID</span>
+                    <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-zinc-200">{profile.username}</span>
                         <button
                           onClick={handleCopyId}
-                          className="rounded p-0.5 text-amber-700/70 transition-colors hover:text-amber-400"
-                          title="ID kopieren"
+                          className="rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-300"
+                          title="UUID kopieren"
                         >
                           {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
                         </button>
                       </div>
-                      <p className="break-all font-mono text-[9px] leading-4 text-amber-600/80">{profile.id}</p>
                     </div>
                   </div>
                 )}
@@ -366,14 +375,10 @@ function ModalContent({ userId, onClose }: ProfileModalProps) {
                     <div className="flex flex-wrap gap-1.5">
                       {Object.entries(profile.equippedByCategory).map(([, item]) => {
                         if (!item) return null;
-                        const style = RARITY_STYLES[item.rarity as Rarity];
                         return (
-                          <span
-                            key={item.id}
-                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${style.border} ${style.bg} ${style.text}`}
-                          >
+                          <RarityChip key={item.id} rarity={item.rarity as Rarity}>
                             {item.name}
-                          </span>
+                          </RarityChip>
                         );
                       })}
                     </div>

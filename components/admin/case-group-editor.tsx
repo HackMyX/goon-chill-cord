@@ -24,7 +24,7 @@ import type { CaseTierRow, CaseGroupRow, ItemRow } from "@/components/admin/admi
 
 const RARITY_DOT: Record<Rarity, string> = {
   normal: "bg-blue-400", selten: "bg-purple-400",
-  mythisch: "bg-amber-400", ultra: "bg-red-400",
+  mythisch: "bg-amber-400", ultra: "bg-fuchsia-400",
 };
 
 function Hint({ text }: { text: string }) {

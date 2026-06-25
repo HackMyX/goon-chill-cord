@@ -7,7 +7,7 @@ import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion"
 import {
   Package, ShoppingBag, Shirt, Globe, Joystick, Pickaxe, Coins,
   Users, Repeat, Gavel, ClipboardList, X, ChevronRight,
-  Megaphone, TrendingUp,
+  Megaphone, TrendingUp, CircleDot,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { Leaderboard, type LeaderboardEntry, type StreakEntry } from "@/components/dashboard/leaderboard";
@@ -141,6 +141,12 @@ const CARD_DEFS: Record<HomepageCardId, CardDef> = {
     icon: TrendingUp, gradient: "from-purple-500/10 via-purple-500/3 to-transparent",
     border: "border-purple-500/20", iconBg: "bg-purple-500/10", iconColor: "text-purple-400",
     shadow: "hover:shadow-[0_4px_24px_rgba(168,85,247,0.12)]", accentBar: "bg-purple-500",
+  },
+  plinko: {
+    label: "Plinko", description: "Lass den Ball fallen und gewinne Credits!", href: "/plinko",
+    icon: CircleDot, gradient: "from-pink-500/10 via-pink-500/3 to-transparent",
+    border: "border-pink-500/20", iconBg: "bg-pink-500/10", iconColor: "text-pink-400",
+    shadow: "hover:shadow-[0_4px_24px_rgba(236,72,153,0.12)]", accentBar: "bg-pink-500",
   },
 };
 

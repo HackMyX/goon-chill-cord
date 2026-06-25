@@ -664,6 +664,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [closeReason, setCloseReason] = useState("");
   const [replyText, setReplyText] = useState("");
+  const [replyAttachFile, setReplyAttachFile] = useState<File | null>(null);
   const [msgs, setMsgs] = useState<TicketMessage[] | null>(null);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -750,10 +751,23 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
     if (!replyText.trim()) return;
     sound.click();
     startTransition(async () => {
-      const res = await modReplyToTicket(t.id, replyText);
+      let attachmentUrl: string | null = null;
+      if (replyAttachFile) {
+        const supabase = createClient();
+        const filePath = `mod-replies/${t.id}/${Date.now()}-${replyAttachFile.name}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("ticket-attachments")
+          .upload(filePath, replyAttachFile, { upsert: false });
+        if (!uploadError && uploadData) {
+          const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(uploadData.path);
+          attachmentUrl = urlData.publicUrl;
+        }
+      }
+      const res = await modReplyToTicket(t.id, replyText, attachmentUrl);
       if (res.success) {
         showFlash("Antwort gesendet.", true);
         setReplyText("");
+        setReplyAttachFile(null);
         setMsgs(null);
         onRefresh();
       } else showFlash(res.error ?? "Fehler.", false);
@@ -961,6 +975,19 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                     m.isStaff ? "rounded-tr-sm bg-sky-500/20 text-sky-100" : "rounded-tl-sm bg-white/5 text-zinc-300"
                   }`}>
                     <p className="whitespace-pre-wrap">{m.message}</p>
+                    {m.attachmentUrl && (
+                      <div className="mt-1.5">
+                        {isImageUrl(m.attachmentUrl) ? (
+                          <a href={m.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                            <img src={m.attachmentUrl} alt="Anhang" className="max-h-40 rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity border border-white/10" />
+                          </a>
+                        ) : (
+                          <a href={m.attachmentUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-sky-400 hover:text-sky-300">
+                            <Paperclip className="h-3 w-3" />Anhang ansehen
+                          </a>
+                        )}
+                      </div>
+                    )}
                     <p className={`mt-1 text-[10px] ${m.isStaff ? "text-sky-400/70 text-right" : "text-zinc-600"}`}>
                       {m.isStaff ? "Staff" : m.username} · {timeAgo(m.createdAt)}
                     </p>
@@ -1011,13 +1038,20 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                   placeholder="Antwort an den Nutzer…"
                   className="flex-1 resize-none rounded-xl border border-white/8 bg-black/20 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-sky-400/40 placeholder:text-zinc-600"
                 />
-                <button
-                  onClick={handleReply} disabled={pending || !replyText.trim()}
-                  className="flex shrink-0 items-center gap-1.5 self-end rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-sky-500 disabled:opacity-50"
-                >
-                  {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                  Antworten
-                </button>
+                <div className="flex shrink-0 flex-col gap-1 self-end">
+                  <label className="flex cursor-pointer items-center gap-1 rounded-xl border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] text-zinc-400 transition-colors hover:border-white/20 hover:text-zinc-200">
+                    <Paperclip className="h-3 w-3" />
+                    {replyAttachFile ? replyAttachFile.name.slice(0, 12) + "…" : "Datei"}
+                    <input type="file" className="hidden" accept="image/*,.pdf,.txt,.log" onChange={(e) => setReplyAttachFile(e.target.files?.[0] ?? null)} />
+                  </label>
+                  <button
+                    onClick={handleReply} disabled={pending || !replyText.trim()}
+                    className="flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-sky-500 disabled:opacity-50"
+                  >
+                    {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    Antworten
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">

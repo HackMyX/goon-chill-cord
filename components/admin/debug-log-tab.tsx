@@ -7,7 +7,7 @@ import {
   CheckCircle2, XCircle, AlertCircle, Activity, FileText,
 } from "lucide-react";
 import {
-  getDebugLogs, deleteAllDebugLogs, deleteDebugLogsInRange, deleteDebugLog,
+  getDebugLogs, deleteAllDebugLogs, deleteDebugLogsInRange, deleteDebugLog, resolveUserIdsToNames,
   type DebugLogEntry,
 } from "@/lib/actions/debug-log";
 import { runSystemHealthChecks, type HealthCheck } from "@/lib/actions/system-health";
@@ -171,11 +171,18 @@ function exportAllLogAsPdf(logs: DebugLogEntry[]) {
   win.print();
 }
 
-function LogRow({ entry, onDeleted }: { entry: DebugLogEntry; onDeleted: () => void }) {
+const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+
+function replaceUuids(text: string, map: Record<string, string>): string {
+  return text.replace(UUID_RE, (id) => map[id.toLowerCase()] ? `@${map[id.toLowerCase()]}` : id);
+}
+
+function LogRow({ entry, uuidMap, onDeleted }: { entry: DebugLogEntry; uuidMap: Record<string, string>; onDeleted: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const Icon = LEVEL_ICON[entry.level];
   const sound = useSoundManager();
+  const resolvedMessage = replaceUuids(entry.message, uuidMap);
 
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
@@ -200,7 +207,7 @@ function LogRow({ entry, onDeleted }: { entry: DebugLogEntry; onDeleted: () => v
           {entry.scope}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-zinc-200">{entry.message}</p>
+          <p className="truncate text-sm font-semibold text-zinc-200">{resolvedMessage}</p>
           <p className="text-[11px] text-zinc-500">
             {new Date(entry.createdAt).toLocaleString("de-DE", {
               day: "2-digit",
@@ -228,12 +235,12 @@ function LogRow({ entry, onDeleted }: { entry: DebugLogEntry; onDeleted: () => v
         <div className="border-t border-white/[0.06] px-4 py-3">
           {entry.detail && (
             <pre className="mb-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-black/40 px-3 py-2 text-[11px] leading-relaxed text-zinc-400">
-              {entry.detail}
+              {replaceUuids(entry.detail, uuidMap)}
             </pre>
           )}
           {entry.context && (
             <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 px-3 py-2 text-[11px] leading-relaxed text-zinc-500">
-              {JSON.stringify(entry.context, null, 2)}
+              {replaceUuids(JSON.stringify(entry.context, null, 2), uuidMap)}
             </pre>
           )}
           {!entry.detail && !entry.context && (
@@ -365,6 +372,7 @@ type LevelFilter = DebugLogEntry["level"] | "all";
 
 export function DebugLogTab() {
   const [logs, setLogs] = useState<DebugLogEntry[]>([]);
+  const [uuidMap, setUuidMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<LevelFilter>("all");
   const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
@@ -381,6 +389,14 @@ export function DebugLogTab() {
     const result = await getDebugLogs();
     setLogs(result);
     setLoading(false);
+    // Extract all UUIDs from messages, detail, and context; resolve to usernames
+    const allText = result.map((e) =>
+      `${e.message} ${e.detail ?? ""} ${e.context ? JSON.stringify(e.context) : ""}`
+    ).join(" ");
+    const uuids = Array.from(new Set(Array.from(allText.matchAll(UUID_RE), (m) => m[0].toLowerCase())));
+    if (uuids.length) {
+      resolveUserIdsToNames(uuids).then(setUuidMap);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -545,7 +561,7 @@ export function DebugLogTab() {
       {!loading && displayed.length > 0 && (
         <div className="flex flex-col gap-2">
           {displayed.map((entry) => (
-            <LogRow key={entry.id} entry={entry} onDeleted={load} />
+            <LogRow key={entry.id} entry={entry} uuidMap={uuidMap} onDeleted={load} />
           ))}
         </div>
       )}

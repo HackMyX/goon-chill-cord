@@ -10,7 +10,7 @@ export const RARITY_HEX: Record<Rarity, string> = {
   normal: "#3b82f6",
   selten: "#a855f7",
   mythisch: "#f59e0b",
-  ultra: "#ff3b3b",
+  ultra: "#e879f9",
 };
 
 export interface EquippedItem {

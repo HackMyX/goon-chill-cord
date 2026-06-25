@@ -31,6 +31,7 @@ import {
   adminGetAllUserBadges,
 } from "@/lib/actions/badges";
 import type { BadgeDefinition, UserBadge } from "@/lib/badges";
+import { getBadgeStyle } from "@/lib/badges";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -55,13 +56,14 @@ function BadgePill({
   onRemove?: () => void;
   removing?: boolean;
 }) {
+  const style = getBadgeStyle(badge.key);
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium"
       style={{
-        background: badge.color + "22",
-        borderColor: badge.color + "50",
-        color: badge.color,
+        background: style.bg,
+        borderColor: style.border,
+        color: style.text,
       }}
     >
       <span>{badge.icon}</span>
@@ -72,7 +74,7 @@ function BadgePill({
           onClick={onRemove}
           disabled={removing}
           className="ml-1 rounded-full p-0.5 opacity-60 transition-opacity hover:opacity-100 disabled:opacity-30"
-          style={{ color: badge.color }}
+          style={{ color: style.text }}
         >
           {removing ? (
             <Loader2 className="h-3 w-3 animate-spin" />
