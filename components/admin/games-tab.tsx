@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Box, Joystick, Pickaxe, Trophy, Coins, Dices } from "lucide-react";
+import { Box, Joystick, Pickaxe, Trophy, Coins, Dices, CircleDot } from "lucide-react";
 import { WorldSessionConfigEditor } from "@/components/admin/world-session-config-editor";
 import { WorldSpawnConfigEditor } from "@/components/admin/world-spawn-editor";
 import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
@@ -11,6 +11,7 @@ import { SnakeConfigEditor } from "@/components/admin/snake-config-editor";
 import { MineConfigEditor } from "@/components/admin/mine-config-editor";
 import { SnakeLeaderboardEditor } from "@/components/admin/snake-leaderboard-editor";
 import { MineLeaderboardEditor } from "@/components/admin/mine-leaderboard-editor";
+import { PlinkoConfigEditor } from "@/components/admin/plinko-config-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import type { ProfileRow } from "@/components/admin/admin-shell";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
@@ -20,6 +21,7 @@ import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import type { DonConfig } from "@/lib/don-config";
 import type { SnakeConfig } from "@/lib/snake-config";
 import type { MineConfig } from "@/lib/mine-config";
+import type { PlinkoConfig } from "@/lib/actions/plinko";
 
 interface GameDef {
   id: string;
@@ -41,6 +43,7 @@ const GAMES: GameDef[] = [
   { id: "don", name: "Double or Nothing", icon: Dices, status: "live" },
   { id: "snake", name: "Snake", icon: Joystick, status: "live" },
   { id: "mine", name: "Mine", icon: Pickaxe, status: "live" },
+  { id: "plinko", name: "Plinko", icon: CircleDot, status: "live" },
 ];
 
 interface GamesTabProps {
@@ -52,6 +55,7 @@ interface GamesTabProps {
   donConfig: DonConfig;
   snakeConfig: SnakeConfig;
   mineConfig: MineConfig;
+  plinkoConfig: PlinkoConfig;
 }
 
 /**
@@ -61,7 +65,7 @@ interface GamesTabProps {
  * anything real behind it; Snake/Mine render as inert "Bald" placeholders
  * so the tab's shape doesn't have to change again once they exist.
  */
-export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig, worldSpawnConfig, topProfiles, donConfig, snakeConfig, mineConfig }: GamesTabProps) {
+export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig, worldSpawnConfig, topProfiles, donConfig, snakeConfig, mineConfig, plinkoConfig }: GamesTabProps) {
   const [openGame, setOpenGame] = useState<string>("");
 
   return (
@@ -126,6 +130,12 @@ export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig
                 <div className="border-t border-white/8 pt-4">
                   <MineLeaderboardEditor />
                 </div>
+              </div>
+            )}
+
+            {isOpen && game.id === "plinko" && (
+              <div className="border-t border-white/10 px-5 py-5">
+                <PlinkoConfigEditor config={plinkoConfig} />
               </div>
             )}
 

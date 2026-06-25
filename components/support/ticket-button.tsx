@@ -41,22 +41,22 @@ import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: "Offen",
   in_progress: "In Bearbeitung",
-  resolved: "Gelöst",
-  closed: "Geschlossen",
+  resolved: "Gelöst/Geschlossen",
+  closed: "Gelöst/Geschlossen",
 };
 
 const STATUS_STYLE: Record<TicketStatus, string> = {
   open: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
   in_progress: "text-blue-300 bg-blue-500/10 border-blue-500/30",
-  resolved: "text-purple-300 bg-purple-500/10 border-purple-500/30",
-  closed: "text-zinc-400 bg-zinc-500/10 border-zinc-500/30",
+  resolved: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
+  closed: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
 };
 
 const STATUS_ICON: Record<TicketStatus, typeof MessageCircle> = {
   open: MessageCircle,
   in_progress: Clock,
   resolved: CheckCircle2,
-  closed: XCircle,
+  closed: CheckCircle2,
 };
 
 function StatusBadge({ status }: { status: TicketStatus }) {
@@ -556,7 +556,7 @@ function SupportButtonInner() {
                         <>
                           <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-2">
                             <StatusBadge status={detail.status} />
-                            {detail.status !== "closed" && (
+                            {detail.status !== "closed" && detail.status !== "resolved" && (
                               <button onClick={handleClose} className="text-[11px] text-zinc-500 hover:text-red-400">
                                 Ticket schließen
                               </button>
@@ -623,7 +623,7 @@ function SupportButtonInner() {
                             )}
                             <div ref={messagesEndRef} />
                           </div>
-                          {detail.status !== "closed" && (
+                          {detail.status !== "closed" && detail.status !== "resolved" && (
                             <form onSubmit={handleReply} className="border-t border-white/10 p-3">
                               <div className="flex gap-2">
                                 <input

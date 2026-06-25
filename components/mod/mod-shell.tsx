@@ -639,9 +639,9 @@ function PriorityBadge({ priority }: { priority: string }) {
 // Ticket Item — own state, thread messages, category/priority, in_progress
 // ---------------------------------------------------------------------------
 
-const ALL_TICKET_STATUSES = ["open", "in_progress", "resolved", "closed"] as const;
+const ALL_TICKET_STATUSES = ["open", "in_progress", "closed"] as const;
 const ALL_TICKET_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
-const STATUS_LABEL: Record<string, string> = { open: "Offen", in_progress: "In Bearb.", resolved: "Gelöst", closed: "Geschlossen" };
+const STATUS_LABEL: Record<string, string> = { open: "Offen", in_progress: "In Bearb.", resolved: "Gelöst/Geschlossen", closed: "Gelöst/Geschlossen" };
 const PRIORITY_LABEL: Record<string, string> = { low: "Niedrig", normal: "Normal", high: "Hoch", urgent: "Dringend" };
 
 function TicketItem({ t, perms, onRefresh, defaultOpen }: {
@@ -663,7 +663,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   const [rewardNote, setRewardNote] = useState("");
   const isActionable = t.status === "open" || t.status === "in_progress";
   const isInProgress = t.status === "in_progress";
-  const isClosed = t.status === "closed";
+  const isClosed = t.status === "closed" || t.status === "resolved";
   const alreadyRewarded = !!t.rewardGrantedAt;
   const rewardIsPending = !alreadyRewarded && t.rewardPending;
   const [escalating, setEscalating] = useState(false);
@@ -1133,24 +1133,16 @@ const TICKET_STATUS_CONFIG = [
     empty: "Keine Tickets in Bearbeitung.",
   },
   {
-    key: "resolved",
-    label: "Gelöst",
+    key: "closed",
+    label: "Gelöst/Geschlossen",
     dot: "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]",
     badge: "bg-emerald-500/20 text-emerald-300",
-    heading: "text-zinc-300",
-    empty: "Keine gelösten Tickets.",
-  },
-  {
-    key: "closed",
-    label: "Geschlossen",
-    dot: "bg-zinc-600",
-    badge: "bg-zinc-700/50 text-zinc-500",
-    heading: "text-zinc-500",
+    heading: "text-zinc-400",
     empty: "",
   },
 ] as const;
 
-type TicketStatusFilter = "open" | "in_progress" | "resolved" | "closed" | "all";
+type TicketStatusFilter = "open" | "in_progress" | "closed" | "all";
 
 function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }: {
   tickets: ModTicket[];
@@ -1178,20 +1170,22 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
   const countByStatus = {
     open: tickets.filter((t) => t.status === "open").length,
     in_progress: tickets.filter((t) => t.status === "in_progress").length,
-    resolved: tickets.filter((t) => t.status === "resolved").length,
-    closed: tickets.filter((t) => t.status === "closed").length,
+    closed: tickets.filter((t) => t.status === "closed" || t.status === "resolved").length,
   };
 
   const filterButtons: Array<{ key: TicketStatusFilter; label: string; count?: number }> = [
     { key: "all", label: `Alle (${tickets.length})` },
     { key: "open", label: `Offen`, count: countByStatus.open },
     { key: "in_progress", label: `In Bearb.`, count: countByStatus.in_progress },
-    { key: "resolved", label: `Gelöst`, count: countByStatus.resolved },
-    { key: "closed", label: `Geschlossen`, count: countByStatus.closed },
+    { key: "closed", label: `Gelöst/Geschlossen`, count: countByStatus.closed },
   ];
 
   function renderTicketGroup(group: ModTicket[]) {
-    const filtered = statusFilter === "all" ? group : group.filter((t) => t.status === statusFilter);
+    const filtered = statusFilter === "all" ? group : group.filter((t) =>
+      statusFilter === "closed"
+        ? (t.status === "closed" || t.status === "resolved")
+        : t.status === statusFilter
+    );
 
     if (filtered.length === 0) {
       return (
@@ -1206,7 +1200,11 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
       return (
         <div className="flex flex-col gap-3">
           {TICKET_STATUS_CONFIG.map((cfg) => {
-            const statusGroup = filtered.filter((t) => t.status === cfg.key);
+            const statusGroup = filtered.filter((t) =>
+              cfg.key === "closed"
+                ? (t.status === "closed" || t.status === "resolved")
+                : t.status === cfg.key
+            );
             if (statusGroup.length === 0) return null;
             return (
               <div key={cfg.key}>
@@ -1230,9 +1228,10 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
       );
     }
 
+    const sliceLimit = statusFilter === "closed" ? 30 : filtered.length;
     return (
       <div className="flex flex-col gap-2">
-        {(statusFilter === "closed" ? filtered.slice(0, 30) : filtered).map((t) => (
+        {filtered.slice(0, sliceLimit).map((t) => (
           <TicketItem key={t.id} t={t} perms={perms} onRefresh={onRefresh} defaultOpen={openTicketId === t.id} />
         ))}
         {statusFilter === "closed" && filtered.length > 30 && (

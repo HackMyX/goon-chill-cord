@@ -36,6 +36,20 @@ export async function getCleanupRules(): Promise<CleanupRule[]> {
 
     const byKey = new Map((data ?? []).map((r: Record<string, unknown>) => [r.source_key as string, r]));
 
+    // Seed any missing keys so the health check sees rows for all expected sources.
+    const missingKeys = ALL_CLEANUP_KEYS.filter((k) => !byKey.has(k));
+    if (missingKeys.length > 0) {
+      void admin.from("cleanup_config").upsert(
+        missingKeys.map((key) => ({
+          source_key: key,
+          enabled: false,
+          retention_days: CLEANUP_SOURCE_META[key].defaultRetentionDays,
+          updated_at: new Date().toISOString(),
+        })),
+        { onConflict: "source_key", ignoreDuplicates: true }
+      );
+    }
+
     return ALL_CLEANUP_KEYS.map((key) => {
       const row = byKey.get(key);
       const meta = CLEANUP_SOURCE_META[key];

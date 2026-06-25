@@ -198,7 +198,7 @@ export async function addTicketMessage(input: {
 
   if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
   if (!isStaff && ticket.user_id !== user.id) return { success: false, error: "Kein Zugriff." };
-  if (ticket.status === "closed") return { success: false, error: "Dieses Ticket ist geschlossen." };
+  if (ticket.status === "closed" || ticket.status === "resolved") return { success: false, error: "Dieses Ticket ist geschlossen." };
 
   await admin.from("ticket_messages").insert({
     ticket_id: input.ticketId,
@@ -330,8 +330,8 @@ export async function updateTicketStatus(input: {
   const STATUS_LABELS: Record<TicketStatus, string> = {
     open: "Offen",
     in_progress: "In Bearbeitung",
-    resolved: "Gelöst",
-    closed: "Geschlossen",
+    resolved: "Gelöst/Geschlossen",
+    closed: "Gelöst/Geschlossen",
   };
 
   let notifyMsg = `Dein Ticket „${ticket.subject}" ist jetzt: ${STATUS_LABELS[effectiveStatus]}`;

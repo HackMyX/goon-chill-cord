@@ -29,7 +29,6 @@ import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { BattlePassTab } from "@/components/admin/battle-pass-tab";
 import { AiConfigEditor } from "@/components/admin/ai-config-editor";
 import { CleanupConfigEditor } from "@/components/admin/cleanup-config-editor";
-import { PlinkoConfigEditor } from "@/components/admin/plinko-config-editor";
 import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
@@ -131,7 +130,7 @@ interface AdminShellProps {
   plinkoConfig: PlinkoConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "plinko";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -155,7 +154,6 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "patchnotes", label: "Patch Notes", icon: FileText },
   { id: "cleanup", label: "Verlaufs-Bereinigung", icon: Trash2 },
   { id: "battlepass", label: "Battle Pass", icon: Sparkles },
-  { id: "plinko", label: "Plinko", icon: Gamepad2 },
 ];
 
 export function AdminShell({
@@ -419,6 +417,7 @@ export function AdminShell({
             donConfig={donConfig}
             snakeConfig={snakeConfig}
             mineConfig={mineConfig}
+            plinkoConfig={plinkoConfig}
           />
         )}
 
@@ -472,8 +471,6 @@ export function AdminShell({
         {tab === "cleanup" && <CleanupConfigEditor rules={cleanupRules} />}
 
         {tab === "battlepass" && <BattlePassTab initialPasses={battlePasses} migrationNeeded={battlePassMigrationNeeded} />}
-
-        {tab === "plinko" && <PlinkoConfigEditor config={plinkoConfig} />}
 
         {tab === "ki" && (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">
