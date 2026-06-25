@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { getDonConfig, getFlipsToday, getFlipsThisHour } from "@/lib/actions/don-config";
+import { getDonUpgradeTier } from "@/lib/actions/don-upgrade";
 import { DonShell } from "@/components/don/don-shell";
 
 export default async function DonPage() {
@@ -14,7 +15,7 @@ export default async function DonPage() {
 
   if (!user) redirect("/");
 
-  const [{ data: profile }, { count: inventoryCount }, donConfig, flipsToday, flipsThisHour] = await Promise.all([
+  const [{ data: profile }, { count: inventoryCount }, donConfig, flipsToday, flipsThisHour, upgradeTier] = await Promise.all([
     supabase
       .from("profiles")
       .select("credits, streak_days, username, role")
@@ -27,6 +28,7 @@ export default async function DonPage() {
     getDonConfig(),
     getFlipsToday(user.id),
     getFlipsThisHour(user.id),
+    getDonUpgradeTier(),
   ]);
 
   return (
@@ -39,6 +41,7 @@ export default async function DonPage() {
       donConfig={donConfig}
       initialFlipsToday={flipsToday}
       initialHourlyFlipsUsed={flipsThisHour}
+      initialUpgradeTier={upgradeTier}
     />
   );
 }

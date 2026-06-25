@@ -14,6 +14,7 @@ import {
   DEFAULT_STREAK_CONFIG,
   type StreakConfig,
 } from "@/lib/streak";
+import { advanceBattlePassProgress } from "@/lib/actions/battle-pass";
 
 interface StreakConfigRow {
   enabled: boolean;
@@ -290,6 +291,9 @@ export async function claimDailyReward(): Promise<ClaimResult> {
   } catch {
     // audit_logs is best-effort, never blocks the claim itself.
   }
+
+  // Advance battle-pass progress — fire-and-forget, never blocks the streak claim.
+  void advanceBattlePassProgress(user.id);
 
   revalidatePath("/");
   revalidatePath("/account");

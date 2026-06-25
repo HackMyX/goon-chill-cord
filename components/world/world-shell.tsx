@@ -34,6 +34,7 @@ import { WorldSettingsPanel } from "@/components/world/world-settings-panel";
 import { loadWorldSettings, saveWorldSettings, type WorldSettings } from "@/lib/world-settings";
 import { setActiveKeybinds } from "@/components/world/use-keyboard-controls";
 import { MobileControls } from "@/components/world/mobile-controls";
+import { WorldChatBubble } from "@/components/world/world-chat-bubble";
 
 interface WorldShellProps {
   userId: string;
@@ -839,6 +840,9 @@ export function WorldShell({
             username={username}
           />
         )}
+
+        {/* Floating global-chat bubble — always visible in-world */}
+        <WorldChatBubble username={username} />
 
         <Canvas
           // r3f's bare `shadows` shorthand defaults to PCFSoftShadowMap —

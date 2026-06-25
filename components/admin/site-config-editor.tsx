@@ -44,6 +44,7 @@ const CARD_LABELS: Record<HomepageCardId, string> = {
   trading: "Trading",
   auctions: "Auktionshaus",
   surveys: "Umfragen",
+  battlepass: "Battle Pass",
 };
 
 const ANNOUNCEMENT_COLORS = [

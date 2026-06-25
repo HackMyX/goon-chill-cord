@@ -26,11 +26,13 @@ import { ChatConfigEditor } from "@/components/admin/chat-config-editor";
 import { PatchNotesEditor } from "@/components/admin/patchnotes-editor";
 import { SurveysTab } from "@/components/admin/surveys-tab";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
+import { BattlePassTab } from "@/components/admin/battle-pass-tab";
 import { AiConfigEditor } from "@/components/admin/ai-config-editor";
 import { CleanupConfigEditor } from "@/components/admin/cleanup-config-editor";
 import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
+import type { BattlePass } from "@/lib/battle-pass";
 import type { SnakeConfig } from "@/lib/snake-config";
 import type { MineConfig } from "@/lib/mine-config";
 import type { ModPermissions, ChatConfig } from "@/lib/mod";
@@ -80,6 +82,7 @@ export interface ProfileRow {
   role: string;
   cases_opened: number;
   support_banned?: boolean;
+  verified?: boolean;
 }
 
 export interface ItemRow {
@@ -121,9 +124,10 @@ interface AdminShellProps {
   snakeConfig: SnakeConfig;
   mineConfig: MineConfig;
   cleanupRules: CleanupRule[];
+  battlePasses: BattlePass[];
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup";
+type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "economy", label: "Economy & Cases", icon: Coins },
@@ -146,6 +150,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "security", label: "Sicherheit", icon: ShieldAlert },
   { id: "patchnotes", label: "Patch Notes", icon: FileText },
   { id: "cleanup", label: "Verlaufs-Bereinigung", icon: Trash2 },
+  { id: "battlepass", label: "Battle Pass", icon: Sparkles },
 ];
 
 export function AdminShell({
@@ -173,6 +178,7 @@ export function AdminShell({
   snakeConfig,
   mineConfig,
   cleanupRules,
+  battlePasses,
 }: AdminShellProps) {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>(() => {
@@ -457,6 +463,8 @@ export function AdminShell({
         {tab === "patchnotes" && <PatchNotesEditor initialNotes={patchNotes} />}
 
         {tab === "cleanup" && <CleanupConfigEditor rules={cleanupRules} />}
+
+        {tab === "battlepass" && <BattlePassTab initialPasses={battlePasses} />}
 
         {tab === "ki" && (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">

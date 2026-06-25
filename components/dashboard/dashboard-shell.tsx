@@ -132,6 +132,12 @@ const CARD_DEFS: Record<HomepageCardId, CardDef> = {
     border: "border-violet-500/20", iconBg: "bg-violet-500/10", iconColor: "text-violet-400",
     shadow: "hover:shadow-[0_4px_24px_rgba(139,92,246,0.12)]", accentBar: "bg-violet-500",
   },
+  battlepass: {
+    label: "Battle Pass", description: "Wöchentlicher Pass — täglich einloggen & Belohnungen sichern.", href: "/battlepass",
+    icon: TrendingUp, gradient: "from-purple-500/10 via-purple-500/3 to-transparent",
+    border: "border-purple-500/20", iconBg: "bg-purple-500/10", iconColor: "text-purple-400",
+    shadow: "hover:shadow-[0_4px_24px_rgba(168,85,247,0.12)]", accentBar: "bg-purple-500",
+  },
 };
 
 const ANNOUNCEMENT_STYLES = {

@@ -14,6 +14,7 @@ export interface PublicProfile {
   gender: "m" | "w";
   discordName: string | null;
   discordAvatarUrl: string | null;
+  verified: boolean;
   equippedByCategory: Record<string, { id: string; name: string; rarity: Rarity }>;
   rarityCounts: Record<Rarity, number>;
 }
@@ -48,7 +49,7 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
   const [{ data: profile }, { data: inventory }, { data: authUser }] = await Promise.all([
     admin
       .from("profiles")
-      .select("id, username, role, credits, cases_opened, created_at, gender")
+      .select("id, username, role, credits, cases_opened, created_at, gender, verified")
       .eq("id", targetUserId)
       .single(),
     admin
@@ -107,6 +108,7 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
       gender: (profile.gender as "m" | "w") ?? "m",
       discordName,
       discordAvatarUrl,
+      verified: (profile.verified as boolean | null) ?? false,
       equippedByCategory,
       rarityCounts,
     },

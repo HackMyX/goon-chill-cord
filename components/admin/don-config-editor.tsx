@@ -5,7 +5,7 @@ import {
   Save, Loader2, Coins, Zap, Timer, Target, Plus, X, Eye, EyeOff, Check,
 } from "lucide-react";
 import { updateDonConfig } from "@/lib/actions/don-config";
-import { DEFAULT_DON_CONFIG, type DonConfig } from "@/lib/don-config";
+import { DEFAULT_DON_CONFIG, DEFAULT_UPGRADE_TIERS, type DonConfig, type DonUpgradeTier } from "@/lib/don-config";
 import { useSoundManager } from "@/lib/sound-manager";
 
 interface Props {
@@ -296,6 +296,99 @@ export function DonConfigEditor({ config }: Props) {
         <span className="mt-1 block text-[11px] text-zinc-600">
           Klick-Schnellauswahl-Beträge für den User. Automatisch sortiert.
         </span>
+      </div>
+
+      {/* Upgrade tiers config */}
+      <div className="mt-5 rounded-xl border border-purple-500/20 bg-purple-500/[0.04] p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-sm font-bold text-zinc-200">Stunden-Upgrades</span>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <span className="text-xs text-zinc-400">Aktiviert</span>
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, upgradeEnabled: !f.upgradeEnabled }))}
+              className={`relative h-5 w-9 rounded-full transition-colors ${form.upgradeEnabled ? "bg-purple-500" : "bg-zinc-700"}`}
+            >
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${form.upgradeEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
+            </button>
+          </label>
+        </div>
+        <p className="mb-3 text-xs text-zinc-500">
+          User können ihr stündliches Flip-Limit mit CR aufwerten. Jede Stufe addiert die konfigurierten Bonus-Flips.
+        </p>
+        <div className="flex flex-col gap-2">
+          {form.upgradeTiers.map((tier, i) => (
+            <div key={tier.tier} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-2">
+              <span className="w-14 text-xs font-bold text-zinc-300">Stufe {tier.tier}</span>
+              <label className="flex flex-col gap-0.5 text-[10px] text-zinc-500">
+                Name
+                <input
+                  value={tier.name}
+                  onChange={(e) => {
+                    const updated = [...form.upgradeTiers];
+                    updated[i] = { ...updated[i], name: e.target.value };
+                    setForm((f) => ({ ...f, upgradeTiers: updated }));
+                  }}
+                  className="w-32 rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+                />
+              </label>
+              <label className="flex flex-col gap-0.5 text-[10px] text-zinc-500">
+                Bonus Flips/h
+                <input
+                  type="number"
+                  min={1}
+                  value={tier.bonusHourlyFlips}
+                  onChange={(e) => {
+                    const updated = [...form.upgradeTiers];
+                    updated[i] = { ...updated[i], bonusHourlyFlips: Math.max(1, Number(e.target.value) || 1) };
+                    setForm((f) => ({ ...f, upgradeTiers: updated }));
+                  }}
+                  className="w-20 rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+                />
+              </label>
+              <label className="flex flex-col gap-0.5 text-[10px] text-zinc-500">
+                Kosten (CR)
+                <input
+                  type="number"
+                  min={0}
+                  value={tier.costCr}
+                  onChange={(e) => {
+                    const updated = [...form.upgradeTiers];
+                    updated[i] = { ...updated[i], costCr: Math.max(0, Number(e.target.value) || 0) };
+                    setForm((f) => ({ ...f, upgradeTiers: updated }));
+                  }}
+                  className="w-24 rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = form.upgradeTiers.filter((_, j) => j !== i).map((t, j) => ({ ...t, tier: j + 1 }));
+                  setForm((f) => ({ ...f, upgradeTiers: updated }));
+                }}
+                className="ml-auto text-zinc-600 hover:text-red-400 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          {form.upgradeTiers.length < 4 && (
+            <button
+              type="button"
+              onClick={() => {
+                const nextTier = form.upgradeTiers.length + 1;
+                const def = DEFAULT_UPGRADE_TIERS.find((t) => t.tier === nextTier) ?? {
+                  tier: nextTier, name: `Upgrade ${nextTier}`, bonusHourlyFlips: nextTier * 5, costCr: nextTier * 2500,
+                };
+                setForm((f) => ({ ...f, upgradeTiers: [...f.upgradeTiers, { ...def, tier: nextTier }] }));
+              }}
+              className="flex items-center gap-2 rounded-lg border border-dashed border-white/20 px-3 py-2 text-xs text-zinc-500 hover:border-purple-400/50 hover:text-purple-300 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Stufe hinzufügen
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Reset + Save */}

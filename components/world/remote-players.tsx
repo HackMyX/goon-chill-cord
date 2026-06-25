@@ -316,8 +316,11 @@ function RemotePlayerAvatar({
           opacity: isDead ? 0.4 : 1,
           transition: "opacity 0.3s",
         }}>
-          {/* Username */}
+          {/* Username + verified badge */}
           <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "3px",
             color: "#e4e4e7",
             fontSize: "11px",
             fontWeight: 700,
@@ -327,6 +330,13 @@ function RemotePlayerAvatar({
             letterSpacing: "0.02em",
           }}>
             {loadout.username}
+            {loadout.verified && (
+              <span style={{
+                color: "#3b82f6",
+                fontSize: "10px",
+                textShadow: "0 0 6px rgba(59,130,246,0.8)",
+              }}>✓</span>
+            )}
           </div>
           {/* HP bar */}
           <div style={{

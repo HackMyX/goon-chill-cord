@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Users, Search, Crown, Shield, Flame } from "lucide-react";
+import { ArrowLeft, Users, Search, Crown, Shield, Flame, BadgeCheck } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { ProfileModal } from "@/components/community/profile-modal";
 import { PlayerCardAvatar } from "@/components/community/player-card-avatar";
@@ -21,6 +21,7 @@ export interface PlayerCard {
   memberSince: string;
   streakDays: number;
   gender: "m" | "w";
+  verified: boolean;
   equippedByCategory: Record<string, EquippedItem | undefined>;
   rarityCounts: Record<Rarity, number>;
 }
@@ -233,6 +234,9 @@ export function PlayerListShell({ players: initialPlayers, credits: initialCredi
                   <div className="flex items-start justify-between gap-1">
                     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                       <span className="font-bold text-zinc-100 truncate">{player.username}</span>
+                      {player.verified && (
+                        <BadgeCheck className="shrink-0 h-3.5 w-3.5 text-blue-400 drop-shadow-[0_0_5px_rgba(59,130,246,0.7)]" aria-label="Verifiziert" />
+                      )}
                       {player.id === viewerId && (
                         <span className="shrink-0 rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-bold text-purple-300">DU</span>
                       )}

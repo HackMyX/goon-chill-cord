@@ -6,7 +6,7 @@ import Image from "next/image";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
-import { X, Loader2, ShieldCheck, Package, Calendar } from "lucide-react";
+import { X, Loader2, ShieldCheck, BadgeCheck, Package, Calendar } from "lucide-react";
 import { CharacterModel } from "@/components/world/character-model";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
 import { getPublicProfile, type PublicProfile } from "@/lib/actions/community";
@@ -132,6 +132,9 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
                 <div>
                   <p className="flex items-center gap-1.5 text-lg font-bold text-zinc-100">
                     {profile.username}
+                    {profile.verified && (
+                      <BadgeCheck className="h-4 w-4 text-blue-400 drop-shadow-[0_0_6px_rgba(59,130,246,0.7)]" aria-label="Verifiziert" />
+                    )}
                     {profile.role === "admin" && (
                       <ShieldCheck className="h-4 w-4 text-amber-400" aria-label="Admin" />
                     )}

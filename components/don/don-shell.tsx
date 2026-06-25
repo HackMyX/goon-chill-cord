@@ -3,10 +3,11 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, TrendingUp, TrendingDown, Coins, RotateCcw } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Coins, RotateCcw, Zap, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { TopBar } from "@/components/layout/top-bar";
 import { flipDouble } from "@/lib/actions/double-or-nothing";
+import { purchaseDonUpgrade } from "@/lib/actions/don-upgrade";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import type { DonConfig } from "@/lib/don-config";
@@ -30,6 +31,7 @@ export function DonShell({
   donConfig,
   initialFlipsToday,
   initialHourlyFlipsUsed = 0,
+  initialUpgradeTier = 0,
 }: {
   initialCredits: number;
   inventoryCount: number;
@@ -39,6 +41,7 @@ export function DonShell({
   donConfig: DonConfig;
   initialFlipsToday: number;
   initialHourlyFlipsUsed?: number;
+  initialUpgradeTier?: number;
 }) {
   const [credits, setCredits] = useState(initialCredits);
   const [phase, setPhase] = useState<"idle" | "loading" | "flipping" | "won" | "lost">("idle");
@@ -49,6 +52,9 @@ export function DonShell({
   const [flipsUsed, setFlipsUsed] = useState(initialFlipsToday);
   const [hourlyFlipsUsed, setHourlyFlipsUsed] = useState(initialHourlyFlipsUsed);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeTier, setUpgradeTier] = useState(initialUpgradeTier);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const [upgrading, setUpgrading] = useState(false);
 
   const coinControls = useAnimation();
   const coinYRef = useRef(0);
@@ -63,6 +69,21 @@ export function DonShell({
   function handleCreditsChange(newCredits: number) {
     setCredits(newCredits);
     router.refresh();
+  }
+
+  async function handleUpgrade(tier: number) {
+    if (upgrading || upgradeTier >= tier) return;
+    setUpgrading(true);
+    setUpgradeError(null);
+    const res = await purchaseDonUpgrade(tier);
+    setUpgrading(false);
+    if (res.success) {
+      setUpgradeTier(res.newTier ?? tier);
+      if (res.newCredits !== undefined) setCredits(res.newCredits);
+      router.refresh();
+    } else {
+      setUpgradeError(res.error ?? "Fehler");
+    }
   }
 
   const stake = customBet ? Math.floor(Number(customBet)) || 0 : selectedQuick;
@@ -654,6 +675,84 @@ export function DonShell({
             </p>
           </div>
         </motion.div>
+
+        {/* DON Upgrades */}
+        {donConfig.upgradeEnabled && donConfig.upgradeTiers.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="mt-4 sm:mt-5 w-full max-w-lg rounded-2xl border border-white/8 bg-[#0d0a15]/70 p-4"
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <Zap className="h-4 w-4 text-purple-400" />
+              <span className="text-sm font-bold text-zinc-200">Stunden-Flip Upgrades</span>
+              {upgradeTier > 0 && (
+                <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
+                  Stufe {upgradeTier}
+                </span>
+              )}
+            </div>
+            <p className="mb-3 text-xs text-zinc-500">
+              Erhöhe dein stündliches Flip-Limit dauerhaft.
+              {donConfig.hourlyFlipLimit !== null && (
+                <> Basis-Limit: {donConfig.hourlyFlipLimit} Flips/h.</>
+              )}
+            </p>
+            <div className="flex flex-col gap-2">
+              {donConfig.upgradeTiers.map((tier) => {
+                const owned = upgradeTier >= tier.tier;
+                const isNext = upgradeTier === tier.tier - 1;
+                const canAfford = credits >= tier.costCr;
+                return (
+                  <div
+                    key={tier.tier}
+                    className={`flex items-center justify-between rounded-xl border px-3 py-2.5 transition-all ${
+                      owned
+                        ? "border-emerald-500/30 bg-emerald-500/[0.06]"
+                        : isNext
+                          ? "border-purple-400/40 bg-purple-500/[0.06]"
+                          : "border-white/5 bg-black/20 opacity-60"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-bold ${owned ? "text-emerald-400" : isNext ? "text-purple-300" : "text-zinc-500"}`}>
+                        Stufe {tier.tier}
+                      </span>
+                      <span className="text-xs text-zinc-400">{tier.name}</span>
+                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${owned ? "bg-emerald-500/20 text-emerald-400" : "bg-purple-500/15 text-purple-400"}`}>
+                        +{tier.bonusHourlyFlips}/h
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {owned ? (
+                        <span className="text-xs font-bold text-emerald-400">✓ Besitzt</span>
+                      ) : isNext ? (
+                        <button
+                          onClick={() => handleUpgrade(tier.tier)}
+                          disabled={upgrading || !canAfford}
+                          className="flex items-center gap-1 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-40 transition-colors shadow-[0_0_8px_rgba(147,51,234,0.4)]"
+                        >
+                          {upgrading ? "…" : (
+                            <>
+                              <ChevronRight className="h-3 w-3" />
+                              {tier.costCr.toLocaleString("de-DE")} {currencyName}
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-zinc-600">{tier.costCr.toLocaleString("de-DE")} {currencyName}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {upgradeError && (
+              <p className="mt-2 text-xs text-red-400">{upgradeError}</p>
+            )}
+          </motion.div>
+        )}
 
         {/* Flip history */}
         <AnimatePresence>

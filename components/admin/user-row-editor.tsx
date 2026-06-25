@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, RotateCcw, MessageCircleOff, MessageCircle } from "lucide-react";
-import { updateUserCredits, updateUserRole, resetUser, setSupportBanned } from "@/lib/actions/admin";
+import { Save, RotateCcw, MessageCircleOff, MessageCircle, BadgeCheck } from "lucide-react";
+import { updateUserCredits, updateUserRole, resetUser, setSupportBanned, setUserVerified } from "@/lib/actions/admin";
 import { UserDetailPanel } from "@/components/admin/user-detail-panel";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -21,6 +21,8 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
   const [resetting, setResetting] = useState(false);
   const [supportBanned, setSupportBannedState] = useState(!!profile.support_banned);
   const [supportBanToggling, setSupportBanToggling] = useState(false);
+  const [verified, setVerifiedState] = useState(!!profile.verified);
+  const [verifyToggling, setVerifyToggling] = useState(false);
   const sound = useSoundManager();
   const router = useRouter();
 
@@ -36,8 +38,27 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
       setCredits(profile.credits);
       setRole(profile.role as ProfileRole);
       setSupportBannedState(!!profile.support_banned);
+      setVerifiedState(!!profile.verified);
     }
-  }, [profile.credits, profile.role, profile.support_banned, saving]);
+  }, [profile.credits, profile.role, profile.support_banned, profile.verified, saving]);
+
+  async function handleToggleVerified(e: React.MouseEvent) {
+    e.stopPropagation();
+    sound.click();
+    setVerifyToggling(true);
+    const next = !verified;
+    const res = await setUserVerified(profile.id, next);
+    setVerifyToggling(false);
+    if (res.success) {
+      setVerifiedState(next);
+      setStatus("saved");
+      sound.save();
+      router.refresh();
+    } else {
+      sound.error();
+      setStatus("error");
+    }
+  }
 
   async function handleToggleSupportBan(e: React.MouseEvent) {
     e.stopPropagation();
@@ -196,6 +217,21 @@ export function UserRowEditor({ profile }: { profile: ProfileRow }) {
           >
             {supportBanned ? <MessageCircleOff className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
             {supportBanToggling ? "..." : supportBanned ? "Support gesperrt" : "Support sperren"}
+          </button>
+
+          <button
+            onMouseEnter={sound.hover}
+            onClick={handleToggleVerified}
+            disabled={verifyToggling}
+            title={verified ? "Verifikation entfernen" : "Blaues Häkchen verleihen"}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
+              verified
+                ? "border-blue-400/60 bg-blue-500/20 text-blue-300 hover:border-blue-400/80 shadow-[0_0_8px_rgba(59,130,246,0.3)]"
+                : "border-white/10 text-zinc-400 hover:border-blue-400/40 hover:text-blue-300"
+            }`}
+          >
+            <BadgeCheck className="h-4 w-4" />
+            {verifyToggling ? "..." : verified ? "Verifiziert" : "Verifizieren"}
           </button>
 
           {status === "saved" && <span className="text-sm font-semibold text-emerald-400">✓ Gespeichert</span>}

@@ -19,6 +19,7 @@ import { getDonConfig } from "@/lib/actions/don-config";
 import { getSnakeConfig } from "@/lib/actions/snake";
 import { getMineConfig } from "@/lib/actions/mine";
 import { getCleanupRules } from "@/lib/actions/cleanup-config";
+import { adminListBattlePasses } from "@/lib/actions/battle-pass";
 import { CASE_GROUPS } from "@/lib/cases";
 import {
   AdminShell,
@@ -141,6 +142,7 @@ export default async function AdminPage() {
     adminSnakeConfig,
     adminMineConfig,
     cleanupRules,
+    battlePasses,
   ] = await Promise.all([
     admin
       .from("audit_logs")
@@ -150,7 +152,7 @@ export default async function AdminPage() {
     fetchTierRows(),
     admin
       .from("profiles")
-      .select("id, username, credits, role, cases_opened, support_banned")
+      .select("id, username, credits, role, cases_opened, support_banned, verified")
       .order("credits", { ascending: false })
       .limit(200),
     fetchItemRows(),
@@ -172,6 +174,7 @@ export default async function AdminPage() {
     getSnakeConfig(),
     getMineConfig(),
     getCleanupRules(),
+    adminListBattlePasses(),
   ]);
 
   // Keep case tiers in the same order as CASE_GROUPS (standard before premium,
@@ -214,6 +217,7 @@ export default async function AdminPage() {
       snakeConfig={adminSnakeConfig}
       mineConfig={adminMineConfig}
       cleanupRules={cleanupRules}
+      battlePasses={battlePasses}
     />
     </Suspense>
   );

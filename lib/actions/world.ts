@@ -7,6 +7,7 @@ import type { EquippedItem } from "@/lib/rarity-colors";
 export interface RemoteLoadout {
   username: string;
   gender: "m" | "w";
+  verified: boolean;
   equippedByCategory: Record<string, EquippedItem>;
 }
 
@@ -36,7 +37,7 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
   const admin = createAdminClient();
 
   const [{ data: profile }, { data: inventory }] = await Promise.all([
-    admin.from("profiles").select("username, gender").eq("id", targetUserId).single(),
+    admin.from("profiles").select("username, gender, verified").eq("id", targetUserId).single(),
     admin
       .from("inventory")
       .select(
@@ -66,6 +67,7 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
     loadout: {
       username: profile.username,
       gender: (profile.gender as "m" | "w") ?? "m",
+      verified: (profile.verified as boolean | null) ?? false,
       equippedByCategory,
     },
   };

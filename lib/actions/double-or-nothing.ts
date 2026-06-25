@@ -30,7 +30,7 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   if (!user) return { success: false, error: "Du musst eingeloggt sein." };
 
   const [{ data: profile, error: profileError }, { currencyName }, config] = await Promise.all([
-    supabase.from("profiles").select("credits").eq("id", user.id).single(),
+    supabase.from("profiles").select("credits, don_upgrade_tier").eq("id", user.id).single(),
     getSiteConfig(),
     getDonConfig(),
   ]);
@@ -66,8 +66,16 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
       }
     }
 
-    // Hourly limit check
+    // Hourly limit check — base limit + bonus from user's upgrade tier
     if (config.hourlyFlipLimit !== null) {
+      const userUpgradeTier = (profile as { don_upgrade_tier?: number }).don_upgrade_tier ?? 0;
+      let bonusFlips = 0;
+      if (config.upgradeEnabled && userUpgradeTier > 0) {
+        const tierDef = config.upgradeTiers.find((t) => t.tier === userUpgradeTier);
+        bonusFlips = tierDef?.bonusHourlyFlips ?? 0;
+      }
+      const effectiveHourlyLimit = config.hourlyFlipLimit + bonusFlips;
+
       const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
       const { count: hourFlips } = await adminClient
         .from("audit_logs")
@@ -75,10 +83,10 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
         .eq("user_id", user.id)
         .eq("action", "double_or_nothing")
         .gte("created_at", hourAgo.toISOString());
-      if ((hourFlips ?? 0) >= config.hourlyFlipLimit) {
+      if ((hourFlips ?? 0) >= effectiveHourlyLimit) {
         return {
           success: false,
-          error: `Stundenlimit von ${config.hourlyFlipLimit} Flips erreicht. Bitte warte etwas!`,
+          error: `Stundenlimit von ${effectiveHourlyLimit} Flips erreicht. Bitte warte etwas!`,
           remainingHourlyFlips: 0,
         };
       }
@@ -159,7 +167,14 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
     });
     remainingFlips = config.dailyFlipLimit !== null ? Math.max(0, config.dailyFlipLimit - ((usedAfter ?? 0) + 1)) : undefined;
     if (config.hourlyFlipLimit !== null) {
-      remainingHourlyFlips = Math.max(0, config.hourlyFlipLimit - ((usedHour ?? 0) + 1));
+      const userUpgradeTier2 = (profile as { don_upgrade_tier?: number }).don_upgrade_tier ?? 0;
+      let bonusFlips2 = 0;
+      if (config.upgradeEnabled && userUpgradeTier2 > 0) {
+        const tierDef2 = config.upgradeTiers.find((t) => t.tier === userUpgradeTier2);
+        bonusFlips2 = tierDef2?.bonusHourlyFlips ?? 0;
+      }
+      const effectiveHourlyLimit2 = config.hourlyFlipLimit + bonusFlips2;
+      remainingHourlyFlips = Math.max(0, effectiveHourlyLimit2 - ((usedHour ?? 0) + 1));
     }
   } catch {
     // logging failed — ignore

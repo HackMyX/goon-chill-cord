@@ -1013,3 +1013,21 @@ export async function resetUser(targetUserId: string): Promise<AdminActionResult
   revalidatePath("/");
   return { success: true };
 }
+
+export async function setUserVerified(targetUserId: string, verified: boolean): Promise<AdminActionResult> {
+  const user = await requireAdmin();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ verified })
+    .eq("id", targetUserId);
+
+  if (error) return { success: false, error: "Speichern fehlgeschlagen." };
+  await logAdminAction(user.id, "set_user_verified", { targetUserId, verified });
+  revalidatePath("/admin");
+  revalidatePath("/community");
+  return { success: true };
+}
+

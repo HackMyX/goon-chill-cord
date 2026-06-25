@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
-import { DEFAULT_DON_CONFIG, type DonConfig } from "@/lib/don-config";
+import { DEFAULT_DON_CONFIG, DEFAULT_UPGRADE_TIERS, type DonConfig, type DonUpgradeTier } from "@/lib/don-config";
 
 interface DonConfigRow {
   enabled: boolean | null;
@@ -19,19 +19,27 @@ interface DonConfigRow {
   section_subtitle: string | null;
   show_remaining_spins: boolean | null;
   allow_all_in: boolean | null;
+  upgrade_enabled: boolean | null;
+  upgrade_tiers: DonUpgradeTier[] | null;
 }
 
 export async function getDonConfig(): Promise<DonConfig> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("don_config")
-    .select("enabled, daily_flip_limit, hourly_flip_limit, cooldown_sec, win_chance, min_bet, max_bet, quick_amounts, section_title, section_subtitle, show_remaining_spins, allow_all_in")
+    .select("enabled, daily_flip_limit, hourly_flip_limit, cooldown_sec, win_chance, min_bet, max_bet, quick_amounts, section_title, section_subtitle, show_remaining_spins, allow_all_in, upgrade_enabled, upgrade_tiers")
     .eq("id", "default")
     .maybeSingle();
 
   if (error || !data) return DEFAULT_DON_CONFIG;
   const row = data as DonConfigRow;
   const def = DEFAULT_DON_CONFIG;
+
+  let upgradeTiers: DonUpgradeTier[] = DEFAULT_UPGRADE_TIERS;
+  if (Array.isArray(row.upgrade_tiers) && row.upgrade_tiers.length > 0) {
+    upgradeTiers = row.upgrade_tiers;
+  }
+
   return {
     enabled: row.enabled ?? def.enabled,
     dailyFlipLimit: typeof row.daily_flip_limit === "number" ? Math.max(1, row.daily_flip_limit) : null,
@@ -47,6 +55,8 @@ export async function getDonConfig(): Promise<DonConfig> {
     sectionSubtitle: row.section_subtitle?.trim() || def.sectionSubtitle,
     showRemainingSpins: row.show_remaining_spins ?? def.showRemainingSpins,
     allowAllIn: row.allow_all_in ?? def.allowAllIn,
+    upgradeEnabled: row.upgrade_enabled ?? def.upgradeEnabled,
+    upgradeTiers,
   };
 }
 
@@ -74,6 +84,8 @@ export async function updateDonConfig(
     section_subtitle: input.sectionSubtitle?.trim() || DEFAULT_DON_CONFIG.sectionSubtitle,
     show_remaining_spins: input.showRemainingSpins,
     allow_all_in: input.allowAllIn,
+    upgrade_enabled: input.upgradeEnabled,
+    upgrade_tiers: input.upgradeTiers,
     updated_at: new Date().toISOString(),
   });
 
