@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
-import { logDebugEvent } from "@/lib/debug-log-server";
 import { DEFAULT_PLINKO_CONFIG, type PlinkoConfig, type PlinkoRiskLevel } from "@/lib/plinko-types";
 export type { PlinkoConfig, PlinkoRiskLevel } from "@/lib/plinko-types";
 
@@ -15,17 +14,24 @@ export async function getPlinkoConfig(): Promise<PlinkoConfig> {
   const d = data as Record<string, unknown>;
   return {
     enabled: (d.enabled as boolean) ?? true,
-    hourlyBallLimit: (d.hourly_ball_limit as number) ?? 20,
+    hourlyBallLimit: (d.hourly_ball_limit as number) ?? 30,
     dailyBallLimit: (d.daily_ball_limit as number) ?? 0,
-    ballCostCr: (d.ball_cost_cr as number) ?? 100,
-    rows: (d.rows as number) ?? 8,
+    minBetCr: (d.min_bet_cr as number) ?? 500,
+    maxBetCr: (d.max_bet_cr as number) ?? 0,
+    quickBetAmounts: (d.quick_bet_amounts as number[]) ?? [500, 2000, 10000, 50000, 250000],
+    rows: (d.rows as number) ?? 12,
     riskLevels: (d.risk_levels as PlinkoRiskLevel[]) ?? DEFAULT_PLINKO_CONFIG.riskLevels,
     maxWinCr: (d.max_win_cr as number) ?? 0,
     announceBigWins: (d.announce_big_wins as boolean) ?? true,
-    bigWinThreshold: (d.big_win_threshold as number) ?? 1000,
+    bigWinThreshold: (d.big_win_threshold as number) ?? 25000,
     showHistory: (d.show_history as boolean) ?? true,
     showLeaderboard: (d.show_leaderboard as boolean) ?? true,
     leaderboardSize: (d.leaderboard_size as number) ?? 10,
+    particlesEnabled: (d.particles_enabled as boolean) ?? true,
+    trailLength: (d.trail_length as number) ?? 7,
+    glowIntensity: (d.glow_intensity as number) ?? 1.8,
+    animationSpeed: (d.animation_speed as number) ?? 1.0,
+    autoBetEnabled: (d.auto_bet_enabled as boolean) ?? true,
   };
 }
 
@@ -127,6 +133,7 @@ export async function getMyPlinkoStats(): Promise<PlinkoPersonalStats> {
 }
 
 export interface PlinkoLeaderEntry {
+  userId: string;
   username: string;
   nameStyleKey?: string;
   avatarUrl: string | null;
@@ -157,6 +164,7 @@ export async function getTopPlinkoWins(limit = 10): Promise<PlinkoLeaderEntry[]>
   return data.map((r) => {
     const prof = profileMap.get(r.user_id as string);
     return {
+      userId: r.user_id as string,
       username: (prof?.username as string) ?? "Anonym",
       nameStyleKey: (prof?.active_name_style_key as string | null) ?? undefined,
       avatarUrl: (prof?.avatar_url as string | null) ?? null,
@@ -207,6 +215,7 @@ export async function getPlinkoAdminStats(): Promise<PlinkoAdminStats> {
 
 export async function dropPlinkoBall(input: {
   riskLevel: string;
+  betAmount: number;
 }): Promise<{
   success: boolean;
   error?: string;
@@ -228,6 +237,17 @@ export async function dropPlinkoBall(input: {
   const riskDef = config.riskLevels.find((r) => r.key === input.riskLevel);
   if (!riskDef) return { success: false, error: "Ungültige Risikostufe." };
 
+  // Bet validation
+  if (!Number.isFinite(input.betAmount) || input.betAmount <= 0) {
+    return { success: false, error: "Ungültiger Einsatz." };
+  }
+  if (input.betAmount < config.minBetCr) {
+    return { success: false, error: `Mindest-Einsatz: ${config.minBetCr.toLocaleString("de-DE")} CR.` };
+  }
+  if (config.maxBetCr > 0 && input.betAmount > config.maxBetCr) {
+    return { success: false, error: `Max-Einsatz: ${config.maxBetCr.toLocaleString("de-DE")} CR.` };
+  }
+
   // Hourly limit check
   const usedHour = await getMyPlinkoUsageThisHour(user.id);
   if (usedHour >= config.hourlyBallLimit) {
@@ -245,8 +265,8 @@ export async function dropPlinkoBall(input: {
   // Check credits
   const { data: profile } = await admin.from("profiles").select("credits").eq("id", user.id).single();
   const currentCredits: number = (profile?.credits as number) ?? 0;
-  if (currentCredits < config.ballCostCr) {
-    return { success: false, error: `Nicht genug Credits (benötigt: ${config.ballCostCr} CR).` };
+  if (currentCredits < input.betAmount) {
+    return { success: false, error: `Nicht genug Credits (benötigt: ${input.betAmount.toLocaleString("de-DE")} CR).` };
   }
 
   // Simulate ball path
@@ -264,17 +284,17 @@ export async function dropPlinkoBall(input: {
   const clampedIdx = Math.min(bucketIndex, bucketCount - 1);
   const multiplier = multipliers[clampedIdx];
 
-  let payout = Math.floor(config.ballCostCr * multiplier);
+  let payout = Math.floor(input.betAmount * multiplier);
   if (config.maxWinCr > 0) payout = Math.min(payout, config.maxWinCr);
 
-  const netChange = payout - config.ballCostCr;
+  const netChange = payout - input.betAmount;
   const newCredits = Math.max(0, currentCredits + netChange);
 
   await admin.from("profiles").update({ credits: newCredits }).eq("id", user.id);
   await admin.from("plinko_plays").insert({
     user_id: user.id,
     risk_level: input.riskLevel,
-    ball_cost: config.ballCostCr,
+    ball_cost: input.betAmount,
     result_multiplier: multiplier,
     payout_cr: payout,
     bucket_index: clampedIdx,
@@ -286,9 +306,9 @@ export async function dropPlinkoBall(input: {
     void admin.from("global_chat_messages").insert({
       username: "System",
       role: "system",
-      content: `🎰 ${username} hat beim Plinko ${payout.toLocaleString("de-DE")} Credits gewonnen! (${multiplier}x · ${riskDef.label})`,
+      content: `🎰 ${username} hat beim Plinko ${payout.toLocaleString("de-DE")} Credits gewonnen! (${multiplier}x · ${riskDef.label} · Einsatz: ${input.betAmount.toLocaleString("de-DE")} CR)`,
       is_system: true,
-      metadata: { type: "plinko_win", payout, multiplier, riskLevel: input.riskLevel },
+      metadata: { type: "plinko_win", payout, multiplier, riskLevel: input.riskLevel, betAmount: input.betAmount },
     });
   }
 
@@ -308,7 +328,10 @@ export async function updatePlinkoConfig(cfg: PlinkoConfig): Promise<{ success: 
     enabled: cfg.enabled,
     hourly_ball_limit: cfg.hourlyBallLimit,
     daily_ball_limit: cfg.dailyBallLimit,
-    ball_cost_cr: cfg.ballCostCr,
+    min_bet_cr: cfg.minBetCr,
+    max_bet_cr: cfg.maxBetCr,
+    quick_bet_amounts: cfg.quickBetAmounts,
+    ball_cost_cr: cfg.minBetCr,
     rows: cfg.rows,
     risk_levels: cfg.riskLevels,
     max_win_cr: cfg.maxWinCr,
@@ -317,6 +340,11 @@ export async function updatePlinkoConfig(cfg: PlinkoConfig): Promise<{ success: 
     show_history: cfg.showHistory,
     show_leaderboard: cfg.showLeaderboard,
     leaderboard_size: cfg.leaderboardSize,
+    particles_enabled: cfg.particlesEnabled,
+    trail_length: cfg.trailLength,
+    glow_intensity: cfg.glowIntensity,
+    animation_speed: cfg.animationSpeed,
+    auto_bet_enabled: cfg.autoBetEnabled,
     updated_at: new Date().toISOString(),
   });
   if (error) return { success: false, error: error.message };

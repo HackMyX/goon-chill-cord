@@ -18,7 +18,7 @@ import {
 } from "@/lib/actions/battle-pass";
 import { BP_THEMES, DEFAULT_AUTOFILL_CONFIG, type BpAutoFillConfig } from "@/lib/battle-pass";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
-import type { BattlePass, BattlePassTier, BpRewardType, BpTheme } from "@/lib/battle-pass";
+import type { BattlePass, BattlePassTier, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
 
 const REWARD_ICONS: Record<BpRewardType, React.ReactNode> = {
@@ -929,6 +929,14 @@ function PassEditor({
   const [showInShop, setShowInShop] = useState(pass.showInShop ?? true);
   const [showOnDashboard, setShowOnDashboard] = useState(pass.showOnDashboard ?? true);
   const [shopSortOrder, setShopSortOrder] = useState(pass.shopSortOrder ?? 0);
+  const [shopPosition, setShopPosition] = useState<BpShopPosition>(pass.shopPosition ?? "below_featured");
+  const [shopBannerSize, setShopBannerSize] = useState<BpShopBannerSize>(pass.shopBannerSize ?? "card");
+  const [passIcon, setPassIcon] = useState(pass.passIcon ?? "🏆");
+  const [customBuyText, setCustomBuyText] = useState(pass.customBuyText ?? "");
+  const [customEliteBuyText, setCustomEliteBuyText] = useState(pass.customEliteBuyText ?? "");
+  const [showCountdown, setShowCountdown] = useState(pass.showCountdown ?? true);
+  const [showTierCountInShop, setShowTierCountInShop] = useState(pass.showTierCountInShop ?? true);
+  const [highlightColor, setHighlightColor] = useState(pass.highlightColor ?? "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -964,6 +972,14 @@ function PassEditor({
       showInShop,
       showOnDashboard,
       shopSortOrder,
+      shopPosition,
+      shopBannerSize,
+      passIcon: passIcon.trim() || "🏆",
+      customBuyText: customBuyText.trim(),
+      customEliteBuyText: customEliteBuyText.trim(),
+      showCountdown,
+      showTierCountInShop,
+      highlightColor: highlightColor.trim(),
     };
     const res = await adminUpdateBattlePass(pass.id, input);
     setSaving(false);
@@ -1180,6 +1196,105 @@ function PassEditor({
         </label>
       </div>
 
+      {/* Shop Positionierung */}
+      <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.04] p-4 space-y-4">
+        <p className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
+          <ShoppingBag className="h-3.5 w-3.5" />Shop-Positionierung &amp; Darstellung
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Position im Shop
+            <select
+              value={shopPosition}
+              onChange={(e) => setShopPosition(e.target.value as BpShopPosition)}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-400/60"
+            >
+              <option value="top">🔝 Ganz oben (vor MOTD)</option>
+              <option value="below_motd">📢 Unter MOTD</option>
+              <option value="below_featured">⭐ Unter Featured (Standard)</option>
+              <option value="between_categories">📁 Zwischen Kategorien</option>
+              <option value="bottom">⬇️ Ganz unten</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Banner-Größe
+            <select
+              value={shopBannerSize}
+              onChange={(e) => setShopBannerSize(e.target.value as BpShopBannerSize)}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-400/60"
+            >
+              <option value="card">🃏 Card (klein, kompakt)</option>
+              <option value="banner">📜 Banner (mittelgroß)</option>
+              <option value="hero">🦸 Hero (volle Breite, groß)</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Pass-Icon (Emoji)
+            <input
+              value={passIcon}
+              onChange={(e) => setPassIcon(e.target.value)}
+              placeholder="🏆"
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-400/60"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Highlight-Farbe (optional)
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={highlightColor || accentColor}
+                onChange={(e) => setHighlightColor(e.target.value)}
+                className="h-9 w-14 cursor-pointer rounded-lg border border-white/10 bg-black/30 p-1"
+              />
+              <button
+                onClick={() => setHighlightColor("")}
+                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Zurücksetzen
+              </button>
+            </div>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Benutzerdefinierter Kauf-Text (Premium)
+            <input
+              value={customBuyText}
+              onChange={(e) => setCustomBuyText(e.target.value)}
+              placeholder="👑 Premium kaufen"
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-400/60"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Benutzerdefinierter Kauf-Text (Elite)
+            <input
+              value={customEliteBuyText}
+              onChange={(e) => setCustomEliteBuyText(e.target.value)}
+              placeholder="💎 Elite kaufen"
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-400/60"
+            />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setShowCountdown((v) => !v)}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+              showCountdown ? "border-red-400/60 bg-red-500/20 text-red-200" : "border-white/10 text-zinc-500 hover:border-white/30"
+            }`}
+          >
+            <Calendar className="h-3.5 w-3.5" />
+            {showCountdown ? "⏱ Countdown sichtbar" : "Countdown versteckt"}
+          </button>
+          <button
+            onClick={() => setShowTierCountInShop((v) => !v)}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+              showTierCountInShop ? "border-blue-400/60 bg-blue-500/20 text-blue-200" : "border-white/10 text-zinc-500 hover:border-white/30"
+            }`}
+          >
+            <Star className="h-3.5 w-3.5" />
+            {showTierCountInShop ? "Tier-Anzahl anzeigen" : "Tier-Anzahl versteckt"}
+          </button>
+        </div>
+      </div>
+
       {/* Action buttons */}
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -1363,6 +1478,14 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
       showInShop: true,
       showOnDashboard: true,
       shopSortOrder: 0,
+      shopPosition: "below_featured",
+      shopBannerSize: "card",
+      passIcon: "🏆",
+      customBuyText: "",
+      customEliteBuyText: "",
+      showCountdown: true,
+      showTierCountInShop: true,
+      highlightColor: "",
     });
     setCreating(false);
     if (res.success) {

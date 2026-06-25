@@ -5,6 +5,7 @@ import { GlobalErrorLogger } from "@/components/debug/global-error-logger";
 import { ThreeWarningsSuppressor } from "@/components/debug/three-warnings-suppressor";
 import { ConfirmDialogProvider } from "@/components/layout/confirm-dialog-provider";
 import { SiteConfigProvider } from "@/components/layout/site-config-provider";
+import { ProfilePopupProvider } from "@/components/ui/profile-popup-provider";
 import { PetConfigProvider } from "@/lib/pet-config-context";
 import { PresenceHeartbeat } from "@/components/layout/presence-heartbeat";
 import { SupportButton } from "@/components/support/ticket-button";
@@ -70,7 +71,9 @@ export default async function RootLayout({
         <FpRegistrar />
         <SiteConfigProvider config={siteConfig}>
           <PetConfigProvider initialConfigs={petConfigs}>
-            <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
+            <ConfirmDialogProvider>
+              <ProfilePopupProvider>{children}</ProfilePopupProvider>
+            </ConfirmDialogProvider>
           </PetConfigProvider>
         </SiteConfigProvider>
         <GlobalBroadcast />

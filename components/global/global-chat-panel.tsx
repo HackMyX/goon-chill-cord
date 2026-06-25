@@ -427,7 +427,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
                     <RoleIcon className={`h-2.5 w-2.5 shrink-0 ${badge?.color ?? "text-zinc-400"}`} />
                   )}
                   <span className={`text-[10px] font-bold truncate max-w-[120px] ${badge?.color ?? "text-zinc-300"}`}>
-                    <StyledUsername name={msg.username} styleKey={msg.nameStyleKey} size="sm" />
+                    <StyledUsername name={msg.username} styleKey={msg.nameStyleKey} size="sm" userId={msg.userId} />
                     {badge && msg.role !== "user" && (
                       <span className="ml-1 opacity-60 font-normal">({badge.label})</span>
                     )}

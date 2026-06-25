@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, Sparkles, ShoppingCart, CheckCircle2, XCircle } from "lucide-react";
+import { Lock, Sparkles, CheckCircle2, XCircle, Eye, RotateCcw, ChevronDown } from "lucide-react";
 import { StyledUsername, RarityChip } from "@/components/ui/styled-username";
 import {
   NAME_STYLES,
@@ -11,11 +11,7 @@ import {
   type NameStyleDef,
   type NameStyleRarity,
 } from "@/lib/name-styles";
-import {
-  equipNameStyle,
-  purchaseNameStyle,
-  type UserNameStyleRow,
-} from "@/lib/actions/name-styles";
+import { equipNameStyle, type UserNameStyleRow } from "@/lib/actions/name-styles";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -24,9 +20,10 @@ interface NameStyleSectionProps {
   initialActiveKey: string | null;
   username: string;
   credits: number;
+  isAdmin?: boolean;
 }
 
-type TabKey = "alle" | NameStyleRarity;
+type TabKey = "owned" | "alle" | NameStyleRarity;
 
 interface FlashMessage {
   ok: boolean;
@@ -36,6 +33,7 @@ interface FlashMessage {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const TABS: { key: TabKey; label: string }[] = [
+  { key: "owned",    label: "Meine"    },
   { key: "alle",     label: "Alle"     },
   { key: "normal",   label: "Normal"   },
   { key: "selten",   label: "Selten"   },
@@ -57,7 +55,6 @@ const SOURCE_COLORS: Record<UserNameStyleRow["source"], string> = {
   achievement: "text-emerald-300 bg-emerald-950/60 border-emerald-700/40",
 };
 
-// Card animation variants
 const cardVariants = {
   hidden:  { opacity: 0, scale: 0.9 },
   visible: { opacity: 1, scale: 1, transition: { type: "spring" as const, stiffness: 260, damping: 22 } },
@@ -66,7 +63,6 @@ const cardVariants = {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-/** Inline flash banner at top of section */
 function FlashBanner({ flash, onDismiss }: { flash: FlashMessage; onDismiss: () => void }) {
   return (
     <AnimatePresence>
@@ -82,16 +78,9 @@ function FlashBanner({ flash, onDismiss }: { flash: FlashMessage; onDismiss: () 
             : "border-red-700/50 bg-red-950/60 text-red-300"
         }`}
       >
-        {flash.ok
-          ? <CheckCircle2 className="h-4 w-4 shrink-0" />
-          : <XCircle className="h-4 w-4 shrink-0" />
-        }
+        {flash.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
         <span className="flex-1">{flash.text}</span>
-        <button
-          onClick={onDismiss}
-          className="ml-1 rounded p-0.5 opacity-60 hover:opacity-100"
-          aria-label="Schließen"
-        >
+        <button onClick={onDismiss} className="ml-1 rounded p-0.5 opacity-60 hover:opacity-100" aria-label="Schließen">
           ✕
         </button>
       </motion.div>
@@ -99,7 +88,6 @@ function FlashBanner({ flash, onDismiss }: { flash: FlashMessage; onDismiss: () 
   );
 }
 
-/** Source chip for how a style was obtained */
 function SourceChip({ source }: { source: UserNameStyleRow["source"] }) {
   return (
     <span className={`inline-block rounded border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest ${SOURCE_COLORS[source]}`}>
@@ -108,91 +96,6 @@ function SourceChip({ source }: { source: UserNameStyleRow["source"] }) {
   );
 }
 
-/** Purchase confirm dialog (inline modal) */
-function PurchaseDialog({
-  style,
-  credits,
-  onConfirm,
-  onCancel,
-  loading,
-}: {
-  style: NameStyleDef;
-  credits: number;
-  onConfirm: () => void;
-  onCancel: () => void;
-  loading: boolean;
-}) {
-  const canAfford = credits >= style.unlock_price_cr;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onCancel}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        transition={{ type: "spring", stiffness: 300, damping: 25 }}
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-900 p-5 shadow-2xl"
-      >
-        {/* Header */}
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-bold text-zinc-50">Style kaufen</h3>
-            <p className="mt-0.5 text-xs text-zinc-400">Einmaliger Kauf mit Credits</p>
-          </div>
-          <button
-            onClick={onCancel}
-            className="rounded-full border border-white/10 p-1.5 text-zinc-400 hover:text-zinc-200"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Preview */}
-        <div className={`mb-4 flex flex-col items-center gap-2 rounded-xl border p-4 ${RARITY_COLORS[style.rarity].border} ${RARITY_COLORS[style.rarity].bg}`}>
-          <StyledUsername name="YourName" styleDef={style} size="xl" />
-          <RarityChip rarity={style.rarity} />
-          <p className="text-center text-xs text-zinc-400">{style.description}</p>
-        </div>
-
-        {/* Price row */}
-        <div className="mb-4 flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
-          <span className="text-sm text-zinc-400">Preis</span>
-          <span className={`text-sm font-bold ${canAfford ? "text-amber-400" : "text-red-400"}`}>
-            {style.unlock_price_cr.toLocaleString("de-DE")} CR
-          </span>
-        </div>
-
-        {!canAfford && (
-          <p className="mb-3 text-center text-xs text-red-400">
-            Nicht genug Credits. Du hast {credits.toLocaleString("de-DE")} CR.
-          </p>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-2">
-          <button
-            onClick={onCancel}
-            className="flex-1 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-zinc-300 hover:border-zinc-600 hover:text-zinc-100 transition-colors"
-          >
-            Abbrechen
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={!canAfford || loading}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-500/90 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ShoppingCart className="h-4 w-4" />
-            {loading ? "Kaufe..." : "Kaufen"}
-          </button>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-/** Standard ("default") card — always first, unequips active style */
 function DefaultStyleCard({
   active,
   username,
@@ -216,12 +119,12 @@ function DefaultStyleCard({
       }`}
     >
       {active && (
-        <span className="absolute right-1.5 top-1.5 rounded-full bg-purple-500 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white">
+        <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white">
           Aktiv
         </span>
       )}
       <div className="flex h-8 items-center justify-center">
-        <span className="font-semibold text-sm text-zinc-300">{username}</span>
+        <span className="text-sm font-bold text-zinc-300">{username}</span>
       </div>
       <span className="text-[9px] uppercase tracking-widest text-zinc-500 border border-zinc-700 rounded px-1.5 py-0.5">
         Normal
@@ -231,7 +134,6 @@ function DefaultStyleCard({
   );
 }
 
-/** A single name style card in the grid */
 function StyleCard({
   style,
   owned,
@@ -246,8 +148,7 @@ function StyleCard({
   onClick: () => void;
 }) {
   const r = RARITY_COLORS[style.rarity];
-  const canBuy = !style.is_special && style.unlock_price_cr > 0;
-  const isFreeSpecial = style.is_special || (style.unlock_price_cr === 0 && style.key !== "default");
+  const isSpecialLocked = style.is_special && !owned;
 
   return (
     <motion.button
@@ -255,18 +156,18 @@ function StyleCard({
       initial="hidden"
       animate="visible"
       exit="exit"
-      onClick={onClick}
+      onClick={owned || !isSpecialLocked ? onClick : undefined}
+      disabled={!owned && style.is_special}
       className={`group relative flex min-h-[110px] flex-col items-center justify-center gap-2 rounded-xl border p-3 text-left transition-all duration-200 ${
         active
           ? "border-purple-400 bg-purple-900/30 ring-1 ring-purple-500/40"
           : owned
           ? `${r.border} ${r.bg} hover:border-purple-400/60`
-          : canBuy
-          ? "border-zinc-700/40 bg-zinc-900/60 opacity-70 hover:border-amber-500/40 hover:opacity-90"
-          : "border-zinc-800/40 bg-zinc-900/40 opacity-50 cursor-not-allowed"
+          : isSpecialLocked
+          ? "border-zinc-800/40 bg-zinc-900/40 opacity-40 cursor-not-allowed"
+          : "border-zinc-700/40 bg-zinc-900/50 opacity-60 cursor-not-allowed"
       }`}
     >
-      {/* Status chip */}
       {active && (
         <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white">
           Aktiv
@@ -277,18 +178,21 @@ function StyleCard({
           Besitzt
         </span>
       )}
-      {!owned && isFreeSpecial && (
+      {!owned && isSpecialLocked && (
         <span className="absolute right-1.5 top-1.5 rounded-full bg-zinc-700/80 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-zinc-400">
           Exklusiv
         </span>
       )}
+      {!owned && !isSpecialLocked && (
+        <span className="absolute right-1.5 top-1.5">
+          <Lock className="h-3 w-3 text-zinc-500" />
+        </span>
+      )}
 
-      {/* Prefix icon (top-left) */}
       {style.prefix_icon && (
         <span className="absolute left-1.5 top-1.5 text-[10px]">{style.prefix_icon}</span>
       )}
 
-      {/* Name preview */}
       <div className="flex h-8 items-center justify-center">
         <StyledUsername name="YourName" styleDef={style} size="md" />
       </div>
@@ -299,21 +203,111 @@ function StyleCard({
         {style.label}
       </span>
 
-      {/* Lock + price for purchasable unowned */}
-      {!owned && canBuy && (
-        <div className="flex items-center gap-1">
-          <Lock className="h-2.5 w-2.5 text-amber-500" />
-          <span className="text-[9px] font-bold text-amber-400">
-            {style.unlock_price_cr.toLocaleString("de-DE")} CR
-          </span>
-        </div>
-      )}
-
-      {/* Source chip for owned */}
-      {owned && source && (
-        <SourceChip source={source} />
-      )}
+      {owned && source && <SourceChip source={source} />}
     </motion.button>
+  );
+}
+
+// ── Admin test-mode panel ──────────────────────────────────────────────────────
+
+function AdminTestPanel({
+  username,
+  previewKey,
+  onPreviewChange,
+  onReset,
+}: {
+  username: string;
+  previewKey: string | null;
+  onPreviewChange: (key: string | null) => void;
+  onReset: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const allStyles = useMemo(() => Object.values(NAME_STYLES), []);
+
+  const groupedByRarity: Record<NameStyleRarity, NameStyleDef[]> = useMemo(() => ({
+    normal:   allStyles.filter(s => s.rarity === "normal"),
+    selten:   allStyles.filter(s => s.rarity === "selten"),
+    mythisch: allStyles.filter(s => s.rarity === "mythisch"),
+    ultra:    allStyles.filter(s => s.rarity === "ultra"),
+  }), [allStyles]);
+
+  const rarityLabels: Record<NameStyleRarity, string> = {
+    normal:   "Normal",
+    selten:   "Selten",
+    mythisch: "Mythisch",
+    ultra:    "Ultra",
+  };
+
+  return (
+    <div className="rounded-2xl border border-amber-500/20 bg-amber-950/10 p-4">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center gap-2 text-left"
+      >
+        <Eye className="h-4 w-4 text-amber-400" />
+        <span className="text-sm font-bold text-amber-300">Admin-Testmodus</span>
+        <span className="ml-1 text-[10px] text-amber-600/70">— Vorschau ohne Vergabe</span>
+        <ChevronDown className={`ml-auto h-4 w-4 text-amber-500 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-4 space-y-3">
+              {/* Current preview */}
+              <div className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] uppercase tracking-widest text-zinc-500">Vorschau aktiv</span>
+                  {previewKey
+                    ? <StyledUsername name={username} styleKey={previewKey} size="lg" />
+                    : <span className="text-sm font-bold text-zinc-400">Keine Vorschau</span>
+                  }
+                </div>
+                {previewKey && (
+                  <button
+                    onClick={onReset}
+                    className="flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-200"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Reset
+                  </button>
+                )}
+              </div>
+
+              {/* Style picker grouped by rarity */}
+              {(["normal", "selten", "mythisch", "ultra"] as NameStyleRarity[]).map(rarity => (
+                <div key={rarity}>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest" style={{ color: RARITY_COLORS[rarity].color }}>
+                    {rarityLabels[rarity]}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {groupedByRarity[rarity].filter(s => !s.is_special).map(s => (
+                      <button
+                        key={s.key}
+                        onClick={() => onPreviewChange(s.key === previewKey ? null : s.key)}
+                        className={`rounded-lg border px-2 py-1 text-[10px] font-semibold transition-all ${
+                          s.key === previewKey
+                            ? "border-amber-400/60 bg-amber-900/30 text-amber-200"
+                            : "border-white/8 bg-white/[0.02] text-zinc-400 hover:border-white/20 hover:text-zinc-200"
+                        }`}
+                      >
+                        <StyledUsername name={s.label} styleDef={s} size="xs" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -324,13 +318,14 @@ export function NameStyleSection({
   initialActiveKey,
   username,
   credits,
+  isAdmin = false,
 }: NameStyleSectionProps) {
   const [ownedRows, setOwnedRows]   = useState<UserNameStyleRow[]>(initialOwned);
   const [activeKey, setActiveKey]   = useState<string | null>(initialActiveKey);
-  const [activeTab, setActiveTab]   = useState<TabKey>("alle");
+  const [activeTab, setActiveTab]   = useState<TabKey>("owned");
   const [flash, setFlash]           = useState<FlashMessage | null>(null);
   const [loading, setLoading]       = useState(false);
-  const [purchaseTarget, setPurchaseTarget] = useState<NameStyleDef | null>(null);
+  const [adminPreviewKey, setAdminPreviewKey] = useState<string | null>(null);
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -345,25 +340,32 @@ export function NameStyleSection({
     return map;
   }, [ownedRows]);
 
-  /** All purchasable styles (non-default, non-special, or already owned) */
-  const allDisplayStyles = useMemo(() => Object.values(NAME_STYLES).filter((s) => s.key !== "default"), []);
+  const allDisplayStyles = useMemo(
+    () => Object.values(NAME_STYLES).filter((s) => s.key !== "default"),
+    [],
+  );
 
   const stylesByTab = useMemo((): NameStyleDef[] => {
-    if (activeTab === "alle") return allDisplayStyles;
+    if (activeTab === "owned")  return allDisplayStyles.filter(s => ownedKeySet.has(s.key));
+    if (activeTab === "alle")   return allDisplayStyles;
     return STYLES_BY_RARITY[activeTab as NameStyleRarity] ?? [];
-  }, [activeTab, allDisplayStyles]);
+  }, [activeTab, allDisplayStyles, ownedKeySet]);
 
-  /** Count owned in a given rarity */
   const countOwned = useCallback(
-    (rarity: NameStyleRarity): number =>
+    (rarity: NameStyleRarity) =>
       ownedRows.filter((r) => NAME_STYLES[r.styleKey]?.rarity === rarity).length,
     [ownedRows],
   );
-
   const totalInRarity = useCallback(
-    (rarity: NameStyleRarity): number => STYLES_BY_RARITY[rarity].length,
+    (rarity: NameStyleRarity) => STYLES_BY_RARITY[rarity].filter(s => !s.is_special).length,
     [],
   );
+
+  // Preview resolves to: admin preview if set, otherwise real active
+  const previewStyleDef = useMemo(() => {
+    const k = adminPreviewKey ?? activeKey ?? "default";
+    return NAME_STYLES[k] ?? NAME_STYLES["default"];
+  }, [adminPreviewKey, activeKey]);
 
   // ── Flash helper ───────────────────────────────────────────────────────────
 
@@ -378,13 +380,13 @@ export function NameStyleSection({
   const handleEquip = useCallback(
     async (key: string) => {
       if (loading) return;
-      // "default" always available; others must be owned
-      if (key !== "default" && !ownedKeySet.has(key)) return;
-
+      if (key !== "default" && !ownedKeySet.has(key)) {
+        showFlash(false, "Du besitzt diesen Style nicht.");
+        return;
+      }
       const previousKey = activeKey;
-      // Optimistic update
       setActiveKey(key === "default" ? null : key);
-
+      setAdminPreviewKey(null);
       setLoading(true);
       try {
         const res = await equipNameStyle(key);
@@ -401,133 +403,105 @@ export function NameStyleSection({
     [loading, ownedKeySet, activeKey, showFlash],
   );
 
-  // ── Purchase ──────────────────────────────────────────────────────────────
-
-  const handlePurchaseConfirm = useCallback(async () => {
-    if (!purchaseTarget || loading) return;
-    const style = purchaseTarget;
-
-    setLoading(true);
-    try {
-      const res = await purchaseNameStyle(style.key);
-      if (!res.ok) {
-        showFlash(false, res.error ?? "Kauf fehlgeschlagen.");
-      } else {
-        // Add to owned rows optimistically
-        const newRow: UserNameStyleRow = {
-          id:         `optimistic-${style.key}`,
-          styleKey:   style.key,
-          source:     "purchased",
-          unlockedAt: new Date().toISOString(),
-          style,
-        };
-        setOwnedRows((prev) => [...prev, newRow]);
-        showFlash(true, `„${style.label}" erfolgreich gekauft!`);
-        setPurchaseTarget(null);
-        // Auto-equip after purchase
-        await handleEquip(style.key);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [purchaseTarget, loading, showFlash, handleEquip]);
-
-  // ── Card click handler ────────────────────────────────────────────────────
+  // ── Card click: only equip owned ──────────────────────────────────────────
 
   const handleCardClick = useCallback(
     (style: NameStyleDef) => {
       if (loading) return;
-      const owned = ownedKeySet.has(style.key);
-      const isCurrentlyActive = (style.key === "default" && activeKey === null) || activeKey === style.key;
-
-      if (owned || style.key === "default") {
-        if (isCurrentlyActive) return; // already active — nothing to do
-        handleEquip(style.key);
+      if (!ownedKeySet.has(style.key)) {
+        showFlash(false, "Du besitzt diesen Style noch nicht.");
         return;
       }
-
-      // Not owned
-      if (style.is_special || style.unlock_price_cr === 0) return; // can't buy
-      setPurchaseTarget(style);
+      const isCurrentlyActive = activeKey === style.key;
+      if (isCurrentlyActive) return;
+      handleEquip(style.key);
     },
-    [loading, ownedKeySet, activeKey, handleEquip],
+    [loading, ownedKeySet, activeKey, handleEquip, showFlash],
   );
 
-  // ── Current active style def ──────────────────────────────────────────────
-
-  const activeStyleDef = useMemo(
-    () => (activeKey ? (NAME_STYLES[activeKey] ?? NAME_STYLES["default"]) : NAME_STYLES["default"]),
-    [activeKey],
-  );
-
-  // ── Tab counts ─────────────────────────────────────────────────────────────
+  // ── Counts ─────────────────────────────────────────────────────────────────
 
   const totalOwned = ownedRows.length;
-  const totalAll   = allDisplayStyles.length;
+  const totalAll   = allDisplayStyles.filter(s => !s.is_special).length;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <section className="flex flex-col gap-5">
-      {/* ── Preview header card ─────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-        <div className="flex flex-col items-center gap-3 text-center">
+      {/* ── Big preview header ──────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+        {/* Background glow matching active style */}
+        {previewStyleDef.glow_color && (
+          <div
+            className="pointer-events-none absolute inset-0 opacity-10"
+            style={{
+              background: `radial-gradient(ellipse at 50% 50%, ${previewStyleDef.glow_color} 0%, transparent 70%)`,
+            }}
+          />
+        )}
+
+        <div className="relative flex flex-col items-center gap-3 text-center">
           <div className="flex items-center gap-2 text-zinc-500 text-xs uppercase tracking-widest font-medium">
             <Sparkles className="h-3.5 w-3.5" />
-            Namensstil-Vorschau
+            {adminPreviewKey ? "Admin-Vorschau" : "Namensstil-Vorschau"}
           </div>
 
           {/* Big username preview */}
-          <div className="flex min-h-[48px] items-center justify-center">
+          <div className="flex min-h-[56px] items-center justify-center">
             <StyledUsername
               name={username}
-              styleKey={activeKey}
-              styleDef={activeStyleDef}
+              styleDef={previewStyleDef}
               size="2xl"
             />
           </div>
 
+          {adminPreviewKey && (
+            <p className="rounded-full border border-amber-700/40 bg-amber-950/30 px-3 py-0.5 text-[10px] text-amber-400">
+              Nur Vorschau — nicht gespeichert
+            </p>
+          )}
+
           <p className="max-w-xs text-xs text-zinc-500 leading-relaxed">
-            Wähle ein Design für deinen Namen überall auf der Site
+            {adminPreviewKey
+              ? previewStyleDef.description
+              : "Klicke einen Style den du besitzt, um ihn auszurüsten"
+            }
           </p>
 
-          {/* Active style label + rarity */}
           <div className="flex items-center gap-2">
-            <RarityChip rarity={activeStyleDef.rarity} />
-            <span className="text-xs text-zinc-400">{activeStyleDef.label}</span>
+            <RarityChip rarity={previewStyleDef.rarity} />
+            <span className="text-xs text-zinc-400">{previewStyleDef.label}</span>
           </div>
         </div>
       </div>
 
       {/* ── Flash banner ─────────────────────────────────────────────────────── */}
-      {flash && (
-        <FlashBanner flash={flash} onDismiss={() => setFlash(null)} />
-      )}
+      {flash && <FlashBanner flash={flash} onDismiss={() => setFlash(null)} />}
 
       {/* ── Rarity tabs ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Rarity-Filter">
+      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Style-Filter">
         {TABS.map((tab) => {
-          const isActive = activeTab === tab.key;
+          const isActiveTab = activeTab === tab.key;
           let countLabel = "";
-          if (tab.key === "alle") {
-            countLabel = `${totalOwned}/${totalAll}`;
-          } else {
+          if (tab.key === "owned")   countLabel = `${totalOwned}`;
+          else if (tab.key === "alle")    countLabel = `${totalOwned}/${totalAll}`;
+          else {
             const rarity = tab.key as NameStyleRarity;
             countLabel = `${countOwned(rarity)}/${totalInRarity(rarity)}`;
           }
 
-          const rarityColor = tab.key !== "alle"
+          const rarityColor = (tab.key !== "alle" && tab.key !== "owned")
             ? RARITY_COLORS[tab.key as NameStyleRarity].color
-            : "#a1a1aa";
+            : tab.key === "owned" ? "#c084fc" : "#a1a1aa";
 
           return (
             <button
               key={tab.key}
               role="tab"
-              aria-selected={isActive}
+              aria-selected={isActiveTab}
               onClick={() => setActiveTab(tab.key)}
               className={`relative min-h-[44px] rounded-xl border px-3 py-1.5 text-left transition-all duration-150 ${
-                isActive
+                isActiveTab
                   ? "border-purple-500/50 bg-purple-900/30 text-purple-200"
                   : "border-white/8 bg-white/[0.02] text-zinc-400 hover:border-white/15 hover:text-zinc-200"
               }`}
@@ -535,7 +509,7 @@ export function NameStyleSection({
               <span className="block text-xs font-semibold leading-tight">{tab.label}</span>
               <span
                 className="block text-[9px] font-bold leading-tight opacity-80"
-                style={{ color: isActive ? undefined : rarityColor }}
+                style={{ color: isActiveTab ? undefined : rarityColor }}
               >
                 {countLabel}
               </span>
@@ -546,10 +520,9 @@ export function NameStyleSection({
 
       {/* ── Style grid ───────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-        {/* Standard card — always first when on "Alle" tab or "Normal" tab */}
-        {(activeTab === "alle" || activeTab === "normal") && (
+        {(activeTab === "owned" || activeTab === "alle" || activeTab === "normal") && (
           <DefaultStyleCard
-            active={activeKey === null}
+            active={activeKey === null && !adminPreviewKey}
             username={username}
             onClick={() => handleEquip("default")}
           />
@@ -561,7 +534,7 @@ export function NameStyleSection({
               key={style.key}
               style={style}
               owned={ownedKeySet.has(style.key)}
-              active={activeKey === style.key}
+              active={!adminPreviewKey && activeKey === style.key}
               source={ownedByKey[style.key]?.source}
               onClick={() => handleCardClick(style)}
             />
@@ -569,24 +542,23 @@ export function NameStyleSection({
         </AnimatePresence>
       </div>
 
-      {stylesByTab.length === 0 && activeTab !== "alle" && (
+      {stylesByTab.length === 0 && (
         <p className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-8 text-center text-sm text-zinc-500">
-          Keine Styles in dieser Kategorie.
+          {activeTab === "owned"
+            ? "Du besitzt noch keine Namensstile. Verdiene sie im Shop, in Cases oder im Battle Pass."
+            : "Keine Styles in dieser Kategorie."}
         </p>
       )}
 
-      {/* ── Purchase dialog ───────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {purchaseTarget && (
-          <PurchaseDialog
-            style={purchaseTarget}
-            credits={credits}
-            onConfirm={handlePurchaseConfirm}
-            onCancel={() => setPurchaseTarget(null)}
-            loading={loading}
-          />
-        )}
-      </AnimatePresence>
+      {/* ── Admin test-mode ───────────────────────────────────────────────────── */}
+      {isAdmin && (
+        <AdminTestPanel
+          username={username}
+          previewKey={adminPreviewKey}
+          onPreviewChange={setAdminPreviewKey}
+          onReset={() => setAdminPreviewKey(null)}
+        />
+      )}
     </section>
   );
 }

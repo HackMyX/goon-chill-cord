@@ -24,6 +24,11 @@ import {
   Trophy,
   UserX,
   Tag,
+  Crown,
+  Sparkles,
+  Star,
+  Camera,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 
@@ -329,6 +334,109 @@ const ACTION_META: Record<string, ActionMeta> = {
     format: (p, c) =>
       `Ticket-Belohnung vergeben${p.credits ? `: +${cr(p.credits, c)}` : ""}${p.note ? ` — "${str(p.note)}"` : ""}`,
   },
+  case_batch_open: {
+    icon: Package,
+    color: "text-blue-300",
+    bg: "bg-blue-500/10",
+    border: "border-blue-500/30",
+    format: (p, c) =>
+      `${str(p.count)}× Cases geöffnet für ${cr(p.totalCost, c)} — ${str(p.wonItemIds && Array.isArray(p.wonItemIds) ? p.wonItemIds.length : p.count)} Items gewonnen`,
+  },
+  battle_pass_purchase: {
+    icon: Crown,
+    color: "text-amber-300",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/30",
+    format: (p, c) =>
+      `Battle Pass Premium gekauft für ${cr(p.cost, c)} — Pass ${str(p.passId).slice(0, 8)}…`,
+  },
+  battle_pass_elite_purchase: {
+    icon: Sparkles,
+    color: "text-violet-300",
+    bg: "bg-violet-500/10",
+    border: "border-violet-500/30",
+    format: (p, c) =>
+      `Battle Pass Elite gekauft für ${cr(p.cost, c)} — Pass ${str(p.passId).slice(0, 8)}…`,
+  },
+  battle_pass_tier_claim: {
+    icon: Gift,
+    color: "text-purple-300",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    format: (p) =>
+      `Battle Pass Tier ${str(p.tierNum)} abgeholt — ${str(p.rewardMsg ?? p.rewardType)}`,
+  },
+  don_upgrade_purchase: {
+    icon: TrendingUp,
+    color: "text-amber-300",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/30",
+    format: (p, c) =>
+      `DON-Upgrade Stufe ${str(p.targetTier)} gekauft für ${cr(p.cost, c)}`,
+  },
+  admin_snake_score_edit: {
+    icon: Gamepad2,
+    color: "text-purple-300",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    format: (p) =>
+      `Snake-Score bearbeitet: ${str(p.speed_mode)} → ${str(p.best_score)} Punkte (${str(p.games_played)} Spiele)`,
+  },
+  admin_snake_score_delete: {
+    icon: Trash2,
+    color: "text-red-300",
+    bg: "bg-red-500/10",
+    border: "border-red-500/30",
+    format: (p) =>
+      `Snake-Score gelöscht: ${str(p.speed_mode)}`,
+  },
+  admin_snake_lb_restore: {
+    icon: RotateCcw,
+    color: "text-purple-300",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    format: (p) =>
+      `Snake-Rangliste wiederhergestellt (${str(p.restored)} Einträge, Modus: ${str(p.speed_mode)})`,
+  },
+  admin_mine_progress_edit: {
+    icon: Pickaxe,
+    color: "text-purple-300",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    format: (p) =>
+      `Mining-Fortschritt bearbeitet: Level ${str(p.level)}, ${cr(p.total_mined, "CR")} abgebaut`,
+  },
+  admin_mine_progress_delete: {
+    icon: Trash2,
+    color: "text-red-300",
+    bg: "bg-red-500/10",
+    border: "border-red-500/30",
+    format: () => `Mining-Fortschritt gelöscht`,
+  },
+  admin_mine_lb_snapshot: {
+    icon: Camera,
+    color: "text-purple-300",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    format: (p) =>
+      `Mine-Rangliste-Snapshot erstellt: "${str(p.snapshot_name)}"`,
+  },
+  admin_mine_lb_restore: {
+    icon: RotateCcw,
+    color: "text-purple-300",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    format: (p) =>
+      `Mine-Rangliste wiederhergestellt (${str(p.restored)} Einträge)`,
+  },
+  plinko_drop: {
+    icon: Star,
+    color: "text-cyan-300",
+    bg: "bg-cyan-500/10",
+    border: "border-cyan-500/10",
+    format: (p, c) =>
+      `Plinko: Einsatz ${cr(p.betAmount, c)} · ${str(p.resultMultiplier)}x · ${p.won ? `+${cr(p.payout, c)}` : `-${cr(p.betAmount, c)}`} (${str(p.riskLevel)})`,
+  },
 };
 
 const FALLBACK_ICON: ActionMeta = {
@@ -340,13 +448,14 @@ const FALLBACK_ICON: ActionMeta = {
 };
 
 function formatFallback(action: string, p: Record<string, unknown>): string {
+  const humanAction = action.replace(/_/g, " ");
   const keys = Object.keys(p);
-  if (keys.length === 0) return action;
+  if (keys.length === 0) return `Aktion: ${humanAction}`;
   const pairs = keys
     .slice(0, 5)
     .map((k) => `${k}: ${typeof p[k] === "string" || typeof p[k] === "number" ? p[k] : JSON.stringify(p[k])}`)
     .join(" · ");
-  return `${action} — ${pairs}`;
+  return `${humanAction} — ${pairs}`;
 }
 
 export function AuditTimeline({ entries }: { entries: AuditEntry[] }) {

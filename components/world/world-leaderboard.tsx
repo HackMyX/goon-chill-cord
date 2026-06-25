@@ -86,8 +86,8 @@ export function WorldLeaderboard({ userId, username }: WorldLeaderboardProps) {
                 {/* Name */}
                 <span className={`flex-1 truncate text-sm ${isSelf ? "font-extrabold text-purple-200" : "font-medium text-zinc-300"}`}>
                   {isSelf
-                    ? <><StyledUsername name={entry.username} styleKey={entry.nameStyleKey} /> <span className="text-purple-400">(Du)</span></>
-                    : <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} />}
+                    ? <><StyledUsername name={entry.username} styleKey={entry.nameStyleKey} userId={entry.userId} size="md" /> <span className="text-purple-400">(Du)</span></>
+                    : <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} userId={entry.userId} size="md" />}
                 </span>
 
                 {/* Credits */}

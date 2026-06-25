@@ -2,6 +2,8 @@ import type { Rarity } from "@/lib/cases";
 
 export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_boost" | "name_style";
 export type BpTheme = "default" | "gold" | "neon" | "fire" | "ice";
+export type BpShopPosition = "top" | "below_motd" | "below_featured" | "between_categories" | "bottom";
+export type BpShopBannerSize = "card" | "banner" | "hero";
 
 export interface BattlePassTier {
   id: string;
@@ -45,6 +47,14 @@ export interface BattlePass {
   showInShop: boolean;
   showOnDashboard: boolean;
   shopSortOrder: number;
+  shopPosition: BpShopPosition;
+  shopBannerSize: BpShopBannerSize;
+  customBuyText: string | null;
+  customEliteBuyText: string | null;
+  highlightColor: string | null;
+  showTierCountInShop: boolean;
+  showCountdown: boolean;
+  passIcon: string;
   tiers: BattlePassTier[];
   createdAt: string;
 }

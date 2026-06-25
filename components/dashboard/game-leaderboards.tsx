@@ -268,7 +268,12 @@ export function GameLeaderboards({ snakeX1, snakeX2, snakeGrind, snakeFarm, mine
 
                     {/* Username */}
                     <span className={`flex-1 truncate text-sm font-semibold ${isFirst ? "text-zinc-50" : "text-zinc-200"}`}>
-                      <StyledUsername name={entry.username} styleKey={(entry as SnakeLeaderboardEntry & MineLeaderboardEntry).nameStyleKey} />
+                      <StyledUsername
+                        name={entry.username}
+                        styleKey={(entry as SnakeLeaderboardEntry & MineLeaderboardEntry).nameStyleKey}
+                        userId={(entry as SnakeLeaderboardEntry & MineLeaderboardEntry).userId}
+                        size="md"
+                      />
                     </span>
 
                     {/* Sub-metric (secondary info) */}

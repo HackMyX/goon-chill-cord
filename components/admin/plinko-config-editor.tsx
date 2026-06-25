@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import {
   Save, Loader2, Plus, X, Disc3, Info, Zap, BarChart2,
-  Users, Coins, TrendingDown, Trophy, Clock, Eye, EyeOff,
+  Users, Coins, TrendingDown, Trophy, Clock, Eye, EyeOff, Sparkles, Bot, Gauge,
 } from "lucide-react";
 import { updatePlinkoConfig, getPlinkoAdminStats, type PlinkoAdminStats } from "@/lib/actions/plinko";
 import type { PlinkoConfig, PlinkoRiskLevel } from "@/lib/actions/plinko";
@@ -31,7 +31,7 @@ function Toggle({ value, onChange, label, sub }: { value: boolean; onChange: (v:
   );
 }
 
-function NumInput({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+function NumInput({ label, value, min, max, step, onChange, sub }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; sub?: string }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="text-[11px] text-zinc-500">{label}</span>
@@ -39,11 +39,40 @@ function NumInput({ label, value, min, max, onChange }: { label: string; value: 
         type="number"
         min={min}
         max={max}
+        step={step ?? 1}
         value={value}
         onChange={(e) => onChange(Math.max(min, Number(e.target.value) || 0))}
         className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
       />
+      {sub && <span className="text-[10px] text-zinc-600">{sub}</span>}
     </label>
+  );
+}
+
+function SliderInput({ label, value, min, max, step, onChange, format }: {
+  label: string; value: number; min: number; max: number; step: number;
+  onChange: (v: number) => void; format?: (v: number) => string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-zinc-500">{label}</span>
+        <span className="text-[11px] font-bold text-zinc-300">{format ? format(value) : value}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-purple-500"
+      />
+      <div className="flex justify-between text-[10px] text-zinc-700">
+        <span>{format ? format(min) : min}</span>
+        <span>{format ? format(max) : max}</span>
+      </div>
+    </div>
   );
 }
 
@@ -59,9 +88,7 @@ function StatsSection() {
 
   useEffect(() => {
     let active = true;
-    getPlinkoAdminStats().then((s) => {
-      if (active) { setStats(s); setLoading(false); }
-    });
+    getPlinkoAdminStats().then((s) => { if (active) { setStats(s); setLoading(false); } });
     return () => { active = false; };
   }, []);
 
@@ -86,10 +113,7 @@ function StatsSection() {
           { icon: <Trophy className="h-3.5 w-3.5 text-yellow-400" />, label: "Big Wins", val: stats.bigWinsCount.toLocaleString("de-DE") },
         ].map((s) => (
           <div key={s.label} className="flex flex-col gap-1 rounded-lg border border-white/8 bg-black/20 p-2.5">
-            <div className="flex items-center gap-1.5">
-              {s.icon}
-              <span className="text-[10px] text-zinc-500">{s.label}</span>
-            </div>
+            <div className="flex items-center gap-1.5">{s.icon}<span className="text-[10px] text-zinc-500">{s.label}</span></div>
             <span className="text-sm font-bold text-zinc-200">{s.val}</span>
           </div>
         ))}
@@ -102,6 +126,7 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
   const [form, setForm] = useState(initialConfig);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [quickBetInput, setQuickBetInput] = useState("");
   const sound = useSoundManager();
 
   function showMsg(text: string, ok: boolean) {
@@ -136,6 +161,13 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
     });
   }
 
+  function addQuickBet() {
+    const v = parseInt(quickBetInput, 10);
+    if (!v || v <= 0) return;
+    setForm((f) => ({ ...f, quickBetAmounts: [...new Set([...f.quickBetAmounts, v])].sort((a, b) => a - b) }));
+    setQuickBetInput("");
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {/* Header */}
@@ -163,40 +195,102 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
       {/* Stats */}
       <StatsSection />
 
-      {/* Basic settings */}
+      {/* Basic + Limits */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-        <h3 className="mb-3 text-sm font-bold text-zinc-300">Grundeinstellungen</h3>
-
+        <h3 className="mb-3 text-sm font-bold text-zinc-300">Grundeinstellungen & Limits</h3>
         <Toggle
           value={form.enabled}
           onChange={(v) => setForm((f) => ({ ...f, enabled: v }))}
           label="Plinko aktiviert"
           sub="Spieler können Bälle fallen lassen"
         />
-
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <NumInput label="Bälle/Stunde" value={form.hourlyBallLimit} min={1} max={1000}
             onChange={(v) => setForm((f) => ({ ...f, hourlyBallLimit: v }))} />
           <NumInput label="Bälle/Tag (0=aus)" value={form.dailyBallLimit} min={0} max={10000}
             onChange={(v) => setForm((f) => ({ ...f, dailyBallLimit: v }))} />
-          <NumInput label="Kosten pro Ball (CR)" value={form.ballCostCr} min={1} max={1_000_000}
-            onChange={(v) => setForm((f) => ({ ...f, ballCostCr: v }))} />
           <NumInput label="Anzahl Reihen (4–16)" value={form.rows} min={4} max={16}
             onChange={(v) => setForm((f) => ({ ...f, rows: v }))} />
           <NumInput label="Max Gewinn (CR, 0=∞)" value={form.maxWinCr} min={0} max={10_000_000}
             onChange={(v) => setForm((f) => ({ ...f, maxWinCr: v }))} />
-          <NumInput label="Big-Win Schwelle (CR)" value={form.bigWinThreshold} min={0} max={100_000}
+          <NumInput label="Big-Win Schwelle (CR)" value={form.bigWinThreshold} min={0} max={10_000_000}
             onChange={(v) => setForm((f) => ({ ...f, bigWinThreshold: v }))} />
         </div>
-
         <div className="mt-3">
           <Toggle
             value={form.announceBigWins}
             onChange={(v) => setForm((f) => ({ ...f, announceBigWins: v }))}
             label="Big Wins im Chat ankündigen"
-            sub={`Automatische Nachricht ab ${form.bigWinThreshold.toLocaleString("de-DE")} CR Gewinn`}
+            sub={`Automatische Systemnachricht ab ${form.bigWinThreshold.toLocaleString("de-DE")} CR Gewinn`}
           />
         </div>
+      </div>
+
+      {/* Variable betting */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Coins className="h-4 w-4 text-amber-400" />
+          <h3 className="text-sm font-bold text-zinc-300">Einsatz-Konfiguration</h3>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <NumInput label="Mindesteinsatz (CR)" value={form.minBetCr} min={1} max={1_000_000}
+            sub="Minimum pro Ball"
+            onChange={(v) => setForm((f) => ({ ...f, minBetCr: v }))} />
+          <NumInput label="Maximaleinsatz (CR, 0=∞)" value={form.maxBetCr} min={0} max={10_000_000}
+            sub="0 = nur durch Credits begrenzt"
+            onChange={(v) => setForm((f) => ({ ...f, maxBetCr: v }))} />
+        </div>
+
+        {/* Quick bet amounts */}
+        <div className="mt-3">
+          <p className="mb-2 text-[11px] text-zinc-500">Schnell-Einsatz Buttons</p>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {form.quickBetAmounts.map((amt) => (
+              <div key={amt} className="flex items-center gap-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-300">
+                {amt.toLocaleString("de-DE")} CR
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, quickBetAmounts: f.quickBetAmounts.filter((a) => a !== amt) }))}
+                  className="text-zinc-600 hover:text-red-400 ml-0.5"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              placeholder="Betrag in CR"
+              value={quickBetInput}
+              onChange={(e) => setQuickBetInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addQuickBet()}
+              className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+            />
+            <button
+              type="button"
+              onClick={addQuickBet}
+              className="flex items-center gap-1 rounded-lg border border-dashed border-white/20 px-3 py-1.5 text-xs text-zinc-400 hover:border-purple-400/50 hover:text-purple-300 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Hinzufügen
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Auto-bet */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Bot className="h-4 w-4 text-violet-400" />
+          <h3 className="text-sm font-bold text-zinc-300">Auto-Bet</h3>
+        </div>
+        <Toggle
+          value={form.autoBetEnabled}
+          onChange={(v) => setForm((f) => ({ ...f, autoBetEnabled: v }))}
+          label="Auto-Bet erlauben"
+          sub="Spieler können Bälle automatisch in schneller Folge fallen lassen"
+        />
       </div>
 
       {/* Display settings */}
@@ -207,7 +301,7 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
             value={form.showHistory}
             onChange={(v) => setForm((f) => ({ ...f, showHistory: v }))}
             label="Spielverlauf anzeigen"
-            sub="User sehen ihren persönlichen Spielverlauf & Statistiken auf der Plinko-Seite"
+            sub="User sehen ihren persönlichen Spielverlauf & Statistiken"
           />
           <Toggle
             value={form.showLeaderboard}
@@ -216,11 +310,54 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
             sub="Öffentliche Rangliste der größten Gewinne"
           />
           {form.showLeaderboard && (
-            <div className="pl-2">
+            <div className="pl-2 pt-1">
               <NumInput label="Leaderboard Einträge" value={form.leaderboardSize} min={3} max={50}
                 onChange={(v) => setForm((f) => ({ ...f, leaderboardSize: v }))} />
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Visual settings */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+        <div className="mb-4 flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-fuchsia-400" />
+          <h3 className="text-sm font-bold text-zinc-300">Visuelle Einstellungen</h3>
+        </div>
+        <div className="flex flex-col gap-5">
+          <Toggle
+            value={form.particlesEnabled}
+            onChange={(v) => setForm((f) => ({ ...f, particlesEnabled: v }))}
+            label="Partikel-Effekte"
+            sub="Funken bei Pin-Treffern, Explosionen bei Bucket-Landung, Sternregen"
+          />
+          <SliderInput
+            label="Trail-Länge (Ball-Schweif)"
+            value={form.trailLength}
+            min={1}
+            max={15}
+            step={1}
+            onChange={(v) => setForm((f) => ({ ...f, trailLength: v }))}
+            format={(v) => `${v} Segmente`}
+          />
+          <SliderInput
+            label="Glow-Intensität"
+            value={form.glowIntensity}
+            min={0}
+            max={3}
+            step={0.1}
+            onChange={(v) => setForm((f) => ({ ...f, glowIntensity: Math.round(v * 10) / 10 }))}
+            format={(v) => v === 0 ? "Aus" : `${v.toFixed(1)}×`}
+          />
+          <SliderInput
+            label="Animationsgeschwindigkeit"
+            value={form.animationSpeed}
+            min={0.3}
+            max={3}
+            step={0.1}
+            onChange={(v) => setForm((f) => ({ ...f, animationSpeed: Math.round(v * 10) / 10 }))}
+            format={(v) => v <= 0.5 ? "Langsam" : v <= 1.2 ? "Normal" : v <= 2 ? "Schnell" : "Turbo"}
+          />
         </div>
       </div>
 
@@ -230,7 +367,7 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
           <h3 className="text-sm font-bold text-zinc-300">Risikostufen & Multiplikatoren</h3>
           <div className="flex items-center gap-1 rounded-lg border border-blue-500/20 bg-blue-500/10 px-2 py-1 text-[10px] text-blue-300">
             <Info className="h-3 w-3" />
-            Links (außen) → Rechts (Mitte)
+            Außen → Mitte
           </div>
         </div>
         <div className="flex flex-col gap-4">
@@ -253,13 +390,10 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
                   />
                   <div className="ml-auto flex gap-3 text-[10px] text-zinc-500">
                     <span>⌀ {avg.toFixed(2)}x</span>
-                    <span className={parseFloat(rtp) >= 100 ? "text-red-400" : "text-emerald-400"}>
-                      RTP {rtp}%
-                    </span>
+                    <span className={parseFloat(rtp) >= 100 ? "text-red-400" : "text-emerald-400"}>RTP {rtp}%</span>
                     <span>Max {Math.max(...r.multipliers)}x</span>
                   </div>
                 </div>
-
                 <div className="flex flex-wrap gap-2">
                   {r.multipliers.map((m, mi) => (
                     <div key={mi} className="flex flex-col items-center gap-0.5">
@@ -297,6 +431,15 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
                     )}
                   </div>
                 </div>
+                {form.riskLevels.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, riskLevels: f.riskLevels.filter((_, i) => i !== ri) }))}
+                    className="mt-3 flex items-center gap-1 text-[11px] text-zinc-600 hover:text-red-400 transition-colors"
+                  >
+                    <X className="h-3 w-3" /> Risikostufe entfernen
+                  </button>
+                )}
               </div>
             );
           })}

@@ -138,6 +138,7 @@ export function WorldChatBubble({ username }: { username: string }) {
                     <StyledUsername
                       name={msg.username ?? "Anon"}
                       styleKey={msg.nameStyleKey}
+                      userId={msg.userId}
                       size="sm"
                       staticMode
                     />

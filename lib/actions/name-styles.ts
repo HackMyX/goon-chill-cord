@@ -113,6 +113,13 @@ export async function equipNameStyle(styleKey: string): Promise<{ ok: boolean; e
     .eq("id", user.id);
 
   if (error) return { ok: false, error: error.message };
+
+  await logDebugEvent({
+    level: "info",
+    scope: "name-style",
+    message: `User ${user.id} ${styleKey === "default" ? "unequipped" : `equipped`} name style "${styleKey}"`,
+  });
+
   return { ok: true };
 }
 

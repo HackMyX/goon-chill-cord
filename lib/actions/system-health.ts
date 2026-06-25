@@ -164,6 +164,14 @@ const COLUMN_CHECKS: Array<{
   { id: "col_plinko_showhistory", category: "Plinko",             table: "plinko_config",       col: "show_history",            detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS show_history boolean NOT NULL DEFAULT true;" },
   { id: "col_plinko_showleader",  category: "Plinko",             table: "plinko_config",       col: "show_leaderboard",        detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS show_leaderboard boolean NOT NULL DEFAULT true;" },
   { id: "col_plinko_leadersize",  category: "Plinko",             table: "plinko_config",       col: "leaderboard_size",        detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS leaderboard_size integer NOT NULL DEFAULT 10;" },
+  { id: "col_plinko_minbet",      category: "Plinko",             table: "plinko_config",       col: "min_bet_cr",              detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS min_bet_cr integer DEFAULT 500;" },
+  { id: "col_plinko_maxbet",      category: "Plinko",             table: "plinko_config",       col: "max_bet_cr",              detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS max_bet_cr integer DEFAULT 0;" },
+  { id: "col_plinko_quickbets",   category: "Plinko",             table: "plinko_config",       col: "quick_bet_amounts",       detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS quick_bet_amounts jsonb DEFAULT '[500,1000,5000,25000,100000]';" },
+  { id: "col_plinko_particles",   category: "Plinko",             table: "plinko_config",       col: "particles_enabled",       detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS particles_enabled boolean DEFAULT true;" },
+  { id: "col_plinko_trail",       category: "Plinko",             table: "plinko_config",       col: "trail_length",            detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS trail_length integer DEFAULT 6;" },
+  { id: "col_plinko_glow",        category: "Plinko",             table: "plinko_config",       col: "glow_intensity",          detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS glow_intensity numeric DEFAULT 1.5;" },
+  { id: "col_plinko_animspeed",   category: "Plinko",             table: "plinko_config",       col: "animation_speed",         detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS animation_speed numeric DEFAULT 1.0;" },
+  { id: "col_plinko_autobet",     category: "Plinko",             table: "plinko_config",       col: "auto_bet_enabled",        detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS auto_bet_enabled boolean DEFAULT true;" },
   // Battle Pass elite tier (2026-06-25)
   { id: "col_bp_elitepricecr",    category: "Battle Pass",        table: "battle_passes",       col: "elite_price_cr",          detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS elite_price_cr integer NOT NULL DEFAULT 0;" },
   { id: "col_bp_eliteenabled",    category: "Battle Pass",        table: "battle_passes",       col: "elite_enabled",           detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS elite_enabled boolean NOT NULL DEFAULT false;" },
@@ -184,6 +192,16 @@ const COLUMN_CHECKS: Array<{
   { id: "col_bp_shop_sort_order",    category: "Battle Pass", table: "battle_passes",     col: "shop_sort_order",       detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS shop_sort_order integer NOT NULL DEFAULT 0;" },
   // Battle Pass tiers — name style reward (2026-06-25)
   { id: "col_bpt_name_style_key",    category: "Battle Pass", table: "battle_pass_tiers", col: "reward_name_style_key", detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS reward_name_style_key text NULL;" },
+  // Battle Pass v3 — shop positioning & per-pass config (2026-06-25)
+  { id: "col_bp_shop_position",      category: "Battle Pass", table: "battle_passes",     col: "shop_position",          detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS shop_position text DEFAULT 'below_featured';" },
+  { id: "col_bp_shop_banner_size",   category: "Battle Pass", table: "battle_passes",     col: "shop_banner_size",       detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS shop_banner_size text DEFAULT 'card';" },
+  { id: "col_bp_custom_buy_text",    category: "Battle Pass", table: "battle_passes",     col: "custom_buy_text",        detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS custom_buy_text text;" },
+  { id: "col_bp_custom_elite_buy",   category: "Battle Pass", table: "battle_passes",     col: "custom_elite_buy_text",  detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS custom_elite_buy_text text;" },
+  { id: "col_bp_highlight_color",    category: "Battle Pass", table: "battle_passes",     col: "highlight_color",        detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS highlight_color text;" },
+  { id: "col_bp_show_tier_count",    category: "Battle Pass", table: "battle_passes",     col: "show_tier_count_in_shop",detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS show_tier_count_in_shop boolean DEFAULT true;" },
+  { id: "col_bp_show_countdown",     category: "Battle Pass", table: "battle_passes",     col: "show_countdown",         detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS show_countdown boolean DEFAULT true;" },
+  { id: "col_bp_pass_icon",          category: "Battle Pass", table: "battle_passes",     col: "pass_icon",              detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS pass_icon text DEFAULT '🏆';" },
+  { id: "col_bp_updated_at",         category: "Battle Pass", table: "battle_passes",     col: "updated_at",             detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

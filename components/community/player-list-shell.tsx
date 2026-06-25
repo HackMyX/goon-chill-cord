@@ -235,7 +235,7 @@ export function PlayerListShell({ players: initialPlayers, credits: initialCredi
 
                   <div className="flex items-start justify-between gap-1">
                     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                      <span className="font-bold text-zinc-100 truncate"><StyledUsername name={player.username} styleKey={player.nameStyleKey} /></span>
+                      <span className="font-bold text-zinc-100 truncate"><StyledUsername name={player.username} styleKey={player.nameStyleKey} userId={player.id} /></span>
                       {player.verified && (
                         <BadgeCheck className="shrink-0 h-3.5 w-3.5 text-blue-400 drop-shadow-[0_0_5px_rgba(59,130,246,0.7)]" aria-label="Verifiziert" />
                       )}

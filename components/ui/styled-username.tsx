@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   getNameStyle,
   computeNameStyleCSS,
@@ -9,18 +9,19 @@ import {
   type NameStyleDef,
   type NameStyleRarity,
 } from "@/lib/name-styles";
+import { useProfilePopup } from "@/components/ui/profile-popup-provider";
 
 const OBFUSCATED_CHARS =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()+-=[]{}|;':,./<>?";
 
 const SIZE_MAP = {
-  "2xs": "text-[9px] leading-none",
-  xs:    "text-[10px] leading-none",
-  sm:    "text-xs",
-  md:    "text-sm",
-  lg:    "text-base",
-  xl:    "text-lg font-bold",
-  "2xl": "text-2xl font-bold",
+  "2xs": "text-[9px]  leading-none font-semibold",
+  xs:    "text-[10px] leading-none font-semibold",
+  sm:    "text-xs font-bold",
+  md:    "text-sm font-bold",
+  lg:    "text-base font-bold",
+  xl:    "text-xl font-bold",
+  "2xl": "text-2xl font-black",
 } as const;
 
 type Size = keyof typeof SIZE_MAP;
@@ -37,6 +38,16 @@ interface StyledUsernameProps {
   extraStyle?: CSSProperties;
   /** Disable JS animations (obfuscated / rgb_wave) — for static/server output */
   staticMode?: boolean;
+  /**
+   * When set, clicking the name opens the universal profile popup.
+   * Pass the user's internal profile UUID (not Discord ID).
+   */
+  userId?: string | null;
+  /**
+   * Suppress the click popup even when userId is set.
+   * Use in admin-critical contexts (audit logs, ticket headers, mod panels).
+   */
+  disablePopup?: boolean;
 }
 
 export function StyledUsername({
@@ -47,9 +58,13 @@ export function StyledUsername({
   styleDef,
   extraStyle,
   staticMode = false,
+  userId,
+  disablePopup = false,
 }: StyledUsernameProps) {
   const style = styleDef ?? getNameStyle(styleKey);
   const animType = style.animation_type;
+  const { openPopup } = useProfilePopup();
+  const anchorRef = useRef<HTMLSpanElement>(null);
 
   // ── Obfuscated: JS character cycling ──────────────────────────────────────
   const [obfText, setObfText] = useState(name);
@@ -83,10 +98,23 @@ export function StyledUsername({
     return () => clearInterval(id);
   }, [animType, staticMode]);
 
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLSpanElement>) => {
+      if (!userId || disablePopup) return;
+      e.stopPropagation();
+      openPopup(userId, anchorRef.current ?? undefined);
+    },
+    [userId, disablePopup, openPopup],
+  );
+
+  const isClickable = Boolean(userId && !disablePopup);
   const sizeClass = SIZE_MAP[size];
   const css = computeNameStyleCSS(style);
   const animClass = ANIM_CLASS[animType] ?? "";
   const speedCssVar = { "--ns-dur": `${(2 / (style.animation_speed || 1)).toFixed(2)}s` } as CSSProperties;
+  const clickClass = isClickable
+    ? "cursor-pointer hover:brightness-125 hover:underline hover:decoration-dotted hover:underline-offset-2 transition-[filter] duration-100"
+    : "";
 
   const prefix = style.prefix_icon ? (
     <span className="mr-[0.15em] not-italic select-none">{style.prefix_icon}</span>
@@ -98,7 +126,13 @@ export function StyledUsername({
   // ── RGB Wave render ────────────────────────────────────────────────────────
   if (animType === "rgb_wave") {
     return (
-      <span className={`inline-flex items-center font-semibold ${sizeClass} ${className}`}>
+      <span
+        ref={anchorRef}
+        onClick={handleClick}
+        role={isClickable ? "button" : undefined}
+        tabIndex={isClickable ? 0 : undefined}
+        className={`inline-flex items-center ${sizeClass} ${clickClass} ${className}`}
+      >
         {prefix}
         {name.split("").map((char, i) => {
           const hue = staticMode ? (i * 40) % 360 : (i * 35 + rgbTick * 12) % 360;
@@ -115,7 +149,11 @@ export function StyledUsername({
 
   return (
     <span
-      className={`inline-flex items-center font-semibold ${sizeClass} ${animClass} ${className}`}
+      ref={anchorRef}
+      onClick={handleClick}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      className={`inline-flex items-center ${sizeClass} ${animClass} ${clickClass} ${className}`}
       style={{ ...speedCssVar, ...css, ...extraStyle }}
     >
       {prefix}

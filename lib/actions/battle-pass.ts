@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { logDebugEvent } from "@/lib/debug-log-server";
-import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType, BpTheme, BpAutoFillConfig } from "@/lib/battle-pass";
+import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize, BpAutoFillConfig } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -56,6 +56,14 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
     showInShop: (r.show_in_shop as boolean | null) ?? true,
     showOnDashboard: (r.show_on_dashboard as boolean | null) ?? true,
     shopSortOrder: (r.shop_sort_order as number | null) ?? 0,
+    shopPosition: ((r.shop_position as BpShopPosition | null) ?? "below_featured"),
+    shopBannerSize: ((r.shop_banner_size as BpShopBannerSize | null) ?? "card"),
+    customBuyText: (r.custom_buy_text as string | null) ?? null,
+    customEliteBuyText: (r.custom_elite_buy_text as string | null) ?? null,
+    highlightColor: (r.highlight_color as string | null) ?? null,
+    showTierCountInShop: (r.show_tier_count_in_shop as boolean | null) ?? true,
+    showCountdown: (r.show_countdown as boolean | null) ?? true,
+    passIcon: (r.pass_icon as string | null) ?? "🏆",
     tiers,
     createdAt: r.created_at as string,
   };
@@ -654,6 +662,14 @@ export interface AdminPassInput {
   showInShop: boolean;
   showOnDashboard: boolean;
   shopSortOrder: number;
+  shopPosition: BpShopPosition;
+  shopBannerSize: BpShopBannerSize;
+  customBuyText: string;
+  customEliteBuyText: string;
+  highlightColor: string;
+  showTierCountInShop: boolean;
+  showCountdown: boolean;
+  passIcon: string;
 }
 
 export async function adminCreateBattlePass(
@@ -685,6 +701,14 @@ export async function adminCreateBattlePass(
       show_in_shop: input.showInShop,
       show_on_dashboard: input.showOnDashboard,
       shop_sort_order: input.shopSortOrder ?? 0,
+      shop_position: input.shopPosition ?? "below_featured",
+      shop_banner_size: input.shopBannerSize ?? "card",
+      custom_buy_text: input.customBuyText?.trim() || null,
+      custom_elite_buy_text: input.customEliteBuyText?.trim() || null,
+      highlight_color: input.highlightColor?.trim() || null,
+      show_tier_count_in_shop: input.showTierCountInShop ?? true,
+      show_countdown: input.showCountdown ?? true,
+      pass_icon: input.passIcon?.trim() || "🏆",
     })
     .select("id")
     .single();
@@ -726,6 +750,14 @@ export async function adminUpdateBattlePass(
       show_in_shop: input.showInShop,
       show_on_dashboard: input.showOnDashboard,
       shop_sort_order: input.shopSortOrder ?? 0,
+      shop_position: input.shopPosition ?? "below_featured",
+      shop_banner_size: input.shopBannerSize ?? "card",
+      custom_buy_text: input.customBuyText?.trim() || null,
+      custom_elite_buy_text: input.customEliteBuyText?.trim() || null,
+      highlight_color: input.highlightColor?.trim() || null,
+      show_tier_count_in_shop: input.showTierCountInShop ?? true,
+      show_countdown: input.showCountdown ?? true,
+      pass_icon: input.passIcon?.trim() || "🏆",
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);

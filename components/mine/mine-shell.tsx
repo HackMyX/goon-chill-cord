@@ -128,7 +128,7 @@ function LeaderboardRow({ entry, userId }: { entry: MineLeaderboardEntry; userId
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <span className={`truncate text-sm font-semibold ${isSelf ? "text-amber-200" : "text-zinc-200"}`}>
-          {isSelf ? "Du" : <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} />}
+          {isSelf ? "Du" : <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} userId={entry.userId} size="md" />}
         </span>
         <span className={`text-[10px] font-bold uppercase ${theme.text}`}>{theme.ore} {theme.label} Lvl {entry.level}</span>
       </div>

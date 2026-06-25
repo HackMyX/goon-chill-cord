@@ -523,7 +523,7 @@ function UsersTab({ users: initialUsers, perms, onRefresh }: {
                       u.role === "moderator" ? "bg-sky-400" :
                       "bg-zinc-600"
                     }`} />
-                    <span className="truncate font-semibold text-zinc-100"><StyledUsername name={u.username} styleKey={u.nameStyleKey} /></span>
+                    <span className="truncate font-semibold text-zinc-100"><StyledUsername name={u.username} styleKey={u.nameStyleKey} disablePopup /></span>
                     {u.role !== "user" && (
                       <span className={`hidden rounded-full px-2 py-0.5 text-[10px] font-bold sm:inline-block ${
                         u.role === "admin" ? "bg-amber-500/20 text-amber-300" : "bg-sky-500/20 text-sky-300"
@@ -814,7 +814,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
             {alreadyRewarded && <Trophy className="h-3 w-3 shrink-0 text-amber-400" aria-label="Bereits belohnt" />}
             {t.attachmentUrl && <Paperclip className="h-3 w-3 shrink-0 text-zinc-500" aria-label="Hat Anhang" />}
           </div>
-          <span className="text-[11px] text-zinc-500">von <StyledUsername name={t.username} styleKey={t.nameStyleKey} size="sm" /></span>
+          <span className="text-[11px] text-zinc-500">von <StyledUsername name={t.username} styleKey={t.nameStyleKey} size="sm" disablePopup /></span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {isInProgress && (
@@ -833,7 +833,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           {/* Meta */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="text-[11px] text-zinc-500">
-              von <strong className="text-zinc-300"><StyledUsername name={t.username} styleKey={t.nameStyleKey} size="sm" /></strong>
+              von <strong className="text-zinc-300"><StyledUsername name={t.username} styleKey={t.nameStyleKey} size="sm" disablePopup /></strong>
               {" · "}{new Date(t.createdAt).toLocaleString("de-DE")}
             </span>
             <CategoryBadge category={t.category} />
@@ -915,7 +915,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                   }`}>
                     <p className="whitespace-pre-wrap">{m.message}</p>
                     <p className={`mt-1 text-[10px] ${m.isStaff ? "text-sky-400/70 text-right" : "text-zinc-600"}`}>
-                      {m.isStaff ? "Staff" : <StyledUsername name={m.username} styleKey={m.nameStyleKey} size="sm" />} · {timeAgo(m.createdAt)}
+                      {m.isStaff ? "Staff" : <StyledUsername name={m.username} styleKey={m.nameStyleKey} size="sm" disablePopup />} · {timeAgo(m.createdAt)}
                     </p>
                   </div>
                 </div>

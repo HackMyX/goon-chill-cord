@@ -262,6 +262,7 @@ export function Leaderboard({
                             <StyledUsername
                               name={entry.username}
                               styleKey={entry.active_name_style_key}
+                              userId={entry.id}
                               size={isFirst ? "lg" : "md"}
                             />
                           </span>
@@ -338,6 +339,7 @@ export function Leaderboard({
                         <StyledUsername
                           name={entry.username}
                           styleKey={entry.active_name_style_key}
+                          userId={entry.id}
                           size="sm"
                         />
                       </span>

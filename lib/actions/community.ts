@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdmin, isModerator } from "@/lib/admin";
 import type { Rarity } from "@/lib/cases";
 
 export interface PublicProfile {
@@ -113,6 +114,79 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
       verified: (profile.verified as boolean | null) ?? false,
       equippedByCategory,
       rarityCounts,
+    },
+  };
+}
+
+// ── Lightweight profile for popup ─────────────────────────────────────────────
+
+export interface MinimalProfile {
+  id: string;
+  username: string;
+  nameStyleKey: string | null;
+  role: string;
+  credits: number;
+  streakDays: number;
+  casesOpened: number;
+  memberSince: string;
+  discordAvatarUrl: string | null;
+  verified: boolean;
+  warningStrikes: number;
+}
+
+export interface GetMinimalProfileResult {
+  ok: boolean;
+  profile?: MinimalProfile;
+  /** True when the viewer is admin or moderator — controls whether internal ID is shown */
+  viewerIsElevated: boolean;
+  error?: string;
+}
+
+/**
+ * Lightweight profile fetch used by the universal ProfilePopup.
+ * Skips inventory data and 3D character equips for fast loading.
+ * Returns viewerIsElevated so the popup can conditionally show the user UUID.
+ */
+export async function getMinimalProfile(targetUserId: string): Promise<GetMinimalProfileResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) return { ok: false, viewerIsElevated: false, error: "Nicht eingeloggt." };
+
+  const admin = createAdminClient();
+
+  const [{ data: viewerProfile }, { data: targetProfile }, { data: authUser }] = await Promise.all([
+    admin.from("profiles").select("role").eq("id", user.id).single(),
+    admin.from("profiles")
+      .select("id, username, role, credits, streak_days, cases_opened, created_at, verified, active_name_style_key, warning_strikes")
+      .eq("id", targetUserId)
+      .single(),
+    admin.auth.admin.getUserById(targetUserId),
+  ]);
+
+  if (!targetProfile) return { ok: false, viewerIsElevated: false, error: "Profil nicht gefunden." };
+
+  const viewerIsElevated = isAdmin(viewerProfile) || isModerator(viewerProfile);
+
+  const metadata = authUser?.user?.user_metadata as Record<string, unknown> | undefined;
+  const discordAvatarUrl =
+    (metadata?.avatar_url as string | undefined) ?? (metadata?.picture as string | undefined) ?? null;
+
+  return {
+    ok: true,
+    viewerIsElevated,
+    profile: {
+      id: targetProfile.id as string,
+      username: targetProfile.username as string,
+      nameStyleKey: (targetProfile.active_name_style_key as string | null) ?? null,
+      role: (targetProfile.role as string) ?? "user",
+      credits: Number(targetProfile.credits ?? 0),
+      streakDays: Number(targetProfile.streak_days ?? 0),
+      casesOpened: Number(targetProfile.cases_opened ?? 0),
+      memberSince: targetProfile.created_at as string,
+      discordAvatarUrl,
+      verified: Boolean(targetProfile.verified),
+      warningStrikes: Number(targetProfile.warning_strikes ?? 0),
     },
   };
 }

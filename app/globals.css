@@ -828,3 +828,131 @@
   text-shadow: 0 0 8px #00ff41, 0 0 20px #00ff41;
   letter-spacing: 0.05em;
 }
+
+/* ── Aurora: northern lights flowing gradient ────────────────────────────────── */
+@keyframes ns-aurora-kf {
+  0%   { background-position: 0% 50%;   filter: hue-rotate(0deg)   saturate(1.6); }
+  33%  { background-position: 100% 50%; filter: hue-rotate(60deg)  saturate(2.2); }
+  66%  { background-position: 50% 100%; filter: hue-rotate(120deg) saturate(1.9); }
+  100% { background-position: 0% 50%;   filter: hue-rotate(0deg)   saturate(1.6); }
+}
+.ns-aurora {
+  background-size: 400% 400%;
+  animation: ns-aurora-kf var(--ns-dur, 5s) ease-in-out infinite;
+}
+
+/* ── Fire: blazing fire gradient sweep ───────────────────────────────────────── */
+@keyframes ns-fire-kf {
+  0%   { background-position: 200% center; filter: brightness(1); }
+  40%  { background-position:   0% center; filter: brightness(1.4); }
+  60%  { background-position: -100% center; filter: brightness(1.2); }
+  100% { background-position: -200% center; filter: brightness(1); }
+}
+.ns-fire {
+  background-size: 500% auto;
+  animation: ns-fire-kf var(--ns-dur, 1.8s) linear infinite;
+}
+
+/* ── Electric: spark flicker with skew ───────────────────────────────────────── */
+@keyframes ns-electric-kf {
+  0%,100% { filter: brightness(1)   drop-shadow(0 0 4px currentColor); transform: skewX(0deg); }
+  5%      { filter: brightness(2.2) drop-shadow(0 0 14px currentColor); transform: skewX(2deg); }
+  10%     { filter: brightness(0.7); transform: skewX(0deg); }
+  15%     { filter: brightness(1.9) drop-shadow(0 0 10px currentColor); transform: skewX(-1.5deg); }
+  20%     { filter: brightness(1);  transform: skewX(0deg); }
+  50%     { filter: brightness(1.3) drop-shadow(0 0 6px currentColor); }
+  52%     { filter: brightness(2)   drop-shadow(0 0 12px currentColor); transform: skewX(1deg); }
+  54%     { filter: brightness(1);  transform: skewX(0deg); }
+}
+.ns-electric {
+  animation: ns-electric-kf var(--ns-dur, 2.5s) ease-in-out infinite;
+}
+
+/* ── Cyber: cyberpunk shimmer with glitch bursts ─────────────────────────────── */
+@keyframes ns-cyber-kf {
+  0%   { background-position: 200% center; opacity: 1; filter: none; }
+  47%  { background-position: -200% center; opacity: 0.97; filter: none; }
+  48%  { opacity: 0.5; filter: hue-rotate(40deg) saturate(3); transform: translate(2px, 0); }
+  49%  { opacity: 1;   filter: none; transform: translate(0); }
+  96%  { background-position: -400% center; opacity: 0.97; }
+  97%  { opacity: 0.6; filter: hue-rotate(-40deg) saturate(3); transform: translate(-2px, 0); }
+  98%  { opacity: 1;   filter: none; transform: translate(0); }
+  100% { background-position: 200% center; }
+}
+.ns-cyber {
+  background-size: 600% auto;
+  animation: ns-cyber-kf var(--ns-dur, 3s) linear infinite;
+}
+
+/* ── Neon Glow: intense neon pulsing aura ────────────────────────────────────── */
+@keyframes ns-neon-glow-kf {
+  0%,100% { filter: brightness(1)   saturate(1.5); opacity: 1; }
+  30%     { filter: brightness(1.7) saturate(2.8); opacity: 0.95; }
+  60%     { filter: brightness(0.85) saturate(1.2); opacity: 0.88; }
+  80%     { filter: brightness(1.5) saturate(2.5); opacity: 0.97; }
+}
+.ns-neon-glow {
+  animation: ns-neon-glow-kf var(--ns-dur, 2s) ease-in-out infinite;
+}
+
+/* ── Blood Moon: dark crimson breathing with red bleed ───────────────────────── */
+@keyframes ns-blood-moon-kf {
+  0%,100% { filter: brightness(0.9) drop-shadow(0 0 5px #7f1d1d); }
+  40%     { filter: brightness(1.4) drop-shadow(0 0 16px #dc2626) saturate(2); }
+  70%     { filter: brightness(1.1) drop-shadow(0 0 8px #991b1b); }
+}
+.ns-blood-moon {
+  animation: ns-blood-moon-kf var(--ns-dur, 3.5s) ease-in-out infinite;
+}
+
+/* ── Venom: toxic green bubbling surge ───────────────────────────────────────── */
+@keyframes ns-venom-kf {
+  0%,100% { filter: brightness(1)   saturate(1.2); }
+  20%     { filter: brightness(1.5) saturate(2.5) drop-shadow(0 0 10px #22c55e); }
+  40%     { filter: brightness(0.85) saturate(0.9); }
+  60%     { filter: brightness(1.7) saturate(3)   drop-shadow(0 0 14px #16a34a); }
+  80%     { filter: brightness(1)   saturate(1.5); }
+}
+.ns-venom {
+  animation: ns-venom-kf var(--ns-dur, 2.8s) ease-in-out infinite;
+}
+
+/* ── Starfield: twinkling sparkle ────────────────────────────────────────────── */
+@keyframes ns-starfield-kf {
+  0%,100% { filter: brightness(1)   drop-shadow(0 0 4px currentColor); }
+  15%     { filter: brightness(2.4) drop-shadow(0 0 12px currentColor); }
+  30%     { filter: brightness(0.7) drop-shadow(0 0 2px currentColor); }
+  50%     { filter: brightness(2)   drop-shadow(0 0 10px currentColor); }
+  70%     { filter: brightness(0.8); }
+  85%     { filter: brightness(1.9) drop-shadow(0 0 8px currentColor); }
+}
+.ns-starfield {
+  animation: ns-starfield-kf var(--ns-dur, 2.2s) ease-in-out infinite;
+}
+
+/* ── Divine: sacred shimmering glow ─────────────────────────────────────────── */
+@keyframes ns-divine-kf {
+  0%   { background-position: 200% center; filter: brightness(1)   saturate(1.2); }
+  30%  { filter: brightness(1.6) saturate(2); }
+  50%  { background-position: -200% center; filter: brightness(1.1) saturate(1.4); }
+  80%  { filter: brightness(1.8) saturate(2.4); }
+  100% { background-position: 200% center; filter: brightness(1)   saturate(1.2); }
+}
+.ns-divine {
+  background-size: 400% auto;
+  animation: ns-divine-kf var(--ns-dur, 3s) ease-in-out infinite;
+}
+
+/* ── Chaos: rapid frantic multi-color chaos ──────────────────────────────────── */
+@keyframes ns-chaos-kf {
+  0%   { filter: hue-rotate(0deg)   saturate(2) brightness(1.2); background-position: 200% center; }
+  20%  { filter: hue-rotate(72deg)  saturate(3) brightness(1.5); }
+  40%  { filter: hue-rotate(144deg) saturate(2.5) brightness(1); background-position: 0% center; }
+  60%  { filter: hue-rotate(216deg) saturate(3) brightness(1.4); }
+  80%  { filter: hue-rotate(288deg) saturate(2) brightness(1.1); background-position: -200% center; }
+  100% { filter: hue-rotate(360deg) saturate(2) brightness(1.2); background-position: 200% center; }
+}
+.ns-chaos {
+  background-size: 500% auto;
+  animation: ns-chaos-kf var(--ns-dur, 1.2s) linear infinite;
+}

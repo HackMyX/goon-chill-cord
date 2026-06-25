@@ -239,7 +239,7 @@ function CreateTradeForm({
                   : "border-white/10 text-zinc-300 hover:border-white/30"
               }`}
             >
-              <StyledUsername name={p.username} styleKey={p.nameStyleKey} size="sm" />
+              <StyledUsername name={p.username} styleKey={p.nameStyleKey} userId={p.id} size="sm" />
             </button>
           );
         })}

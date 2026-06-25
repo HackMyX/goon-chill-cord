@@ -132,7 +132,7 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
                 )}
                 <div>
                   <p className="flex items-center gap-1.5 text-lg font-bold text-zinc-100">
-                    <StyledUsername name={profile.username} styleKey={profile.nameStyleKey ?? undefined} size="lg" />
+                    <StyledUsername name={profile.username} styleKey={profile.nameStyleKey ?? undefined} size="lg" disablePopup />
                     {profile.verified && (
                       <BadgeCheck className="h-4 w-4 text-blue-400 drop-shadow-[0_0_6px_rgba(59,130,246,0.7)]" aria-label="Verifiziert" />
                     )}

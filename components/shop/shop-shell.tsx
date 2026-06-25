@@ -535,6 +535,166 @@ function SectionHeader({
 }
 
 // ---------------------------------------------------------------------------
+// Battle Pass banner components
+// ---------------------------------------------------------------------------
+
+function BpBannerCard({ bp, size }: { bp: BattlePass; size: "card" | "banner" | "hero" }) {
+  const theme = BP_THEMES[bp.theme] ?? BP_THEMES.default;
+  const accent = bp.accentColor || theme.accent;
+  const glow = theme.glow;
+
+  if (size === "hero") {
+    return (
+      <Link href="/battlepass" className="group relative block w-full overflow-hidden rounded-3xl border transition-all duration-300 hover:-translate-y-1">
+        <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${accent}20 0%, #080612 60%)`, borderColor: `${accent}50` }} />
+        <motion.div
+          className="pointer-events-none absolute inset-0 rounded-3xl"
+          animate={{ opacity: [0, 0.3, 0] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          style={{ background: `radial-gradient(ellipse at 50% 0%, ${glow}, transparent 70%)` }}
+        />
+        {bp.bannerImageUrl && (
+          <div
+            className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-[0.07]"
+            style={{ backgroundImage: `url(${bp.bannerImageUrl})` }}
+          />
+        )}
+        <div className="relative flex items-center justify-between p-6 sm:p-8">
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2" style={{ color: accent }}>
+              {bp.passIcon ?? "🏆"} {bp.seasonLabel}
+            </p>
+            <h2 className="text-2xl sm:text-4xl font-black text-white mb-2" style={{ textShadow: `0 0 60px ${glow}` }}>
+              {bp.name}
+            </h2>
+            {bp.description && (
+              <p className="text-sm text-white/50 mb-4 max-w-xl line-clamp-2">{bp.description}</p>
+            )}
+            <div className="flex flex-wrap gap-3">
+              <span className="rounded-full border px-3 py-1.5 text-xs font-bold" style={{ borderColor: `${accent}40`, color: accent, background: `${accent}12` }}>
+                👑 ab {bp.priceCr.toLocaleString("de-DE")} CR
+              </span>
+              {bp.showTierCountInShop && (
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-white/50">
+                  {bp.tierCount} Tiers
+                </span>
+              )}
+              {bp.eliteEnabled && (
+                <span className="rounded-full border border-violet-400/40 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-300">
+                  💎 Elite {bp.elitePriceCr.toLocaleString("de-DE")} CR
+                </span>
+              )}
+            </div>
+          </div>
+          <div
+            className="shrink-0 ml-6 flex items-center justify-center rounded-2xl border p-5 transition-all group-hover:scale-110"
+            style={{ borderColor: `${accent}30`, background: `${accent}14`, boxShadow: `0 0 30px ${glow}` }}
+          >
+            <Crown className="h-10 w-10" style={{ color: accent }} />
+          </div>
+        </div>
+        <div className="relative px-6 pb-4 sm:px-8">
+          <div className="flex items-center gap-2 text-sm font-black" style={{ color: accent }}>
+            <ChevronRight className="h-4 w-4" />
+            Zum Battle Pass — Jetzt kaufen
+          </div>
+        </div>
+        <div className="absolute inset-x-0 bottom-0 h-[2px]" style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} />
+      </Link>
+    );
+  }
+
+  if (size === "banner") {
+    return (
+      <Link href="/battlepass" className="group relative flex items-center gap-4 overflow-hidden rounded-2xl border px-5 py-4 transition-all duration-300 hover:-translate-y-0.5"
+        style={{ borderColor: `${accent}35`, background: `linear-gradient(90deg, ${accent}14 0%, #080612 50%)` }}
+      >
+        <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle at 0% 50%, ${glow}, transparent 60%)`, opacity: 0.4 }} />
+        <div className="relative flex items-center justify-center rounded-xl border p-3 shrink-0"
+          style={{ borderColor: `${accent}30`, background: `${accent}12`, boxShadow: `0 0 20px ${glow}` }}
+        >
+          <span className="text-2xl">{bp.passIcon ?? "🏆"}</span>
+        </div>
+        <div className="relative flex-1 min-w-0">
+          <p className="text-[9px] font-black uppercase tracking-widest mb-0.5" style={{ color: `${accent}80` }}>{bp.seasonLabel}</p>
+          <h3 className="text-base font-black text-white truncate">{bp.name}</h3>
+          <div className="mt-1 flex items-center gap-2 text-xs">
+            <span className="font-bold" style={{ color: accent }}>ab {bp.priceCr.toLocaleString("de-DE")} CR</span>
+            {bp.showTierCountInShop && <span className="text-white/30">· {bp.tierCount} Tiers</span>}
+          </div>
+        </div>
+        <div className="relative shrink-0 flex items-center gap-1 text-xs font-black" style={{ color: accent }}>
+          <ChevronRight className="h-4 w-4" />
+        </div>
+      </Link>
+    );
+  }
+
+  // card (default)
+  return (
+    <Link href="/battlepass" className="group relative overflow-hidden rounded-2xl border transition-all duration-300 hover:-translate-y-1"
+      style={{ borderColor: `${accent}40`, background: `linear-gradient(135deg, ${accent}10 0%, #0a090f 60%)`, boxShadow: `0 0 0 1px ${accent}15` }}
+    >
+      <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle at 60% 0%, ${glow}, transparent 70%)`, opacity: 0.4 }} />
+      <div className="relative flex items-center justify-between p-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: accent }}>{bp.seasonLabel}</p>
+          <h3 className="text-base font-black text-white">{bp.name}</h3>
+          {bp.description && <p className="mt-1 text-xs text-white/40 line-clamp-1">{bp.description}</p>}
+          <div className="mt-2 flex items-center gap-2 text-xs">
+            {bp.showTierCountInShop && (
+              <span className="rounded-full border px-2 py-0.5 font-bold" style={{ borderColor: `${accent}40`, color: accent, background: `${accent}10` }}>
+                {bp.tierCount} Tiers
+              </span>
+            )}
+            <span className="text-white/30">ab {bp.priceCr.toLocaleString("de-DE")} CR</span>
+          </div>
+        </div>
+        <div className="shrink-0 ml-4 flex items-center justify-center rounded-xl border p-3 transition-all group-hover:scale-110"
+          style={{ borderColor: `${accent}30`, background: `${accent}12`, boxShadow: `0 0 16px ${glow}` }}
+        >
+          <Crown className="h-6 w-6" style={{ color: accent }} />
+        </div>
+      </div>
+      <div className="px-4 pb-3">
+        <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: accent }}>
+          <ChevronRight className="h-3 w-3" />
+          Zum Battle Pass
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function BpPositionSlot({
+  passes,
+  position,
+}: {
+  passes: BattlePass[];
+  position: import("@/lib/battle-pass").BpShopPosition;
+}) {
+  const filtered = passes.filter((bp) => bp.showInShop && bp.shopPosition === position);
+  if (!filtered.length) return null;
+
+  const hasHero = filtered.some((bp) => bp.shopBannerSize === "hero");
+
+  return (
+    <div className="mb-6">
+      {position === "top" || position === "below_motd" ? null : (
+        <SectionHeader icon={Star} label="Battle Pass" colorClass="text-amber-300" />
+      )}
+      <div className={`mt-3 ${hasHero ? "flex flex-col gap-3" : "grid gap-3 sm:grid-cols-2 lg:grid-cols-3"}`}>
+        {filtered
+          .sort((a, b) => a.shopSortOrder - b.shopSortOrder)
+          .map((bp) => (
+            <BpBannerCard key={bp.id} bp={bp} size={bp.shopBannerSize ?? "card"} />
+          ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main shop shell
 // ---------------------------------------------------------------------------
 
@@ -666,6 +826,9 @@ export function ShopShell({
       </div>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-8">
+        {/* BP: top position (before MOTD) */}
+        <BpPositionSlot passes={activeBattlePasses} position="top" />
+
         {/* MOTD Banner */}
         <AnimatePresence>
           {motd && !motdDismissed && (
@@ -687,48 +850,8 @@ export function ShopShell({
           )}
         </AnimatePresence>
 
-        {/* Battle Pass section */}
-        {activeBattlePasses.length > 0 && (
-          <div className="mb-6">
-            <SectionHeader icon={Star} label="Battle Pass" colorClass="text-amber-300" />
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {activeBattlePasses.map((bp) => {
-                const theme = BP_THEMES[bp.theme] ?? BP_THEMES.default;
-                return (
-                  <Link key={bp.id} href="/battlepass" className="group relative overflow-hidden rounded-2xl border transition-all duration-300 hover:-translate-y-1"
-                    style={{ borderColor: `${theme.accent}40`, background: `linear-gradient(135deg, ${theme.accent}10 0%, #0a090f 60%)`, boxShadow: `0 0 0 1px ${theme.accent}15` }}
-                  >
-                    <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle at 60% 0%, ${theme.glow}, transparent 70%)`, opacity: 0.4 }} />
-                    <div className="relative flex items-center justify-between p-4">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: theme.accent }}>{bp.seasonLabel}</p>
-                        <h3 className="text-base font-black text-white">{bp.name}</h3>
-                        {bp.description && <p className="mt-1 text-xs text-white/40 line-clamp-1">{bp.description}</p>}
-                        <div className="mt-2 flex items-center gap-2 text-xs">
-                          <span className="rounded-full border px-2 py-0.5 font-bold" style={{ borderColor: `${theme.accent}40`, color: theme.accent, background: `${theme.accent}10` }}>
-                            {bp.tierCount} Tiers
-                          </span>
-                          <span className="text-white/30">ab {bp.priceCr.toLocaleString("de-DE")} CR</span>
-                        </div>
-                      </div>
-                      <div className="shrink-0 ml-4 flex items-center justify-center rounded-xl border p-3 transition-all group-hover:scale-110"
-                        style={{ borderColor: `${theme.accent}30`, background: `${theme.accent}12`, boxShadow: `0 0 16px ${theme.glow}` }}
-                      >
-                        <Crown className="h-6 w-6" style={{ color: theme.accent }} />
-                      </div>
-                    </div>
-                    <div className="px-4 pb-3">
-                      <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: theme.accent }}>
-                        <ChevronRight className="h-3 w-3" />
-                        Zum Battle Pass
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* BP: below_motd position */}
+        <BpPositionSlot passes={activeBattlePasses} position="below_motd" />
 
         {listings.length === 0 ? (
           <motion.div
@@ -744,6 +867,11 @@ export function ShopShell({
           </motion.div>
         ) : (
           <div className="flex flex-col gap-12">
+
+            {/* BP: below_featured (default) — shown before featured hero */}
+            {activeBattlePasses.some((bp) => bp.showInShop && bp.shopPosition === "below_featured") && (
+              <BpPositionSlot passes={activeBattlePasses} position="below_featured" />
+            )}
 
             {/* Featured Hero */}
             {heroItems.length > 0 && (
@@ -806,6 +934,11 @@ export function ShopShell({
               </motion.p>
             )}
 
+            {/* BP: between_categories — before the first category */}
+            {activeBattlePasses.some((bp) => bp.showInShop && bp.shopPosition === "between_categories") && (
+              <BpPositionSlot passes={activeBattlePasses} position="between_categories" />
+            )}
+
             {sections.map((section, si) => {
               const CatIcon = resolveShopCategoryIcon(section.icon);
               const catColor = resolveShopCategoryColor(section.color);
@@ -835,6 +968,11 @@ export function ShopShell({
                 </motion.div>
               );
             })}
+
+            {/* BP: bottom — after all categories */}
+            {activeBattlePasses.some((bp) => bp.showInShop && bp.shopPosition === "bottom") && (
+              <BpPositionSlot passes={activeBattlePasses} position="bottom" />
+            )}
           </div>
         )}
       </main>

@@ -541,6 +541,7 @@ export function WardrobeShell({
               initialActiveKey={nameStyleData.activeKey}
               username={username}
               credits={credits}
+              isAdmin={isAdmin}
             />
           </div>
         )}

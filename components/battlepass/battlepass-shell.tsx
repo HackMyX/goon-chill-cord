@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition, useCallback, useRef, useEffect } from "react";
+import { useState, useTransition, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Crown, Zap, Lock, CheckCircle2, ChevronRight,
-  Star, Calendar, Award, Layers, TrendingUp, Gift, Sparkles,
+  Crown, Zap, Lock, CheckCircle2, Star, Calendar, Award, Layers, Gift,
+  Sparkles, ChevronLeft, ChevronRight, Clock, Coins, TrendingUp, Shield,
 } from "lucide-react";
 import { BP_THEMES, type BattlePass, type BattlePassTier, type UserBpStatus } from "@/lib/battle-pass";
 import { purchaseBattlePass, purchaseEliteBattlePass, claimBpTier } from "@/lib/actions/battle-pass";
@@ -29,28 +29,65 @@ function rewardLabel(tier: BattlePassTier): string {
   switch (tier.rewardType) {
     case "credits":
       return tier.rewardCredits
-        ? `${(tier.rewardCredits * tier.rewardQuantity).toLocaleString("de-DE")} CR`
+        ? `${((tier.rewardCredits) * tier.rewardQuantity).toLocaleString("de-DE")} CR`
         : "Credits";
     case "item": return `Item${tier.rewardQuantity > 1 ? ` ×${tier.rewardQuantity}` : ""}`;
-    case "random_item": return `Zufalls-Item${tier.rewardItemRarity ? ` (${tier.rewardItemRarity})` : ""}`;
+    case "random_item": return tier.rewardItemRarity ? `${tier.rewardItemRarity} Item` : "Zufalls-Item";
     case "badge": return tier.rewardBadgeText ?? "Badge";
-    case "xp_boost": return `+${tier.rewardXpBoost ?? 1} Tag${(tier.rewardXpBoost ?? 1) !== 1 ? "e" : ""}`;
+    case "xp_boost": return `+${tier.rewardXpBoost ?? 1} Fortschrittstag${(tier.rewardXpBoost ?? 1) !== 1 ? "e" : ""}`;
     case "name_style": return `Style: ${tier.rewardNameStyleKey ?? "?"}`;
     default: return "Belohnung";
   }
 }
 
+function rewardIcon(tier: BattlePassTier): string {
+  if (tier.icon) return tier.icon;
+  switch (tier.rewardType) {
+    case "credits": return "💰";
+    case "item": return "🎁";
+    case "random_item": return "🎲";
+    case "badge": return "🏆";
+    case "xp_boost": return "⚡";
+    case "name_style": return "✨";
+    default: return "🎁";
+  }
+}
+
+// ── Countdown timer ───────────────────────────────────────────────────────────
+
+function Countdown({ endDate }: { endDate: string }) {
+  const [remaining, setRemaining] = useState("");
+
+  useEffect(() => {
+    function calc() {
+      const diff = new Date(endDate).getTime() - Date.now();
+      if (diff <= 0) { setRemaining("Abgelaufen"); return; }
+      const d = Math.floor(diff / 86_400_000);
+      const h = Math.floor((diff % 86_400_000) / 3_600_000);
+      const m = Math.floor((diff % 3_600_000) / 60_000);
+      const s = Math.floor((diff % 60_000) / 1_000);
+      if (d > 0) setRemaining(`${d}T ${h}Std`);
+      else setRemaining(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`);
+    }
+    calc();
+    const id = setInterval(calc, 1000);
+    return () => clearInterval(id);
+  }, [endDate]);
+
+  return <span className="tabular-nums">{remaining}</span>;
+}
+
 // ── Particle field ────────────────────────────────────────────────────────────
 
-function ParticleField({ accent, count = 30 }: { accent: string; count?: number }) {
+function ParticleField({ accent, count = 40 }: { accent: string; count?: number }) {
   const particles = Array.from({ length: count }, (_, i) => ({
     id: i,
-    x: Math.random() * 100,
-    y: Math.random() * 100,
-    size: 1 + Math.random() * 2.5,
-    dur: 4 + Math.random() * 8,
-    delay: Math.random() * -8,
-    drift: (Math.random() - 0.5) * 30,
+    x: (i / count) * 100,
+    y: Math.sin(i * 2.3) * 40 + 50,
+    size: 1 + (i % 3) * 1.2,
+    dur: 4 + (i % 4) * 2,
+    delay: -(i % 6),
+    drift: Math.cos(i * 1.7) * 25,
   }));
 
   return (
@@ -65,162 +102,144 @@ function ParticleField({ accent, count = 30 }: { accent: string; count?: number 
             width: p.size,
             height: p.size,
             background: accent,
-            boxShadow: `0 0 ${p.size * 2}px ${accent}`,
+            boxShadow: `0 0 ${p.size * 3}px ${accent}`,
           }}
-          animate={{
-            y: [0, -40, 0],
-            x: [0, p.drift, 0],
-            opacity: [0, 0.8, 0],
-            scale: [0.5, 1.2, 0.5],
-          }}
-          transition={{
-            duration: p.dur,
-            delay: p.delay,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
+          animate={{ y: [0, -50, 0], x: [0, p.drift, 0], opacity: [0, 0.9, 0], scale: [0.5, 1.3, 0.5] }}
+          transition={{ duration: p.dur, delay: p.delay, repeat: Infinity, ease: "easeInOut" }}
         />
       ))}
     </div>
   );
 }
 
-// ── Milestone tier card (BIG) ─────────────────────────────────────────────────
+// ── Horizontal track card ─────────────────────────────────────────────────────
 
-function MilestoneTierCard({
-  tier,
-  state,
-  accent,
-  glow,
-  onClaim,
-  claiming,
+function TrackTileCard({
+  tier, state, accent, glow, trackColor, onClaim, claiming, isSelected, onClick,
 }: {
   tier: BattlePassTier;
   state: TierState;
   accent: string;
   glow: string;
+  trackColor: string;
   onClaim: (id: string) => void;
   claiming: boolean;
+  isSelected: boolean;
+  onClick: () => void;
 }) {
   const isClaimed = state === "claimed";
   const isAvailable = state === "available";
   const isLocked = state === "locked";
+  const isMilestone = tier.highlightTier;
 
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.92 }}
-      animate={{ opacity: 1, scale: 1 }}
-      whileHover={isAvailable ? { scale: 1.03, y: -4 } : undefined}
-      className="relative overflow-hidden rounded-2xl border p-5 text-center"
+      onClick={onClick}
+      whileHover={{ y: -4, scale: 1.03 }}
+      whileTap={{ scale: 0.97 }}
+      className={`relative flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl border transition-all duration-200 ${
+        isMilestone ? "w-36 h-52" : "w-28 h-44"
+      }`}
       style={
         isAvailable
           ? {
-              borderColor: accent + "70",
-              background: `linear-gradient(135deg, ${accent}18 0%, ${accent}08 50%, transparent 100%)`,
-              boxShadow: `0 0 40px ${glow}, 0 0 80px ${glow}40, inset 0 1px 0 ${accent}30`,
+              borderColor: `${trackColor}80`,
+              background: `linear-gradient(160deg, ${trackColor}22 0%, ${trackColor}08 60%, transparent 100%)`,
+              boxShadow: isSelected
+                ? `0 0 0 2px ${trackColor}, 0 0 32px ${glow}80`
+                : `0 0 20px ${glow}40`,
             }
           : isClaimed
-            ? { borderColor: "rgba(52,211,153,0.3)", background: "rgba(52,211,153,0.05)" }
-            : { borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.01)", opacity: 0.6 }
+            ? { borderColor: "rgba(52,211,153,0.3)", background: "rgba(52,211,153,0.04)" }
+            : { borderColor: "rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.01)" }
       }
     >
-      {/* Animated glow background */}
-      {isAvailable && (
-        <>
-          <motion.div
-            className="pointer-events-none absolute inset-0 rounded-2xl"
-            animate={{ opacity: [0.3, 0.6, 0.3] }}
-            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-            style={{ background: `radial-gradient(circle at 50% 40%, ${glow}, transparent 70%)` }}
-          />
-          <div
-            className="pointer-events-none absolute inset-0 rounded-2xl"
-            style={{
-              backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(255,255,255,0.01) 8px, rgba(255,255,255,0.01) 9px)",
-            }}
-          />
-        </>
-      )}
-      {isClaimed && (
-        <div className="pointer-events-none absolute inset-0 rounded-2xl" style={{ background: "radial-gradient(circle at 50% 30%, rgba(52,211,153,0.08), transparent 70%)" }} />
+      {/* Milestone crown */}
+      {isMilestone && (
+        <div
+          className="absolute top-0 inset-x-0 h-0.5 rounded-t-2xl"
+          style={{ background: `linear-gradient(90deg, transparent, ${trackColor}, transparent)` }}
+        />
       )}
 
-      {/* Tier badge */}
-      <div className="relative z-10 flex flex-col items-center gap-3">
+      {/* Shimmer on available */}
+      {isAvailable && (
+        <motion.div
+          className="pointer-events-none absolute inset-0 rounded-2xl"
+          animate={{ opacity: [0, 0.5, 0] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+          style={{ background: `linear-gradient(135deg, ${trackColor}28, transparent 60%)` }}
+        />
+      )}
+
+      {/* Claimed overlay */}
+      {isClaimed && (
+        <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-emerald-500/5">
+          <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-emerald-400/80" />
+        </div>
+      )}
+
+      {/* Locked overlay */}
+      {isLocked && (
+        <div className="absolute inset-0 rounded-2xl bg-black/30 backdrop-blur-[1px]">
+          <Lock className="absolute bottom-2 right-2 h-3 w-3 text-white/15" />
+        </div>
+      )}
+
+      <div className="relative z-10 flex h-full flex-col items-center justify-between p-3 text-center">
+        {/* Tier number */}
         <div
-          className="flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest"
+          className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-black"
           style={
             isClaimed
-              ? { borderColor: "rgba(52,211,153,0.4)", color: "#34d399", background: "rgba(52,211,153,0.08)" }
+              ? { background: "rgba(52,211,153,0.2)", color: "#34d399" }
               : isAvailable
-                ? { borderColor: accent + "50", color: accent, background: accent + "10" }
-                : { borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.3)" }
+                ? { background: `${trackColor}30`, color: trackColor }
+                : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.2)" }
           }
         >
-          <Star className="h-2.5 w-2.5" />
-          Meilenstein {tier.tierNumber}
+          {tier.tierNumber}
         </div>
 
         {/* Icon */}
         <motion.span
-          className={`text-5xl leading-none ${isLocked ? "grayscale opacity-30" : ""}`}
-          animate={isAvailable ? { scale: [1, 1.08, 1] } : {}}
+          className={`text-4xl leading-none select-none ${isLocked ? "grayscale opacity-20" : ""} ${isMilestone ? "text-5xl" : ""}`}
+          animate={isAvailable ? { scale: [1, 1.1, 1] } : {}}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
         >
-          {tier.icon}
+          {rewardIcon(tier)}
         </motion.span>
 
         {/* Name */}
-        <h3 className="text-base font-black text-white leading-tight">{tier.name}</h3>
-
-        {/* Reward */}
-        <div
-          className="rounded-lg border px-3 py-1.5 text-sm font-bold"
-          style={
-            isClaimed
-              ? { borderColor: "rgba(52,211,153,0.3)", color: "#34d399", background: "rgba(52,211,153,0.06)" }
-              : isAvailable
-                ? { borderColor: accent + "40", color: accent, background: accent + "08" }
-                : { borderColor: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.2)" }
-          }
-        >
-          {rewardLabel(tier)}
+        <div>
+          <p className={`font-black leading-tight text-white ${isMilestone ? "text-[11px]" : "text-[10px]"} ${isLocked ? "opacity-25" : ""}`}>
+            {tier.name}
+          </p>
+          <p
+            className={`mt-0.5 text-[9px] font-semibold leading-tight ${isMilestone ? "text-[10px]" : ""}`}
+            style={
+              isClaimed ? { color: "#34d39980" }
+                : isAvailable ? { color: `${trackColor}cc` }
+                  : { color: "rgba(255,255,255,0.18)" }
+            }
+          >
+            {rewardLabel(tier)}
+          </p>
         </div>
-
-        {/* Description */}
-        {tier.description && (
-          <p className="text-xs text-white/40 leading-relaxed max-w-[180px]">{tier.description}</p>
-        )}
-
-        {/* Status */}
-        {isClaimed && (
-          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Abgeholt
-          </div>
-        )}
-        {isLocked && (
-          <div className="flex items-center gap-1.5 text-xs font-bold text-white/20">
-            <Lock className="h-3.5 w-3.5" />
-            Gesperrt
-          </div>
-        )}
 
         {/* Claim button */}
         {isAvailable && (
           <motion.button
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
+            whileTap={{ scale: 0.88 }}
             disabled={claiming}
-            onClick={() => !claiming && onClaim(tier.id)}
-            className="w-full rounded-xl py-3 text-sm font-black text-white transition-all disabled:opacity-60 mt-1"
+            onClick={(e) => { e.stopPropagation(); if (!claiming) onClaim(tier.id); }}
+            className={`w-full rounded-xl py-2 text-[10px] font-black text-white transition-all disabled:opacity-50 ${isMilestone ? "py-2.5 text-[11px]" : ""}`}
             style={{
-              background: `linear-gradient(135deg, ${accent} 0%, ${accent}cc 100%)`,
-              boxShadow: `0 4px 24px ${glow}, 0 0 0 1px ${accent}30`,
+              background: `linear-gradient(135deg, ${trackColor} 0%, ${trackColor}cc 100%)`,
+              boxShadow: `0 3px 16px ${glow}`,
             }}
           >
-            {claiming ? "Abholen…" : "✦ Jetzt abholen"}
+            {claiming ? "…" : "Abholen"}
           </motion.button>
         )}
       </div>
@@ -228,186 +247,158 @@ function MilestoneTierCard({
   );
 }
 
-// ── Regular tier card ─────────────────────────────────────────────────────────
+// ── Horizontal scrollable track ───────────────────────────────────────────────
 
-function TierCard({
-  tier,
-  state,
-  accent,
-  glow,
-  onClaim,
-  claiming,
-}: {
-  tier: BattlePassTier;
-  state: TierState;
-  accent: string;
-  glow: string;
-  onClaim: (id: string) => void;
-  claiming: boolean;
-}) {
-  const isClaimed = state === "claimed";
-  const isAvailable = state === "available";
-  const isLocked = state === "locked";
-
-  return (
-    <motion.div
-      layout
-      whileHover={isAvailable ? { scale: 1.06, y: -3 } : undefined}
-      className="relative flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all duration-200 overflow-hidden"
-      style={
-        isAvailable
-          ? {
-              borderColor: accent + "50",
-              background: `linear-gradient(135deg, ${accent}12 0%, transparent 100%)`,
-              boxShadow: `0 0 16px ${glow}60`,
-              cursor: "pointer",
-            }
-          : isClaimed
-            ? { borderColor: "rgba(52,211,153,0.25)", background: "rgba(52,211,153,0.05)" }
-            : { borderColor: "rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.01)", opacity: 0.45 }
-      }
-      onClick={isAvailable && !claiming ? () => onClaim(tier.id) : undefined}
-    >
-      {/* Shimmer on available */}
-      {isAvailable && (
-        <motion.div
-          className="pointer-events-none absolute inset-0 rounded-xl"
-          animate={{ opacity: [0, 0.4, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: Math.random() * 2 }}
-          style={{ background: `linear-gradient(135deg, ${accent}20, transparent)` }}
-        />
-      )}
-
-      {/* Tier number */}
-      <span
-        className="absolute top-1.5 left-1.5 rounded-md px-1 py-0.5 text-[8px] font-black tabular-nums"
-        style={
-          isClaimed
-            ? { background: "rgba(52,211,153,0.15)", color: "#34d399" }
-            : isAvailable
-              ? { background: accent + "20", color: accent }
-              : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.2)" }
-        }
-      >
-        {tier.tierNumber}
-      </span>
-
-      {/* Status icon */}
-      {isClaimed && <CheckCircle2 className="absolute top-1.5 right-1.5 h-3 w-3 text-emerald-400" />}
-      {isLocked && <Lock className="absolute top-1.5 right-1.5 h-2.5 w-2.5 text-white/15" />}
-
-      {/* Reward emoji */}
-      <span className={`text-2xl mt-3.5 leading-none ${isLocked ? "grayscale opacity-30" : ""}`}>
-        {tier.icon}
-      </span>
-
-      <span className="text-[10px] font-bold text-white/70 leading-tight line-clamp-2 px-0.5">
-        {tier.name}
-      </span>
-      <span
-        className="text-[9px] font-semibold leading-tight"
-        style={
-          isClaimed ? { color: "#34d399aa" }
-            : isAvailable ? { color: accent + "cc" }
-              : { color: "rgba(255,255,255,0.2)" }
-        }
-      >
-        {rewardLabel(tier)}
-      </span>
-
-      {isAvailable && (
-        <motion.button
-          whileTap={{ scale: 0.88 }}
-          disabled={claiming}
-          className="mt-1.5 w-full rounded-lg py-2 text-[10px] font-black text-white transition-all disabled:opacity-50"
-          style={{
-            background: `linear-gradient(135deg, ${accent} 0%, ${accent}aa 100%)`,
-            boxShadow: `0 2px 12px ${glow}`,
-          }}
-          onClick={(e) => { e.stopPropagation(); if (!claiming) onClaim(tier.id); }}
-        >
-          {claiming ? "…" : "Abholen"}
-        </motion.button>
-      )}
-    </motion.div>
-  );
-}
-
-// ── Track section with milestone cards ────────────────────────────────────────
-
-function TrackRow({
-  tiers,
-  label,
-  labelColor,
-  icon,
-  userStatus,
-  progressDays,
-  accent,
-  glow,
-  onClaim,
-  claimingId,
+function HorizontalTrack({
+  tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor,
+  onClaim, claimingId,
 }: {
   tiers: BattlePassTier[];
   label: string;
   labelColor: string;
-  icon: React.ReactNode;
+  trackIcon: React.ReactNode;
   userStatus: UserBpStatus | null;
   progressDays: number;
   accent: string;
   glow: string;
+  trackColor: string;
   onClaim: (id: string) => void;
   claimingId: string | null;
 }) {
-  const milestones = tiers.filter((t) => t.highlightTier);
-  const regular = tiers.filter((t) => !t.highlightTier);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [selectedTier, setSelectedTier] = useState<string | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  function updateScrollState() {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 8);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
+  }
+
+  function scrollBy(delta: number) {
+    scrollRef.current?.scrollBy({ left: delta, behavior: "smooth" });
+  }
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", updateScrollState, { passive: true });
+    updateScrollState();
+    return () => el.removeEventListener("scroll", updateScrollState);
+  }, []);
+
+  // Auto-scroll to first available tier
+  useEffect(() => {
+    const firstAvailable = tiers.findIndex(
+      (t) => getTierState(t, userStatus, progressDays) === "available"
+    );
+    if (firstAvailable > 0 && scrollRef.current) {
+      const el = scrollRef.current;
+      const cardW = 128;
+      setTimeout(() => {
+        el.scrollTo({ left: Math.max(0, firstAvailable * (cardW + 8) - 60), behavior: "smooth" });
+      }, 600);
+    }
+  }, [tiers, userStatus, progressDays]);
+
+  const selectedTierData = selectedTier ? tiers.find((t) => t.id === selectedTier) : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {/* Track header */}
       <div className="flex items-center gap-3">
-        <span style={{ color: labelColor }}>{icon}</span>
-        <h2
-          className="text-xs font-black uppercase tracking-[0.2em]"
-          style={{ color: labelColor }}
-        >
+        <span style={{ color: labelColor }}>{trackIcon}</span>
+        <h2 className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: labelColor }}>
           {label}
         </h2>
         <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${labelColor}30, transparent)` }} />
+        <span className="text-[10px] text-white/30">{tiers.length} Tiers</span>
       </div>
 
-      {/* Milestone cards — displayed prominently */}
-      {milestones.length > 0 && (
-        <div className={`grid gap-3 ${milestones.length === 1 ? "grid-cols-1 max-w-xs" : milestones.length <= 3 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
-          {milestones.map((tier) => (
-            <MilestoneTierCard
-              key={tier.id}
-              tier={tier}
-              state={getTierState(tier, userStatus, progressDays)}
-              accent={accent}
-              glow={glow}
-              onClaim={onClaim}
-              claiming={claimingId === tier.id}
-            />
-          ))}
-        </div>
-      )}
+      {/* Scrollable row */}
+      <div className="relative">
+        {/* Left arrow */}
+        {canScrollLeft && (
+          <button
+            onClick={() => scrollBy(-300)}
+            className="absolute left-0 top-1/2 z-10 -translate-y-1/2 -translate-x-1 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-zinc-900/90 text-white/60 shadow-xl hover:text-white transition-colors backdrop-blur-sm"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+        )}
 
-      {/* Regular tiers grid */}
-      {regular.length > 0 && (
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
-          {regular.map((tier) => (
-            <TierCard
-              key={tier.id}
-              tier={tier}
-              state={getTierState(tier, userStatus, progressDays)}
-              accent={accent}
-              glow={glow}
-              onClaim={onClaim}
-              claiming={claimingId === tier.id}
-            />
-          ))}
+        {/* Scroll container */}
+        <div
+          ref={scrollRef}
+          className="flex gap-2 overflow-x-auto pb-2"
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
+          {tiers.map((tier) => {
+            const state = getTierState(tier, userStatus, progressDays);
+            return (
+              <TrackTileCard
+                key={tier.id}
+                tier={tier}
+                state={state}
+                accent={accent}
+                glow={glow}
+                trackColor={trackColor}
+                onClaim={onClaim}
+                claiming={claimingId === tier.id}
+                isSelected={selectedTier === tier.id}
+                onClick={() => setSelectedTier((prev) => (prev === tier.id ? null : tier.id))}
+              />
+            );
+          })}
         </div>
-      )}
+
+        {/* Right arrow */}
+        {canScrollRight && (
+          <button
+            onClick={() => scrollBy(300)}
+            className="absolute right-0 top-1/2 z-10 -translate-y-1/2 translate-x-1 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-zinc-900/90 text-white/60 shadow-xl hover:text-white transition-colors backdrop-blur-sm"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Selected tier detail panel */}
+      <AnimatePresence>
+        {selectedTierData && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div
+              className="rounded-2xl border p-4 flex items-center gap-4"
+              style={{
+                borderColor: `${trackColor}40`,
+                background: `linear-gradient(135deg, ${trackColor}10 0%, transparent 100%)`,
+              }}
+            >
+              <span className="text-5xl">{rewardIcon(selectedTierData)}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-white">{selectedTierData.name}</p>
+                <p className="text-sm mt-0.5" style={{ color: `${trackColor}cc` }}>{rewardLabel(selectedTierData)}</p>
+                {selectedTierData.description && (
+                  <p className="mt-1 text-xs text-white/40">{selectedTierData.description}</p>
+                )}
+              </div>
+              <div
+                className="shrink-0 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest"
+                style={{ borderColor: `${trackColor}40`, color: trackColor, background: `${trackColor}10` }}
+              >
+                Tier {selectedTierData.tierNumber}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -415,11 +406,7 @@ function TrackRow({
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
 function ProgressBar({
-  progressDays,
-  tierCount,
-  accent,
-  glow,
-  claimedCount,
+  progressDays, tierCount, accent, glow, claimedCount,
 }: {
   progressDays: number;
   tierCount: number;
@@ -451,12 +438,8 @@ function ProgressBar({
           animate={{ width: `${pct}%` }}
           transition={{ duration: 1, ease: "easeOut", delay: 0.1 }}
           className="absolute inset-y-0 left-0 rounded-full"
-          style={{
-            background: `linear-gradient(90deg, ${accent} 0%, ${accent}cc 100%)`,
-            boxShadow: `0 0 12px ${glow}`,
-          }}
+          style={{ background: `linear-gradient(90deg, ${accent} 0%, ${accent}cc 100%)`, boxShadow: `0 0 12px ${glow}` }}
         />
-        {/* Shimmer */}
         <motion.div
           className="absolute inset-y-0 w-16 rounded-full pointer-events-none"
           animate={{ left: ["-15%", "110%"] }}
@@ -482,12 +465,15 @@ interface BattlePassShellProps {
 export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassShellProps) {
   const router = useRouter();
   const theme = BP_THEMES[pass.theme] ?? BP_THEMES.default;
+  const accent = pass.accentColor || theme.accent;
+  const glow = theme.glow.replace(/[\d.]+\)$/, "0.5)");
 
   const [userStatus, setUserStatus] = useState(initialStatus);
   const [isPending, startTransition] = useTransition();
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [buyError, setBuyError] = useState<string | null>(null);
+  const [purchaseAnim, setPurchaseAnim] = useState(false);
 
   const progressDays = userStatus?.progressDays ?? 0;
   const hasPremium = userStatus?.hasPremium ?? false;
@@ -500,7 +486,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
 
   function showToast(msg: string, ok: boolean) {
     setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3200);
+    setTimeout(() => setToast(null), 3500);
   }
 
   const handleClaim = useCallback((tierId: string) => {
@@ -526,6 +512,8 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
     startTransition(async () => {
       const res = await purchaseBattlePass(pass.id);
       if (res.success) {
+        setPurchaseAnim(true);
+        setTimeout(() => setPurchaseAnim(false), 2000);
         showToast("Premium Pass aktiviert! 👑", true);
         setUserStatus((prev) =>
           prev ? { ...prev, hasPremium: true }
@@ -543,6 +531,8 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
     startTransition(async () => {
       const res = await purchaseEliteBattlePass(pass.id);
       if (res.success) {
+        setPurchaseAnim(true);
+        setTimeout(() => setPurchaseAnim(false), 2000);
         showToast("Elite Pass aktiviert! 💎", true);
         setUserStatus((prev) =>
           prev ? { ...prev, hasElite: true }
@@ -555,162 +545,196 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
     });
   }, [pass.id, router]);
 
+  // Coin-purchase animation overlay
+  const CoinBurst = purchaseAnim ? (
+    <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+      {Array.from({ length: 18 }, (_, i) => (
+        <motion.div
+          key={i}
+          className="absolute text-2xl"
+          initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+          animate={{
+            x: Math.cos((i / 18) * Math.PI * 2) * (80 + Math.random() * 120),
+            y: Math.sin((i / 18) * Math.PI * 2) * (80 + Math.random() * 120),
+            opacity: 0,
+            scale: 0.3,
+          }}
+          transition={{ duration: 1.2, ease: "easeOut" }}
+        >
+          💰
+        </motion.div>
+      ))}
+    </div>
+  ) : null;
+
   return (
     <div className="flex flex-1 flex-col min-h-0 relative">
+      {CoinBurst}
 
-      {/* ══ EPIC HERO ══════════════════════════════════════════════════════ */}
+      {/* ══ HERO ══════════════════════════════════════════════════════════ */}
       <div
         className="relative overflow-hidden border-b"
-        style={{ borderColor: `${theme.accent}25`, background: `linear-gradient(180deg, ${theme.accent}0d 0%, #0a090f 100%)` }}
+        style={{ borderColor: `${accent}25`, background: `linear-gradient(180deg, ${accent}12 0%, #070512 100%)` }}
       >
         {/* Grid pattern */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-[0.04]"
+          className="pointer-events-none absolute inset-0 opacity-[0.035]"
           style={{
             backgroundImage: "repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,0.6) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,0.6) 40px)",
           }}
         />
 
-        {/* Large ambient glow orbs */}
+        {/* Glow orbs */}
         <motion.div
-          className="pointer-events-none absolute -top-32 left-1/4 h-[500px] w-[500px] rounded-full blur-[140px]"
-          style={{ background: theme.accent }}
-          animate={{ opacity: [0.08, 0.18, 0.08], scale: [1, 1.1, 1] }}
+          className="pointer-events-none absolute -top-40 left-1/4 h-[600px] w-[600px] rounded-full blur-[160px]"
+          style={{ background: accent }}
+          animate={{ opacity: [0.08, 0.2, 0.08], scale: [1, 1.1, 1] }}
           transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
         />
         <motion.div
-          className="pointer-events-none absolute -bottom-24 right-1/4 h-96 w-96 rounded-full blur-[120px]"
-          style={{ background: theme.accent }}
-          animate={{ opacity: [0.05, 0.12, 0.05], scale: [1, 1.15, 1] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+          className="pointer-events-none absolute -bottom-24 right-1/3 h-96 w-96 rounded-full blur-[120px]"
+          style={{ background: accent }}
+          animate={{ opacity: [0.05, 0.14, 0.05] }}
+          transition={{ duration: 8, repeat: Infinity, delay: 2 }}
         />
         <motion.div
-          className="pointer-events-none absolute top-1/2 right-12 h-72 w-72 rounded-full blur-[100px]"
-          style={{ background: theme.glow }}
-          animate={{ opacity: [0.04, 0.1, 0.04] }}
-          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+          className="pointer-events-none absolute top-1/2 -right-20 h-[400px] w-[400px] rounded-full blur-[100px]"
+          style={{ background: pass.highlightColor ?? accent }}
+          animate={{ opacity: [0.04, 0.12, 0.04] }}
+          transition={{ duration: 7, repeat: Infinity, delay: 1 }}
         />
 
         {/* Particles */}
-        <ParticleField accent={theme.accent} count={25} />
+        <ParticleField accent={accent} count={35} />
 
         {/* Banner image */}
         {pass.bannerImageUrl && (
           <div
-            className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-[0.07]"
+            className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-[0.08]"
             style={{ backgroundImage: `url(${pass.bannerImageUrl})` }}
           />
         )}
 
-        {/* Content */}
-        <div className="relative z-10 mx-auto max-w-5xl px-4 py-10 sm:py-16 text-center">
-          {/* Season badge */}
-          <motion.div
-            initial={{ opacity: 0, y: -12, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ type: "spring", stiffness: 200, damping: 20 }}
-            className="mb-5 inline-flex items-center gap-2 rounded-full border px-5 py-2 text-xs font-black uppercase tracking-[0.25em] backdrop-blur-md"
-            style={{
-              borderColor: `${theme.accent}60`,
-              color: theme.accent,
-              background: `${theme.accent}10`,
-              boxShadow: `0 0 24px ${theme.glow}`,
-            }}
-          >
-            <motion.span
-              animate={{ rotate: [0, 360] }}
-              transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+        {/* Hero content */}
+        <div className="relative z-10 mx-auto max-w-6xl px-4 py-10 sm:py-14">
+          <div className="flex flex-col items-center text-center">
+
+            {/* Season badge + icon */}
+            <motion.div
+              initial={{ opacity: 0, y: -16, scale: 0.88 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 18 }}
+              className="mb-5 flex items-center gap-3"
             >
-              <Star className="h-3 w-3" />
-            </motion.span>
-            {pass.seasonLabel}
-          </motion.div>
+              <span className="text-3xl">{pass.passIcon ?? "🏆"}</span>
+              <div
+                className="inline-flex items-center gap-2 rounded-full border px-5 py-2 text-xs font-black uppercase tracking-[0.25em] backdrop-blur-md"
+                style={{
+                  borderColor: `${accent}60`,
+                  color: accent,
+                  background: `${accent}12`,
+                  boxShadow: `0 0 30px ${glow}`,
+                }}
+              >
+                <motion.span animate={{ rotate: [0, 360] }} transition={{ duration: 8, repeat: Infinity, ease: "linear" }}>
+                  <Star className="h-3 w-3" />
+                </motion.span>
+                {pass.seasonLabel}
+              </div>
+            </motion.div>
 
-          {/* Title */}
-          <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.06, type: "spring", stiffness: 100, damping: 18 }}
-            className="text-4xl font-black tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl"
-            style={{ textShadow: `0 0 80px ${theme.glow}, 0 0 120px ${theme.glow}50` }}
-          >
-            {pass.name}
-          </motion.h1>
+            {/* Title */}
+            <motion.h1
+              initial={{ opacity: 0, y: 28 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.07, type: "spring", stiffness: 100, damping: 16 }}
+              className="text-4xl font-black tracking-tight text-white sm:text-6xl lg:text-7xl"
+              style={{ textShadow: `0 0 100px ${glow}, 0 0 160px ${glow}40` }}
+            >
+              {pass.name}
+            </motion.h1>
 
-          {/* Animated accent line */}
-          <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: "120px", opacity: 1 }}
-            transition={{ delay: 0.2, duration: 0.7 }}
-            className="mx-auto my-5 h-0.5 rounded-full"
-            style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}, transparent)`, boxShadow: `0 0 16px ${theme.glow}` }}
-          />
+            {/* Animated divider */}
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: "160px", opacity: 1 }}
+              transition={{ delay: 0.22, duration: 0.7 }}
+              className="mx-auto my-5 h-[2px] rounded-full"
+              style={{ background: `linear-gradient(90deg, transparent, ${accent}, ${pass.highlightColor ?? accent}, transparent)`, boxShadow: `0 0 20px ${glow}` }}
+            />
 
-          {/* Description */}
-          {pass.description && (
-            <motion.p
+            {/* Description */}
+            {pass.description && (
+              <motion.p
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="mx-auto max-w-xl text-sm sm:text-base text-white/50 leading-relaxed"
+              >
+                {pass.description}
+              </motion.p>
+            )}
+
+            {/* Stats row */}
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="mx-auto max-w-xl text-sm sm:text-base text-white/50 leading-relaxed"
+              transition={{ delay: 0.25 }}
+              className="mt-7 flex flex-wrap justify-center gap-3"
             >
-              {pass.description}
-            </motion.p>
-          )}
-
-          {/* Meta row */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.22 }}
-            className="mt-6 flex flex-wrap justify-center gap-4 text-xs text-white/35"
-          >
-            <span className="flex items-center gap-1.5">
-              <Layers className="h-3.5 w-3.5" />
-              {pass.tierCount} Tiers
-            </span>
-            {pass.startDate && (
-              <span className="flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5" />
-                {new Date(pass.startDate).toLocaleDateString("de-DE")}
-                {pass.endDate && ` – ${new Date(pass.endDate).toLocaleDateString("de-DE")}`}
-              </span>
-            )}
-            {pass.spinChanceBoost > 0 && (
-              <span className="flex items-center gap-1.5" style={{ color: theme.accent + "cc" }}>
-                <TrendingUp className="h-3.5 w-3.5" />
-                +{Math.round(pass.spinChanceBoost * 100)}% Case-Boost (Premium)
-              </span>
-            )}
-          </motion.div>
-
-          {/* Track badges */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="mt-6 flex flex-wrap justify-center gap-2"
-          >
-            <span className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-white/50 backdrop-blur-sm">
-              <Gift className="h-3 w-3" />
-              FREE · {freeTiers.length} Tiers
-            </span>
-            {premiumTiers.length > 0 && (
-              <span
-                className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold backdrop-blur-sm"
-                style={{ borderColor: "#f59e0b50", background: "#f59e0b12", color: "#fbbf24" }}
+              <div
+                className="flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold backdrop-blur-sm"
+                style={{ borderColor: `${accent}30`, background: `${accent}08`, color: "rgba(255,255,255,0.7)" }}
               >
-                <Crown className="h-3 w-3" />
-                PREMIUM · {premiumTiers.length} Tiers
+                <Layers className="h-4 w-4" style={{ color: accent }} />
+                <span className="font-black" style={{ color: accent }}>{pass.tierCount}</span> Tiers
+              </div>
+              {pass.startDate && (
+                <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/50 backdrop-blur-sm">
+                  <Calendar className="h-4 w-4" />
+                  {new Date(pass.startDate).toLocaleDateString("de-DE")}
+                  {pass.endDate && ` – ${new Date(pass.endDate).toLocaleDateString("de-DE")}`}
+                </div>
+              )}
+              {pass.showCountdown && pass.endDate && (
+                <div
+                  className="flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-bold backdrop-blur-sm"
+                  style={{ borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)", color: "rgba(252,165,165,0.9)" }}
+                >
+                  <Clock className="h-4 w-4 text-red-400" />
+                  Noch: <Countdown endDate={pass.endDate} />
+                </div>
+              )}
+              {pass.spinChanceBoost > 0 && (
+                <div className="flex items-center gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/8 px-4 py-2.5 text-sm font-bold text-amber-300 backdrop-blur-sm">
+                  <TrendingUp className="h-4 w-4" />
+                  +{Math.round(pass.spinChanceBoost * 100)}% Case-Boost
+                </div>
+              )}
+            </motion.div>
+
+            {/* Track badges */}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.32 }}
+              className="mt-5 flex flex-wrap justify-center gap-2"
+            >
+              <span className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-white/50">
+                <Gift className="h-3 w-3" /> FREE · {freeTiers.length} Tiers
               </span>
-            )}
-            {pass.eliteEnabled && eliteTiers.length > 0 && (
-              <span className="flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-300 backdrop-blur-sm">
-                <Sparkles className="h-3 w-3" />
-                ELITE · {eliteTiers.length} Tiers
-              </span>
-            )}
-          </motion.div>
+              {premiumTiers.length > 0 && (
+                <span className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-300">
+                  <Crown className="h-3 w-3" /> PREMIUM · {premiumTiers.length} Tiers · {pass.priceCr.toLocaleString("de-DE")} CR
+                </span>
+              )}
+              {pass.eliteEnabled && eliteTiers.length > 0 && (
+                <span className="flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-300">
+                  <Sparkles className="h-3 w-3" /> ELITE · {eliteTiers.length} Tiers · {pass.elitePriceCr.toLocaleString("de-DE")} CR
+                </span>
+              )}
+            </motion.div>
+          </div>
         </div>
       </div>
 
@@ -719,7 +743,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
         <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
 
           {/* Tracks column */}
-          <div className="flex-1 min-w-0 space-y-10">
+          <div className="flex-1 min-w-0 space-y-8">
 
             {/* Progress bar */}
             {userStatus && (
@@ -727,13 +751,13 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 backdrop-blur-sm"
-                style={{ boxShadow: `0 0 30px ${theme.glow}10` }}
+                style={{ boxShadow: `0 0 30px ${glow}10` }}
               >
                 <ProgressBar
                   progressDays={progressDays}
                   tierCount={pass.tierCount}
-                  accent={theme.accent}
-                  glow={theme.glow}
+                  accent={accent}
+                  glow={glow}
                   claimedCount={claimedCount}
                 />
               </motion.div>
@@ -741,74 +765,100 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
 
             {/* FREE TRACK */}
             {freeTiers.length > 0 && (
-              <TrackRow
-                tiers={freeTiers}
-                label="Free Track"
-                labelColor="rgba(255,255,255,0.35)"
-                icon={<Gift className="h-4 w-4" />}
-                userStatus={userStatus}
-                progressDays={progressDays}
-                accent={theme.accent}
-                glow={theme.glow}
-                onClaim={handleClaim}
-                claimingId={claimingId}
-              />
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+                className="rounded-2xl border border-white/[0.06] bg-white/[0.01] p-5"
+              >
+                <HorizontalTrack
+                  tiers={freeTiers}
+                  label="Free Track"
+                  labelColor="rgba(255,255,255,0.5)"
+                  trackIcon={<Gift className="h-4 w-4" />}
+                  userStatus={userStatus}
+                  progressDays={progressDays}
+                  accent={accent}
+                  glow={glow}
+                  trackColor="rgba(148,163,184,0.8)"
+                  onClaim={handleClaim}
+                  claimingId={claimingId}
+                />
+              </motion.div>
             )}
 
             {/* PREMIUM TRACK */}
             {premiumTiers.length > 0 && (
-              <div>
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="rounded-2xl border p-5"
+                style={{ borderColor: `${accent}20`, background: `${accent}04` }}
+              >
                 {!hasPremium && (
                   <motion.div
+                    className="mb-4 flex items-center gap-3 rounded-xl border border-amber-500/25 bg-amber-500/6 px-4 py-2.5"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="mb-4 flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/6 px-4 py-2.5"
                   >
                     <Lock className="h-4 w-4 shrink-0 text-amber-400/60" />
-                    <p className="text-xs text-amber-300/70 font-semibold">Premium Pass benötigt — schalte {premiumTiers.length} exklusive Tiers frei.</p>
+                    <p className="text-xs text-amber-300/70 font-semibold">
+                      Premium Pass benötigt — schalte {premiumTiers.length} exklusive Rewards frei.
+                    </p>
                   </motion.div>
                 )}
-                <TrackRow
+                <HorizontalTrack
                   tiers={premiumTiers}
                   label="Premium Track"
                   labelColor="#f59e0bcc"
-                  icon={<Crown className="h-4 w-4" />}
+                  trackIcon={<Crown className="h-4 w-4" />}
                   userStatus={userStatus}
                   progressDays={progressDays}
-                  accent={theme.accent}
-                  glow={theme.glow}
+                  accent={accent}
+                  glow={glow}
+                  trackColor="#f59e0b"
                   onClaim={handleClaim}
                   claimingId={claimingId}
                 />
-              </div>
+              </motion.div>
             )}
 
             {/* ELITE TRACK */}
             {pass.eliteEnabled && eliteTiers.length > 0 && (
-              <div>
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.03] p-5"
+                style={{ boxShadow: "0 0 40px rgba(167,139,250,0.08)" }}
+              >
                 {!hasElite && (
                   <motion.div
+                    className="mb-4 flex items-center gap-3 rounded-xl border border-violet-500/25 bg-violet-500/6 px-4 py-2.5"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="mb-4 flex items-center gap-3 rounded-xl border border-violet-500/20 bg-violet-500/6 px-4 py-2.5"
                   >
                     <Zap className="h-4 w-4 shrink-0 text-violet-400/60" />
-                    <p className="text-xs text-violet-300/70 font-semibold">Elite Pass benötigt — {eliteTiers.length} legendary Tiers warten.</p>
+                    <p className="text-xs text-violet-300/70 font-semibold">
+                      Elite Pass benötigt — {eliteTiers.length} legendary Rewards warten auf dich.
+                    </p>
                   </motion.div>
                 )}
-                <TrackRow
+                <HorizontalTrack
                   tiers={eliteTiers}
                   label="Elite Track"
                   labelColor="#a78bfa"
-                  icon={<Sparkles className="h-4 w-4" />}
+                  trackIcon={<Sparkles className="h-4 w-4" />}
                   userStatus={userStatus}
                   progressDays={progressDays}
-                  accent={theme.accent}
-                  glow={theme.glow}
+                  accent={accent}
+                  glow={glow}
+                  trackColor="#a78bfa"
                   onClaim={handleClaim}
                   claimingId={claimingId}
                 />
-              </div>
+              </motion.div>
             )}
           </div>
 
@@ -816,16 +866,16 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
           <motion.aside
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.18 }}
+            transition={{ delay: 0.2 }}
             className="flex w-full flex-col gap-4 lg:w-72 lg:shrink-0"
           >
             {/* User progress card */}
             {userStatus && (
               <div
                 className="rounded-2xl border p-5 backdrop-blur-sm"
-                style={{ borderColor: `${theme.accent}20`, background: `${theme.accent}05` }}
+                style={{ borderColor: `${accent}20`, background: `${accent}06` }}
               >
-                <h3 className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-widest" style={{ color: `${theme.accent}aa` }}>
+                <h3 className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-widest" style={{ color: `${accent}aa` }}>
                   <Award className="h-3.5 w-3.5" />
                   Dein Status
                 </h3>
@@ -837,7 +887,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                   )}
                   {hasElite && (
                     <span className="flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs font-bold text-violet-300">
-                      💎 Elite
+                      <Sparkles className="h-3 w-3" />Elite
                     </span>
                   )}
                   {!hasPremium && !hasElite && (
@@ -848,26 +898,26 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { label: "Login-Tage", value: progressDays },
-                    { label: "Abgeholt", value: claimedCount },
+                    { label: "Login-Tage", value: progressDays, icon: <Calendar className="h-3 w-3" /> },
+                    { label: "Abgeholt", value: claimedCount, icon: <CheckCircle2 className="h-3 w-3 text-emerald-400" /> },
                   ].map((s) => (
-                    <div
-                      key={s.label}
-                      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-center"
-                    >
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-white/25">{s.label}</p>
-                      <p className="mt-0.5 text-2xl font-black tabular-nums text-white">{s.value}</p>
+                    <div key={s.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+                      <div className="flex items-center justify-center gap-1 mb-1" style={{ color: `${accent}80` }}>
+                        {s.icon}
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-white/25">{s.label}</p>
+                      </div>
+                      <p className="text-2xl font-black tabular-nums text-white">{s.value}</p>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Purchase card */}
+            {/* Purchase / upgrade card */}
             {(!hasPremium || (pass.eliteEnabled && !hasElite)) && (
-              <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 backdrop-blur-sm space-y-3">
+              <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 space-y-3 backdrop-blur-sm">
                 <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-white/35">
-                  <ChevronRight className="h-3.5 w-3.5" />
+                  <Coins className="h-3.5 w-3.5" />
                   Pass upgraden
                 </h3>
 
@@ -885,10 +935,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 </AnimatePresence>
 
                 {!hasPremium && (
-                  <div
-                    className="rounded-xl border p-4 space-y-3"
-                    style={{ borderColor: "#f59e0b30", background: "#f59e0b06" }}
-                  >
+                  <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "#f59e0b30", background: "#f59e0b06" }}>
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5 text-sm font-black text-amber-300">
                         <Crown className="h-4 w-4" />Premium
@@ -906,13 +953,13 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                       whileTap={{ scale: 0.97 }}
                       disabled={isPending}
                       onClick={handleBuyPremium}
-                      className="w-full rounded-xl py-3 text-sm font-black text-white transition-all disabled:opacity-50"
+                      className="w-full rounded-xl py-3 text-sm font-black text-white transition-all disabled:opacity-50 relative overflow-hidden"
                       style={{
-                        background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}bb 100%)`,
-                        boxShadow: `0 4px 24px ${theme.glow}`,
+                        background: `linear-gradient(135deg, ${accent} 0%, ${accent}bb 100%)`,
+                        boxShadow: `0 4px 24px ${glow}`,
                       }}
                     >
-                      {isPending ? "Kaufe…" : "👑 Premium kaufen"}
+                      <span className="relative z-10">{isPending ? "Kaufe…" : (pass.customBuyText || "👑 Premium kaufen")}</span>
                     </motion.button>
                   </div>
                 )}
@@ -939,25 +986,22 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                       className="w-full rounded-xl border border-violet-500/40 bg-violet-500/15 py-3 text-sm font-black text-violet-200 transition-all hover:bg-violet-500/25 disabled:opacity-50"
                       style={{ boxShadow: "0 4px 20px rgba(167,139,250,0.2)" }}
                     >
-                      {isPending ? "Kaufe…" : "💎 Elite kaufen"}
+                      {isPending ? "Kaufe…" : (pass.customEliteBuyText || "💎 Elite kaufen")}
                     </motion.button>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Fully owned state */}
+            {/* Fully owned */}
             {hasPremium && (!pass.eliteEnabled || hasElite) && (
               <div
                 className="rounded-2xl border p-5"
-                style={{ borderColor: `${theme.accent}30`, background: `${theme.accent}08` }}
+                style={{ borderColor: `${accent}30`, background: `${accent}08` }}
               >
                 <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-                    style={{ background: `${theme.accent}20` }}
-                  >
-                    <CheckCircle2 className="h-5 w-5" style={{ color: theme.accent }} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: `${accent}20` }}>
+                    <Shield className="h-5 w-5" style={{ color: accent }} />
                   </div>
                   <div>
                     <p className="text-sm font-black text-white">Vollständig freigeschaltet</p>
@@ -966,24 +1010,47 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 </div>
               </div>
             )}
+
+            {/* Remaining tiers quick stats */}
+            <div className="rounded-2xl border border-white/[0.05] bg-white/[0.01] p-4">
+              <h4 className="mb-3 text-[10px] font-black uppercase tracking-widest text-white/25">Überblick</h4>
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-white/40">Abgeholte Tiers</span>
+                  <span className="font-bold text-emerald-400">{claimedCount} / {pass.tierCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-white/40">Verfügbare Tiers</span>
+                  <span className="font-bold" style={{ color: accent }}>
+                    {pass.tiers.filter((t) => getTierState(t, userStatus, progressDays) === "available").length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-white/40">Noch gesperrte</span>
+                  <span className="font-bold text-white/30">
+                    {pass.tiers.filter((t) => getTierState(t, userStatus, progressDays) === "locked").length}
+                  </span>
+                </div>
+              </div>
+            </div>
           </motion.aside>
         </div>
       </div>
 
-      {/* ══ Toast ══════════════════════════════════════════════════════════ */}
+      {/* ══ Toast ════════════════════════════════════════════════════════ */}
       <AnimatePresence>
         {toast && (
           <motion.div
-            key={toast.msg + Date.now()}
-            initial={{ opacity: 0, y: 30, scale: 0.85 }}
+            key={toast.msg}
+            initial={{ opacity: 0, y: 32, scale: 0.88 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
             transition={{ type: "spring", stiffness: 220, damping: 20 }}
-            className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2 w-max max-w-[calc(100vw-2rem)] rounded-2xl border px-5 py-3.5 text-sm font-bold shadow-2xl backdrop-blur-xl"
+            className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2 w-max max-w-[calc(100vw-2rem)] rounded-2xl border px-6 py-4 text-sm font-bold shadow-2xl backdrop-blur-xl"
             style={
               toast.ok
-                ? { borderColor: "#34d39940", background: "rgba(6,40,28,0.92)", color: "#34d399", boxShadow: "0 4px 32px rgba(52,211,153,0.2)" }
-                : { borderColor: "#f8717140", background: "rgba(40,6,6,0.92)", color: "#f87171", boxShadow: "0 4px 32px rgba(248,113,113,0.2)" }
+                ? { borderColor: "#34d39940", background: "rgba(6,40,28,0.95)", color: "#34d399", boxShadow: "0 4px 40px rgba(52,211,153,0.25)" }
+                : { borderColor: "#f8717140", background: "rgba(40,6,6,0.95)", color: "#f87171", boxShadow: "0 4px 40px rgba(248,113,113,0.2)" }
             }
           >
             {toast.msg}

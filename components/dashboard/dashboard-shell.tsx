@@ -324,7 +324,7 @@ export function DashboardShell({
                     Hey, willkommen zurück 👋
                   </span>
                   <span>
-                    <StyledUsername name={username!} styleKey={nameStyleKey} size="lg" />
+                    <StyledUsername name={username!} styleKey={nameStyleKey} size="lg" disablePopup />
                   </span>
                 </>
               ) : (
