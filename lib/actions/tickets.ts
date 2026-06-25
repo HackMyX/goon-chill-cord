@@ -37,6 +37,7 @@ export interface TicketMessage {
   message: string;
   isStaff: boolean;
   createdAt: string;
+  attachmentUrl?: string | null;
 }
 
 export interface InternalNote {
@@ -153,7 +154,7 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
 
   const { data: messages } = await admin
     .from("ticket_messages")
-    .select("id, ticket_id, user_id, message, is_staff, created_at")
+    .select("id, ticket_id, user_id, message, is_staff, created_at, attachment_url")
     .eq("ticket_id", ticketId)
     .order("created_at", { ascending: true });
 
@@ -202,6 +203,7 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
         message: m.message,
         isStaff: m.is_staff,
         createdAt: m.created_at,
+        attachmentUrl: (m as Record<string, unknown>).attachment_url as string | null ?? null,
       };
     }),
   };
@@ -256,6 +258,7 @@ export async function addInternalNote(
 export async function addTicketMessage(input: {
   ticketId: string;
   message: string;
+  attachmentUrl?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   const {
@@ -284,12 +287,9 @@ export async function addTicketMessage(input: {
   if (!isStaff && ticket.user_id !== user.id) return { success: false, error: "Kein Zugriff." };
   if (ticket.status === "closed" || ticket.status === "resolved") return { success: false, error: "Dieses Ticket ist geschlossen." };
 
-  await admin.from("ticket_messages").insert({
-    ticket_id: input.ticketId,
-    user_id: user.id,
-    message,
-    is_staff: isStaff,
-  });
+  const msgPayload: Record<string, unknown> = { ticket_id: input.ticketId, user_id: user.id, message, is_staff: isStaff };
+  if (input.attachmentUrl) msgPayload.attachment_url = input.attachmentUrl;
+  await admin.from("ticket_messages").insert(msgPayload);
 
   // Update updated_at on the ticket
   await admin

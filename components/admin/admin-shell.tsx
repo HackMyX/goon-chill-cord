@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2 } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CasesAdminTab } from "@/components/admin/case-group-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -31,6 +31,7 @@ import { AiConfigEditor } from "@/components/admin/ai-config-editor";
 import { CleanupConfigEditor } from "@/components/admin/cleanup-config-editor";
 import { BadgesTab } from "@/components/admin/badges-tab";
 import { NameStylesTab } from "@/components/admin/name-styles-tab";
+import { BalanceStudioTab } from "@/components/admin/balance-studio-tab";
 import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
@@ -152,9 +153,10 @@ interface AdminShellProps {
   plinkoConfig: PlinkoConfig;
 }
 
-type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles";
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
+  { id: "balance", label: "⚡ Balance Studio", icon: SlidersHorizontal },
   { id: "economy", label: "Economy & Cases", icon: Coins },
   { id: "streak", label: "Daily-Streak", icon: Flame },
   { id: "shop", label: "Shop", icon: Store },
@@ -354,6 +356,8 @@ export function AdminShell({
             </button>
           ))}
         </div>
+
+        {tab === "balance" && <BalanceStudioTab />}
 
         {tab === "economy" && (
           <CasesAdminTab caseGroups={caseGroups} caseTiers={caseTiers} items={items} />

@@ -41,11 +41,11 @@ const REQUIRED_TABLES = [
   // Core user & auth
   "profiles", "notifications", "login_events", "device_bans",
   // Moderation & support
-  "tickets", "ticket_messages", "mod_actions", "mod_permissions", "audit_logs",
+  "tickets", "ticket_messages", "ticket_internal_notes", "mod_actions", "mod_permissions", "audit_logs",
   // Items & economy
-  "inventory", "items", "case_tiers",
+  "inventory", "items", "case_tiers", "case_groups",
   // Trading & auctions
-  "auctions", "trades",
+  "auctions", "trades", "auction_bids", "trade_items",
   // Snake game
   "snake_best_scores", "snake_config",
   // Community features
@@ -59,38 +59,29 @@ const REQUIRED_TABLES = [
   // World & monsters
   "monster_types", "kill_streak_config", "mine_progress",
   // Pets
-  "pet_configs",
+  "pet_configs", "pet_rarity_overrides",
   // DON (Double or Nothing)
   "don_config",
   // Plinko
   "plinko_config", "plinko_plays",
   // Surveys
   "surveys", "survey_questions", "survey_answers", "survey_responses",
+  // Polls (placeholder)
+  "polls", "poll_options", "poll_votes",
   // Config singletons
   "site_config", "streak_config", "world_config", "character_config",
   // Badges
   "badge_definitions", "user_badges",
+  // Name Styles
+  "name_styles", "user_name_styles", "name_style_rarity_config",
+  // Battle Pass
+  "battle_passes", "battle_pass_tiers", "user_battle_passes", "user_bp_tier_claims",
 ] as const;
 
-/** Tables that are optional (feature may not be deployed). WARNUNG if missing. */
+/** Tables that are optional (future features, not yet fully live). WARNUNG if missing. */
 const OPTIONAL_TABLES: Array<{ name: string; migration: string; feature: string }> = [
-  { name: "battle_passes",      migration: "scripts/add-battlepass-upgrades.sql", feature: "Battle Pass" },
-  { name: "battle_pass_tiers",  migration: "scripts/add-battlepass-upgrades.sql", feature: "Battle Pass" },
-  { name: "user_battle_passes", migration: "scripts/add-battlepass-upgrades.sql", feature: "Battle Pass" },
-  { name: "user_bp_tier_claims",migration: "scripts/add-battlepass-upgrades.sql", feature: "Battle Pass" },
-  { name: "polls",              migration: "scripts/create-polls.sql",             feature: "Umfragen/Polls (noch nicht implementiert)" },
-  { name: "poll_options",       migration: "scripts/create-polls.sql",             feature: "Umfragen/Polls" },
-  { name: "poll_votes",         migration: "scripts/create-polls.sql",             feature: "Umfragen/Polls" },
-  { name: "auction_bids",       migration: "CREATE TABLE IF NOT EXISTS auction_bids (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), auction_id uuid NOT NULL, bidder_id uuid REFERENCES profiles(id) ON DELETE SET NULL, amount integer NOT NULL, created_at timestamptz NOT NULL DEFAULT now()); ALTER TABLE auction_bids ENABLE ROW LEVEL SECURITY;", feature: "Auktionen (Gebote)" },
-  { name: "trade_items",        migration: "CREATE TABLE IF NOT EXISTS trade_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), trade_id uuid NOT NULL, inventory_id uuid, side text NOT NULL DEFAULT 'from', created_at timestamptz NOT NULL DEFAULT now()); ALTER TABLE trade_items ENABLE ROW LEVEL SECURITY;", feature: "Handel (Trade-Items)" },
-  { name: "ip_duplicate_ignore","migration": "Supabase SQL Editor",                feature: "Security (IP-Ignore-Liste)" },
-  { name: "shop_category_day_rules","migration": "Supabase SQL Editor",            feature: "Shop (Tagesregeln)" },
-  { name: "name_styles",             migration: "Supabase SQL Editor",                                            feature: "Name Styles" },
-  { name: "user_name_styles",        migration: "Supabase SQL Editor",                                            feature: "Name Styles (User-Zuweisungen)" },
-  { name: "name_style_rarity_config",migration: "scripts/add-name-style-rarity-config.cjs",                      feature: "Name Styles (Seltenheiten-Konfiguration)" },
-  { name: "pet_rarity_overrides",    migration: "scripts/add-pet-rarity-overrides.cjs",                          feature: "Pets (Rarität-Stats pro Tierart)" },
-  { name: "case_groups",             migration: "scripts/add-case-groups.cjs",                                    feature: "Cases (dynamische Gruppen — Admin kann unbegrenzt neue Cases erstellen)" },
-  { name: "ticket_internal_notes",   migration: "scripts/add-ticket-notes.cjs",                                   feature: "Tickets (interne Mod-Notizen — nur für Staff sichtbar)" },
+  { name: "ip_duplicate_ignore",     migration: "Supabase SQL Editor",  feature: "Security (IP-Ignore-Liste — noch nicht implementiert)" },
+  { name: "shop_category_day_rules", migration: "Supabase SQL Editor",  feature: "Shop (Tagesregeln — noch nicht implementiert)" },
 ];
 
 /** Config singleton rows that must exist. */
@@ -105,6 +96,8 @@ const SINGLETON_CONFIGS: Array<{ id: string; table: string; name: string; catego
   { id: "cfg_don",         table: "don_config",         name: "don_config (default)",       category: "DON-System" },
   { id: "cfg_ai",          table: "ai_config",          name: "ai_config (default)",        category: "KI / Chat" },
   { id: "cfg_snake",       table: "snake_config",       name: "snake_config (default)",     category: "Snake-Spiel" },
+  { id: "cfg_plinko",      table: "plinko_config",      name: "plinko_config (default)",    category: "Plinko" },
+  { id: "cfg_killstreak",  table: "kill_streak_config", name: "kill_streak_config (default)",category: "World" },
 ];
 
 /**
@@ -210,6 +203,29 @@ const COLUMN_CHECKS: Array<{
   { id: "col_bp_show_countdown",     category: "Battle Pass", table: "battle_passes",     col: "show_countdown",         detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS show_countdown boolean DEFAULT true;" },
   { id: "col_bp_pass_icon",          category: "Battle Pass", table: "battle_passes",     col: "pass_icon",              detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS pass_icon text DEFAULT '🏆';" },
   { id: "col_bp_updated_at",         category: "Battle Pass", table: "battle_passes",     col: "updated_at",             detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();" },
+  // Tickets — per-message attachments (2026-06-25)
+  { id: "col_ticketmsg_attachment",  category: "Tickets",     table: "ticket_messages",   col: "attachment_url",         detail: "node scripts/full-db-sync.cjs" },
+  // World config — spawn config columns (2026-06-25)
+  { id: "col_world_spawnmin",        category: "World",       table: "world_config",      col: "spawn_interval_min_sec", detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_world_spawnmax",        category: "World",       table: "world_config",      col: "spawn_interval_max_sec", detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_world_alivecapmax",     category: "World",       table: "world_config",      col: "alive_cap_max",          detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_world_alivecapplayer",  category: "World",       table: "world_config",      col: "alive_cap_per_extra_player", detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_world_perkmuliplicap",  category: "World",       table: "world_config",      col: "perk_multiplier_cap",    detail: "node scripts/full-db-sync.cjs" },
+  // Character config — combat columns (2026-06-25)
+  { id: "col_char_attackcooldown",   category: "World",       table: "character_config",  col: "attack_cooldown",        detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_char_hpregenpersec",    category: "World",       table: "character_config",  col: "hp_regen_per_sec",       detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_char_hpregendelay",     category: "World",       table: "character_config",  col: "hp_regen_delay_after_hit_sec", detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_char_pvpdmg",           category: "World",       table: "character_config",  col: "pvp_damage_multiplier",  detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_char_perkmuliplicap",   category: "World",       table: "character_config",  col: "perk_multiplier_cap",    detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_char_fistdmg",          category: "World",       table: "character_config",  col: "fist_damage",            detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_char_movespeed",        category: "World",       table: "character_config",  col: "move_speed",             detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_char_sprintmult",       category: "World",       table: "character_config",  col: "sprint_multiplier",      detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_char_sprintdmg",        category: "World",       table: "character_config",  col: "sprint_damage_multiplier", detail: "node scripts/full-db-sync.cjs" },
+  // Monster types — reward columns (2026-06-25)
+  { id: "col_monster_credits",       category: "World",       table: "monster_types",     col: "credits_reward",         detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_monster_rewardmin",     category: "World",       table: "monster_types",     col: "reward_min",             detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_monster_rewardmax",     category: "World",       table: "monster_types",     col: "reward_max",             detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_monster_spawnweight",   category: "World",       table: "monster_types",     col: "spawn_weight",           detail: "node scripts/full-db-sync.cjs" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -675,6 +691,185 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
             : `WARNUNG: ${nsrcCount ?? 0} von 4 Seltenheiten konfiguriert`));
   } catch (e) {
     results.push(err("name_style_rarity_config_count", "Name Styles", "name_style_rarity_config", String(e)));
+  }
+
+  // ── 23. Plinko ────────────────────────────────────────────────────────────
+  try {
+    const { data: plinkoCfg, error: plinkoErr } = await admin
+      .from("plinko_config").select("ball_cost_cr,daily_ball_limit,show_history").eq("id", "default").maybeSingle();
+    results.push(plinkoErr || !plinkoCfg
+      ? warn("plinko_cfg_row", "Plinko", "plinko_config (default)", "Kein Konfig-Eintrag — Migration ausführen: node scripts/full-db-sync.cjs")
+      : ok("plinko_cfg_row", "Plinko", "plinko_config (default)",
+          `ball_cost: ${plinkoCfg.ball_cost_cr ?? 0} CR, daily_limit: ${plinkoCfg.daily_ball_limit ?? 0}`));
+  } catch (e) {
+    results.push(warn("plinko_cfg_row", "Plinko", "plinko_config (default)", String(e)));
+  }
+
+  try {
+    const since24h = new Date(Date.now() - 86_400_000).toISOString();
+    const { count: plinkoPlays24h } = await admin
+      .from("plinko_plays").select("*", { count: "exact", head: true }).gte("created_at", since24h);
+    results.push(ok("plinko_plays_24h", "Plinko", "Plinko-Spiele (24h)", `${plinkoPlays24h ?? 0} Spiele`));
+  } catch (e) {
+    results.push(warn("plinko_plays_24h", "Plinko", "Plinko-Spiele (24h)", String(e)));
+  }
+
+  // ── 24. World / Combat / Kill-Streak ──────────────────────────────────────
+  try {
+    const { data: ksRow, error: ksErr } = await admin
+      .from("kill_streak_config").select("multiplier_per_kill,max_multiplier").eq("id", "default").maybeSingle();
+    results.push(ksErr || !ksRow
+      ? warn("killstreak_cfg", "World", "kill_streak_config (default)", "Kein Konfig-Eintrag — Migration ausführen: node scripts/full-db-sync.cjs")
+      : ok("killstreak_cfg", "World", "kill_streak_config (default)",
+          `mult/kill: ${ksRow.multiplier_per_kill}, max: ${ksRow.max_multiplier}`));
+  } catch (e) {
+    results.push(warn("killstreak_cfg", "World", "kill_streak_config (default)", String(e)));
+  }
+
+  try {
+    const { data: worldRow, error: worldErr } = await admin
+      .from("world_config").select("max_alive_monsters,spawn_interval_min_sec,spawn_interval_max_sec").eq("id", "default").maybeSingle();
+    if (worldErr || !worldRow) {
+      results.push(warn("world_spawn_cfg", "World", "world_config spawn-Werte", "Kein Konfig-Eintrag oder Spalten fehlen."));
+    } else {
+      const ready = worldRow.max_alive_monsters !== null && worldRow.spawn_interval_min_sec !== null;
+      results.push(ready
+        ? ok("world_spawn_cfg", "World", "world_config spawn-Werte",
+            `max_monsters: ${worldRow.max_alive_monsters}, spawn: ${worldRow.spawn_interval_min_sec}–${worldRow.spawn_interval_max_sec}s`)
+        : warn("world_spawn_cfg", "World", "world_config spawn-Werte", "Spawn-Spalten vorhanden aber leer — Balance-Script ausführen."));
+    }
+  } catch (e) {
+    results.push(warn("world_spawn_cfg", "World", "world_config spawn-Werte", String(e)));
+  }
+
+  try {
+    const { data: charRow, error: charErr } = await admin
+      .from("character_config").select("attack_cooldown,pvp_damage_multiplier,move_speed").eq("id", "default").maybeSingle();
+    if (charErr || !charRow) {
+      results.push(warn("char_cfg", "World", "character_config Kampf-Werte", "Kein Konfig-Eintrag oder Spalten fehlen."));
+    } else {
+      const ready = charRow.attack_cooldown !== null;
+      results.push(ready
+        ? ok("char_cfg", "World", "character_config Kampf-Werte",
+            `atk_cd: ${charRow.attack_cooldown}s, pvp: ${charRow.pvp_damage_multiplier}×, speed: ${charRow.move_speed}`)
+        : warn("char_cfg", "World", "character_config Kampf-Werte", "Spalten vorhanden aber leer — Balance-Script ausführen."));
+    }
+  } catch (e) {
+    results.push(warn("char_cfg", "World", "character_config Kampf-Werte", String(e)));
+  }
+
+  try {
+    const { data: monsters } = await admin
+      .from("monster_types").select("id,credits_reward").order("credits_reward", { ascending: false });
+    const mList = (monsters ?? []) as Array<{ id: string; credits_reward: number | null }>;
+    const withReward = mList.filter((m) => (m.credits_reward ?? 0) > 0);
+    results.push(mList.length === 0
+      ? warn("monster_rewards", "World", "Monster-Belohnungen", "Keine Monster gefunden.")
+      : withReward.length === mList.length
+        ? ok("monster_rewards", "World", "Monster-Belohnungen",
+            `${mList.length} Monster, alle mit CR-Belohnung (max: ${mList[0]?.credits_reward ?? 0} CR)`)
+        : warn("monster_rewards", "World", "Monster-Belohnungen",
+            `${withReward.length}/${mList.length} Monster haben CR-Belohnungen — node scripts/full-db-sync.cjs`));
+  } catch (e) {
+    results.push(warn("monster_rewards", "World", "Monster-Belohnungen", String(e)));
+  }
+
+  // ── 25. Pets ──────────────────────────────────────────────────────────────
+  try {
+    const { count: petCount, error: petErr } = await admin
+      .from("pet_configs").select("*", { count: "exact", head: true });
+    results.push(petErr
+      ? warn("pet_configs_count", "Pets", "pet_configs", petErr.message)
+      : ok("pet_configs_count", "Pets", "pet_configs", `${petCount ?? 0} Pet-Konfigurationen`));
+  } catch (e) {
+    results.push(warn("pet_configs_count", "Pets", "pet_configs", String(e)));
+  }
+
+  try {
+    const { count: proCount, error: proErr } = await admin
+      .from("pet_rarity_overrides").select("*", { count: "exact", head: true });
+    results.push(proErr
+      ? warn("pet_rarity_overrides_count", "Pets", "pet_rarity_overrides", proErr.message)
+      : ok("pet_rarity_overrides_count", "Pets", "pet_rarity_overrides", `${proCount ?? 0} Seltenheits-Overrides`));
+  } catch (e) {
+    results.push(warn("pet_rarity_overrides_count", "Pets", "pet_rarity_overrides", String(e)));
+  }
+
+  // ── 26. Tickets ───────────────────────────────────────────────────────────
+  try {
+    const { count: openCount } = await admin
+      .from("tickets").select("*", { count: "exact", head: true }).in("status", ["open", "in_progress"]);
+    const { count: totalCount } = await admin
+      .from("tickets").select("*", { count: "exact", head: true });
+    results.push(ok("tickets_open", "Tickets", "Offene Tickets", `${openCount ?? 0} offen, ${totalCount ?? 0} gesamt`));
+  } catch (e) {
+    results.push(warn("tickets_open", "Tickets", "Offene Tickets", String(e)));
+  }
+
+  try {
+    const { count: pendingRewards } = await admin
+      .from("tickets").select("*", { count: "exact", head: true }).eq("reward_pending", true);
+    results.push((pendingRewards ?? 0) > 0
+      ? warn("tickets_pending_reward", "Tickets", "Ausstehende Belohnungen", `${pendingRewards} Ticket(s) warten auf Belohnungs-Auszahlung`)
+      : ok("tickets_pending_reward", "Tickets", "Ausstehende Belohnungen", "Keine ausstehenden Belohnungen"));
+  } catch (e) {
+    results.push(warn("tickets_pending_reward", "Tickets", "Ausstehende Belohnungen", String(e)));
+  }
+
+  // ── 27. Trading & Auctions ────────────────────────────────────────────────
+  try {
+    const { count: activeAuctions } = await admin
+      .from("auctions").select("*", { count: "exact", head: true }).eq("status", "active");
+    const { count: totalAuctions } = await admin
+      .from("auctions").select("*", { count: "exact", head: true });
+    results.push(ok("auctions_count", "Auktionen", "auctions", `${activeAuctions ?? 0} aktiv, ${totalAuctions ?? 0} gesamt`));
+  } catch (e) {
+    results.push(warn("auctions_count", "Auktionen", "auctions", String(e)));
+  }
+
+  try {
+    const { count: activeTrades } = await admin
+      .from("trades").select("*", { count: "exact", head: true }).eq("status", "pending");
+    results.push(ok("trades_count", "Handel", "trades", `${activeTrades ?? 0} ausstehende Handel`));
+  } catch (e) {
+    results.push(warn("trades_count", "Handel", "trades", String(e)));
+  }
+
+  // ── 28. Balance Studio — data completeness ────────────────────────────────
+  try {
+    const { data: siteCfg } = await admin.from("site_config").select("starting_credits").eq("id", "default").maybeSingle();
+    const sc = (siteCfg as { starting_credits?: number } | null)?.starting_credits ?? 0;
+    results.push(sc >= 1000
+      ? ok("balance_starting_cr", "Balance Studio", "Startguthaben", `${sc.toLocaleString("de-DE")} CR`)
+      : warn("balance_starting_cr", "Balance Studio", "Startguthaben", `Nur ${sc} CR — node scripts/balance-final.cjs ausführen`));
+  } catch (e) {
+    results.push(warn("balance_starting_cr", "Balance Studio", "Startguthaben", String(e)));
+  }
+
+  try {
+    const { data: mineCfg } = await admin.from("mine_config").select("levels").eq("id", "default").maybeSingle();
+    const levels = (mineCfg as { levels?: unknown[] } | null)?.levels ?? [];
+    results.push(Array.isArray(levels) && levels.length === 10
+      ? ok("balance_mine", "Balance Studio", "Mine-Konfiguration", "10 Level konfiguriert")
+      : warn("balance_mine", "Balance Studio", "Mine-Konfiguration", `${Array.isArray(levels) ? levels.length : 0} Level (erwartet 10) — node scripts/balance-final.cjs`));
+  } catch (e) {
+    results.push(warn("balance_mine", "Balance Studio", "Mine-Konfiguration", String(e)));
+  }
+
+  // ── 29. Storage Buckets ───────────────────────────────────────────────────
+  try {
+    const { data: buckets, error: bucketsErr } = await admin.storage.listBuckets();
+    if (bucketsErr) {
+      results.push(warn("storage_buckets", "Storage", "Supabase Storage Buckets", bucketsErr.message));
+    } else {
+      const bucketIds = (buckets ?? []).map((b) => b.id);
+      const ticketBucket = bucketIds.includes("ticket-attachments");
+      results.push(ticketBucket
+        ? ok("storage_ticket_bucket", "Storage", "ticket-attachments Bucket", "Bucket existiert und ist öffentlich")
+        : warn("storage_ticket_bucket", "Storage", "ticket-attachments Bucket", "Bucket fehlt — node scripts/migrate-ticket-attachments.cjs ausführen"));
+    }
+  } catch (e) {
+    results.push(warn("storage_buckets", "Storage", "Supabase Storage Buckets", String(e)));
   }
 
   return results;

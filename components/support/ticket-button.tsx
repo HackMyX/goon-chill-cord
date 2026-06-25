@@ -145,6 +145,7 @@ function SupportButtonInner() {
 
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  const [replyAttachFile, setReplyAttachFile] = useState<File | null>(null);
   const [newMsgFlash, setNewMsgFlash] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sound = useSoundManager();
@@ -339,8 +340,22 @@ function SupportButtonInner() {
     e.preventDefault();
     if (!reply.trim() || !detail) return;
     setSending(true);
-    await addTicketMessage({ ticketId: detail.id, message: reply.trim() });
+    let attachmentUrl: string | null = null;
+    if (replyAttachFile) {
+      const supabase = createClient();
+      const ext = replyAttachFile.name.split(".").pop() ?? "bin";
+      const filePath = `msg-${detail.id}-${Date.now()}.${ext}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("ticket-attachments")
+        .upload(filePath, replyAttachFile, { upsert: false });
+      if (!uploadError && uploadData) {
+        const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(uploadData.path);
+        attachmentUrl = urlData.publicUrl;
+      }
+    }
+    await addTicketMessage({ ticketId: detail.id, message: reply.trim(), attachmentUrl });
     setReply("");
+    setReplyAttachFile(null);
     const updated = await getTicketDetail(detail.id);
     setDetail(updated);
     setSending(false);
@@ -815,6 +830,19 @@ function SupportButtonInner() {
                                   </span>
                                 </div>
                                 <p className="mt-0.5 text-xs leading-relaxed text-zinc-300">{msg.message}</p>
+                                {msg.attachmentUrl && (
+                                  <div className="mt-1.5">
+                                    {isImageUrl(msg.attachmentUrl) ? (
+                                      <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                                        <img src={msg.attachmentUrl} alt="Anhang" className="max-h-40 rounded-lg object-cover cursor-pointer hover:opacity-90 border border-white/10" />
+                                      </a>
+                                    ) : (
+                                      <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] text-purple-300">
+                                        <Paperclip className="h-3 w-3" /> Anhang
+                                      </a>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             ))}
                             {newMsgFlash && (
@@ -836,6 +864,10 @@ function SupportButtonInner() {
                                   placeholder="Antwort schreiben…"
                                   className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-purple-400/60"
                                 />
+                                <label className="flex cursor-pointer items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] px-2 text-zinc-400 hover:border-purple-400/40 hover:text-zinc-200" title="Anhang">
+                                  <Paperclip className="h-3.5 w-3.5" />
+                                  <input type="file" accept="image/*,video/*,.pdf" className="sr-only" onChange={(e) => setReplyAttachFile(e.target.files?.[0] ?? null)} />
+                                </label>
                                 <button
                                   type="submit"
                                   disabled={sending || !reply.trim()}
@@ -844,6 +876,13 @@ function SupportButtonInner() {
                                   {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                                 </button>
                               </div>
+                              {replyAttachFile && (
+                                <div className="mt-1 flex items-center gap-1.5 text-[10px] text-zinc-400">
+                                  <Paperclip className="h-3 w-3 text-purple-400" />
+                                  <span className="truncate max-w-[180px]">{replyAttachFile.name}</span>
+                                  <button type="button" onClick={() => setReplyAttachFile(null)} className="ml-auto text-zinc-600 hover:text-red-400">×</button>
+                                </div>
+                              )}
                             </form>
                           )}
 
