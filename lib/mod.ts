@@ -128,6 +128,7 @@ export interface ModTicket {
   rewardNote: string | null;
   rewardGrantedAt: string | null;
   rewardPending: boolean;
+  escalatedToAdmin: boolean;
 }
 
 export interface TicketMessage {

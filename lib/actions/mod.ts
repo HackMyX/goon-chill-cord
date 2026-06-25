@@ -252,7 +252,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, created_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending")
+    .select("id, user_id, subject, description, status, category, priority, created_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending, escalated_to_admin")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -284,6 +284,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
     rewardNote: (t as Record<string, unknown>).reward_note as string | null ?? null,
     rewardGrantedAt: (t as Record<string, unknown>).reward_granted_at as string | null ?? null,
     rewardPending: ((t as Record<string, unknown>).reward_pending as boolean) ?? false,
+    escalatedToAdmin: ((t as Record<string, unknown>).escalated_to_admin as boolean) ?? false,
   }));
 }
 
@@ -738,6 +739,33 @@ export async function modGrantTicketReward(
     return { success: true };
   } catch (e) {
     void logDebugEvent({ level: "error", scope: "mod", message: "modGrantTicketReward fehlgeschlagen", detail: String(e), context: { ticketId, credits: opts.credits } });
+    return { success: false, error: String(e) };
+  }
+}
+
+export async function modEscalateTicket(ticketId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user } = await requireMod();
+    const admin = createAdminClient();
+    const { data: profile } = await admin.from("profiles").select("username").eq("id", user.id).single();
+    const modUsername = (profile as Record<string, unknown>)?.username as string ?? "Mod";
+
+    const { data: ticket } = await admin.from("tickets").select("user_id, subject, escalated_to_admin").eq("id", ticketId).single();
+    if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
+    if ((ticket as Record<string, unknown>).escalated_to_admin) return { success: false, error: "Bereits weitergeleitet." };
+
+    const { error } = await admin.from("tickets").update({ escalated_to_admin: true, updated_at: new Date().toISOString() }).eq("id", ticketId);
+    if (error) return { success: false, error: error.message };
+
+    await notifyStaff({
+      type: "ticket_new",
+      title: "⬆ Ticket an Admin weitergeleitet",
+      message: `${modUsername} hat Ticket „${(ticket as Record<string, unknown>).subject}" an Admins weitergeleitet.`,
+      link: `/admin?tab=tickets&open=${ticketId}`,
+    });
+
+    return { success: true };
+  } catch (e) {
     return { success: false, error: String(e) };
   }
 }

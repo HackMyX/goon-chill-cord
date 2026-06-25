@@ -25,6 +25,7 @@ export interface Ticket {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  escalatedToAdmin?: boolean;
 }
 
 export interface TicketMessage {
@@ -273,7 +274,7 @@ export async function getAdminTickets(): Promise<Ticket[]> {
 
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, escalated_to_admin, ticket_messages(count)")
     .order("updated_at", { ascending: false })
     .limit(100);
 
@@ -485,6 +486,36 @@ export async function deleteTicketsByDateRange(input: {
   return { success: true, deleted: data?.length ?? 0 };
 }
 
+/** Escalate a ticket to admin attention — mod or admin only. */
+export async function escalateTicketToAdmin(ticketId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
+  if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
+
+  const { data: ticket } = await admin.from("tickets").select("user_id, subject, status, escalated_to_admin").eq("id", ticketId).single();
+  if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
+  if ((ticket as Record<string, unknown>).escalated_to_admin) return { success: false, error: "Ticket wurde bereits weitergeleitet." };
+
+  const { error } = await admin.from("tickets").update({ escalated_to_admin: true, updated_at: new Date().toISOString() }).eq("id", ticketId);
+  if (error) return { success: false, error: error.message };
+
+  const modUsername = (profile as Record<string, unknown>).username as string ?? "Mod";
+  await notifyStaff({
+    type: "ticket_new",
+    title: "⬆ Ticket an Admin weitergeleitet",
+    message: `${modUsername} hat Ticket „${(ticket as Record<string, unknown>).subject}" an Admins weitergeleitet.`,
+    link: `/admin?tab=tickets&open=${ticketId}`,
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/mod");
+  return { success: true };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // `tickets`/`ticket_messages` only carry a FK to `auth.users`, not to
@@ -527,5 +558,6 @@ function mapTicket(row: any, username?: string, closedByUsername?: string): Tick
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     messageCount: typeof msgCountRaw === "number" ? msgCountRaw : Number(msgCountRaw) || 0,
+    escalatedToAdmin: (row.escalated_to_admin as boolean) ?? false,
   };
 }

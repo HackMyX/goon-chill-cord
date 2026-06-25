@@ -5,7 +5,7 @@ import {
   Shield, Users, Ticket, Activity, AlertTriangle, Ban, StickyNote,
   ChevronDown, Check, X, Coins, Clock, Search, LogOut, Trash2, Loader2,
   Sparkles, LayoutDashboard, RefreshCw, History, NotepadText, FileText,
-  Trophy, Paperclip, MessageSquare, Bug, Lightbulb,
+  Trophy, Paperclip, MessageSquare, Bug, Lightbulb, ArrowUpRight,
 } from "lucide-react";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { GlobalChatPanel } from "@/components/global/global-chat-panel";
@@ -19,7 +19,7 @@ import {
   modWarnUser, modAddNote, modTempBan, modLiftBan, modCloseTicket, modAddCredits,
   modRemoveWarning, getModUserHistory, getTicketMessages, modMarkInProgress, modReplyToTicket,
   modDeleteTicket, modSetTicketPriority, modUpdateTicketStatus, modGrantTicketReward,
-  getMyEffectivePermissions,
+  modEscalateTicket, getMyEffectivePermissions,
 } from "@/lib/actions/mod";
 import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage } from "@/lib/mod";
 import { ADMIN_MOD_PERMISSIONS } from "@/lib/mod";
@@ -666,6 +666,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   const isClosed = t.status === "closed";
   const alreadyRewarded = !!t.rewardGrantedAt;
   const rewardIsPending = !alreadyRewarded && t.rewardPending;
+  const [escalating, setEscalating] = useState(false);
   const sound = useSoundManager();
   const itemRef = useRef<HTMLDivElement>(null);
   const prevDefaultOpen = useRef(defaultOpen ?? false);
@@ -799,12 +800,22 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
         className="flex w-full items-center justify-between gap-2 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.02]"
         onClick={() => setOpen((o) => !o)}
       >
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className={`h-2 w-2 shrink-0 rounded-full ${dotCls}`} />
-          <span className="truncate font-semibold text-zinc-100">{t.subject}</span>
-          <span className="hidden text-[11px] text-zinc-500 sm:block">von {t.username}</span>
-          {alreadyRewarded && <Trophy className="h-3 w-3 shrink-0 text-amber-400" aria-label="Bereits belohnt" />}
-          {t.attachmentUrl && <Paperclip className="h-3 w-3 shrink-0 text-zinc-500" aria-label="Hat Anhang" />}
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className={`h-2 w-2 shrink-0 rounded-full ${dotCls}`} />
+            <span className="break-words font-semibold text-zinc-100">{t.subject}</span>
+            {t.escalatedToAdmin && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-orange-500/40 bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-300">
+                <ArrowUpRight className="h-2.5 w-2.5" />
+                Weitergeleitet
+              </span>
+            )}
+            {alreadyRewarded && <Trophy className="h-3 w-3 shrink-0 text-amber-400" aria-label="Bereits belohnt" />}
+            {t.attachmentUrl && <Paperclip className="h-3 w-3 shrink-0 text-zinc-500" aria-label="Hat Anhang" />}
+          </div>
+          <span className="text-[11px] text-zinc-500 sm:hidden">von {t.username}</span>
+        </div>
+        <span className="hidden text-[11px] text-zinc-500 sm:block">von {t.username}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {isInProgress && (
@@ -991,8 +1002,25 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           )}
 
           {/* Extended actions row */}
-          {(perms.canDeleteTickets || perms.canRewardTickets) && (
+          {(perms.canDeleteTickets || perms.canRewardTickets || (perms.canCloseTickets && !t.escalatedToAdmin)) && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/5 pt-3">
+              {perms.canCloseTickets && !t.escalatedToAdmin && isActionable && (
+                <button
+                  onClick={async () => {
+                    sound.click();
+                    setEscalating(true);
+                    const res = await modEscalateTicket(t.id);
+                    setEscalating(false);
+                    if (res.success) { showFlash("An Admin weitergeleitet.", true); onRefresh(); }
+                    else showFlash(res.error ?? "Fehler.", false);
+                  }}
+                  disabled={pending || escalating}
+                  className="flex items-center gap-1.5 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-bold text-orange-300 transition-colors hover:bg-orange-500/20 disabled:opacity-50"
+                >
+                  {escalating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
+                  An Admin weiterleiten
+                </button>
+              )}
               {perms.canRewardTickets && !alreadyRewarded && !rewardIsPending && (
                 <button
                   onClick={() => setShowReward((v) => !v)}

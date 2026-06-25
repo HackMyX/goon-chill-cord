@@ -137,6 +137,10 @@ const COLUMN_CHECKS: Array<{
   { id: "col_streak_specialmult", category: "Streak",             table: "streak_config",       col: "special_event_multiplier",detail: "ALTER TABLE streak_config ADD COLUMN special_event_multiplier numeric(4,2) DEFAULT 2.0;" },
   // World config — spawn params
   { id: "col_world_maxmonsters",  category: "World",              table: "world_config",        col: "max_alive_monsters",      detail: "ALTER TABLE world_config ADD COLUMN max_alive_monsters integer;" },
+  // Tickets — reward pin system (2026-06-25)
+  { id: "col_tickets_reward_pending", category: "Tickets",        table: "tickets",             col: "reward_pending",          detail: "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS reward_pending boolean NOT NULL DEFAULT false;" },
+  // Tickets — escalate to admin (2026-06-25)
+  { id: "col_tickets_escalated",  category: "Tickets",            table: "tickets",             col: "escalated_to_admin",      detail: "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS escalated_to_admin boolean NOT NULL DEFAULT false;" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ import {
   X,
   Trophy,
   Coins,
+  ArrowUpRight,
 } from "lucide-react";
 import {
   getAdminTickets,
@@ -261,7 +262,13 @@ function TicketRow({
           <CategoryBadge category={ticket.category} />
           <PriorityBadge priority={ticket.priority ?? "normal"} />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-zinc-200">{ticket.subject}</p>
+            {ticket.escalatedToAdmin && (
+              <span className="mb-0.5 inline-flex items-center gap-1 rounded-full border border-orange-500/40 bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-300">
+                <ArrowUpRight className="h-2.5 w-2.5" />
+                An Admin weitergeleitet
+              </span>
+            )}
+            <p className="break-words text-sm font-semibold text-zinc-200">{ticket.subject}</p>
             <p className="text-[11px] text-zinc-500">
               {ticket.username} ·{" "}
               {new Date(ticket.updatedAt).toLocaleString("de-DE", {
@@ -514,7 +521,7 @@ function TicketRow({
   );
 }
 
-type FilterStatus = TicketStatus | "all";
+type FilterStatus = TicketStatus | "all" | "escalated";
 type FilterCategory = TicketCategory | "all";
 
 export function TicketsTab({
@@ -567,10 +574,13 @@ export function TicketsTab({
   }, [autoOpenId, tickets, onTicketOpened]);
 
   const byCategory = categoryFilter === "all" ? tickets : tickets.filter((t) => t.category === categoryFilter);
-  const displayed = filter === "all" ? byCategory : byCategory.filter((t) => t.status === filter);
+  const displayed = filter === "escalated"
+    ? byCategory.filter((t) => t.escalatedToAdmin)
+    : filter === "all" ? byCategory : byCategory.filter((t) => t.status === filter);
 
   const countFor = (s: FilterStatus) =>
-    s === "all" ? byCategory.length : byCategory.filter((t) => t.status === s).length;
+    s === "escalated" ? byCategory.filter((t) => t.escalatedToAdmin).length
+    : s === "all" ? byCategory.length : byCategory.filter((t) => t.status === s).length;
 
   function toggleSelect(id: string, val: boolean) {
     setSelected((prev) => {
@@ -670,18 +680,21 @@ export function TicketsTab({
 
       {/* Status filter bar */}
       <div className="flex flex-wrap items-center gap-2">
-        {(["all", "open", "in_progress", "resolved", "closed"] as FilterStatus[]).map((s) => (
+        {(["all", "open", "in_progress", "resolved", "closed", "escalated"] as FilterStatus[]).map((s) => (
           <button
             key={s}
             onMouseEnter={sound.hover}
             onClick={() => { sound.click(); setFilter(s); }}
             className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
               filter === s
-                ? "border-purple-400 bg-purple-500/15 text-purple-200 shadow-[0_0_8px_rgba(168,85,247,0.35)]"
+                ? s === "escalated"
+                  ? "border-orange-400 bg-orange-500/15 text-orange-200 shadow-[0_0_8px_rgba(249,115,22,0.35)]"
+                  : "border-purple-400 bg-purple-500/15 text-purple-200 shadow-[0_0_8px_rgba(168,85,247,0.35)]"
                 : "border-white/10 text-zinc-400 hover:border-white/30"
             }`}
           >
-            {s === "all" ? "Alle" : STATUS_LABEL[s as TicketStatus]}
+            {s === "escalated" && <ArrowUpRight className="h-3 w-3" />}
+            {s === "all" ? "Alle" : s === "escalated" ? "Weitergeleitet" : STATUS_LABEL[s as TicketStatus]}
             <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px]">{countFor(s)}</span>
           </button>
         ))}

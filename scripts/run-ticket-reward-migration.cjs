@@ -8,6 +8,8 @@ const pool = new Pool({
 const migrations = [
   // Ticket reward_pending: reward is pinned but credits not yet paid out
   `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS reward_pending boolean NOT NULL DEFAULT false`,
+  // Ticket escalated_to_admin: mod forwarded ticket to admin for review
+  `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS escalated_to_admin boolean NOT NULL DEFAULT false`,
   // Plinko config table
   `CREATE TABLE IF NOT EXISTS plinko_config (
     id text PRIMARY KEY DEFAULT 'default',
