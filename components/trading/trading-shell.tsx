@@ -19,10 +19,12 @@ import {
 import type { Rarity } from "@/lib/cases";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 export interface TradablePlayer {
   id: string;
   username: string;
+  nameStyleKey?: string;
   acceptsTrades?: boolean;
 }
 
@@ -237,7 +239,7 @@ function CreateTradeForm({
                   : "border-white/10 text-zinc-300 hover:border-white/30"
               }`}
             >
-              {p.username}
+              <StyledUsername name={p.username} styleKey={p.nameStyleKey} size="sm" />
             </button>
           );
         })}
@@ -268,7 +270,7 @@ function CreateTradeForm({
 
             <div>
               <p className="mb-2 text-xs font-semibold text-amber-400">
-                Items von {selectedPlayer.username} (anfordern)
+                Items von <StyledUsername name={selectedPlayer.username} styleKey={selectedPlayer.nameStyleKey} size="sm" staticMode /> (anfordern)
               </p>
               {loadingTheirs ? (
                 <p className="py-8 text-center text-xs text-zinc-500">Lade Inventar...</p>

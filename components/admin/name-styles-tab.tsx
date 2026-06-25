@@ -15,6 +15,10 @@ import {
   User,
   RefreshCw,
   Eye,
+  Save,
+  ShoppingBag,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 import {
   adminGrantNameStyle,
@@ -26,6 +30,12 @@ import {
   adminUpsertNameStyle,
   adminDeleteNameStyle,
   getNameStyleCatalog,
+  adminGetNameStylesWithShopStatus,
+  adminSetNameStyleShopAvailability,
+  getNameStyleRarityConfigs,
+  adminUpdateNameStyleRarityConfig,
+  adminBulkUpdateStylePricesByRarity,
+  type NameStyleShopRow,
 } from "@/lib/actions/name-styles";
 import {
   StyledUsername,
@@ -36,8 +46,10 @@ import {
   NAME_STYLES,
   STYLES_BY_RARITY,
   RARITY_COLORS,
+  NAME_STYLE_RARITY_PRICES,
   type NameStyleDef,
   type NameStyleRarity,
+  type NameStyleRarityConfig,
   type AnimationType,
 } from "@/lib/name-styles";
 
@@ -61,7 +73,7 @@ interface NameStylesTabProps {
   profiles: ProfileRow[];
 }
 
-type SectionTab = "katalog" | "vergeben" | "erstellen";
+type SectionTab = "katalog" | "vergeben" | "erstellen" | "shop" | "seltenheiten";
 
 interface FlashMsg {
   type: "ok" | "err";
@@ -1160,6 +1172,525 @@ function ErstellenSection({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Section 4: Shop-Verwaltung
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RARITY_PRICE_DEFAULTS: Record<string, number> = NAME_STYLE_RARITY_PRICES;
+
+function ShopStyleRow({
+  row,
+  onSave,
+  saving,
+}: {
+  row: NameStyleShopRow;
+  onSave: (key: string, opts: Parameters<typeof adminSetNameStyleShopAvailability>[1]) => Promise<void>;
+  saving: boolean;
+}) {
+  const localDef = NAME_STYLES[row.key];
+  const [available, setAvailable] = useState(row.availableInShop);
+  const [price, setPrice] = useState(row.shopPriceCr || RARITY_PRICE_DEFAULTS[row.rarity] || 5000);
+  const [stock, setStock] = useState<string>(row.shopStock !== null ? String(row.shopStock) : "");
+  const [expires, setExpires] = useState(row.shopExpiresAt ? row.shopExpiresAt.split("T")[0] : "");
+  const [sortOrder, setSortOrder] = useState(row.shopSortOrder);
+  const rc = RARITY_COLORS[row.rarity as NameStyleRarity] ?? RARITY_COLORS["normal"];
+
+  async function handleSave() {
+    await onSave(row.key, {
+      availableInShop: available,
+      shopPriceCr: price,
+      shopStock: stock !== "" ? Number(stock) : null,
+      shopExpiresAt: expires ? new Date(expires).toISOString() : null,
+      shopSortOrder: sortOrder,
+    });
+  }
+
+  return (
+    <div className={`rounded-xl border p-4 transition-all ${available ? "border-emerald-500/30 bg-emerald-950/10" : "border-zinc-700/60 bg-zinc-800/20"}`}>
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Style preview */}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {localDef ? (
+            <StyledUsername name={localDef.label} styleDef={localDef} size="sm" />
+          ) : (
+            <span className="text-sm font-medium text-zinc-200">{row.label}</span>
+          )}
+          <span
+            className="shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold"
+            style={{ color: rc.color, borderColor: rc.color + "44", background: rc.color + "11" }}
+          >
+            {rc.label}
+          </span>
+          <span className="text-[10px] font-mono text-zinc-600">{row.key}</span>
+        </div>
+
+        {/* Toggle */}
+        <button
+          onClick={() => setAvailable((v) => !v)}
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            available
+              ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-200"
+              : "border-zinc-600 text-zinc-500 hover:border-zinc-400 hover:text-zinc-300"
+          }`}
+        >
+          {available ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+          {available ? "Im Shop" : "Kein Shop"}
+        </button>
+      </div>
+
+      {/* Settings — always visible so changes are easy */}
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <label className="flex flex-col gap-1 text-[10px] text-zinc-500">
+          Preis (CR)
+          <input
+            type="number"
+            value={price}
+            onChange={(e) => setPrice(Number(e.target.value) || 0)}
+            min={0}
+            className="rounded-lg border border-zinc-700 bg-black/30 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-[10px] text-zinc-500">
+          Bestand (leer = ∞)
+          <input
+            type="number"
+            value={stock}
+            onChange={(e) => setStock(e.target.value)}
+            min={0}
+            placeholder="∞"
+            className="rounded-lg border border-zinc-700 bg-black/30 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-[10px] text-zinc-500">
+          Ablaufdatum
+          <input
+            type="date"
+            value={expires}
+            onChange={(e) => setExpires(e.target.value)}
+            className="rounded-lg border border-zinc-700 bg-black/30 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-[10px] text-zinc-500">
+          Reihenfolge
+          <input
+            type="number"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(Number(e.target.value) || 0)}
+            min={0}
+            className="rounded-lg border border-zinc-700 bg-black/30 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+          />
+        </label>
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="mt-3 flex items-center gap-1.5 rounded-lg bg-purple-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-600 disabled:opacity-50 transition-colors"
+      >
+        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+        Speichern
+      </button>
+    </div>
+  );
+}
+
+function ShopSection({ onFlash }: { onFlash: (type: "ok" | "err", msg: string) => void }) {
+  const [rows, setRows] = useState<NameStyleShopRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [filterAvailable, setFilterAvailable] = useState<"all" | "active" | "inactive">("all");
+
+  const loadRows = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await adminGetNameStylesWithShopStatus();
+      // Merge with local catalog — add any local styles not yet in DB
+      const dbKeys = new Set(data.map((r) => r.key));
+      const localMissing: NameStyleShopRow[] = Object.values(NAME_STYLES)
+        .filter((s) => !dbKeys.has(s.key))
+        .map((s) => ({
+          key: s.key,
+          label: s.label,
+          rarity: s.rarity,
+          availableInShop: false,
+          shopPriceCr: RARITY_PRICE_DEFAULTS[s.rarity] || 5000,
+          shopStock: null,
+          shopExpiresAt: null,
+          shopSortOrder: 0,
+        }));
+      setRows([...data, ...localMissing]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadRows(); }, [loadRows]);
+
+  const handleSave = useCallback(async (
+    key: string,
+    opts: Parameters<typeof adminSetNameStyleShopAvailability>[1]
+  ) => {
+    setSavingKey(key);
+    try {
+      const res = await adminSetNameStyleShopAvailability(key, opts);
+      if (res.ok) {
+        onFlash("ok", `Shop-Status für "${key}" gespeichert.`);
+        await loadRows();
+      } else {
+        onFlash("err", res.error ?? "Fehler beim Speichern.");
+      }
+    } finally {
+      setSavingKey(null);
+    }
+  }, [loadRows, onFlash]);
+
+  const filtered = rows.filter((r) => {
+    const matchSearch = !search || r.key.includes(search.toLowerCase()) || r.label.toLowerCase().includes(search.toLowerCase());
+    const matchFilter = filterAvailable === "all"
+      ? true
+      : filterAvailable === "active"
+        ? r.availableInShop
+        : !r.availableInShop;
+    return matchSearch && matchFilter;
+  });
+
+  const activeCount = rows.filter((r) => r.availableInShop).length;
+
+  return (
+    <div>
+      <SectionHeader
+        title="Shop-Verfügbarkeit"
+        description="Steuere welche Name Styles im Shop kaufbar sind — mit Preis, Bestand und Ablaufdatum."
+        icon={ShoppingBag}
+      />
+
+      <div className="mb-4 flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+          <input
+            type="text"
+            placeholder="Style suchen…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2 pl-9 pr-4 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-purple-500"
+          />
+        </div>
+        <div className="flex gap-1 rounded-lg border border-zinc-700 bg-zinc-800/50 p-1">
+          {(["all", "active", "inactive"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilterAvailable(f)}
+              className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                filterAvailable === f ? "bg-purple-700 text-white" : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {f === "all" ? `Alle (${rows.length})` : f === "active" ? `Im Shop (${activeCount})` : `Kein Shop (${rows.length - activeCount})`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12 text-zinc-500">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((row) => (
+            <ShopStyleRow
+              key={row.key}
+              row={row}
+              onSave={handleSave}
+              saving={savingKey === row.key}
+            />
+          ))}
+          {filtered.length === 0 && (
+            <p className="py-8 text-center text-sm text-zinc-600">Keine Styles gefunden.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section 5: Seltenheiten-Konfiguration
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RARITY_ORDER: NameStyleRarity[] = ["ultra", "mythisch", "selten", "normal"];
+
+function RarityConfigCard({
+  config,
+  onUpdate,
+  onBulkPrice,
+  saving,
+}: {
+  config: NameStyleRarityConfig;
+  onUpdate: (rarity: NameStyleRarity, opts: Partial<NameStyleRarityConfig>) => Promise<void>;
+  onBulkPrice: (rarity: NameStyleRarity, price: number) => Promise<void>;
+  saving: boolean;
+}) {
+  const rc = RARITY_COLORS[config.rarity];
+  const [basePrice, setBasePrice] = useState(config.baseShopPriceCr);
+  const [maxPrice, setMaxPrice] = useState(config.maxShopPriceCr);
+  const [dropWeight, setDropWeight] = useState(config.caseDropWeight);
+  const [dropEnabled, setDropEnabled] = useState(config.caseDropEnabled);
+  const [bpEnabled, setBpEnabled] = useState(config.bpRewardEnabled);
+  const [bulkPrice, setBulkPrice] = useState(config.baseShopPriceCr);
+  const [dirty, setDirty] = useState(false);
+
+  const styleCount = STYLES_BY_RARITY[config.rarity].filter((s) => !s.is_special).length;
+
+  async function handleSave() {
+    await onUpdate(config.rarity, {
+      baseShopPriceCr: basePrice,
+      maxShopPriceCr: maxPrice,
+      caseDropWeight: dropWeight,
+      caseDropEnabled: dropEnabled,
+      bpRewardEnabled: bpEnabled,
+    });
+    setDirty(false);
+  }
+
+  async function handleBulkPrice() {
+    await onBulkPrice(config.rarity, bulkPrice);
+  }
+
+  return (
+    <div
+      className="rounded-2xl border p-5 space-y-4"
+      style={{ borderColor: rc.color + "33", background: rc.color + "08" }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div
+          className="rounded-lg px-3 py-1.5 text-sm font-bold uppercase tracking-wider"
+          style={{ color: rc.color, background: rc.color + "22" }}
+        >
+          {rc.label}
+        </div>
+        <span className="text-xs text-zinc-500">{styleCount} Styles</span>
+        <div className="ml-auto flex gap-2">
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+              bpEnabled ? "border-green-500/40 text-green-400 bg-green-950/30" : "border-zinc-600 text-zinc-600"
+            }`}
+          >
+            BP: {bpEnabled ? "AN" : "AUS"}
+          </span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+              dropEnabled ? "border-amber-500/40 text-amber-400 bg-amber-950/30" : "border-zinc-600 text-zinc-600"
+            }`}
+          >
+            Case: {dropEnabled ? "AN" : "AUS"}
+          </span>
+        </div>
+      </div>
+
+      {/* Price settings */}
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1.5 text-xs text-zinc-500">
+          Basis-Shop-Preis (CR)
+          <input
+            type="number"
+            value={basePrice}
+            min={0}
+            step={50000}
+            onChange={(e) => { setBasePrice(Number(e.target.value)); setDirty(true); }}
+            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-purple-500/60"
+          />
+          <span style={{ color: rc.color }} className="text-[10px] font-medium">
+            {(basePrice).toLocaleString("de-DE")} CR
+          </span>
+        </label>
+        <label className="flex flex-col gap-1.5 text-xs text-zinc-500">
+          Max. Shop-Preis (CR)
+          <input
+            type="number"
+            value={maxPrice}
+            min={0}
+            step={100000}
+            onChange={(e) => { setMaxPrice(Number(e.target.value)); setDirty(true); }}
+            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-purple-500/60"
+          />
+          <span className="text-[10px] font-medium text-zinc-600">
+            {(maxPrice).toLocaleString("de-DE")} CR
+          </span>
+        </label>
+      </div>
+
+      {/* Case drop weight */}
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1.5 text-xs text-zinc-500">
+          Case-Drop-Gewicht
+          <input
+            type="number"
+            value={dropWeight}
+            min={0}
+            max={1000}
+            onChange={(e) => { setDropWeight(Number(e.target.value)); setDirty(true); }}
+            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-purple-500/60"
+          />
+          <span className="text-[10px] text-zinc-600">Höher = häufiger</span>
+        </label>
+        <div className="flex flex-col gap-2 justify-center">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+            <input
+              type="checkbox"
+              checked={dropEnabled}
+              onChange={(e) => { setDropEnabled(e.target.checked); setDirty(true); }}
+              className="h-4 w-4 accent-amber-500 rounded"
+            />
+            Case-Drop aktiviert
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+            <input
+              type="checkbox"
+              checked={bpEnabled}
+              onChange={(e) => { setBpEnabled(e.target.checked); setDirty(true); }}
+              className="h-4 w-4 accent-green-500 rounded"
+            />
+            Battle-Pass-Belohnung
+          </label>
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex flex-wrap gap-2 border-t border-zinc-700/40 pt-3">
+        <button
+          onClick={handleSave}
+          disabled={saving || !dirty}
+          className="flex items-center gap-1.5 rounded-lg bg-purple-700 px-4 py-2 text-xs font-semibold text-white hover:bg-purple-600 disabled:opacity-40"
+        >
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+          Konfiguration speichern
+        </button>
+
+        {/* Bulk price updater */}
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="text-[10px] text-zinc-600">Bulk-Preis:</span>
+          <input
+            type="number"
+            value={bulkPrice}
+            min={0}
+            step={50000}
+            onChange={(e) => setBulkPrice(Number(e.target.value))}
+            className="w-32 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-amber-500/60"
+          />
+          <button
+            onClick={handleBulkPrice}
+            disabled={saving}
+            className="flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-950/20 px-3 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-950/40 disabled:opacity-40"
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            Alle {styleCount} Styles
+          </button>
+        </div>
+      </div>
+
+      <p className="text-[10px] text-zinc-600">
+        Zuletzt aktualisiert: {new Date(config.updatedAt).toLocaleString("de-DE")}
+      </p>
+    </div>
+  );
+}
+
+function SeltenheitenSection({ onFlash }: { onFlash: (type: "ok" | "err", msg: string) => void }) {
+  const [configs, setConfigs] = useState<NameStyleRarityConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingRarity, setSavingRarity] = useState<NameStyleRarity | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getNameStyleRarityConfigs();
+      setConfigs(data);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleUpdate = useCallback(async (
+    rarity: NameStyleRarity,
+    opts: Partial<NameStyleRarityConfig>,
+  ) => {
+    setSavingRarity(rarity);
+    try {
+      const res = await adminUpdateNameStyleRarityConfig(rarity, opts);
+      if (res.ok) {
+        onFlash("ok", `${RARITY_COLORS[rarity].label}-Konfiguration gespeichert.`);
+        await load();
+      } else {
+        onFlash("err", res.error ?? "Fehler beim Speichern.");
+      }
+    } finally {
+      setSavingRarity(null);
+    }
+  }, [load, onFlash]);
+
+  const handleBulkPrice = useCallback(async (rarity: NameStyleRarity, price: number) => {
+    setSavingRarity(rarity);
+    try {
+      const res = await adminBulkUpdateStylePricesByRarity(rarity, price);
+      if (res.ok) {
+        onFlash("ok", `Alle ${RARITY_COLORS[rarity].label}-Styles auf ${price.toLocaleString("de-DE")} CR gesetzt.`);
+      } else {
+        onFlash("err", res.error ?? "Fehler beim Bulk-Update.");
+      }
+    } finally {
+      setSavingRarity(null);
+    }
+  }, [onFlash]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16 text-zinc-500">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+
+  const sorted = [...configs].sort(
+    (a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity)
+  );
+
+  return (
+    <div>
+      <SectionHeader
+        title="Seltenheiten-Konfiguration"
+        description="Preisstufen, Case-Drop-Gewichte und Unlock-Quellen pro Seltenheitsstufe einstellen."
+        icon={Palette}
+      />
+
+      <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-950/10 px-4 py-3 text-xs text-amber-300">
+        <span className="font-bold">Achtung:</span> &ldquo;Basis-Shop-Preis&rdquo; ist der Standardpreis für neue Shop-Slots dieser Seltenheit.
+        &ldquo;Alle X Styles&rdquo; überschreibt <em>sofort</em> alle unlock_price_cr + shop_price_cr in der DB für nicht-spezielle Styles dieser Seltenheit.
+      </div>
+
+      <div className="space-y-4">
+        {sorted.map((cfg) => (
+          <RarityConfigCard
+            key={cfg.rarity}
+            config={cfg}
+            onUpdate={handleUpdate}
+            onBulkPrice={handleBulkPrice}
+            saving={savingRarity === cfg.rarity}
+          />
+        ))}
+        {sorted.length === 0 && (
+          <p className="py-8 text-center text-sm text-zinc-600">
+            Keine Konfiguration gefunden. Bitte Migration ausführen.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1277,9 +1808,11 @@ export function NameStylesTab({ profiles }: NameStylesTabProps) {
   }, [showFlash]);
 
   const SECTIONS: { id: SectionTab; label: string }[] = [
-    { id: "katalog", label: "Style-Katalog" },
-    { id: "vergeben", label: "Vergeben / Entziehen" },
-    { id: "erstellen", label: "Custom Styles" },
+    { id: "katalog",       label: "Style-Katalog" },
+    { id: "shop",          label: "Shop-Verfügbarkeit" },
+    { id: "seltenheiten",  label: "Seltenheiten" },
+    { id: "vergeben",      label: "Vergeben / Entziehen" },
+    { id: "erstellen",     label: "Custom Styles" },
   ];
 
   return (
@@ -1335,6 +1868,12 @@ export function NameStylesTab({ profiles }: NameStylesTabProps) {
             onClearWarnings={handleClearWarnings}
             loadingKey={loadingKey}
           />
+        )}
+        {activeSection === "shop" && (
+          <ShopSection onFlash={showFlash} />
+        )}
+        {activeSection === "seltenheiten" && (
+          <SeltenheitenSection onFlash={showFlash} />
         )}
         {activeSection === "erstellen" && (
           <ErstellenSection

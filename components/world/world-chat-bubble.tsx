@@ -5,6 +5,7 @@ import { MessageSquare, X, ChevronDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getGlobalChatMessages, sendGlobalChatMessage, type GlobalChatMessage } from "@/lib/actions/global-chat";
 import { useSoundManager } from "@/lib/sound-manager";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 const MAX_DISPLAY = 6;
 
@@ -133,11 +134,13 @@ export function WorldChatBubble({ username }: { username: string }) {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <span className={`text-[9px] font-bold mr-1 ${
-                    msg.role === "admin" ? "text-amber-300" :
-                    msg.role === "moderator" ? "text-sky-300" : "text-purple-300"
-                  }`}>
-                    {msg.username ?? "Anon"}
+                  <span className="text-[9px] font-bold mr-1">
+                    <StyledUsername
+                      name={msg.username ?? "Anon"}
+                      styleKey={msg.nameStyleKey}
+                      size="sm"
+                      staticMode
+                    />
                   </span>
                   <span className="text-[9px] text-zinc-500">{formatTime(msg.createdAt)}</span>
                   <p className="text-[11px] text-zinc-200 break-words leading-tight mt-0.5">{msg.content}</p>

@@ -7,6 +7,7 @@ import type { Rarity } from "@/lib/cases";
 export interface PublicProfile {
   id: string;
   username: string;
+  nameStyleKey: string | null;
   role: string;
   credits: number;
   casesOpened: number;
@@ -49,7 +50,7 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
   const [{ data: profile }, { data: inventory }, { data: authUser }] = await Promise.all([
     admin
       .from("profiles")
-      .select("id, username, role, credits, cases_opened, created_at, gender, verified")
+      .select("id, username, role, credits, cases_opened, created_at, gender, verified, active_name_style_key")
       .eq("id", targetUserId)
       .single(),
     admin
@@ -101,6 +102,7 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
     profile: {
       id: profile.id,
       username: profile.username,
+      nameStyleKey: (profile.active_name_style_key as string | null) ?? null,
       role: profile.role,
       credits: profile.credits,
       casesOpened: profile.cases_opened,

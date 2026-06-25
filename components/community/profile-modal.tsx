@@ -11,6 +11,7 @@ import { CharacterModel } from "@/components/world/character-model";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
 import { getPublicProfile, type PublicProfile } from "@/lib/actions/community";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 interface ProfileModalProps {
   userId: string;
@@ -131,7 +132,7 @@ export function ProfileModal({ userId, onClose }: ProfileModalProps) {
                 )}
                 <div>
                   <p className="flex items-center gap-1.5 text-lg font-bold text-zinc-100">
-                    {profile.username}
+                    <StyledUsername name={profile.username} styleKey={profile.nameStyleKey ?? undefined} size="lg" />
                     {profile.verified && (
                       <BadgeCheck className="h-4 w-4 text-blue-400 drop-shadow-[0_0_6px_rgba(59,130,246,0.7)]" aria-label="Verifiziert" />
                     )}

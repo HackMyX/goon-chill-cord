@@ -31,7 +31,7 @@ export default async function CommunityPage() {
   const [{ data: profiles }, { data: inventory }] = await Promise.all([
     admin
       .from("profiles")
-      .select("id, username, credits, role, created_at, gender, streak_days, verified")
+      .select("id, username, credits, role, created_at, gender, streak_days, verified, active_name_style_key")
       .or(`profile_visible.eq.true,id.eq.${user.id}`)
       .order("credits", { ascending: false }),
     admin
@@ -69,6 +69,7 @@ export default async function CommunityPage() {
   const players: PlayerCard[] = (profiles ?? []).map((p) => ({
     id: p.id,
     username: p.username,
+    nameStyleKey: (p as Record<string, unknown>).active_name_style_key as string | undefined,
     credits: p.credits,
     role: p.role,
     memberSince: p.created_at,

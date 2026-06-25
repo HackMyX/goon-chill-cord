@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { Crown, Trophy, Coins, RotateCcw } from "lucide-react";
 import { getWorldLeaderboard } from "@/lib/actions/mine";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 interface LeaderboardEntry {
   rank: number;
   userId: string;
   username: string;
+  nameStyleKey?: string;
   credits: number;
 }
 
@@ -83,7 +85,9 @@ export function WorldLeaderboard({ userId, username }: WorldLeaderboardProps) {
 
                 {/* Name */}
                 <span className={`flex-1 truncate text-sm ${isSelf ? "font-extrabold text-purple-200" : "font-medium text-zinc-300"}`}>
-                  {isSelf ? `${entry.username} (Du)` : entry.username}
+                  {isSelf
+                    ? <><StyledUsername name={entry.username} styleKey={entry.nameStyleKey} /> <span className="text-purple-400">(Du)</span></>
+                    : <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} />}
                 </span>
 
                 {/* Credits */}

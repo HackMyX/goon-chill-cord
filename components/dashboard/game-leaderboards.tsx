@@ -7,6 +7,7 @@ import { Joystick, Pickaxe, Crown, Trophy, Medal, ChevronRight, Gamepad2 } from 
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { SnakeLeaderboardEntry } from "@/lib/actions/snake";
 import type { MineLeaderboardEntry } from "@/lib/actions/mine";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 export type { SnakeLeaderboardEntry };
 export type { MineLeaderboardEntry };
@@ -267,7 +268,7 @@ export function GameLeaderboards({ snakeX1, snakeX2, snakeGrind, snakeFarm, mine
 
                     {/* Username */}
                     <span className={`flex-1 truncate text-sm font-semibold ${isFirst ? "text-zinc-50" : "text-zinc-200"}`}>
-                      {entry.username}
+                      <StyledUsername name={entry.username} styleKey={(entry as SnakeLeaderboardEntry & MineLeaderboardEntry).nameStyleKey} />
                     </span>
 
                     {/* Sub-metric (secondary info) */}

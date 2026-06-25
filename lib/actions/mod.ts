@@ -210,7 +210,7 @@ export async function getModUsers(): Promise<ModUserSummary[]> {
   const admin = createAdminClient();
   const { data: users } = await admin
     .from("profiles")
-    .select("id, username, role, credits, streak_days, temp_banned_until, created_at")
+    .select("id, username, role, credits, streak_days, temp_banned_until, created_at, active_name_style_key")
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -233,6 +233,7 @@ export async function getModUsers(): Promise<ModUserSummary[]> {
   return users.map((u) => ({
     id: u.id,
     username: u.username ?? "?",
+    nameStyleKey: (u as Record<string, unknown>).active_name_style_key as string | undefined,
     role: u.role ?? "user",
     credits: u.credits ?? 0,
     streakDays: u.streak_days ?? 0,
@@ -264,13 +265,14 @@ export async function getModTickets(): Promise<ModTicket[]> {
       ...data.map((t) => t.closed_by).filter((id): id is string => !!id),
     ])
   );
-  const { data: profiles } = await admin.from("profiles").select("id, username").in("id", allIds);
-  const byId = new Map((profiles ?? []).map((p) => [p.id, p.username as string | null]));
+  const { data: profiles } = await admin.from("profiles").select("id, username, active_name_style_key").in("id", allIds);
+  const byId = new Map((profiles ?? []).map((p) => [p.id, p as { username: string | null; active_name_style_key: string | null }]));
 
   return data.map((t) => ({
     id: t.id,
     userId: t.user_id,
-    username: byId.get(t.user_id) ?? "?",
+    username: byId.get(t.user_id)?.username ?? "?",
+    nameStyleKey: byId.get(t.user_id)?.active_name_style_key ?? undefined,
     subject: t.subject ?? "(kein Betreff)",
     message: t.description ?? "",
     status: t.status ?? "open",
@@ -278,7 +280,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
     priority: t.priority ?? "normal",
     createdAt: t.created_at,
     closedAt: t.closed_at,
-    closedByUsername: t.closed_by ? (byId.get(t.closed_by) ?? null) : null,
+    closedByUsername: t.closed_by ? (byId.get(t.closed_by)?.username ?? null) : null,
     attachmentUrl: (t as Record<string, unknown>).attachment_url as string | null ?? null,
     rewardCredits: (t as Record<string, unknown>).reward_credits as number | null ?? null,
     rewardNote: (t as Record<string, unknown>).reward_note as string | null ?? null,
@@ -300,14 +302,15 @@ export async function getTicketMessages(ticketId: string): Promise<TicketMessage
   if (!data || data.length === 0) return [];
 
   const userIds = Array.from(new Set(data.map((m) => m.user_id)));
-  const { data: profiles } = await admin.from("profiles").select("id, username").in("id", userIds);
-  const byId = new Map((profiles ?? []).map((p) => [p.id, p.username as string | null]));
+  const { data: profiles } = await admin.from("profiles").select("id, username, active_name_style_key").in("id", userIds);
+  const byId = new Map((profiles ?? []).map((p) => [p.id, p as { username: string | null; active_name_style_key: string | null }]));
 
   return data.map((m) => ({
     id: m.id,
     ticketId: m.ticket_id,
     userId: m.user_id,
-    username: byId.get(m.user_id) ?? "?",
+    username: byId.get(m.user_id)?.username ?? "?",
+    nameStyleKey: byId.get(m.user_id)?.active_name_style_key ?? undefined,
     message: m.message ?? "",
     isStaff: m.is_staff ?? false,
     createdAt: m.created_at,

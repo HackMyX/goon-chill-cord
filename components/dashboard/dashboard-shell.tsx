@@ -24,6 +24,7 @@ import type { LucideIcon } from "lucide-react";
 import { BpBanner } from "@/components/battlepass/bp-banner";
 import { getActiveBattlePass } from "@/lib/actions/battle-pass";
 import type { ActiveBpView } from "@/lib/battle-pass";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 // Animated number that counts up when the value changes
 function AnimatedNumber({ value, className }: { value: number; className?: string }) {
@@ -160,6 +161,7 @@ interface DashboardShellProps {
   isAdmin?: boolean;
   isModerator?: boolean;
   username?: string;
+  nameStyleKey?: string;
   userCount?: number;
   homepageConfig?: HomepageConfig;
   snakeX1?: SnakeLeaderboardEntry[];
@@ -178,6 +180,7 @@ export function DashboardShell({
   isAdmin = false,
   isModerator = false,
   username,
+  nameStyleKey,
   userCount = 0,
   homepageConfig,
   snakeX1 = [],
@@ -320,8 +323,8 @@ export function DashboardShell({
                   <span className="block text-xl sm:text-2xl font-semibold text-zinc-400 mb-1 tracking-normal">
                     Hey, willkommen zurück 👋
                   </span>
-                  <span className="bg-gradient-to-r from-purple-300 via-fuchsia-300 to-indigo-300 bg-clip-text text-transparent">
-                    {username}
+                  <span>
+                    <StyledUsername name={username!} styleKey={nameStyleKey} size="lg" />
                   </span>
                 </>
               ) : (

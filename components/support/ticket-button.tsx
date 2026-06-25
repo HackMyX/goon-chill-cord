@@ -37,6 +37,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { UserAiChat } from "@/components/ai/user-ai-chat";
 import { GlobalChatPanel } from "@/components/global/global-chat-panel";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: "Offen",
@@ -607,7 +608,8 @@ function SupportButtonInner() {
                               >
                                 <div className="flex items-center gap-1.5">
                                   <span className={`text-[10px] font-bold ${msg.isStaff ? "text-purple-300" : "text-zinc-400"}`}>
-                                    {msg.isStaff ? "🛡 " : ""}{msg.username}
+                                    {msg.isStaff ? "🛡 " : ""}
+                                    <StyledUsername name={msg.username} styleKey={msg.nameStyleKey} size="sm" staticMode />
                                   </span>
                                   <span className="text-[10px] text-zinc-600">
                                     {new Date(msg.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}

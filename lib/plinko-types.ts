@@ -22,9 +22,9 @@ export interface PlinkoConfig {
 
 export const DEFAULT_PLINKO_CONFIG: PlinkoConfig = {
   enabled: true,
-  hourlyBallLimit: 20,
+  hourlyBallLimit: 30,
   dailyBallLimit: 0,
-  ballCostCr: 100,
+  ballCostCr: 500,
   rows: 8,
   riskLevels: [
     { key: "low",    label: "Niedrig", emoji: "🟢", multipliers: [1.5, 1.3, 1.1, 0.9, 0.8, 0.9, 1.1, 1.3, 1.5] },
@@ -33,7 +33,7 @@ export const DEFAULT_PLINKO_CONFIG: PlinkoConfig = {
   ],
   maxWinCr: 0,
   announceBigWins: true,
-  bigWinThreshold: 1000,
+  bigWinThreshold: 10000,
   showHistory: true,
   showLeaderboard: true,
   leaderboardSize: 10,

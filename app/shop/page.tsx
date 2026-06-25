@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTodayShop } from "@/lib/actions/shop";
 import { ShopShell } from "@/components/shop/shop-shell";
 import { isAdmin, isModerator } from "@/lib/admin";
+import { getShopBattlePasses } from "@/lib/actions/battle-pass";
 
 export default async function ShopPage() {
   const supabase = await createClient();
@@ -11,13 +12,15 @@ export default async function ShopPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("credits, streak_days, gender, role, username")
-    .eq("id", user.id)
-    .single();
-
-  const { listings, resetsAt, motd, motdEnabled, categories } = await getTodayShop();
+  const [
+    { data: profile },
+    { listings, resetsAt, motd, motdEnabled, categories },
+    activeBattlePasses,
+  ] = await Promise.all([
+    supabase.from("profiles").select("credits, streak_days, gender, role, username").eq("id", user.id).single(),
+    getTodayShop(),
+    getShopBattlePasses(),
+  ]);
 
   return (
     <ShopShell
@@ -30,6 +33,7 @@ export default async function ShopPage() {
       categories={categories}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}
+      activeBattlePasses={activeBattlePasses}
     />
   );
 }

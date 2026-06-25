@@ -128,6 +128,7 @@ export async function getMyPlinkoStats(): Promise<PlinkoPersonalStats> {
 
 export interface PlinkoLeaderEntry {
   username: string;
+  nameStyleKey?: string;
   avatarUrl: string | null;
   payoutCr: number;
   multiplier: number;
@@ -148,7 +149,7 @@ export async function getTopPlinkoWins(limit = 10): Promise<PlinkoLeaderEntry[]>
   const userIds = [...new Set(data.map((r) => r.user_id as string))];
   const { data: profiles } = await admin
     .from("profiles")
-    .select("id, username, avatar_url")
+    .select("id, username, avatar_url, active_name_style_key")
     .in("id", userIds);
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id as string, p]));
@@ -157,6 +158,7 @@ export async function getTopPlinkoWins(limit = 10): Promise<PlinkoLeaderEntry[]>
     const prof = profileMap.get(r.user_id as string);
     return {
       username: (prof?.username as string) ?? "Anonym",
+      nameStyleKey: (prof?.active_name_style_key as string | null) ?? undefined,
       avatarUrl: (prof?.avatar_url as string | null) ?? null,
       payoutCr: r.payout_cr as number,
       multiplier: r.result_multiplier as number,

@@ -22,19 +22,21 @@ import type { BattlePass, BattlePassTier, BpRewardType, BpTheme } from "@/lib/ba
 import type { Rarity } from "@/lib/cases";
 
 const REWARD_ICONS: Record<BpRewardType, React.ReactNode> = {
-  credits: <Coins className="h-3.5 w-3.5" />,
-  item: <Package className="h-3.5 w-3.5" />,
-  random_item: <Sparkles className="h-3.5 w-3.5" />,
-  badge: <Trophy className="h-3.5 w-3.5" />,
-  xp_boost: <TrendingUp className="h-3.5 w-3.5" />,
+  credits:    <Coins className="h-3.5 w-3.5" />,
+  item:       <Package className="h-3.5 w-3.5" />,
+  random_item:<Sparkles className="h-3.5 w-3.5" />,
+  badge:      <Trophy className="h-3.5 w-3.5" />,
+  xp_boost:   <TrendingUp className="h-3.5 w-3.5" />,
+  name_style: <Palette className="h-3.5 w-3.5" />,
 };
 
 const REWARD_LABELS: Record<BpRewardType, string> = {
-  credits: "Credits",
-  item: "Spezifisches Item",
-  random_item: "Zufälliges Item",
-  badge: "Badge / Titel",
-  xp_boost: "XP Boost (Tage)",
+  credits:    "Credits",
+  item:       "Spezifisches Item",
+  random_item:"Zufälliges Item",
+  badge:      "Badge / Titel",
+  xp_boost:   "XP Boost (Tage)",
+  name_style: "Name Style",
 };
 
 const TIER_EMOJIS = ["🎁","💰","⚡","🔥","🌟","💎","👑","🎯","🎲","🚀","✨","🎪","🌈","💫","🛡️","⚔️","🎭","🎨","🎵","🎮","🏆","⭐","🎀","🔮","🐉"];
@@ -595,6 +597,7 @@ function TierEditorModal({
   const [rewardBadgeKey, setRewardBadgeKey] = useState(existing?.rewardBadgeKey ?? "");
   const [rewardBadgeText, setRewardBadgeText] = useState(existing?.rewardBadgeText ?? "");
   const [rewardXpBoost, setRewardXpBoost] = useState(existing?.rewardXpBoost ?? 1);
+  const [rewardNameStyleKey, setRewardNameStyleKey] = useState(existing?.rewardNameStyleKey ?? "");
   const [rewardQuantity, setRewardQuantity] = useState(existing?.rewardQuantity ?? 1);
   const [highlightTier, setHighlightTier] = useState(existing?.highlightTier ?? false);
   const [description, setDescription] = useState(existing?.description ?? "");
@@ -622,6 +625,7 @@ function TierEditorModal({
       rewardBadgeText: rewardType === "badge" ? (rewardBadgeText || null) : null,
       rewardItemRarity: rewardType === "random_item" ? rewardItemRarity : null,
       rewardXpBoost: rewardType === "xp_boost" ? rewardXpBoost : null,
+      rewardNameStyleKey: rewardType === "name_style" ? (rewardNameStyleKey.trim() || null) : null,
       rewardQuantity: Math.max(1, rewardQuantity),
       highlightTier,
       description: description.trim() || null,
@@ -851,6 +855,23 @@ function TierEditorModal({
                 <p className="text-[10px] text-zinc-500">Fügt dem User zusätzliche Fortschrittstage hinzu (überspringt Tiers).</p>
               </div>
             )}
+
+            {rewardType === "name_style" && (
+              <div className="space-y-2">
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Name-Style Key
+                  <input
+                    value={rewardNameStyleKey}
+                    onChange={(e) => setRewardNameStyleKey(e.target.value)}
+                    placeholder="z.B. galaxy, rainbow, celestial…"
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+                  />
+                </label>
+                <p className="text-[10px] text-zinc-500">
+                  Key des Name-Styles aus dem Katalog (z.B. galaxy, rainbow, prismatic…). Der User erhält diesen Style dauerhaft.
+                </p>
+              </div>
+            )}
           </div>
 
           {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
@@ -907,6 +928,7 @@ function PassEditor({
   const [bannerImageUrl, setBannerImageUrl] = useState(pass.bannerImageUrl ?? "");
   const [showInShop, setShowInShop] = useState(pass.showInShop ?? true);
   const [showOnDashboard, setShowOnDashboard] = useState(pass.showOnDashboard ?? true);
+  const [shopSortOrder, setShopSortOrder] = useState(pass.shopSortOrder ?? 0);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -941,6 +963,7 @@ function PassEditor({
       bannerImageUrl: bannerImageUrl.trim() || null,
       showInShop,
       showOnDashboard,
+      shopSortOrder,
     };
     const res = await adminUpdateBattlePass(pass.id, input);
     setSaving(false);
@@ -1145,6 +1168,16 @@ function PassEditor({
             {showOnDashboard ? "Dashboard" : "Kein Dashboard"}
           </button>
         </div>
+        <label className="flex flex-col gap-1 text-xs text-zinc-400">
+          Shop-Reihenfolge (niedriger = weiter vorne)
+          <input
+            type="number"
+            value={shopSortOrder}
+            onChange={(e) => setShopSortOrder(Number(e.target.value) || 0)}
+            min={0}
+            className="w-28 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+          />
+        </label>
       </div>
 
       {/* Action buttons */}
@@ -1329,6 +1362,7 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
       bannerImageUrl: null,
       showInShop: true,
       showOnDashboard: true,
+      shopSortOrder: 0,
     });
     setCreating(false);
     if (res.success) {

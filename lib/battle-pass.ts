@@ -1,6 +1,6 @@
 import type { Rarity } from "@/lib/cases";
 
-export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_boost";
+export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_boost" | "name_style";
 export type BpTheme = "default" | "gold" | "neon" | "fire" | "ice";
 
 export interface BattlePassTier {
@@ -17,6 +17,7 @@ export interface BattlePassTier {
   rewardBadgeText: string | null;
   rewardItemRarity: Rarity | null;
   rewardXpBoost: number | null;
+  rewardNameStyleKey: string | null;
   rewardQuantity: number;
   highlightTier: boolean;
   description: string | null;
@@ -43,6 +44,7 @@ export interface BattlePass {
   bannerImageUrl: string | null;
   showInShop: boolean;
   showOnDashboard: boolean;
+  shopSortOrder: number;
   tiers: BattlePassTier[];
   createdAt: string;
 }
@@ -110,11 +112,11 @@ export interface BpAutoFillConfig {
 }
 
 export const DEFAULT_AUTOFILL_CONFIG: BpAutoFillConfig = {
-  creditMin: 200,
-  creditMax: 5000,
+  creditMin: 1000,
+  creditMax: 25000,
   milestoneTierInterval: 5,
-  rewardMixCredits: 60,
-  rewardMixRandomItem: 25,
+  rewardMixCredits: 55,
+  rewardMixRandomItem: 30,
   rewardMixXpBoost: 10,
   rewardMixBadge: 5,
   freeRatio: 40,

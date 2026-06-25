@@ -33,6 +33,7 @@ export interface TicketMessage {
   ticketId: string;
   userId: string;
   username: string;
+  nameStyleKey?: string;
   message: string;
   isStaff: boolean;
   createdAt: string;
@@ -157,15 +158,19 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
     rewardNote: (data as Record<string, unknown>).reward_note as string | null ?? null,
     rewardGrantedAt: (data as Record<string, unknown>).reward_granted_at as string | null ?? null,
     rewardPending: ((data as Record<string, unknown>).reward_pending as boolean) ?? false,
-    messages: (messages ?? []).map((m) => ({
-      id: m.id,
-      ticketId: m.ticket_id,
-      userId: m.user_id,
-      username: usernames.get(m.user_id) ?? "Unbekannt",
-      message: m.message,
-      isStaff: m.is_staff,
-      createdAt: m.created_at,
-    })),
+    messages: (messages ?? []).map((m) => {
+      const userInfo = usernames.get(m.user_id);
+      return {
+        id: m.id,
+        ticketId: m.ticket_id,
+        userId: m.user_id,
+        username: userInfo?.username ?? "Unbekannt",
+        nameStyleKey: userInfo?.nameStyleKey,
+        message: m.message,
+        isStaff: m.is_staff,
+        createdAt: m.created_at,
+      };
+    }),
   };
 }
 
@@ -525,10 +530,21 @@ export async function escalateTicketToAdmin(ticketId: string): Promise<{ success
 // in a second batched query instead, same pattern the rest of the codebase
 // (auctions.ts, trading.ts) already uses.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function fetchUsernames(admin: ReturnType<typeof createAdminClient>, userIds: string[]): Promise<Map<string, string>> {
+async function fetchUsernames(
+  admin: ReturnType<typeof createAdminClient>,
+  userIds: string[],
+): Promise<Map<string, { username: string; nameStyleKey?: string }>> {
   if (userIds.length === 0) return new Map();
-  const { data } = await admin.from("profiles").select("id, username").in("id", userIds);
-  return new Map((data ?? []).map((p: { id: string; username: string | null }) => [p.id, p.username ?? "Unbekannt"]));
+  const { data } = await admin.from("profiles").select("id, username, active_name_style_key").in("id", userIds);
+  return new Map(
+    (data ?? []).map((p: { id: string; username: string | null; active_name_style_key?: string | null }) => [
+      p.id,
+      {
+        username: p.username ?? "Unbekannt",
+        nameStyleKey: p.active_name_style_key ?? undefined,
+      },
+    ])
+  );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -538,7 +554,7 @@ async function attachUsernames(admin: ReturnType<typeof createAdminClient>, rows
     ...rows.filter((r) => r.closed_by).map((r) => r.closed_by),
   ]));
   const usernames = await fetchUsernames(admin, allUserIds);
-  return rows.map((row) => mapTicket(row, usernames.get(row.user_id), row.closed_by ? usernames.get(row.closed_by) : undefined));
+  return rows.map((row) => mapTicket(row, usernames.get(row.user_id)?.username, row.closed_by ? usernames.get(row.closed_by)?.username : undefined));
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

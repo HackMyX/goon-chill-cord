@@ -3,8 +3,8 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, isModerator } from "@/lib/admin";
-import { getActiveBattlePass } from "@/lib/actions/battle-pass";
-import { BattlePassShell } from "@/components/battlepass/battlepass-shell";
+import { getActiveBattlePasses } from "@/lib/actions/battle-pass";
+import { BattlePassSelector } from "@/components/battlepass/battlepass-selector";
 import { TopBar } from "@/components/layout/top-bar";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
@@ -14,9 +14,9 @@ export default async function BattlePassPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/");
 
-  const [{ data: profile }, view] = await Promise.all([
+  const [{ data: profile }, views] = await Promise.all([
     supabase.from("profiles").select("credits, streak_days, role").eq("id", user.id).single(),
-    getActiveBattlePass(),
+    getActiveBattlePasses(),
   ]);
 
   const credits = profile?.credits ?? 0;
@@ -24,7 +24,7 @@ export default async function BattlePassPage() {
   const adminFlag = isAdmin(profile);
   const modFlag = isModerator(profile);
 
-  if (!view) {
+  if (!views || views.length === 0) {
     return (
       <div className="flex flex-1 flex-col">
         <TopBar credits={credits} streakDays={streakDays} isAdmin={adminFlag} isModerator={modFlag} />
@@ -44,7 +44,7 @@ export default async function BattlePassPage() {
   return (
     <div className="flex flex-1 flex-col">
       <TopBar credits={credits} streakDays={streakDays} isAdmin={adminFlag} isModerator={modFlag} />
-      <BattlePassShell pass={view.pass} userStatus={view.userStatus} />
+      <BattlePassSelector views={views} />
     </div>
   );
 }

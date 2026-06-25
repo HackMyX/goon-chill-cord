@@ -50,7 +50,7 @@ export default async function Home() {
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("credits, streak_days, username, role")
+      .select("credits, streak_days, username, role, active_name_style_key")
       .eq("id", user.id)
       .single(),
     supabase
@@ -101,6 +101,7 @@ export default async function Home() {
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}
       username={profile?.username ?? undefined}
+      nameStyleKey={(profile as Record<string, unknown> | null)?.active_name_style_key as string | undefined}
       userCount={userCount ?? 0}
       homepageConfig={siteConfig.homepageConfig}
       snakeX1={snakeX1}

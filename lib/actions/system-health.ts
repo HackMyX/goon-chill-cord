@@ -85,8 +85,9 @@ const OPTIONAL_TABLES: Array<{ name: string; migration: string; feature: string 
   { name: "trade_items",        migration: "CREATE TABLE IF NOT EXISTS trade_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), trade_id uuid NOT NULL, inventory_id uuid, side text NOT NULL DEFAULT 'from', created_at timestamptz NOT NULL DEFAULT now()); ALTER TABLE trade_items ENABLE ROW LEVEL SECURITY;", feature: "Handel (Trade-Items)" },
   { name: "ip_duplicate_ignore","migration": "Supabase SQL Editor",                feature: "Security (IP-Ignore-Liste)" },
   { name: "shop_category_day_rules","migration": "Supabase SQL Editor",            feature: "Shop (Tagesregeln)" },
-  { name: "name_styles",            migration: "Supabase SQL Editor",              feature: "Name Styles" },
-  { name: "user_name_styles",       migration: "Supabase SQL Editor",              feature: "Name Styles (User-Zuweisungen)" },
+  { name: "name_styles",             migration: "Supabase SQL Editor",                                            feature: "Name Styles" },
+  { name: "user_name_styles",        migration: "Supabase SQL Editor",                                            feature: "Name Styles (User-Zuweisungen)" },
+  { name: "name_style_rarity_config",migration: "scripts/add-name-style-rarity-config.cjs",                      feature: "Name Styles (Seltenheiten-Konfiguration)" },
 ];
 
 /** Config singleton rows that must exist. */
@@ -173,6 +174,16 @@ const COLUMN_CHECKS: Array<{
   { id: "col_profiles_active_name_style", category: "Name Styles", table: "profiles", col: "active_name_style_key", detail: "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS active_name_style_key text;" },
   { id: "col_profiles_warning_strikes",   category: "Name Styles", table: "profiles", col: "warning_strikes",       detail: "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS warning_strikes integer NOT NULL DEFAULT 0;" },
   { id: "col_profiles_warning_note",      category: "Name Styles", table: "profiles", col: "warning_note",          detail: "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS warning_note text;" },
+  // Name Styles — shop system (2026-06-25)
+  { id: "col_ns_available_in_shop",  category: "Name Styles", table: "name_styles", col: "available_in_shop",  detail: "ALTER TABLE name_styles ADD COLUMN IF NOT EXISTS available_in_shop boolean NOT NULL DEFAULT false;" },
+  { id: "col_ns_shop_price_cr",      category: "Name Styles", table: "name_styles", col: "shop_price_cr",      detail: "ALTER TABLE name_styles ADD COLUMN IF NOT EXISTS shop_price_cr integer NOT NULL DEFAULT 0;" },
+  { id: "col_ns_shop_stock",         category: "Name Styles", table: "name_styles", col: "shop_stock",         detail: "ALTER TABLE name_styles ADD COLUMN IF NOT EXISTS shop_stock integer NULL;" },
+  { id: "col_ns_shop_expires_at",    category: "Name Styles", table: "name_styles", col: "shop_expires_at",    detail: "ALTER TABLE name_styles ADD COLUMN IF NOT EXISTS shop_expires_at timestamptz NULL;" },
+  { id: "col_ns_shop_sort_order",    category: "Name Styles", table: "name_styles", col: "shop_sort_order",    detail: "ALTER TABLE name_styles ADD COLUMN IF NOT EXISTS shop_sort_order integer NOT NULL DEFAULT 0;" },
+  // Battle Pass — shop sort order (2026-06-25)
+  { id: "col_bp_shop_sort_order",    category: "Battle Pass", table: "battle_passes",     col: "shop_sort_order",       detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS shop_sort_order integer NOT NULL DEFAULT 0;" },
+  // Battle Pass tiers — name style reward (2026-06-25)
+  { id: "col_bpt_name_style_key",    category: "Battle Pass", table: "battle_pass_tiers", col: "reward_name_style_key", detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS reward_name_style_key text NULL;" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -624,6 +635,20 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
       : ok("user_name_styles_count", "Name Styles", "user_name_styles", `${unsCount ?? 0} User-Zuweisung(en)`));
   } catch (e) {
     results.push(err("user_name_styles_count", "Name Styles", "user_name_styles", String(e)));
+  }
+
+  try {
+    const { count: nsrcCount, error: nsrcErr } = await admin
+      .from("name_style_rarity_config")
+      .select("*", { count: "exact", head: true });
+    results.push(nsrcErr
+      ? err("name_style_rarity_config_count", "Name Styles", "name_style_rarity_config", nsrcErr.message)
+      : ok("name_style_rarity_config_count", "Name Styles", "name_style_rarity_config",
+          nsrcCount === 4
+            ? `${nsrcCount} Seltenheiten konfiguriert (erwartet: 4)`
+            : `WARNUNG: ${nsrcCount ?? 0} von 4 Seltenheiten konfiguriert`));
+  } catch (e) {
+    results.push(err("name_style_rarity_config_count", "Name Styles", "name_style_rarity_config", String(e)));
   }
 
   return results;

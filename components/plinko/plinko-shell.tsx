@@ -17,6 +17,7 @@ import {
 } from "@/lib/actions/plinko";
 import type { PlinkoConfig } from "@/lib/actions/plinko";
 import { useSoundManager } from "@/lib/sound-manager";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 interface Props {
   config: PlinkoConfig;
@@ -173,7 +174,7 @@ function LeaderboardPanel({ config }: { config: PlinkoConfig }) {
           className={`flex items-center gap-2 rounded-lg border border-white/5 px-3 py-2 ${i === 0 ? "border-yellow-400/20 bg-yellow-400/[0.04]" : "bg-white/[0.01]"}`}
         >
           <span className="w-5 text-center text-sm">{medals[i] ?? `${i + 1}.`}</span>
-          <span className="flex-1 text-xs font-semibold text-zinc-300 truncate">{e.username}</span>
+          <span className="flex-1 text-xs font-semibold text-zinc-300 truncate"><StyledUsername name={e.username} styleKey={e.nameStyleKey} size="sm" /></span>
           <span className="text-[10px] text-zinc-500">{e.multiplier}x</span>
           <span className="text-xs font-bold text-amber-400">{fmt(e.payoutCr)} CR</span>
         </div>

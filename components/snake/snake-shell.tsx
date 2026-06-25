@@ -13,6 +13,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { submitSnakeScore } from "@/lib/actions/snake";
 import type { SnakeConfig, SnakeMode, SnakeModeConfig, SnakeGrindConfig } from "@/lib/snake-config";
 import type { SnakeLeaderboardEntry } from "@/lib/actions/snake";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -757,7 +758,7 @@ function Leaderboard({ entries, myBest, userId, mode }: {
             <div key={entry.userId} className={`flex items-center gap-3 px-4 py-2.5 ${isSelf ? "bg-purple-500/10 ring-1 ring-inset ring-purple-500/20" : "hover:bg-white/[0.02]"}`}>
               <RankIcon rank={entry.rank} />
               <span className={`flex-1 truncate text-sm ${isSelf ? "font-bold text-purple-200" : "text-zinc-300"}`}>
-                {isSelf ? "Du" : entry.username}
+                {isSelf ? "Du" : <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} />}
               </span>
               <span className={`font-mono text-sm font-bold ${entry.rank === 1 ? "text-amber-400" : entry.rank <= 3 ? "text-amber-500/80" : "text-zinc-200"}`}>
                 {entry.bestScore}

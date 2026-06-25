@@ -12,6 +12,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { collectMineCredits, upgradeMine } from "@/lib/actions/mine";
 import type { MineConfig } from "@/lib/mine-config";
 import type { MineProgress, MineLeaderboardEntry } from "@/lib/actions/mine";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -127,7 +128,7 @@ function LeaderboardRow({ entry, userId }: { entry: MineLeaderboardEntry; userId
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <span className={`truncate text-sm font-semibold ${isSelf ? "text-amber-200" : "text-zinc-200"}`}>
-          {isSelf ? "Du" : entry.username}
+          {isSelf ? "Du" : <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} />}
         </span>
         <span className={`text-[10px] font-bold uppercase ${theme.text}`}>{theme.ore} {theme.label} Lvl {entry.level}</span>
       </div>

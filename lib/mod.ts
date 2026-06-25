@@ -102,6 +102,7 @@ export interface ModActionRow {
 export interface ModUserSummary {
   id: string;
   username: string;
+  nameStyleKey?: string;
   role: string;
   credits: number;
   streakDays: number;
@@ -115,6 +116,7 @@ export interface ModTicket {
   id: string;
   userId: string;
   username: string;
+  nameStyleKey?: string;
   subject: string;
   message: string;
   status: "open" | "in_progress" | "closed" | string;
@@ -136,6 +138,7 @@ export interface TicketMessage {
   ticketId: string;
   userId: string;
   username: string;
+  nameStyleKey?: string;
   message: string;
   isStaff: boolean;
   createdAt: string;

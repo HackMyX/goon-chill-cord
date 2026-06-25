@@ -19,6 +19,7 @@ export interface MineLeaderboardEntry {
   rank: number;
   userId: string;
   username: string;
+  nameStyleKey?: string;
   level: number;
   totalMined: number;
 }
@@ -246,7 +247,7 @@ export async function getMineLeaderboard(limit = 20): Promise<MineLeaderboardEnt
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("mine_progress")
-    .select("user_id, level, total_mined, profiles(username)")
+    .select("user_id, level, total_mined, profiles(username, active_name_style_key)")
     .order("total_mined", { ascending: false })
     .limit(limit);
 
@@ -256,21 +257,22 @@ export async function getMineLeaderboard(limit = 20): Promise<MineLeaderboardEnt
     user_id: string;
     level: number;
     total_mined: number;
-    profiles: { username: string } | null;
+    profiles: { username: string; active_name_style_key: string | null } | null;
   }[]).map((row, i) => ({
     rank: i + 1,
     userId: row.user_id,
     username: row.profiles?.username ?? "Unbekannt",
+    nameStyleKey: row.profiles?.active_name_style_key ?? undefined,
     level: row.level,
     totalMined: row.total_mined,
   }));
 }
 
-export async function getWorldLeaderboard(limit = 20): Promise<{ rank: number; userId: string; username: string; credits: number }[]> {
+export async function getWorldLeaderboard(limit = 20): Promise<{ rank: number; userId: string; username: string; nameStyleKey?: string; credits: number }[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("profiles")
-    .select("id, username, credits")
+    .select("id, username, credits, active_name_style_key")
     .order("credits", { ascending: false })
     .limit(limit);
 
@@ -279,6 +281,7 @@ export async function getWorldLeaderboard(limit = 20): Promise<{ rank: number; u
     rank: i + 1,
     userId: row.id,
     username: row.username,
+    nameStyleKey: (row.active_name_style_key as string | null) ?? undefined,
     credits: row.credits,
   }));
 }

@@ -26,6 +26,7 @@ function rowToTier(r: Record<string, unknown>): BattlePassTier {
     rewardBadgeText: r.reward_badge_text as string | null,
     rewardItemRarity: r.reward_item_rarity as Rarity | null,
     rewardXpBoost: r.reward_xp_boost as number | null,
+    rewardNameStyleKey: r.reward_name_style_key as string | null,
     rewardQuantity: (r.reward_quantity as number | null) ?? 1,
     highlightTier: (r.highlight_tier as boolean | null) ?? false,
     description: r.description as string | null,
@@ -54,6 +55,7 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
     bannerImageUrl: r.banner_image_url as string | null,
     showInShop: (r.show_in_shop as boolean | null) ?? true,
     showOnDashboard: (r.show_on_dashboard as boolean | null) ?? true,
+    shopSortOrder: (r.shop_sort_order as number | null) ?? 0,
     tiers,
     createdAt: r.created_at as string,
   };
@@ -109,6 +111,90 @@ export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
   };
 
   return { pass, userStatus };
+}
+
+export async function getShopBattlePasses(): Promise<BattlePass[]> {
+  const admin = createAdminClient();
+  const { data: passRows } = await admin
+    .from("battle_passes")
+    .select("*")
+    .eq("is_active", true)
+    .eq("enabled", true)
+    .eq("show_in_shop", true)
+    .order("shop_sort_order", { ascending: true });
+
+  if (!passRows || passRows.length === 0) return [];
+  return passRows.map((p) => rowToPass(p as Record<string, unknown>, []));
+}
+
+export async function getActiveBattlePasses(): Promise<ActiveBpView[]> {
+  const admin = createAdminClient();
+
+  const { data: passRows } = await admin
+    .from("battle_passes")
+    .select("*")
+    .eq("is_active", true)
+    .eq("enabled", true)
+    .order("shop_sort_order", { ascending: true });
+
+  if (!passRows || passRows.length === 0) return [];
+
+  const passIds = passRows.map((p) => p.id as string);
+
+  const [{ data: allTierRows }, supabase] = await Promise.all([
+    admin
+      .from("battle_pass_tiers")
+      .select("*")
+      .in("pass_id", passIds)
+      .order("tier_number", { ascending: true }),
+    createClient(),
+  ]);
+
+  const tiersByPass = new Map<string, BattlePassTier[]>();
+  for (const passId of passIds) {
+    tiersByPass.set(
+      passId,
+      (allTierRows ?? [])
+        .filter((t) => t.pass_id === passId)
+        .map((t) => rowToTier(t as Record<string, unknown>))
+    );
+  }
+
+  const passes = passRows.map((p) =>
+    rowToPass(p as Record<string, unknown>, tiersByPass.get(p.id as string) ?? [])
+  );
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return passes.map((pass) => ({ pass, userStatus: null }));
+
+  const [{ data: ubpRows }, { data: claimRows }] = await Promise.all([
+    admin
+      .from("user_battle_passes")
+      .select("pass_id, has_premium, has_elite, progress_days")
+      .eq("user_id", user.id)
+      .in("pass_id", passIds),
+    admin
+      .from("user_bp_tier_claims")
+      .select("pass_id, tier_id")
+      .eq("user_id", user.id)
+      .in("pass_id", passIds),
+  ]);
+
+  return passes.map((pass) => {
+    const ubp = (ubpRows ?? []).find((r) => r.pass_id === pass.id);
+    const claims = (claimRows ?? [])
+      .filter((r) => r.pass_id === pass.id)
+      .map((r) => r.tier_id as string);
+
+    const userStatus: UserBpStatus = {
+      passId: pass.id,
+      hasPremium: ubp?.has_premium ?? false,
+      hasElite: ubp?.has_elite ?? false,
+      progressDays: ubp?.progress_days ?? 0,
+      claimedTierIds: claims,
+    };
+    return { pass, userStatus };
+  });
 }
 
 export async function purchaseBattlePass(passId: string): Promise<{ success: boolean; error?: string }> {
@@ -355,6 +441,24 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
         .eq("pass_id", passId);
       rewardMsg = `+${days} Fortschrittstag${days !== 1 ? "e" : ""}`;
     }
+  } else if (rewardType === "name_style") {
+    const styleKey = t.reward_name_style_key as string | null;
+    if (styleKey) {
+      const { data: alreadyOwned } = await admin
+        .from("user_name_styles")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("style_key", styleKey)
+        .maybeSingle();
+      if (!alreadyOwned) {
+        await admin.from("user_name_styles").insert({
+          user_id: user.id,
+          style_key: styleKey,
+          source: "won",
+        });
+      }
+      rewardMsg = `Name-Style: ${styleKey}`;
+    }
   }
 
   await admin.from("user_bp_tier_claims").insert({
@@ -549,6 +653,7 @@ export interface AdminPassInput {
   bannerImageUrl: string | null;
   showInShop: boolean;
   showOnDashboard: boolean;
+  shopSortOrder: number;
 }
 
 export async function adminCreateBattlePass(
@@ -579,6 +684,7 @@ export async function adminCreateBattlePass(
       banner_image_url: input.bannerImageUrl || null,
       show_in_shop: input.showInShop,
       show_on_dashboard: input.showOnDashboard,
+      shop_sort_order: input.shopSortOrder ?? 0,
     })
     .select("id")
     .single();
@@ -619,6 +725,7 @@ export async function adminUpdateBattlePass(
       banner_image_url: input.bannerImageUrl || null,
       show_in_shop: input.showInShop,
       show_on_dashboard: input.showOnDashboard,
+      shop_sort_order: input.shopSortOrder ?? 0,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -645,9 +752,6 @@ export async function adminSetPassActive(id: string, active: boolean): Promise<{
   if (!user) return { success: false, error: "Kein Zugriff." };
 
   const admin = createAdminClient();
-  if (active) {
-    await admin.from("battle_passes").update({ is_active: false }).neq("id", id);
-  }
   const { error } = await admin
     .from("battle_passes")
     .update({ is_active: active, updated_at: new Date().toISOString() })
@@ -671,6 +775,7 @@ export interface AdminTierInput {
   rewardBadgeText: string | null;
   rewardItemRarity: Rarity | null;
   rewardXpBoost: number | null;
+  rewardNameStyleKey: string | null;
   rewardQuantity: number;
   highlightTier: boolean;
   description: string | null;
@@ -700,6 +805,7 @@ export async function adminUpsertBpTier(
       reward_badge_text: (input.rewardType === "badge") ? (input.rewardBadgeText ?? "") : null,
       reward_item_rarity: (input.rewardType === "random_item") ? input.rewardItemRarity : null,
       reward_xp_boost: (input.rewardType === "xp_boost") ? (input.rewardXpBoost ?? 1) : null,
+      reward_name_style_key: (input.rewardType === "name_style") ? (input.rewardNameStyleKey ?? null) : null,
       reward_quantity: Math.max(1, input.rewardQuantity),
       highlight_tier: input.highlightTier,
       description: input.description?.trim() || null,

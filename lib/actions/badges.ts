@@ -261,6 +261,73 @@ export async function adminDeleteBadgeDefinition(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Auto-award logic — triggered by system events
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Check and automatically award Name Style achievement badges.
+ * Safe to call from anywhere after a user receives a new name style — never throws.
+ */
+export async function checkAndAwardNameStyleBadges(userId: string): Promise<void> {
+  try {
+    const admin = createAdminClient();
+
+    // Count all owned styles
+    const { count: styleCount } = await admin
+      .from("user_name_styles")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId);
+
+    // Grant ns_collector when user owns 5+
+    if ((styleCount ?? 0) >= 5) {
+      await admin
+        .from("user_badges")
+        .upsert({ user_id: userId, badge_key: "ns_collector" }, { onConflict: "user_id,badge_key" });
+    }
+
+    // Fetch all owned style keys to check rarities
+    const { data: ownedRows } = await admin
+      .from("user_name_styles")
+      .select("style_key")
+      .eq("user_id", userId);
+
+    if (ownedRows && ownedRows.length > 0) {
+      const styleKeys = ownedRows.map((r) => r.style_key as string);
+
+      // Check for any mythisch-rarity styles
+      const { data: mythischOwned } = await admin
+        .from("name_styles")
+        .select("key")
+        .in("key", styleKeys)
+        .eq("rarity", "mythisch")
+        .limit(1);
+
+      if (mythischOwned && mythischOwned.length > 0) {
+        await admin
+          .from("user_badges")
+          .upsert({ user_id: userId, badge_key: "ns_mythisch" }, { onConflict: "user_id,badge_key" });
+      }
+
+      // Check for any ultra-rarity styles
+      const { data: ultraOwned } = await admin
+        .from("name_styles")
+        .select("key")
+        .in("key", styleKeys)
+        .eq("rarity", "ultra")
+        .limit(1);
+
+      if (ultraOwned && ultraOwned.length > 0) {
+        await admin
+          .from("user_badges")
+          .upsert({ user_id: userId, badge_key: "ns_ultra" }, { onConflict: "user_id,badge_key" });
+      }
+    }
+  } catch {
+    // Never block the calling action
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Admin read — all user badges for admin panel
 // ─────────────────────────────────────────────────────────────────────────────
 

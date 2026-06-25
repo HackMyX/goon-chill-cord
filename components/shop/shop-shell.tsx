@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Store, Clock, Sparkles, ShoppingCart, Check, Megaphone,
-  Star, Zap, Package, TrendingUp, Eye, X, ChevronLeft, ChevronRight,
+  Star, Zap, Package, TrendingUp, Eye, X, ChevronLeft, ChevronRight, Crown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Canvas } from "@react-three/fiber";
@@ -21,6 +21,7 @@ import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { resolveShopCategoryIcon, resolveShopCategoryColor } from "@/lib/shop-category-icons";
 import { RARITY_STYLES, type Rarity } from "@/lib/cases";
+import { BP_THEMES, type BattlePass } from "@/lib/battle-pass";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -547,6 +548,7 @@ interface ShopShellProps {
   categories: ShopCategoryMeta[];
   isAdmin?: boolean;
   isModerator?: boolean;
+  activeBattlePasses?: BattlePass[];
 }
 
 export function ShopShell({
@@ -559,6 +561,7 @@ export function ShopShell({
   categories,
   isAdmin = false,
   isModerator = false,
+  activeBattlePasses = [],
 }: ShopShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => { if (typeof row.credits === "number") setCredits(row.credits); });
@@ -683,6 +686,49 @@ export function ShopShell({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Battle Pass section */}
+        {activeBattlePasses.length > 0 && (
+          <div className="mb-6">
+            <SectionHeader icon={Star} label="Battle Pass" colorClass="text-amber-300" />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {activeBattlePasses.map((bp) => {
+                const theme = BP_THEMES[bp.theme] ?? BP_THEMES.default;
+                return (
+                  <Link key={bp.id} href="/battlepass" className="group relative overflow-hidden rounded-2xl border transition-all duration-300 hover:-translate-y-1"
+                    style={{ borderColor: `${theme.accent}40`, background: `linear-gradient(135deg, ${theme.accent}10 0%, #0a090f 60%)`, boxShadow: `0 0 0 1px ${theme.accent}15` }}
+                  >
+                    <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle at 60% 0%, ${theme.glow}, transparent 70%)`, opacity: 0.4 }} />
+                    <div className="relative flex items-center justify-between p-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: theme.accent }}>{bp.seasonLabel}</p>
+                        <h3 className="text-base font-black text-white">{bp.name}</h3>
+                        {bp.description && <p className="mt-1 text-xs text-white/40 line-clamp-1">{bp.description}</p>}
+                        <div className="mt-2 flex items-center gap-2 text-xs">
+                          <span className="rounded-full border px-2 py-0.5 font-bold" style={{ borderColor: `${theme.accent}40`, color: theme.accent, background: `${theme.accent}10` }}>
+                            {bp.tierCount} Tiers
+                          </span>
+                          <span className="text-white/30">ab {bp.priceCr.toLocaleString("de-DE")} CR</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 ml-4 flex items-center justify-center rounded-xl border p-3 transition-all group-hover:scale-110"
+                        style={{ borderColor: `${theme.accent}30`, background: `${theme.accent}12`, boxShadow: `0 0 16px ${theme.glow}` }}
+                      >
+                        <Crown className="h-6 w-6" style={{ color: theme.accent }} />
+                      </div>
+                    </div>
+                    <div className="px-4 pb-3">
+                      <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: theme.accent }}>
+                        <ChevronRight className="h-3 w-3" />
+                        Zum Battle Pass
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {listings.length === 0 ? (
           <motion.div

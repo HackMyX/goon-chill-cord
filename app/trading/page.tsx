@@ -25,7 +25,7 @@ export default async function TradingPage() {
   const admin = createAdminClient();
 
   const [{ data: players }, { data: myInventory }, { data: tradeRows }] = await Promise.all([
-    admin.from("profiles").select("id, username, accepts_trades").neq("id", user.id).order("username"),
+    admin.from("profiles").select("id, username, accepts_trades, active_name_style_key").neq("id", user.id).order("username"),
     admin
       .from("inventory")
       .select(`id, item:items(${ITEM_STAT_SELECT})`)
@@ -92,6 +92,7 @@ export default async function TradingPage() {
   const tradablePlayers: TradablePlayer[] = (players ?? []).map((p) => ({
     id: p.id,
     username: p.username,
+    nameStyleKey: (p.active_name_style_key as string | null) ?? undefined,
     acceptsTrades: p.accepts_trades ?? true,
   }));
 

@@ -15,6 +15,7 @@ export interface SnakeLeaderboardEntry {
   rank: number;
   userId: string;
   username: string;
+  nameStyleKey?: string;
   bestScore: number;
   totalCrEarned: number;
   gamesPlayed: number;
@@ -405,7 +406,7 @@ export async function getSnakeLeaderboard(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("snake_best_scores")
-    .select("user_id, best_score, total_cr_earned, games_played, profiles(username)")
+    .select("user_id, best_score, total_cr_earned, games_played, profiles(username, active_name_style_key)")
     .eq("speed_mode", speedMode)
     .order("best_score", { ascending: false })
     .limit(limit);
@@ -417,11 +418,12 @@ export async function getSnakeLeaderboard(
     best_score: number;
     total_cr_earned: number;
     games_played: number;
-    profiles: { username: string } | null;
+    profiles: { username: string; active_name_style_key: string | null } | null;
   }[]).map((row, i) => ({
     rank: i + 1,
     userId: row.user_id,
     username: row.profiles?.username ?? "Unbekannt",
+    nameStyleKey: row.profiles?.active_name_style_key ?? undefined,
     bestScore: row.best_score,
     totalCrEarned: row.total_cr_earned,
     gamesPlayed: row.games_played,

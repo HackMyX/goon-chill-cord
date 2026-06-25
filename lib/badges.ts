@@ -24,10 +24,20 @@ export const ALL_BADGE_KEYS: string[] = [
   "streaker",
   "vip",
   "helper",
+  // Name Style achievement badges (auto-awarded)
+  "ns_collector",
+  "ns_mythisch",
+  "ns_ultra",
+  // Admin-grantable special badges
+  "grinder",
+  "season_vet",
 ];
 
 /** Badges that are auto-assigned based on role or battle pass ownership — not manually grantable */
 export const SYSTEM_BADGE_KEYS: string[] = ["premium", "elite", "mod", "admin"];
+
+/** Badges auto-awarded by the system based on achievements */
+export const AUTO_BADGE_KEYS: string[] = ["ns_collector", "ns_mythisch", "ns_ultra"];
 
 export function getBadgeStyle(key: string): {
   bg: string;
@@ -98,6 +108,41 @@ export function getBadgeStyle(key: string): {
         text: "#06b6d4",
         border: "rgba(6,182,212,0.4)",
         glow: "rgba(6,182,212,0.35)",
+      };
+    case "ns_collector":
+      return {
+        bg: "rgba(192,132,252,0.15)",
+        text: "#c084fc",
+        border: "rgba(192,132,252,0.4)",
+        glow: "rgba(192,132,252,0.35)",
+      };
+    case "ns_mythisch":
+      return {
+        bg: "rgba(168,85,247,0.15)",
+        text: "#a855f7",
+        border: "rgba(168,85,247,0.4)",
+        glow: "rgba(168,85,247,0.35)",
+      };
+    case "ns_ultra":
+      return {
+        bg: "rgba(245,158,11,0.18)",
+        text: "#f59e0b",
+        border: "rgba(245,158,11,0.5)",
+        glow: "rgba(245,158,11,0.45)",
+      };
+    case "grinder":
+      return {
+        bg: "rgba(249,115,22,0.15)",
+        text: "#f97316",
+        border: "rgba(249,115,22,0.4)",
+        glow: "rgba(249,115,22,0.35)",
+      };
+    case "season_vet":
+      return {
+        bg: "rgba(96,165,250,0.15)",
+        text: "#60a5fa",
+        border: "rgba(96,165,250,0.4)",
+        glow: "rgba(96,165,250,0.35)",
       };
     default:
       return {
