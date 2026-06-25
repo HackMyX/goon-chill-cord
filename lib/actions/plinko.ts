@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { logDebugEvent } from "@/lib/debug-log-server";
-import { DEFAULT_PLINKO_CONFIG } from "@/lib/plinko-types";
+import { DEFAULT_PLINKO_CONFIG, type PlinkoConfig, type PlinkoRiskLevel } from "@/lib/plinko-types";
 export type { PlinkoConfig, PlinkoRiskLevel } from "@/lib/plinko-types";
 
 export async function getPlinkoConfig(): Promise<PlinkoConfig> {

@@ -3,7 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isModerator, isAdmin } from "@/lib/admin";
-import { notifyUser } from "@/lib/notifications-internal";
+import { notifyUser, notifyStaff } from "@/lib/notifications-internal";
 import { logDebugEvent } from "@/lib/debug-log-server";
 import {
   DEFAULT_MOD_PERMISSIONS,
