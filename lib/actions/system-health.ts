@@ -56,11 +56,12 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
   const optionalTables = [
     "surveys", "survey_questions", "survey_answers", "survey_responses",
     "polls", "poll_options", "poll_votes",
+    "battle_passes", "battle_pass_tiers", "user_battle_passes", "user_bp_tier_claims",
   ];
   for (const tbl of optionalTables) {
     try {
       const { error } = await admin.from(tbl).select("*").limit(0);
-      results.push({ id: `table_opt_${tbl}`, category: "Optionale Tabellen", name: tbl, status: error ? "warn" : "ok", detail: error ? `Nicht vorhanden — Migration ausführen` : null });
+      results.push({ id: `table_opt_${tbl}`, category: "Optionale Tabellen", name: tbl, status: error ? "warn" : "ok", detail: error ? `Nicht vorhanden — Migration ausführen (scripts/add-battlepass-upgrades.sql)` : null });
     } catch (e) {
       results.push({ id: `table_opt_${tbl}`, category: "Optionale Tabellen", name: tbl, status: "warn", detail: String(e) });
     }
@@ -107,17 +108,17 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
   }
 
   // ── Environment variables ──────────────────────────────────────────────────
-  const envVars = [
-    { key: "NEXT_PUBLIC_SUPABASE_URL", id: "env_sb_url" },
-    { key: "NEXT_PUBLIC_SUPABASE_ANON_KEY", id: "env_sb_anon" },
-    { key: "SUPABASE_SERVICE_ROLE_KEY", id: "env_sb_service" },
-    { key: "GEMINI_API_KEY", id: "env_gemini" },
+  const envVars: { key: string; id: string; severity: "error" | "warn" }[] = [
+    { key: "NEXT_PUBLIC_SUPABASE_URL", id: "env_sb_url", severity: "error" },
+    { key: "NEXT_PUBLIC_SUPABASE_ANON_KEY", id: "env_sb_anon", severity: "error" },
+    { key: "SUPABASE_SERVICE_ROLE_KEY", id: "env_sb_service", severity: "error" },
+    { key: "GROQ_API_KEY", id: "env_groq", severity: "warn" },
   ];
   const envDetails: Record<string, string> = {
-    "NEXT_PUBLIC_SUPABASE_URL": "Supabase URL fehlt — App kann nicht verbinden",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "Supabase Anon Key fehlt — App kann nicht verbinden",
-    "SUPABASE_SERVICE_ROLE_KEY": "Service Role Key fehlt — Admin-Operationen schlagen fehl",
-    "GEMINI_API_KEY": "Gemini API-Schlüssel fehlt — KI-Chat nicht funktionsfähig. In .env.local setzen und Server neu starten.",
+    "NEXT_PUBLIC_SUPABASE_URL": "Supabase URL fehlt — App kann nicht verbinden.",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "Supabase Anon Key fehlt — App kann nicht verbinden.",
+    "SUPABASE_SERVICE_ROLE_KEY": "Service Role Key fehlt — Admin-Operationen schlagen fehl.",
+    "GROQ_API_KEY": "GROQ API-Schlüssel fehlt — KI-Chat nicht funktionsfähig. In .env.local setzen und Server neu starten. (Alternativ: Key im Admin-Panel unter 'KI-Chat' hinterlegen.)",
   };
   for (const ev of envVars) {
     const present = !!(process.env[ev.key]);
@@ -125,9 +126,41 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
       id: ev.id,
       category: "Umgebungsvariablen",
       name: ev.key,
-      status: present ? "ok" : (ev.key === "GEMINI_API_KEY" ? "warn" : "error"),
+      status: present ? "ok" : ev.severity,
       detail: present ? null : (envDetails[ev.key] ?? `${ev.key} fehlt`),
     });
+  }
+
+  // ── AI Config (GROQ key from DB or env) ───────────────────────────────────
+  try {
+    const { data: aiRow } = await admin.from("ai_config").select("groq_api_key").eq("id", "default").maybeSingle();
+    const dbKey = (aiRow?.groq_api_key as string | null)?.trim() || null;
+    const envKey = process.env.GROQ_API_KEY || null;
+    const hasKey = !!(dbKey || envKey);
+    const src = dbKey ? "DB (admin gesetzt)" : envKey ? ".env.local" : "fehlt";
+    results.push({
+      id: "ai_groq_key",
+      category: "KI / Chat",
+      name: "GROQ-API-Schlüssel",
+      status: hasKey ? "ok" : "warn",
+      detail: hasKey ? `Quelle: ${src}` : "Kein GROQ-Schlüssel gefunden — KI-Chat deaktiviert.",
+    });
+  } catch (e) {
+    results.push({ id: "ai_groq_key", category: "KI / Chat", name: "GROQ-API-Schlüssel", status: "warn", detail: `Konnte nicht geprüft werden: ${String(e)}` });
+  }
+
+  // ── Battle pass config ─────────────────────────────────────────────────────
+  try {
+    const { error } = await admin.from("battle_passes").select("id").limit(0);
+    if (error) {
+      results.push({ id: "bp_tables", category: "Battle Pass", name: "battle_passes Tabelle", status: "error", detail: `Tabelle fehlt — SQL-Migration ausführen: scripts/add-battlepass-upgrades.sql. Fehler: ${error.message}` });
+    } else {
+      const { data: activePasses } = await admin.from("battle_passes").select("id").eq("is_active", true);
+      const count = activePasses?.length ?? 0;
+      results.push({ id: "bp_active", category: "Battle Pass", name: "Aktiver Battle Pass", status: count === 1 ? "ok" : count === 0 ? "warn" : "warn", detail: count === 0 ? "Kein aktiver Battle Pass — im Admin-Panel aktivieren." : count > 1 ? `${count} aktive Pässe — sollte immer nur 1 sein.` : null });
+    }
+  } catch (e) {
+    results.push({ id: "bp_tables", category: "Battle Pass", name: "battle_passes Tabelle", status: "error", detail: String(e) });
   }
 
   // ── Profiles without usernames ─────────────────────────────────────────────

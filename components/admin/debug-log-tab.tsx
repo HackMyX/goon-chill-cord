@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Bug, AlertTriangle, Info, RefreshCw, Trash2,
   ChevronDown, ChevronUp, Loader2, Calendar, FileDown,
-  CheckCircle2, XCircle, AlertCircle, Activity,
+  CheckCircle2, XCircle, AlertCircle, Activity, FileText,
 } from "lucide-react";
 import {
   getDebugLogs, deleteAllDebugLogs, deleteDebugLogsInRange, deleteDebugLog,
@@ -68,6 +68,107 @@ ${detailHtml}${contextHtml}
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function exportSystemCheckAsPdf(checks: HealthCheck[], generatedAt: string) {
+  const STATUS_COLOR: Record<HealthCheck["status"], string> = {
+    ok: "#10b981", warn: "#f59e0b", error: "#ef4444",
+  };
+  const STATUS_LABEL: Record<HealthCheck["status"], string> = {
+    ok: "OK", warn: "WARNUNG", error: "FEHLER",
+  };
+  const categories = Array.from(new Set(checks.map((c) => c.category)));
+  const overallOk = !checks.some((c) => c.status === "error");
+  const overallWarn = checks.some((c) => c.status === "warn");
+  const overallColor = !overallOk ? "#ef4444" : overallWarn ? "#f59e0b" : "#10b981";
+  const overallLabel = !overallOk ? "FEHLER" : overallWarn ? "WARNUNGEN" : "ALLES OK";
+
+  const rowsHtml = categories.map((cat) => {
+    const catChecks = checks.filter((c) => c.category === cat);
+    const rowsStr = catChecks.map((c) => `
+      <tr>
+        <td style="padding:4px 8px; color:${STATUS_COLOR[c.status]}; font-weight:700; white-space:nowrap;">${STATUS_LABEL[c.status]}</td>
+        <td style="padding:4px 8px; color:#374151;">${escapeHtml(c.name)}</td>
+        <td style="padding:4px 8px; color:#6b7280; font-size:11px;">${c.detail ? escapeHtml(c.detail) : ""}</td>
+      </tr>`).join("");
+    return `
+      <tr><td colspan="3" style="padding:10px 8px 4px; font-size:11px; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:.05em; border-top:1px solid #e5e7eb;">${escapeHtml(cat)}</td></tr>
+      ${rowsStr}`;
+  }).join("");
+
+  const html = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
+<title>System-Prüfbericht — ${escapeHtml(generatedAt)}</title>
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; font-size:13px; color:#111; max-width:900px; margin:2rem auto; }
+  h1 { font-size:18px; margin:0 0 .25rem; }
+  .badge { display:inline-block; padding:3px 12px; border-radius:99px; color:#fff; font-weight:700; font-size:12px; margin-left:10px; background:${overallColor}; }
+  .meta { color:#6b7280; font-size:11px; margin:.5rem 0 1.5rem; }
+  table { width:100%; border-collapse:collapse; }
+  td { vertical-align:top; }
+  @media print { body { margin:.5rem; } }
+</style></head><body>
+<h1>System-Prüfbericht <span class="badge">${overallLabel}</span></h1>
+<p class="meta">Erstellt: ${escapeHtml(generatedAt)} &nbsp;|&nbsp; ${checks.length} Prüfungen</p>
+<table>${rowsHtml}</table>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=900,height=700");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+function exportAllLogAsPdf(logs: DebugLogEntry[]) {
+  if (logs.length === 0) return;
+  const LEVEL_COLOR: Record<DebugLogEntry["level"], string> = {
+    error: "#ef4444", warn: "#f59e0b", info: "#3b82f6",
+  };
+  const rows = logs.map((entry) => {
+    const ts = new Date(entry.createdAt).toLocaleString("de-DE", {
+      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+    const color = LEVEL_COLOR[entry.level];
+    return `<tr>
+      <td style="padding:4px 8px; color:${color}; font-weight:700; font-size:10px; white-space:nowrap;">${entry.level.toUpperCase()}</td>
+      <td style="padding:4px 8px; font-size:10px; color:#6b7280; white-space:nowrap;">${escapeHtml(ts)}</td>
+      <td style="padding:4px 8px; font-size:10px; color:#4b5563;">${escapeHtml(entry.scope)}</td>
+      <td style="padding:4px 8px; font-size:11px; color:#1f2937;">${escapeHtml(entry.message)}</td>
+      <td style="padding:4px 8px; font-size:10px; color:#9ca3af;">${entry.detail ? escapeHtml(entry.detail.slice(0, 120)) : ""}</td>
+    </tr>`;
+  }).join("");
+
+  const now = new Date().toLocaleString("de-DE", { dateStyle: "long", timeStyle: "short" });
+  const html = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
+<title>Debug-Log Export — ${escapeHtml(now)}</title>
+<style>
+  body { font-family: monospace; font-size:12px; color:#111; margin:1.5rem; }
+  h1 { font-size:14px; margin:0 0 .25rem; }
+  .meta { color:#6b7280; font-size:11px; margin:.25rem 0 1rem; }
+  table { width:100%; border-collapse:collapse; }
+  tr:nth-child(even) { background:#f9f9f9; }
+  td { vertical-align:top; border-bottom:1px solid #f0f0f0; }
+  @media print { body { margin:.5rem; } }
+</style></head><body>
+<h1>Debug-Log Export</h1>
+<p class="meta">${logs.length} Einträge &nbsp;|&nbsp; Stand: ${escapeHtml(now)}</p>
+<table>
+  <tr style="font-size:10px; color:#9ca3af; font-weight:700;">
+    <td style="padding:4px 8px;">Level</td><td style="padding:4px 8px;">Zeitstempel</td>
+    <td style="padding:4px 8px;">Scope</td><td style="padding:4px 8px;">Nachricht</td>
+    <td style="padding:4px 8px;">Detail (Auszug)</td>
+  </tr>
+  ${rows}
+</table>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=1100,height=750");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
 }
 
 function LogRow({ entry, onDeleted }: { entry: DebugLogEntry; onDeleted: () => void }) {
@@ -158,12 +259,17 @@ function LogRow({ entry, onDeleted }: { entry: DebugLogEntry; onDeleted: () => v
 function SystemHealthPanel() {
   const [checks, setChecks] = useState<HealthCheck[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checkedAt, setCheckedAt] = useState<string | null>(null);
   const sound = useSoundManager();
 
   async function load() {
     sound.click();
     setLoading(true);
-    try { setChecks(await runSystemHealthChecks()); }
+    try {
+      const result = await runSystemHealthChecks();
+      setChecks(result);
+      setCheckedAt(new Date().toLocaleString("de-DE", { dateStyle: "long", timeStyle: "medium" }));
+    }
     catch { setChecks([]); }
     finally { setLoading(false); }
   }
@@ -191,14 +297,26 @@ function SystemHealthPanel() {
             {overallStatus === "ok" ? "Alles OK" : overallStatus === "warn" ? "Warnungen" : "Fehler"}
           </span>
         )}
-        <button
-          onClick={load}
-          disabled={loading}
-          className="ml-auto flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:border-purple-400/50 hover:text-purple-300 disabled:opacity-50"
-        >
-          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          {checks ? "Neu prüfen" : "Jetzt prüfen"}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {checks && checks.length > 0 && (
+            <button
+              onClick={() => exportSystemCheckAsPdf(checks, checkedAt ?? new Date().toLocaleString("de-DE"))}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-400 hover:border-purple-400/50 hover:text-purple-300 transition-colors"
+              title="Systemprüfung als PDF exportieren"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              PDF
+            </button>
+          )}
+          <button
+            onClick={load}
+            disabled={loading}
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:border-purple-400/50 hover:text-purple-300 disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {checks ? "Neu prüfen" : "Jetzt prüfen"}
+          </button>
+        </div>
       </div>
 
       {!checks && !loading && (
@@ -334,14 +452,27 @@ export function DebugLogTab() {
           </button>
         ))}
 
-        <button
-          onMouseEnter={sound.hover}
-          onClick={() => { sound.click(); load(); }}
-          className="ml-auto flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-zinc-400 hover:border-white/30"
-        >
-          <RefreshCw className="h-3 w-3" />
-          Aktualisieren
-        </button>
+        <div className="ml-auto flex items-center gap-1.5">
+          {displayed.length > 0 && (
+            <button
+              onMouseEnter={sound.hover}
+              onClick={() => { sound.click(); exportAllLogAsPdf(displayed); }}
+              className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-zinc-400 hover:border-purple-400/50 hover:text-purple-300 transition-colors"
+              title="Sichtbare Logs als PDF exportieren"
+            >
+              <FileDown className="h-3 w-3" />
+              Als PDF
+            </button>
+          )}
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => { sound.click(); load(); }}
+            className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-zinc-400 hover:border-white/30"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Aktualisieren
+          </button>
+        </div>
         <button
           onMouseEnter={sound.hover}
           onClick={() => { sound.click(); setRangeOpen((o) => !o); }}

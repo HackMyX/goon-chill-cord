@@ -125,6 +125,7 @@ interface AdminShellProps {
   mineConfig: MineConfig;
   cleanupRules: CleanupRule[];
   battlePasses: BattlePass[];
+  battlePassMigrationNeeded?: boolean;
 }
 
 type Tab = "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass";
@@ -179,6 +180,7 @@ export function AdminShell({
   mineConfig,
   cleanupRules,
   battlePasses,
+  battlePassMigrationNeeded = false,
 }: AdminShellProps) {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>(() => {
@@ -464,7 +466,7 @@ export function AdminShell({
 
         {tab === "cleanup" && <CleanupConfigEditor rules={cleanupRules} />}
 
-        {tab === "battlepass" && <BattlePassTab initialPasses={battlePasses} />}
+        {tab === "battlepass" && <BattlePassTab initialPasses={battlePasses} migrationNeeded={battlePassMigrationNeeded} />}
 
         {tab === "ki" && (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">

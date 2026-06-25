@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, Edit2, Trash2, Zap, Eye, EyeOff, ChevronDown, ChevronUp,
-  Save, X, CheckCircle, Gift, Coins, Check, Star,
+  Save, X, CheckCircle, Gift, Coins, Check, Star, AlertTriangle, Copy, ExternalLink,
 } from "lucide-react";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -586,8 +586,127 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
 
 // ── Main tab ──────────────────────────────────────────────────────────────────
 
-export function BattlePassTab({ initialPasses }: { initialPasses: BattlePass[] }) {
+const MIGRATION_SQL = `-- In Supabase SQL Editor ausführen:
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS don_upgrade_tier integer NOT NULL DEFAULT 0;
+
+ALTER TABLE don_config
+  ADD COLUMN IF NOT EXISTS upgrade_enabled boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS upgrade_tiers jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+CREATE TABLE IF NOT EXISTS battle_passes (
+  id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name text NOT NULL,
+  season_label text NOT NULL DEFAULT 'Pass',
+  description text,
+  price_cr integer NOT NULL DEFAULT 2000,
+  enabled boolean NOT NULL DEFAULT true,
+  is_active boolean NOT NULL DEFAULT false,
+  start_date date, end_date date,
+  tier_count integer NOT NULL DEFAULT 20,
+  spin_chance_boost numeric(4,3) NOT NULL DEFAULT 0.020,
+  banner_color text NOT NULL DEFAULT '#7c3aed',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS battle_pass_tiers (
+  id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  pass_id text NOT NULL REFERENCES battle_passes(id) ON DELETE CASCADE,
+  tier_number integer NOT NULL,
+  name text NOT NULL DEFAULT 'Belohnung',
+  is_premium boolean NOT NULL DEFAULT true,
+  reward_type text NOT NULL DEFAULT 'credits',
+  reward_credits integer DEFAULT 100,
+  reward_item_id text, reward_badge_key text,
+  icon text NOT NULL DEFAULT '🎁',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(pass_id, tier_number)
+);
+
+CREATE TABLE IF NOT EXISTS user_battle_passes (
+  id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id uuid NOT NULL,
+  pass_id text NOT NULL REFERENCES battle_passes(id) ON DELETE CASCADE,
+  has_premium boolean NOT NULL DEFAULT false,
+  progress_days integer NOT NULL DEFAULT 0,
+  purchased_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id, pass_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_bp_tier_claims (
+  id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id uuid NOT NULL,
+  pass_id text NOT NULL,
+  tier_id text NOT NULL REFERENCES battle_pass_tiers(id) ON DELETE CASCADE,
+  claimed_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id, tier_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ubp_user ON user_battle_passes(user_id);
+CREATE INDEX IF NOT EXISTS idx_ubp_pass ON user_battle_passes(pass_id);
+CREATE INDEX IF NOT EXISTS idx_ubtc_user ON user_bp_tier_claims(user_id);
+CREATE INDEX IF NOT EXISTS idx_bpt_pass_num ON battle_pass_tiers(pass_id, tier_number);
+
+ALTER TABLE battle_passes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE battle_pass_tiers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_battle_passes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_bp_tier_claims ENABLE ROW LEVEL SECURITY;`;
+
+function MigrationBanner() {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(MIGRATION_SQL).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-500/40 bg-amber-500/[0.07] p-4">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-amber-200 mb-1">Datenbank-Migration erforderlich</p>
+          <p className="text-xs text-amber-400/80 mb-3">
+            Die Battle-Pass-Tabellen existieren noch nicht in deiner Supabase-Datenbank.
+            Führe die SQL-Migration aus, bevor du Pässe erstellen kannst.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/25 transition-colors"
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Kopiert!" : "SQL kopieren"}
+            </button>
+            <a
+              href="https://supabase.com/dashboard"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-400 hover:border-white/30 hover:text-zinc-200 transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Supabase SQL-Editor öffnen
+            </a>
+          </div>
+          <details className="mt-3">
+            <summary className="cursor-pointer text-[11px] text-amber-400/60 hover:text-amber-400 transition-colors">SQL anzeigen</summary>
+            <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-black/40 p-3 text-[10px] leading-relaxed text-zinc-400 whitespace-pre-wrap">{MIGRATION_SQL}</pre>
+          </details>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function BattlePassTab({ initialPasses, migrationNeeded = false }: { initialPasses: BattlePass[]; migrationNeeded?: boolean }) {
   const [passes, setPasses] = useState(initialPasses);
+  const [showMigration, setShowMigration] = useState(migrationNeeded);
   const sound = useSoundManager();
   const router = useRouter();
 
@@ -607,6 +726,8 @@ export function BattlePassTab({ initialPasses }: { initialPasses: BattlePass[] }
           frei und erhalten einen Spin-Bonus. Nur ein Pass kann gleichzeitig aktiv sein.
         </p>
       </div>
+
+      {showMigration && <MigrationBanner />}
 
       {activePass && (
         <div className="rounded-xl border border-purple-500/30 bg-purple-500/[0.06] p-4">

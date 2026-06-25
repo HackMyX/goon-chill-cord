@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
+import { logDebugEvent } from "@/lib/debug-log-server";
 import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType } from "@/lib/battle-pass";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -337,18 +338,22 @@ async function requireAdminUser() {
 
 export async function adminListBattlePasses(): Promise<BattlePass[]> {
   const admin = createAdminClient();
-  const { data: passes } = await admin
+  const { data: passes, error } = await admin
     .from("battle_passes")
     .select("*")
     .order("created_at", { ascending: false });
 
+  if (error) {
+    // Table likely doesn't exist yet — return empty, migration banner will show
+    return [];
+  }
   if (!passes) return [];
 
   const passIds = passes.map((p) => p.id as string);
   const { data: allTiers } = await admin
     .from("battle_pass_tiers")
     .select("*")
-    .in("pass_id", passIds)
+    .in("pass_id", passIds.length > 0 ? passIds : ["__none__"])
     .order("tier_number", { ascending: true });
 
   return passes.map((p) => {
@@ -357,6 +362,12 @@ export async function adminListBattlePasses(): Promise<BattlePass[]> {
       .map((t) => rowToTier(t as Record<string, unknown>));
     return rowToPass(p as Record<string, unknown>, tiers);
   });
+}
+
+export async function checkBattlePassMigration(): Promise<boolean> {
+  const admin = createAdminClient();
+  const { error } = await admin.from("battle_passes").select("id").limit(0);
+  return !!error; // true = migration needed
 }
 
 export interface AdminPassInput {
@@ -397,7 +408,10 @@ export async function adminCreateBattlePass(
     .select("id")
     .single();
 
-  if (error || !data) return { success: false, error: "Erstellen fehlgeschlagen." };
+  if (error || !data) {
+    void logDebugEvent({ scope: "adminCreateBattlePass", message: "Battlepass-Erstellung fehlgeschlagen", level: "error", detail: error?.message, context: { code: error?.code, hint: error?.hint } });
+    return { success: false, error: error?.message ? `DB-Fehler: ${error.message}` : "Erstellen fehlgeschlagen — Tabellen fehlen möglicherweise (Migration ausführen)." };
+  }
   revalidatePath("/admin");
   return { success: true, id: data.id as string };
 }
