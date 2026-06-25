@@ -48,6 +48,10 @@ interface SceneProps {
   mobileMode?: boolean;
   /** Passed through to Player.tsx for client-side PvP gate. */
   pvpEnabled?: boolean;
+  isAdmin?: boolean;
+  isModerator?: boolean;
+  nameStyleKey?: string | null;
+  verified?: boolean;
 }
 
 /** Dual border rings + inner halo — keeps the world edge from reading as a
@@ -139,6 +143,10 @@ export function Scene({
   respawnSignal,
   mobileMode = false,
   pvpEnabled = true,
+  isAdmin = false,
+  isModerator = false,
+  nameStyleKey = null,
+  verified = false,
 }: SceneProps) {
   // Equipped items never change mid-World-session (re-equipping requires
   // the Garderobe, a separate page) — armor/shield are seeded once here
@@ -226,6 +234,10 @@ export function Scene({
         characterConfig={characterConfig}
         mobileMode={mobileMode}
         pvpEnabled={pvpEnabled}
+        isAdmin={isAdmin}
+        isModerator={isModerator}
+        nameStyleKey={nameStyleKey}
+        verified={verified}
       />
 
       <RemotePlayers selfUserId={userId} registryRef={remotePlayerRegistryRef} maxHp={characterConfig.playerMaxHp} />

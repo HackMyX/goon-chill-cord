@@ -76,6 +76,7 @@ const REQUIRED_TABLES = [
   "name_styles", "user_name_styles", "name_style_rarity_config",
   // Battle Pass
   "battle_passes", "battle_pass_tiers", "user_battle_passes", "user_bp_tier_claims",
+  "bp_quest_definitions", "bp_quests", "user_bp_quest_progress",
   // Level & XP system
   "xp_config", "xp_events", "ability_definitions", "user_abilities",
   // Sound
@@ -240,6 +241,12 @@ const COLUMN_CHECKS: Array<{
   { id: "col_profiles_ability_key",  category: "Level & XP",  table: "profiles",           col: "equipped_ability_key",   detail: "node scripts/add-level-xp-abilities.cjs" },
   // Battle Pass tier — ability reward (2026-06-25)
   { id: "col_bpt_ability_key",       category: "Battle Pass", table: "battle_pass_tiers",  col: "reward_ability_key",     detail: "node scripts/add-level-xp-abilities.cjs" },
+  // Battle Pass Quest System (2026-06-25) — node scripts/add-bp-quests.cjs
+  { id: "col_bp_progression_type",   category: "Battle Pass", table: "battle_passes",       col: "progression_type",       detail: "node scripts/add-bp-quests.cjs" },
+  { id: "col_bp_xp_per_tier",        category: "Battle Pass", table: "battle_passes",       col: "bp_xp_per_tier",         detail: "node scripts/add-bp-quests.cjs" },
+  { id: "col_bp_xp_cap_per_day",     category: "Battle Pass", table: "battle_passes",       col: "bp_xp_cap_per_day",      detail: "node scripts/add-bp-quests.cjs" },
+  { id: "col_bpt_bp_xp_required",    category: "Battle Pass", table: "battle_pass_tiers",   col: "bp_xp_required",         detail: "node scripts/add-bp-quests.cjs" },
+  { id: "col_ubp_bp_xp",             category: "Battle Pass", table: "user_battle_passes",  col: "bp_xp",                  detail: "node scripts/add-bp-quests.cjs" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

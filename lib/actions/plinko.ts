@@ -319,6 +319,11 @@ export async function dropPlinkoBall(input: {
     void awardXp(user.id, xpCfg.sources.plinko_per_drop ?? 5, "plinko_drop", `${multiplier}x · ${input.riskLevel}`);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementBpQuestProgress } = await import("@/lib/actions/bp-quests");
+    void incrementBpQuestProgress(user.id, "plinko_play", 1);
+  } catch { /* non-fatal */ }
+
   return { success: true, bucketIndex: clampedIdx, multiplier, payout, newCredits, path };
 }
 

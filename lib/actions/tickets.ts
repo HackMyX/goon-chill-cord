@@ -123,6 +123,14 @@ export async function createTicket(input: {
     link: `/mod?tab=tickets&open=${data.id}`,
   });
 
+  try {
+    await admin.from("audit_logs").insert({
+      user_id: user.id,
+      action: "ticket_created",
+      payload: { ticketId: data.id, subject, category, username },
+    });
+  } catch { /* non-fatal audit */ }
+
   revalidatePath("/admin");
   return { success: true, ticketId: data.id };
 }
@@ -452,7 +460,7 @@ export async function updateTicketStatus(input: {
   const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
   if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
 
-  const { data: ticket } = await admin.from("tickets").select("user_id, subject, reward_pending, reward_credits, reward_note, reward_granted_by").eq("id", input.ticketId).single();
+  const { data: ticket } = await admin.from("tickets").select("user_id, subject, status, reward_pending, reward_credits, reward_note, reward_granted_by").eq("id", input.ticketId).single();
   if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
 
   const isClosing = input.status === "closed" || input.status === "resolved";
@@ -497,6 +505,26 @@ export async function updateTicketStatus(input: {
       const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
       const newCredits = ((targetProfile?.credits as number) ?? 0) + totalPayout;
       await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
+      // Full audit trail: credit payout via ticket reward
+      try {
+        await admin.from("audit_logs").insert({
+          user_id: user.id,
+          action: "ticket_reward_paid",
+          payload: {
+            ticketId: input.ticketId,
+            recipientUserId: ticket.user_id,
+            creditsAwarded: totalPayout,
+            subject: (ticket as Record<string, unknown>).subject,
+            closedBy: user.id,
+          },
+        });
+      } catch { /* non-fatal audit */ }
+      void logDebugEvent({
+        level: "info",
+        scope: "tickets",
+        message: `Ticket-Belohnung ausgezahlt: ${totalPayout} Credits an ${ticket.user_id}`,
+        context: { ticketId: input.ticketId, totalPayout, staffId: user.id },
+      });
     }
     updatePayload.reward_pending = false;
     updatePayload.reward_granted_at = now;
@@ -506,6 +534,22 @@ export async function updateTicketStatus(input: {
   }
 
   await admin.from("tickets").update(updatePayload).eq("id", input.ticketId);
+
+  // Audit log for all status changes
+  try {
+    await admin.from("audit_logs").insert({
+      user_id: user.id,
+      action: "ticket_status_changed",
+      payload: {
+        ticketId: input.ticketId,
+        recipientUserId: ticket.user_id,
+        oldStatus: (ticket as Record<string, unknown>).status ?? "unknown",
+        newStatus: effectiveStatus,
+        subject: (ticket as Record<string, unknown>).subject,
+        staffUsername: profile?.username ?? null,
+      },
+    });
+  } catch { /* non-fatal audit */ }
 
   const STATUS_LABELS: Record<TicketStatus, string> = {
     open: "Offen",

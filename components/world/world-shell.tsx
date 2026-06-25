@@ -65,6 +65,8 @@ interface WorldShellProps {
   spawnConfig: WorldSpawnConfig;
   isAdmin?: boolean;
   isModerator?: boolean;
+  nameStyleKey?: string | null;
+  verified?: boolean;
 }
 
 interface RewardPopup {
@@ -125,6 +127,8 @@ export function WorldShell({
   spawnConfig,
   isAdmin = false,
   isModerator = false,
+  nameStyleKey = null,
+  verified = false,
 }: WorldShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -882,6 +886,10 @@ export function WorldShell({
               respawnSignal={respawnSignal}
               mobileMode={isMobile}
               pvpEnabled={pvpEnabled}
+              isAdmin={isAdmin}
+              isModerator={isModerator}
+              nameStyleKey={nameStyleKey}
+              verified={verified}
             />
           </Suspense>
         </Canvas>

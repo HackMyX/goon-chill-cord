@@ -303,6 +303,11 @@ export async function claimDailyReward(): Promise<ClaimResult> {
     void awardXp(user.id, Math.round(decision.newStreak * xpPerDay), "streak_claim", `${decision.newStreak} Tage`);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementBpQuestProgress } = await import("@/lib/actions/bp-quests");
+    void incrementBpQuestProgress(user.id, "daily_login", 1);
+  } catch { /* non-fatal */ }
+
   revalidatePath("/");
   revalidatePath("/account");
 

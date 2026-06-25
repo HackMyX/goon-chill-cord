@@ -20,7 +20,7 @@ export default async function WorldPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days, username, gender, role")
+    .select("credits, streak_days, username, gender, role, active_name_style_key, verified")
     .eq("id", user.id)
     .single();
 
@@ -98,6 +98,8 @@ export default async function WorldPage() {
       pvpEnabled={worldSessionConfig.pvpEnabled}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}
+      nameStyleKey={(profile?.active_name_style_key as string | null) ?? null}
+      verified={(profile?.verified as boolean | null) ?? false}
     />
   );
 }

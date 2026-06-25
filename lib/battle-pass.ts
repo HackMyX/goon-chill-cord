@@ -1,6 +1,54 @@
 import type { Rarity } from "@/lib/cases";
 
 export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_boost" | "name_style" | "ability";
+export type BpProgressionType = "days" | "xp";
+export type QuestDifficulty = "easy" | "medium" | "hard" | "legendary";
+export type QuestFrequency = "daily" | "weekly" | "seasonal" | "once";
+export type QuestType = "count" | "accumulate" | "reach";
+
+export interface BpQuestDefinition {
+  id: string;
+  key: string;
+  label: string;
+  description: string | null;
+  questType: QuestType;
+  targetAction: string;
+  defaultTarget: number;
+  defaultBpXpReward: number;
+  difficulty: QuestDifficulty;
+  frequency: QuestFrequency;
+  icon: string;
+  enabled: boolean;
+}
+
+export interface BpQuest {
+  id: string;
+  passId: string;
+  definitionId: string | null;
+  label: string;
+  description: string | null;
+  questType: QuestType;
+  targetAction: string;
+  targetValue: number;
+  bpXpReward: number;
+  difficulty: QuestDifficulty;
+  frequency: QuestFrequency;
+  icon: string;
+  sortOrder: number;
+  enabled: boolean;
+}
+
+export interface UserBpQuestProgress {
+  questId: string;
+  currentValue: number;
+  completed: boolean;
+  bpXpAwarded: boolean;
+  completedAt: string | null;
+}
+
+export interface BpQuestWithProgress extends BpQuest {
+  progress: UserBpQuestProgress | null;
+}
 export type BpTheme = "default" | "gold" | "neon" | "fire" | "ice";
 export type BpShopPosition = "top" | "below_motd" | "below_featured" | "between_categories" | "bottom";
 export type BpShopBannerSize = "card" | "banner" | "hero";
@@ -15,16 +63,20 @@ export interface BattlePassTier {
   rewardType: BpRewardType;
   rewardCredits: number | null;
   rewardItemId: string | null;
+  rewardItemName: string | null;
+  rewardItemType: string | null;
   rewardBadgeKey: string | null;
   rewardBadgeText: string | null;
   rewardItemRarity: Rarity | null;
   rewardXpBoost: number | null;
   rewardNameStyleKey: string | null;
   rewardAbilityKey: string | null;
+  rewardAbilityName: string | null;
   rewardQuantity: number;
   highlightTier: boolean;
   description: string | null;
   icon: string;
+  bpXpRequired: number | null;
 }
 
 export interface BattlePass {
@@ -59,6 +111,9 @@ export interface BattlePass {
   incompatibleWith: string[];
   tiers: BattlePassTier[];
   createdAt: string;
+  progressionType: BpProgressionType;
+  bpXpPerTier: number;
+  bpXpCapPerDay: number;
 }
 
 export interface UserBpStatus {
@@ -67,6 +122,7 @@ export interface UserBpStatus {
   hasElite: boolean;
   progressDays: number;
   claimedTierIds: string[];
+  bpXp: number;
 }
 
 export interface ActiveBpView {

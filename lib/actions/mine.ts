@@ -223,6 +223,12 @@ export async function collectMineCredits(): Promise<CollectResult> {
     });
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementBpQuestProgress } = await import("@/lib/actions/bp-quests");
+    void incrementBpQuestProgress(user.id, "mine_collect", 1);
+    void incrementBpQuestProgress(user.id, "credits_collected", earned);
+  } catch { /* non-fatal */ }
+
   if (earned >= 1000) {
     await notifyUser({
       userId: user.id,

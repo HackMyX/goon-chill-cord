@@ -6,9 +6,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Crown, Zap, Lock, CheckCircle2, Star, Calendar, Award, Layers, Gift,
   Sparkles, ChevronLeft, ChevronRight, Clock, Coins, TrendingUp, Shield,
+  Package, Palette, Trophy, ChevronDown, ChevronUp,
+  Target,
 } from "lucide-react";
-import { BP_THEMES, type BattlePass, type BattlePassTier, type UserBpStatus } from "@/lib/battle-pass";
+import { BP_THEMES, type BattlePass, type BattlePassTier, type UserBpStatus, type BpQuestWithProgress } from "@/lib/battle-pass";
 import { purchaseBattlePass, purchaseEliteBattlePass, claimBpTier } from "@/lib/actions/battle-pass";
+import { getBpQuestsWithProgress } from "@/lib/actions/bp-quests";
+import { StyledUsername } from "@/components/ui/styled-username";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -51,6 +55,457 @@ function rewardIcon(tier: BattlePassTier): string {
     case "name_style": return "✨";
     default: return "🎁";
   }
+}
+
+// ── Visual reward preview ─────────────────────────────────────────────────────
+
+const RARITY_COLORS: Record<string, string> = {
+  normal: "#94a3b8",
+  selten: "#a78bfa",
+  mythisch: "#f59e0b",
+  ultra: "#e879f9",
+};
+const RARITY_GLOWS: Record<string, string> = {
+  normal: "rgba(148,163,184,0.3)",
+  selten: "rgba(167,139,250,0.4)",
+  mythisch: "rgba(245,158,11,0.45)",
+  ultra: "rgba(232,121,249,0.5)",
+};
+
+const ACTION_ICONS: Record<string, string> = {
+  monster_kill: "⚔️", pvp_kill: "🗡️", snake_game: "🐍", mine_collect: "⛏️",
+  plinko_spin: "🎲", case_open: "📦", daily_login: "📅", login_streak: "🔥",
+  world_playtime: "🌍", auction_bid: "🔨", credits_earn: "💰",
+};
+
+function RewardPreviewCard({ tier, accent, glow }: { tier: BattlePassTier; accent: string; glow: string }) {
+  const rarity = tier.rewardItemRarity ?? "normal";
+  const rarityColor = RARITY_COLORS[rarity] ?? "#94a3b8";
+  const rarityGlow = RARITY_GLOWS[rarity] ?? "rgba(148,163,184,0.25)";
+
+  if (tier.rewardType === "credits") {
+    const amount = (tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1);
+    return (
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative flex items-center justify-center">
+          {/* Stacked coin effect */}
+          {[...Array(3)].map((_, i) => (
+            <motion.div
+              key={i}
+              className="absolute rounded-full"
+              style={{
+                width: 56 + i * 4,
+                height: 56 + i * 4,
+                background: `radial-gradient(circle at 35% 35%, #fde68a, #f59e0b, #78350f)`,
+                boxShadow: `0 0 ${10 + i * 8}px rgba(245,158,11,${0.3 + i * 0.1})`,
+                bottom: i * 3,
+                zIndex: 3 - i,
+              }}
+              animate={{ y: [0, -2, 0] }}
+              transition={{ duration: 2 + i * 0.5, repeat: Infinity, delay: i * 0.3, ease: "easeInOut" }}
+            />
+          ))}
+          <span className="relative z-10 text-2xl">💰</span>
+        </div>
+        <div className="text-center mt-8">
+          <p className="text-3xl font-black text-amber-300 tabular-nums">{amount.toLocaleString("de-DE")}</p>
+          <p className="text-xs text-white/40 font-bold">Credits</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (tier.rewardType === "item" || tier.rewardType === "random_item") {
+    const isRandom = tier.rewardType === "random_item";
+    return (
+      <div className="flex flex-col items-center gap-3">
+        <motion.div
+          className="relative flex h-24 w-24 items-center justify-center rounded-2xl border-2"
+          style={{
+            borderColor: rarityColor,
+            background: `radial-gradient(circle at 50% 30%, ${rarityColor}20 0%, transparent 70%)`,
+            boxShadow: `0 0 40px ${rarityGlow}, inset 0 0 20px ${rarityColor}10`,
+          }}
+          animate={{ boxShadow: [`0 0 30px ${rarityGlow}`, `0 0 60px ${rarityGlow}`, `0 0 30px ${rarityGlow}`] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+        >
+          {isRandom ? (
+            <motion.span
+              className="text-4xl"
+              animate={{ rotateY: [0, 180, 360] }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            >
+              🎲
+            </motion.span>
+          ) : (
+            <span className="text-4xl">{tier.icon ?? "🎁"}</span>
+          )}
+          {/* Corner rarity gem */}
+          <div
+            className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full border border-black/50"
+            style={{ background: rarityColor, boxShadow: `0 0 8px ${rarityColor}` }}
+          />
+        </motion.div>
+        <div className="text-center">
+          <p className="text-sm font-black text-white">
+            {isRandom ? `Zufällig${tier.rewardItemRarity ? ` · ${tier.rewardItemRarity}` : ""}` : (tier.rewardItemName ?? tier.name)}
+          </p>
+          {tier.rewardItemRarity && (
+            <span className="mt-1 inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest"
+              style={{ background: `${rarityColor}20`, color: rarityColor, border: `1px solid ${rarityColor}40` }}>
+              {tier.rewardItemRarity}
+            </span>
+          )}
+          {tier.rewardQuantity > 1 && (
+            <p className="mt-1 text-xs text-white/40">×{tier.rewardQuantity}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (tier.rewardType === "badge") {
+    const badgeColor = "#f59e0b";
+    return (
+      <div className="flex flex-col items-center gap-4">
+        <motion.div
+          className="relative flex h-20 w-20 items-center justify-center rounded-2xl border-2"
+          style={{
+            borderColor: `${badgeColor}60`,
+            background: `radial-gradient(circle, ${badgeColor}15 0%, transparent 70%)`,
+          }}
+          animate={{ boxShadow: [`0 0 20px ${badgeColor}30`, `0 0 50px ${badgeColor}50`, `0 0 20px ${badgeColor}30`] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Trophy className="h-10 w-10" style={{ color: badgeColor }} />
+          <motion.div
+            className="absolute inset-0 rounded-2xl"
+            animate={{ opacity: [0, 0.4, 0] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: `radial-gradient(circle, ${badgeColor}30 0%, transparent 70%)` }}
+          />
+        </motion.div>
+        {tier.rewardBadgeText && (
+          <span
+            className="rounded-full border px-4 py-1.5 text-xs font-black"
+            style={{ borderColor: `${badgeColor}40`, color: badgeColor, background: `${badgeColor}15`, boxShadow: `0 0 16px ${badgeColor}30` }}
+          >
+            {tier.rewardBadgeText}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (tier.rewardType === "xp_boost") {
+    const days = tier.rewardXpBoost ?? 1;
+    return (
+      <div className="flex flex-col items-center gap-4">
+        <motion.div
+          className="relative flex h-20 w-20 items-center justify-center rounded-full border-2 border-sky-400/60"
+          style={{ background: "radial-gradient(circle, rgba(56,189,248,0.2) 0%, transparent 70%)" }}
+          animate={{ boxShadow: ["0 0 20px rgba(56,189,248,0.3)", "0 0 50px rgba(56,189,248,0.6)", "0 0 20px rgba(56,189,248,0.3)"] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Zap className="h-10 w-10 text-sky-400" />
+        </motion.div>
+        <div className="text-center">
+          <p className="text-3xl font-black text-sky-300">+{days}</p>
+          <p className="text-xs text-white/40">{days === 1 ? "Fortschrittstag" : "Fortschrittstage"}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (tier.rewardType === "name_style" && tier.rewardNameStyleKey) {
+    return (
+      <div className="flex flex-col items-center gap-4">
+        <motion.div
+          className="flex h-20 w-full max-w-[240px] items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-sm px-4"
+          animate={{ boxShadow: [`0 0 20px ${accent}20`, `0 0 40px ${accent}40`, `0 0 20px ${accent}20`] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <StyledUsername name="DeinName" styleKey={tier.rewardNameStyleKey} size="md" staticMode={false} />
+        </motion.div>
+        <div className="text-center">
+          <p className="text-xs text-white/40">Name Style</p>
+          <p className="text-sm font-black" style={{ color: accent }}>{tier.rewardNameStyleKey}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (tier.rewardType === "ability") {
+    return (
+      <div className="flex flex-col items-center gap-4">
+        <motion.div
+          className="relative flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-purple-500/60"
+          style={{ background: "radial-gradient(circle, rgba(168,85,247,0.2) 0%, transparent 70%)" }}
+          animate={{ boxShadow: ["0 0 20px rgba(168,85,247,0.3)", "0 0 60px rgba(168,85,247,0.6)", "0 0 20px rgba(168,85,247,0.3)"] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Zap className="h-10 w-10 text-purple-400" />
+          <motion.div
+            className="absolute inset-0 rounded-2xl border-2 border-purple-400/40"
+            animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0, 0.5] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </motion.div>
+        <div className="text-center">
+          <p className="text-sm font-black text-purple-300">{tier.rewardAbilityName ?? tier.name}</p>
+          <p className="text-xs text-white/40">Fähigkeit</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Generic fallback
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <motion.span
+        className="text-6xl"
+        animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+      >
+        {rewardIcon(tier)}
+      </motion.span>
+    </div>
+  );
+}
+
+// ── Quest panel ───────────────────────────────────────────────────────────────
+
+const DIFFICULTY_COLORS: Record<string, string> = {
+  easy: "#34d399",
+  medium: "#60a5fa",
+  hard: "#f59e0b",
+  legendary: "#e879f9",
+};
+
+const FREQ_LABELS: Record<string, string> = {
+  daily: "Täglich",
+  weekly: "Wöchentlich",
+  seasonal: "Saisonal",
+  once: "Einmalig",
+};
+
+function QuestCard({ quest, accent }: { quest: BpQuestWithProgress; accent: string }) {
+  const progress = quest.progress;
+  const current = progress?.currentValue ?? 0;
+  const total = quest.targetValue;
+  const pct = Math.min(100, Math.round((current / total) * 100));
+  const completed = progress?.completed ?? false;
+  const diffColor = DIFFICULTY_COLORS[quest.difficulty] ?? "#60a5fa";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="relative rounded-xl border p-3.5 transition-colors"
+      style={
+        completed
+          ? { borderColor: "rgba(52,211,153,0.3)", background: "rgba(52,211,153,0.04)" }
+          : { borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.01)" }
+      }
+    >
+      {completed && (
+        <div className="absolute inset-0 rounded-xl pointer-events-none"
+          style={{ background: "linear-gradient(135deg, rgba(52,211,153,0.06) 0%, transparent 60%)" }} />
+      )}
+      <div className="flex items-start gap-3">
+        <div className="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg"
+          style={{ background: `${diffColor}15`, border: `1px solid ${diffColor}30` }}>
+          <span>{quest.icon}</span>
+          {completed && (
+            <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500">
+              <CheckCircle2 className="h-2.5 w-2.5 text-white" />
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <p className={`text-xs font-black leading-tight ${completed ? "text-emerald-400" : "text-zinc-100"}`}>
+              {quest.label}
+            </p>
+            <span className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black"
+              style={{ background: `${diffColor}20`, color: diffColor }}>
+              {quest.bpXpReward} XP
+            </span>
+          </div>
+          {quest.description && (
+            <p className="mt-0.5 text-[10px] text-white/35 leading-snug">{quest.description}</p>
+          )}
+          {/* Progress bar */}
+          <div className="mt-2 space-y-1">
+            <div className="relative h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${pct}%` }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="absolute inset-y-0 left-0 rounded-full"
+                style={
+                  completed
+                    ? { background: "#34d399" }
+                    : { background: `linear-gradient(90deg, ${accent} 0%, ${accent}cc 100%)` }
+                }
+              />
+            </div>
+            <div className="flex justify-between text-[9px]">
+              <span className="text-white/30">{FREQ_LABELS[quest.frequency] ?? quest.frequency}</span>
+              <span className="font-bold tabular-nums" style={{ color: completed ? "#34d399" : `${accent}90` }}>
+                {current.toLocaleString("de-DE")} / {total.toLocaleString("de-DE")}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function QuestPanel({ passId, accent, glow }: { passId: string; accent: string; glow: string }) {
+  const [quests, setQuests] = useState<BpQuestWithProgress[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getBpQuestsWithProgress(passId).then((q) => {
+      if (active) { setQuests(q); setLoading(false); }
+    });
+    return () => { active = false; };
+  }, [passId]);
+
+  if (!loading && quests.length === 0) return null;
+
+  const completed = quests.filter((q) => q.progress?.completed).length;
+  const totalXp = quests.reduce((sum, q) => sum + (q.progress?.bpXpAwarded ? q.bpXpReward : 0), 0);
+  const availableXp = quests.reduce((sum, q) => sum + q.bpXpReward, 0);
+
+  const byFreq: Record<string, BpQuestWithProgress[]> = {};
+  for (const q of quests) {
+    if (!byFreq[q.frequency]) byFreq[q.frequency] = [];
+    byFreq[q.frequency].push(q);
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+      className="rounded-2xl border border-white/[0.07] bg-white/[0.01] overflow-hidden"
+      style={{ boxShadow: `0 0 40px ${glow}08` }}
+    >
+      {/* Header */}
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center justify-between gap-3 p-5 hover:bg-white/[0.02] transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ background: `${accent}15`, border: `1px solid ${accent}30` }}>
+            <Target className="h-4 w-4" style={{ color: accent }} />
+          </div>
+          <div className="text-left">
+            <p className="text-sm font-black text-zinc-100">Aufgaben</p>
+            <p className="text-[10px] text-white/35">
+              {loading ? "Lade…" : `${completed}/${quests.length} erledigt · ${totalXp.toLocaleString("de-DE")} / ${availableXp.toLocaleString("de-DE")} BP-XP`}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {!loading && (
+            <div className="flex gap-1">
+              {quests.filter((q) => q.progress?.completed).length > 0 && (
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-black text-emerald-400">
+                  {completed} ✓
+                </span>
+              )}
+              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold text-white/40">
+                {quests.length - completed} offen
+              </span>
+            </div>
+          )}
+          {collapsed ? <ChevronDown className="h-4 w-4 text-white/30" /> : <ChevronUp className="h-4 w-4 text-white/30" />}
+        </div>
+      </button>
+
+      {/* Content */}
+      <AnimatePresence>
+        {!collapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-5 pb-5 space-y-5">
+              {loading ? (
+                <div className="py-4 text-center text-xs text-white/30">Lade Aufgaben…</div>
+              ) : (
+                Object.entries(byFreq).map(([freq, qs]) => (
+                  <div key={freq} className="space-y-2">
+                    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/25">
+                      <span>{freq === "daily" ? "🔁" : freq === "weekly" ? "📅" : "⭐"}</span>
+                      {FREQ_LABELS[freq] ?? freq}
+                    </p>
+                    {qs.map((q) => <QuestCard key={q.id} quest={q} accent={accent} />)}
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ── XP progression bar ────────────────────────────────────────────────────────
+
+function XpProgressBar({ bpXp, bpXpPerTier, tierCount, accent, glow }: {
+  bpXp: number;
+  bpXpPerTier: number;
+  tierCount: number;
+  accent: string;
+  glow: string;
+}) {
+  const totalXpNeeded = bpXpPerTier * tierCount;
+  const currentTier = Math.min(tierCount, Math.floor(bpXp / bpXpPerTier));
+  const tierProgress = bpXp % bpXpPerTier;
+  const pct = Math.min(100, Math.round((tierProgress / bpXpPerTier) * 100));
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-white/40 font-semibold">BP-XP Fortschritt</span>
+        <span className="font-black tabular-nums" style={{ color: accent }}>
+          {bpXp.toLocaleString("de-DE")} / {totalXpNeeded.toLocaleString("de-DE")} XP
+        </span>
+      </div>
+      <div className="relative h-4 rounded-full bg-white/[0.04] overflow-hidden border border-white/[0.06]">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 1, ease: "easeOut" }}
+          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ background: `linear-gradient(90deg, ${accent} 0%, ${accent}cc 100%)`, boxShadow: `0 0 12px ${glow}` }}
+        />
+        <motion.div
+          className="absolute inset-y-0 w-20 rounded-full pointer-events-none"
+          animate={{ left: ["-15%", "110%"] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.5 }}
+          style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)" }}
+        />
+        <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white/70">
+          Tier {currentTier} · +{(bpXpPerTier - tierProgress).toLocaleString("de-DE")} XP bis Tier {currentTier + 1}
+        </div>
+      </div>
+      <div className="flex justify-between text-[10px] text-white/25">
+        <span>Tier {currentTier} / {tierCount}</span>
+        <span>{pct}%</span>
+      </div>
+    </div>
+  );
 }
 
 // ── Countdown timer ───────────────────────────────────────────────────────────
@@ -383,7 +838,7 @@ function HorizontalTrack({
         )}
       </div>
 
-      {/* Selected tier detail panel */}
+      {/* Selected tier detail panel — rich visual preview */}
       <AnimatePresence>
         {selectedTierData && (
           <motion.div
@@ -393,25 +848,73 @@ function HorizontalTrack({
             className="overflow-hidden"
           >
             <div
-              className="rounded-2xl border p-4 flex items-center gap-4"
+              className="rounded-2xl border overflow-hidden"
               style={{
                 borderColor: `${trackColor}40`,
-                background: `linear-gradient(135deg, ${trackColor}10 0%, transparent 100%)`,
+                background: `linear-gradient(135deg, ${trackColor}08 0%, rgba(0,0,0,0.6) 100%)`,
+                boxShadow: `0 0 40px ${trackColor}15`,
               }}
             >
-              <span className="text-5xl">{rewardIcon(selectedTierData)}</span>
-              <div className="flex-1 min-w-0">
-                <p className="font-black text-white">{selectedTierData.name}</p>
-                <p className="text-sm mt-0.5" style={{ color: `${trackColor}cc` }}>{rewardLabel(selectedTierData)}</p>
-                {selectedTierData.description && (
-                  <p className="mt-1 text-xs text-white/40">{selectedTierData.description}</p>
-                )}
-              </div>
-              <div
-                className="shrink-0 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest"
-                style={{ borderColor: `${trackColor}40`, color: trackColor, background: `${trackColor}10` }}
-              >
-                Tier {selectedTierData.tierNumber}
+              <div className="flex flex-col sm:flex-row">
+                {/* Visual preview area */}
+                <div
+                  className="relative flex min-h-[160px] sm:w-52 shrink-0 flex-col items-center justify-center gap-4 p-6 sm:border-r"
+                  style={{
+                    borderColor: `${trackColor}20`,
+                    background: `radial-gradient(circle at 50% 50%, ${trackColor}12 0%, transparent 70%)`,
+                  }}
+                >
+                  {/* Background glow */}
+                  <motion.div
+                    className="pointer-events-none absolute inset-0"
+                    animate={{ opacity: [0.3, 0.7, 0.3] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                    style={{ background: `radial-gradient(circle at 50% 50%, ${trackColor}15 0%, transparent 60%)` }}
+                  />
+                  <RewardPreviewCard tier={selectedTierData} accent={trackColor} glow={`${trackColor}60`} />
+                </div>
+                {/* Info area */}
+                <div className="flex flex-1 flex-col justify-between gap-3 p-5">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <h3 className="text-lg font-black text-white leading-tight">{selectedTierData.name}</h3>
+                      <div
+                        className="shrink-0 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest"
+                        style={{ borderColor: `${trackColor}40`, color: trackColor, background: `${trackColor}12` }}
+                      >
+                        Tier {selectedTierData.tierNumber}
+                      </div>
+                    </div>
+                    <p className="text-sm font-semibold" style={{ color: `${trackColor}cc` }}>
+                      {rewardLabel(selectedTierData)}
+                    </p>
+                    {selectedTierData.description && (
+                      <p className="mt-2 text-xs text-white/40 leading-relaxed">{selectedTierData.description}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedTierData.isPremium && (
+                      <span className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-black text-amber-300">
+                        <Crown className="h-3 w-3" />Premium
+                      </span>
+                    )}
+                    {selectedTierData.isElite && (
+                      <span className="flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10px] font-black text-violet-300">
+                        <Sparkles className="h-3 w-3" />Elite
+                      </span>
+                    )}
+                    {selectedTierData.highlightTier && (
+                      <span className="flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-black text-amber-200">
+                        <Star className="h-3 w-3" />Meilenstein
+                      </span>
+                    )}
+                    {selectedTierData.bpXpRequired && (
+                      <span className="flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[10px] font-black text-sky-300">
+                        <Zap className="h-3 w-3" />{selectedTierData.bpXpRequired.toLocaleString("de-DE")} BP-XP
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </motion.div>
@@ -535,7 +1038,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
         showToast("Premium Pass aktiviert! 👑", true);
         setUserStatus((prev) =>
           prev ? { ...prev, hasPremium: true }
-               : { passId: pass.id, hasPremium: true, hasElite: false, progressDays: 0, claimedTierIds: [] }
+               : { passId: pass.id, hasPremium: true, hasElite: false, progressDays: 0, claimedTierIds: [], bpXp: 0 }
         );
         router.refresh();
       } else {
@@ -554,7 +1057,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
         showToast("Elite Pass aktiviert! 💎", true);
         setUserStatus((prev) =>
           prev ? { ...prev, hasElite: true }
-               : { passId: pass.id, hasPremium: false, hasElite: true, progressDays: 0, claimedTierIds: [] }
+               : { passId: pass.id, hasPremium: false, hasElite: true, progressDays: 0, claimedTierIds: [], bpXp: 0 }
         );
         router.refresh();
       } else {
@@ -780,7 +1283,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
           {/* Tracks column */}
           <div className="flex-1 min-w-0 space-y-8">
 
-            {/* Progress bar */}
+            {/* Progress bar / XP bar */}
             {userStatus && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
@@ -788,13 +1291,23 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 backdrop-blur-sm"
                 style={{ boxShadow: `0 0 30px ${glow}10` }}
               >
-                <ProgressBar
-                  progressDays={progressDays}
-                  tierCount={pass.tierCount}
-                  accent={accent}
-                  glow={glow}
-                  claimedCount={claimedCount}
-                />
+                {pass.progressionType === "xp" ? (
+                  <XpProgressBar
+                    bpXp={userStatus.bpXp}
+                    bpXpPerTier={pass.bpXpPerTier}
+                    tierCount={pass.tierCount}
+                    accent={accent}
+                    glow={glow}
+                  />
+                ) : (
+                  <ProgressBar
+                    progressDays={progressDays}
+                    tierCount={pass.tierCount}
+                    accent={accent}
+                    glow={glow}
+                    claimedCount={claimedCount}
+                  />
+                )}
               </motion.div>
             )}
 
@@ -895,6 +1408,9 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 />
               </motion.div>
             )}
+            {/* QUEST PANEL */}
+            <QuestPanel passId={pass.id} accent={accent} glow={glow} />
+
           </div>
 
           {/* ── Side panel ──────────────────────────────────────────────── */}
@@ -933,7 +1449,9 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { label: "Login-Tage", value: progressDays, icon: <Calendar className="h-3 w-3" /> },
+                    pass.progressionType === "xp"
+                      ? { label: "BP-XP", value: userStatus.bpXp.toLocaleString("de-DE"), icon: <Zap className="h-3 w-3" style={{ color: accent }} /> }
+                      : { label: "Login-Tage", value: progressDays, icon: <Calendar className="h-3 w-3" /> },
                     { label: "Abgeholt", value: claimedCount, icon: <CheckCircle2 className="h-3 w-3 text-emerald-400" /> },
                   ].map((s) => (
                     <div key={s.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-center">
@@ -945,6 +1463,23 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                     </div>
                   ))}
                 </div>
+                {pass.progressionType === "xp" && (
+                  <div className="mt-3 pt-3 border-t border-white/[0.06]">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-white/20 mb-2">Nächster Tier</p>
+                    <div className="relative h-2 rounded-full bg-white/[0.04] overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, Math.round(((userStatus.bpXp % pass.bpXpPerTier) / pass.bpXpPerTier) * 100))}%` }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        className="absolute inset-y-0 left-0 rounded-full"
+                        style={{ background: accent, boxShadow: `0 0 8px ${accent}` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-right text-[9px] font-bold tabular-nums" style={{ color: `${accent}80` }}>
+                      {(userStatus.bpXp % pass.bpXpPerTier).toLocaleString("de-DE")} / {pass.bpXpPerTier.toLocaleString("de-DE")} XP
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

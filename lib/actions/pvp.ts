@@ -165,6 +165,11 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
     void awardXp(user.id, xpCfg.sources.pvp_kill ?? 15, "pvp_kill", `Schaden: ${damage} an ${input.targetUserId.slice(0, 8)}`);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementBpQuestProgress } = await import("@/lib/actions/bp-quests");
+    void incrementBpQuestProgress(user.id, "pvp_hit", 1);
+  } catch { /* non-fatal */ }
+
   // Broadcast is now done client-side via broadcastPvpDamage (world-realtime.ts)
   // using the same httpSend path as every other game event — the REST broadcast
   // endpoint (lib/realtime-server.ts) was silently dropping these messages.

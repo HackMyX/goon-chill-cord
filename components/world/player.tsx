@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
 import * as THREE from "three";
+import { StyledUsername } from "@/components/ui/styled-username";
 import { rarityColorFor, type EquippedItem } from "@/lib/rarity-colors";
 import { SlashEffect, SLASH_EFFECT_LIFETIME_MS } from "@/components/world/hit-fx";
 import { getEquippedDamage, capsuleHitTest, momentumMultiplier, getPerkMultiplier, applyIncomingDamage, computePvpDamage } from "@/lib/combat";
@@ -94,6 +96,13 @@ interface PlayerProps {
    * when not passed. Enforced here so that disabling it in the admin panel
    * takes effect immediately without a server-action round trip. */
   pvpEnabled?: boolean;
+  /** Active name style key — same data that drives StyledUsername everywhere
+   * else on the site, now threaded here so the local player's nametag uses
+   * the same styled design name instead of plain username text. */
+  nameStyleKey?: string | null;
+  isAdmin?: boolean;
+  isModerator?: boolean;
+  verified?: boolean;
 }
 
 // Velocity smoothing rate — governs how quickly horizontal speed tracks the
@@ -229,6 +238,10 @@ export function Player({
   characterConfig,
   mobileMode = false,
   pvpEnabled = true,
+  nameStyleKey = null,
+  isAdmin = false,
+  isModerator = false,
+  verified = false,
 }: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const limbs = useRef<CharacterLimbRefs>(null);
@@ -1236,11 +1249,98 @@ export function Player({
             ref={limbs}
             equippedByCategory={equippedByCategory}
             gender={gender}
-            name={name}
+            name=""
             shieldStateRef={combatRef}
             monsterRegistryRef={monsterRegistryRef}
             petTypes={petTypes}
           />
+          {/* Styled nametag — Html overlay so StyledUsername (animated CSS
+              name styles, badges) works here exactly as on all other pages.
+              Matches remote-players.tsx card design so local + remote chars
+              look identical in the world. */}
+          {name && (
+            <Html
+              position={[0, 2.95, 0]}
+              center
+              occlude={false}
+              distanceFactor={7}
+              style={{ pointerEvents: "none", userSelect: "none" }}
+            >
+              <div style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "4px",
+              }}>
+                <div style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "5px",
+                  padding: "7px 12px 8px",
+                  background: "rgba(6,6,10,0.82)",
+                  backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
+                  border: `1px solid ${isAdmin ? "rgba(239,68,68,0.7)" : isModerator ? "rgba(34,197,94,0.7)" : verified ? "rgba(168,85,247,0.6)" : "rgba(255,255,255,0.1)"}`,
+                  borderRadius: "12px",
+                  boxShadow: isAdmin
+                    ? "0 0 12px rgba(239,68,68,0.5), 0 0 24px rgba(239,68,68,0.2)"
+                    : isModerator
+                    ? "0 0 12px rgba(34,197,94,0.45), 0 0 24px rgba(34,197,94,0.15)"
+                    : verified
+                    ? "0 0 10px rgba(168,85,247,0.35), 0 0 20px rgba(168,85,247,0.1)"
+                    : "0 2px 8px rgba(0,0,0,0.5)",
+                  minWidth: "100px",
+                }}>
+                  <div style={{
+                    color: isAdmin ? "#fbbf24" : "#f4f4f5",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    fontFamily: "system-ui, sans-serif",
+                    letterSpacing: "0.02em",
+                    whiteSpace: "nowrap",
+                    textShadow: isAdmin ? "0 0 10px rgba(251,191,36,0.7)" : "0 1px 4px rgba(0,0,0,0.95)",
+                  }}>
+                    <StyledUsername name={name} styleKey={nameStyleKey} size="sm" staticMode={true} />
+                  </div>
+                  {(isAdmin || isModerator || verified) && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                      {isAdmin && (
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: "2px",
+                          padding: "1px 6px",
+                          background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.6)",
+                          borderRadius: "999px", color: "#fca5a5", fontSize: "8px", fontWeight: 700,
+                          fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
+                          boxShadow: "0 0 8px rgba(239,68,68,0.45)", whiteSpace: "nowrap",
+                        }}>⚡ Admin</span>
+                      )}
+                      {isModerator && (
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: "2px",
+                          padding: "1px 6px",
+                          background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.55)",
+                          borderRadius: "999px", color: "#86efac", fontSize: "8px", fontWeight: 700,
+                          fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
+                          boxShadow: "0 0 8px rgba(34,197,94,0.35)", whiteSpace: "nowrap",
+                        }}>🛡 Mod</span>
+                      )}
+                      {verified && (
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: "2px",
+                          padding: "1px 6px",
+                          background: "rgba(59,130,246,0.18)", border: "1px solid rgba(59,130,246,0.55)",
+                          borderRadius: "999px", color: "#93c5fd", fontSize: "8px", fontWeight: 700,
+                          fontFamily: "system-ui, sans-serif", letterSpacing: "0.04em",
+                          boxShadow: "0 0 8px rgba(59,130,246,0.4)", whiteSpace: "nowrap",
+                        }}>✦ Verified</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Html>
+          )}
           {/* Ability visual aura — always a sibling of CharacterModel so it
               moves with the player group but isn't affected by death-pose rotation. */}
           <AbilityEffectAura effectType={abilityEffectType} />

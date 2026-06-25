@@ -399,6 +399,12 @@ export async function submitSnakeScore(
     } catch { /* non-fatal */ }
   }
 
+  try {
+    const { incrementBpQuestProgress } = await import("@/lib/actions/bp-quests");
+    void incrementBpQuestProgress(user.id, "snake_game", 1);
+    if (score > 0) void incrementBpQuestProgress(user.id, "snake_score", score);
+  } catch { /* non-fatal */ }
+
   revalidatePath("/snake");
   return {
     success: true,

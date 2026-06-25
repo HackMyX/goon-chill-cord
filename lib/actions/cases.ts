@@ -267,6 +267,11 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
     void awardXp(user.id, xpCfg.sources.case_open ?? 30, "case_open", tier.label);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementBpQuestProgress } = await import("@/lib/actions/bp-quests");
+    void incrementBpQuestProgress(user.id, "case_open", 1);
+  } catch { /* non-fatal */ }
+
   // ── Name style bonus drop ─────────────────────────────────────────────────
   // Only runs if this tier has name styles enabled AND the rarity config says drop is active.
   let wonStyleKey: string | null = null;

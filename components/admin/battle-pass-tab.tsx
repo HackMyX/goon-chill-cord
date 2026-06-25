@@ -7,6 +7,7 @@ import {
   Save, X, Check, Star, AlertTriangle, Copy, ExternalLink,
   Gift, Coins, Trophy, Package, Sparkles, TrendingUp, Users,
   ShoppingBag, Crown, Palette, Search, BarChart2, Calendar, Wand2, Pencil,
+  Target, RotateCcw, RefreshCw,
 } from "lucide-react";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -16,9 +17,18 @@ import {
   getBpStats, searchBpItems, adminAutoFillBpTiers,
   type AdminPassInput, type AdminTierInput, type BpStats,
 } from "@/lib/actions/battle-pass";
+import {
+  getBpQuestDefinitions, adminGetBpQuests, adminCreateBpQuestDefinition,
+  adminUpdateBpQuestDefinition, adminDeleteBpQuestDefinition,
+  adminAssignQuestToPass, adminUpdateBpQuest, adminDeleteBpQuest,
+  adminAutoGenerateQuests, adminGetQuestStats, adminResetQuestProgress,
+} from "@/lib/actions/bp-quests";
 import { BP_THEMES, DEFAULT_AUTOFILL_CONFIG, type BpAutoFillConfig } from "@/lib/battle-pass";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
-import type { BattlePass, BattlePassTier, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize } from "@/lib/battle-pass";
+import type {
+  BattlePass, BattlePassTier, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize,
+  BpQuestDefinition, BpQuest, QuestDifficulty, QuestFrequency, QuestType, BpProgressionType,
+} from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
 
 const REWARD_ICONS: Record<BpRewardType, React.ReactNode> = {
@@ -903,6 +913,422 @@ function TierEditorModal({
   );
 }
 
+// ── Quest constants ───────────────────────────────────────────────────────────
+
+const QUEST_TYPES: QuestType[] = ["count", "accumulate", "reach"];
+const QUEST_TYPE_LABELS: Record<QuestType, string> = { count: "Zählen", accumulate: "Ansammeln", reach: "Erreichen" };
+const QUEST_DIFFICULTIES: QuestDifficulty[] = ["easy", "medium", "hard", "legendary"];
+const QUEST_DIFF_LABELS: Record<QuestDifficulty, string> = { easy: "Leicht", medium: "Mittel", hard: "Schwer", legendary: "Legendär" };
+const QUEST_DIFF_COLORS: Record<QuestDifficulty, string> = { easy: "#34d399", medium: "#60a5fa", hard: "#f59e0b", legendary: "#e879f9" };
+const QUEST_FREQUENCIES: QuestFrequency[] = ["daily", "weekly", "seasonal", "once"];
+const QUEST_FREQ_LABELS: Record<QuestFrequency, string> = { daily: "Täglich", weekly: "Wöchentlich", seasonal: "Saisonal", once: "Einmalig" };
+const COMMON_ACTIONS = [
+  "monster_kill", "pvp_kill", "snake_game", "mine_collect", "plinko_spin",
+  "case_open", "daily_login", "login_streak", "world_playtime", "auction_bid", "credits_earn",
+];
+
+// ── Quest editor modal ────────────────────────────────────────────────────────
+
+function QuestEditorModal({
+  passId, quest, definitions, onClose, onSaved,
+}: {
+  passId: string;
+  quest: BpQuest | null;
+  definitions: BpQuestDefinition[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const sound = useSoundManager();
+  const [label, setLabel] = useState(quest?.label ?? "");
+  const [description, setDescription] = useState(quest?.description ?? "");
+  const [questType, setQuestType] = useState<QuestType>(quest?.questType ?? "count");
+  const [targetAction, setTargetAction] = useState(quest?.targetAction ?? "monster_kill");
+  const [targetValue, setTargetValue] = useState(quest?.targetValue ?? 10);
+  const [bpXpReward, setBpXpReward] = useState(quest?.bpXpReward ?? 250);
+  const [difficulty, setDifficulty] = useState<QuestDifficulty>(quest?.difficulty ?? "medium");
+  const [frequency, setFrequency] = useState<QuestFrequency>(quest?.frequency ?? "weekly");
+  const [icon, setIcon] = useState(quest?.icon ?? "🎯");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function applyDefinition(def: BpQuestDefinition) {
+    setLabel(def.label);
+    setDescription(def.description ?? "");
+    setQuestType(def.questType);
+    setTargetAction(def.targetAction);
+    setTargetValue(def.defaultTarget);
+    setBpXpReward(def.defaultBpXpReward);
+    setDifficulty(def.difficulty);
+    setFrequency(def.frequency);
+    setIcon(def.icon);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    let res;
+    if (quest) {
+      res = await adminUpdateBpQuest(quest.id, { label, description: description || null, questType, targetAction, targetValue, bpXpReward, difficulty, frequency, icon });
+    } else {
+      res = await adminAssignQuestToPass(passId, { label, description: description || null, questType, targetAction, targetValue, bpXpReward, difficulty, frequency, icon });
+    }
+    setSaving(false);
+    if (res.success) { sound.save(); onSaved(); onClose(); }
+    else { sound.error(); setError(res.error ?? "Fehler"); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0c0a14] p-5 shadow-2xl max-h-[92vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-black text-zinc-100">{quest ? "Aufgabe bearbeiten" : "Neue Aufgabe"}</h3>
+          <button onClick={onClose} className="rounded-full p-1 text-zinc-500 hover:text-zinc-300 transition-colors"><X className="h-4 w-4" /></button>
+        </div>
+
+        {/* Quick fill from definition */}
+        {!quest && definitions.length > 0 && (
+          <div className="mb-4">
+            <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-500">Vorlage verwenden</p>
+            <div className="flex flex-wrap gap-1.5">
+              {definitions.map((def) => (
+                <button
+                  key={def.id}
+                  onClick={() => applyDefinition(def)}
+                  className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-white/[0.07] transition-colors"
+                >
+                  <span>{def.icon}</span>
+                  {def.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Name</label>
+              <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Aufgabenname" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]" />
+            </div>
+            <div className="w-16">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Icon</label>
+              <input value={icon} onChange={(e) => setIcon(e.target.value)} className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-center text-xl outline-none focus:border-purple-400/60 min-h-[44px]" />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Beschreibung</label>
+            <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optionale Beschreibung" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Aktion</label>
+              <select value={targetAction} onChange={(e) => setTargetAction(e.target.value)} className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none min-h-[44px]">
+                {COMMON_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Typ</label>
+              <select value={questType} onChange={(e) => setQuestType(e.target.value as QuestType)} className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none min-h-[44px]">
+                {QUEST_TYPES.map((t) => <option key={t} value={t}>{QUEST_TYPE_LABELS[t]}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Ziel</label>
+              <input type="number" min={1} value={targetValue} onChange={(e) => setTargetValue(Number(e.target.value))} className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">BP-XP Belohnung</label>
+              <input type="number" min={0} value={bpXpReward} onChange={(e) => setBpXpReward(Number(e.target.value))} className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Schwierigkeit</label>
+              <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as QuestDifficulty)} className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none min-h-[44px]">
+                {QUEST_DIFFICULTIES.map((d) => <option key={d} value={d} style={{ color: QUEST_DIFF_COLORS[d] }}>{QUEST_DIFF_LABELS[d]}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">Frequenz</label>
+              <select value={frequency} onChange={(e) => setFrequency(e.target.value as QuestFrequency)} className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none min-h-[44px]">
+                {QUEST_FREQUENCIES.map((f) => <option key={f} value={f}>{QUEST_FREQ_LABELS[f]}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {error && <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
+
+        <button
+          onClick={handleSave}
+          disabled={saving || !label.trim()}
+          className="mt-4 w-full rounded-xl bg-purple-600 py-3 text-sm font-black text-white hover:bg-purple-500 disabled:opacity-50 transition-colors"
+        >
+          {saving ? "Speichern…" : quest ? "Aktualisieren" : "Aufgabe hinzufügen"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Quest auto-generate modal ─────────────────────────────────────────────────
+
+function QuestAutoGenModal({
+  passId, onClose, onDone,
+}: {
+  passId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const sound = useSoundManager();
+  const [dailyCount, setDailyCount] = useState(3);
+  const [weeklyCount, setWeeklyCount] = useState(4);
+  const [seasonalCount, setSeasonalCount] = useState(2);
+  const [xpMultiplier, setXpMultiplier] = useState(1.0);
+  const [preferActions, setPreferActions] = useState<string[]>([]);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; generated?: number; error?: string } | null>(null);
+
+  async function handleRun() {
+    setRunning(true);
+    const res = await adminAutoGenerateQuests(passId, { dailyCount, weeklyCount, seasonalCount, xpMultiplier, preferActions });
+    setRunning(false);
+    setResult(res);
+    if (res.success) { sound.save(); setTimeout(() => { onDone(); onClose(); }, 1500); }
+    else sound.error();
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0c0a14] p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-black text-zinc-100">Aufgaben auto-generieren</h3>
+          <button onClick={onClose} className="rounded-full p-1 text-zinc-500 hover:text-zinc-300 transition-colors"><X className="h-4 w-4" /></button>
+        </div>
+        <p className="mb-4 text-xs text-zinc-500 leading-relaxed">Generiert automatisch Aufgaben aus den vorhandenen Vorlagen. Bestehende Aufgaben für diesen Pass werden ersetzt.</p>
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: "Tägl. Aufgaben", value: dailyCount, set: setDailyCount },
+              { label: "Wöchentl.", value: weeklyCount, set: setWeeklyCount },
+              { label: "Saisonal", value: seasonalCount, set: setSeasonalCount },
+            ].map((s) => (
+              <div key={s.label}>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">{s.label}</label>
+                <input type="number" min={0} max={10} value={s.value} onChange={(e) => s.set(Number(e.target.value))} className="w-full rounded-lg border border-white/10 bg-black/30 px-2 py-2.5 text-center text-sm text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]" />
+              </div>
+            ))}
+          </div>
+          <div>
+            <label className="mb-1 flex justify-between text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+              XP-Multiplikator <span className="text-purple-400 normal-case font-black">×{xpMultiplier.toFixed(1)}</span>
+            </label>
+            <input type="range" min={0.5} max={3} step={0.1} value={xpMultiplier} onChange={(e) => setXpMultiplier(Number(e.target.value))} className="w-full" />
+          </div>
+        </div>
+        {result && (
+          <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${result.success ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-red-500/30 bg-red-500/10 text-red-300"}`}>
+            {result.success ? `✓ ${result.generated} Aufgaben generiert` : result.error}
+          </div>
+        )}
+        <button
+          onClick={handleRun}
+          disabled={running}
+          className="mt-4 w-full rounded-xl bg-purple-600 py-3 text-sm font-black text-white hover:bg-purple-500 disabled:opacity-50 transition-colors"
+        >
+          {running ? "Generiere…" : "Jetzt generieren"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Quest manager (within PassEditor) ────────────────────────────────────────
+
+function QuestManager({ passId }: { passId: string }) {
+  const sound = useSoundManager();
+  const [quests, setQuests] = useState<BpQuest[]>([]);
+  const [definitions, setDefinitions] = useState<BpQuestDefinition[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingQuest, setEditingQuest] = useState<BpQuest | null | "new">(null);
+  const [showAutoGen, setShowAutoGen] = useState(false);
+  const [stats, setStats] = useState<Awaited<ReturnType<typeof adminGetQuestStats>> | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [resetConfirm, setResetConfirm] = useState(false);
+
+  async function reload() {
+    setLoading(true);
+    const [q, d] = await Promise.all([adminGetBpQuests(passId), getBpQuestDefinitions()]);
+    setQuests(q);
+    setDefinitions(d);
+    if (q.length > 0) adminGetQuestStats(passId).then(setStats);
+    setLoading(false);
+  }
+
+  useEffect(() => { reload(); }, [passId]);
+
+  async function handleDelete(id: string) {
+    setDeleting(id);
+    const res = await adminDeleteBpQuest(id);
+    if (res.success) { sound.save(); reload(); }
+    else { sound.error(); }
+    setDeleting(null);
+  }
+
+  async function handleToggleEnabled(quest: BpQuest) {
+    await adminUpdateBpQuest(quest.id, { enabled: !quest.enabled });
+    reload();
+  }
+
+  async function handleResetProgress() {
+    const res = await adminResetQuestProgress(passId);
+    setResetConfirm(false);
+    if (res.success) { sound.save(); }
+    else { sound.error(); }
+  }
+
+  const totalAvailableXp = quests.reduce((s, q) => s + q.bpXpReward, 0);
+
+  return (
+    <>
+      {editingQuest && editingQuest !== "new" && (
+        <QuestEditorModal passId={passId} quest={editingQuest} definitions={definitions} onClose={() => setEditingQuest(null)} onSaved={reload} />
+      )}
+      {editingQuest === "new" && (
+        <QuestEditorModal passId={passId} quest={null} definitions={definitions} onClose={() => setEditingQuest(null)} onSaved={reload} />
+      )}
+      {showAutoGen && (
+        <QuestAutoGenModal passId={passId} onClose={() => setShowAutoGen(false)} onDone={reload} />
+      )}
+
+      <div className="space-y-4">
+        {/* Header + actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-zinc-500">
+              {loading ? "Lade…" : `${quests.length} Aufgaben · ${totalAvailableXp.toLocaleString("de-DE")} BP-XP gesamt`}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setShowAutoGen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs font-bold text-purple-300 hover:bg-purple-500/20 transition-colors"
+            >
+              <Wand2 className="h-3.5 w-3.5" />Auto-generieren
+            </button>
+            <button
+              onClick={() => setEditingQuest("new")}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-zinc-200 hover:bg-white/[0.08] transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />Neue Aufgabe
+            </button>
+            {quests.length > 0 && (
+              <button
+                onClick={() => setResetConfirm(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/6 px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/12 transition-colors"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />Progress reset
+              </button>
+            )}
+          </div>
+        </div>
+
+        {resetConfirm && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+            <p className="text-xs text-red-300 mb-2">Sicher? Dieser Reset löscht ALLEN Quest-Fortschritt aller User für diesen Pass.</p>
+            <div className="flex gap-2">
+              <button onClick={handleResetProgress} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-500">Ja, zurücksetzen</button>
+              <button onClick={() => setResetConfirm(false)} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-400">Abbrechen</button>
+            </div>
+          </div>
+        )}
+
+        {/* Stats */}
+        {stats && (
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: "Abgeschlossen", value: stats.totalCompletions },
+              { label: "XP vergeben", value: stats.totalXpAwarded },
+              { label: "Quests gesamt", value: stats.totalQuests },
+            ].map((s) => (
+              <div key={s.label} className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5 text-center">
+                <p className="text-[10px] text-zinc-500">{s.label}</p>
+                <p className="text-lg font-black text-zinc-100">{s.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Quest list */}
+        {loading ? (
+          <p className="py-4 text-center text-xs text-zinc-500">Lade…</p>
+        ) : quests.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-white/10 py-8 text-center">
+            <Target className="mx-auto h-8 w-8 text-zinc-600 mb-2" />
+            <p className="text-xs text-zinc-500">Noch keine Aufgaben. Erstelle Aufgaben manuell oder per Auto-Generierung.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {quests.map((quest) => {
+              const diffColor = QUEST_DIFF_COLORS[quest.difficulty] ?? "#60a5fa";
+              return (
+                <div
+                  key={quest.id}
+                  className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
+                >
+                  <span className="text-xl shrink-0">{quest.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className={`text-xs font-black truncate ${quest.enabled ? "text-zinc-100" : "text-zinc-600 line-through"}`}>
+                        {quest.label}
+                      </p>
+                      <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-black" style={{ background: `${diffColor}20`, color: diffColor }}>
+                        {QUEST_DIFF_LABELS[quest.difficulty]}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-zinc-500">
+                      {quest.targetAction} · {quest.targetValue}x · {QUEST_FREQ_LABELS[quest.frequency]} · <span className="text-purple-400 font-bold">{quest.bpXpReward} XP</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleToggleEnabled(quest)}
+                      className={`rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors ${quest.enabled ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10" : "border-white/10 text-zinc-600 hover:border-white/20"}`}
+                    >
+                      {quest.enabled ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                    </button>
+                    <button
+                      onClick={() => setEditingQuest(quest)}
+                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(quest.id)}
+                      disabled={deleting === quest.id}
+                      className="rounded-lg border border-red-500/20 p-1.5 text-red-400/60 hover:text-red-400 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ── Pass editor ───────────────────────────────────────────────────────────────
 
 function PassEditor({
@@ -953,6 +1379,9 @@ function PassEditor({
   const [showPreview, setShowPreview] = useState(true);
   const [showStats, setShowStats] = useState(false);
   const [showAutoFill, setShowAutoFill] = useState(false);
+  const [progressionType, setProgressionType] = useState<BpProgressionType>(pass.progressionType ?? "days");
+  const [bpXpPerTier, setBpXpPerTier] = useState(pass.bpXpPerTier ?? 1000);
+  const [bpXpCapPerDay, setBpXpCapPerDay] = useState(pass.bpXpCapPerDay ?? 0);
   const sound = useSoundManager();
   const router = useRouter();
 
@@ -987,6 +1416,9 @@ function PassEditor({
       showTierCountInShop,
       highlightColor: highlightColor.trim(),
       incompatibleWith,
+      progressionType,
+      bpXpPerTier,
+      bpXpCapPerDay,
     };
     const res = await adminUpdateBattlePass(pass.id, input);
     setSaving(false);
@@ -1093,6 +1525,42 @@ function PassEditor({
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
           className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60 resize-none" />
       </label>
+
+      {/* Progressions-Typ */}
+      <div className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] p-4 space-y-3">
+        <p className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+          <TrendingUp className="h-3.5 w-3.5" />Progression & Leveling
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Progressions-Typ
+            <select value={progressionType} onChange={(e) => setProgressionType(e.target.value as BpProgressionType)}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]">
+              <option value="days">📅 Login-Tage</option>
+              <option value="xp">⚡ BP-XP (Quests)</option>
+            </select>
+          </label>
+          {progressionType === "xp" && (
+            <>
+              <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                BP-XP pro Tier
+                <input type="number" min={100} max={100000} value={bpXpPerTier} onChange={(e) => setBpXpPerTier(Number(e.target.value))}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]" />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                XP-Cap/Tag (0 = kein Limit)
+                <input type="number" min={0} value={bpXpCapPerDay} onChange={(e) => setBpXpCapPerDay(Number(e.target.value))}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]" />
+              </label>
+            </>
+          )}
+        </div>
+        {progressionType === "xp" && (
+          <p className="text-[10px] text-zinc-500">
+            Spieler schalten Tiers durch BP-XP frei (verdient durch Aufgaben). {bpXpPerTier.toLocaleString("de-DE")} XP = 1 Tier. Gesamt für alle {tierCount} Tiers: {(bpXpPerTier * tierCount).toLocaleString("de-DE")} XP.
+          </p>
+        )}
+      </div>
 
       {/* Banner image */}
       <label className="flex flex-col gap-1 text-xs text-zinc-400">
@@ -1497,6 +1965,21 @@ function PassEditor({
           onDone={async () => { await onSaved(); router.refresh(); }}
         />
       )}
+
+      {/* Quest / Aufgaben-Manager */}
+      <CollapsibleAdminRow
+        header={
+          <div className="flex items-center gap-2">
+            <Target className="h-3.5 w-3.5 text-purple-400" />
+            <span className="text-sm font-semibold text-zinc-200">Aufgaben & Quests</span>
+            <span className="text-xs text-zinc-500">— manuelle und auto-generierte Aufgaben mit BP-XP</span>
+          </div>
+        }
+      >
+        <div className="pt-2">
+          <QuestManager passId={pass.id} />
+        </div>
+      </CollapsibleAdminRow>
     </div>
   );
 }

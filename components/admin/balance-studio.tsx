@@ -779,6 +779,7 @@ function XpSourcesSection({ data, onChange }: {
         xpWorldKill: data.xpWorldKill,
         xpBpTierClaim: data.xpBpTierClaim,
         xpPvpKill: data.xpPvpKill,
+        abilitySlotCount: data.abilitySlotCount,
       });
       if (res.success) setOk(true); else setError(res.error ?? "Fehler");
     });
@@ -805,7 +806,7 @@ function XpSourcesSection({ data, onChange }: {
     <SectionCard title="XP-Quellen (Balance)" icon={Zap}>
       <p className="mb-4 text-xs text-zinc-500">
         Definiert wie viel XP jede Aktivität gibt. Level-Aufbau und Belohnungen werden im Admin-Panel unter
-        &ldquo;Level & XP&rdquo; konfiguriert.
+        &ldquo;Level &amp; XP&rdquo; konfiguriert.
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {XP_FIELDS.map(({ key, label, hint, step }) => (
@@ -822,6 +823,26 @@ function XpSourcesSection({ data, onChange }: {
             />
           </div>
         ))}
+      </div>
+
+      {/* Ability slot count */}
+      <div className="mt-4 flex items-end gap-4 rounded-xl border border-amber-500/15 bg-amber-500/5 p-3">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-zinc-300">Fähigkeiten-Slots</span>
+          <span className="text-[10px] text-zinc-600">Wie viele Fähigkeiten ein Spieler gleichzeitig ausrüsten darf</span>
+          <input
+            type="number"
+            value={data.abilitySlotCount}
+            step={1}
+            min={1}
+            max={5}
+            onChange={(e) => onChange({ abilitySlotCount: Math.max(1, Math.min(5, Number(e.target.value))) })}
+            className="w-20 rounded-lg border border-amber-500/30 bg-black/30 px-3 py-1.5 text-sm text-amber-200 outline-none focus:border-amber-400/60"
+          />
+        </div>
+        <p className="text-[10px] text-zinc-600 max-w-xs">
+          Gilt global für alle Spieler. Level &amp; XP-Admin-Tab erlaubt detaillierteren Aufbau inklusive Belohnungen.
+        </p>
       </div>
 
       {error && (

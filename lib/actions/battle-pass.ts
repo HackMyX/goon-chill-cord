@@ -22,16 +22,20 @@ function rowToTier(r: Record<string, unknown>): BattlePassTier {
     rewardType: r.reward_type as BpRewardType,
     rewardCredits: r.reward_credits as number | null,
     rewardItemId: r.reward_item_id as string | null,
+    rewardItemName: (r.reward_item_name as string | null) ?? null,
+    rewardItemType: (r.reward_item_type as string | null) ?? null,
     rewardBadgeKey: r.reward_badge_key as string | null,
     rewardBadgeText: r.reward_badge_text as string | null,
     rewardItemRarity: r.reward_item_rarity as Rarity | null,
     rewardXpBoost: r.reward_xp_boost as number | null,
     rewardNameStyleKey: r.reward_name_style_key as string | null,
     rewardAbilityKey: (r.reward_ability_key as string | null) ?? null,
+    rewardAbilityName: (r.reward_ability_name as string | null) ?? null,
     rewardQuantity: (r.reward_quantity as number | null) ?? 1,
     highlightTier: (r.highlight_tier as boolean | null) ?? false,
     description: r.description as string | null,
     icon: r.icon as string,
+    bpXpRequired: (r.bp_xp_required as number | null) ?? null,
   };
 }
 
@@ -68,6 +72,9 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
     incompatibleWith: (r.incompatible_with as string[] | null) ?? [],
     tiers,
     createdAt: r.created_at as string,
+    progressionType: ((r.progression_type as string | null) ?? "days") as "days" | "xp",
+    bpXpPerTier: (r.bp_xp_per_tier as number | null) ?? 1000,
+    bpXpCapPerDay: (r.bp_xp_cap_per_day as number | null) ?? 0,
   };
 }
 
@@ -101,7 +108,7 @@ export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
   const [{ data: ubpRow }, { data: claimRows }] = await Promise.all([
     admin
       .from("user_battle_passes")
-      .select("has_premium, has_elite, progress_days")
+      .select("has_premium, has_elite, progress_days, bp_xp")
       .eq("user_id", user.id)
       .eq("pass_id", pass.id)
       .maybeSingle(),
@@ -118,6 +125,7 @@ export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
     hasElite: ubpRow?.has_elite ?? false,
     progressDays: ubpRow?.progress_days ?? 0,
     claimedTierIds: (claimRows ?? []).map((r) => r.tier_id as string),
+    bpXp: (ubpRow?.bp_xp as number | null) ?? 0,
   };
 
   return { pass, userStatus };
@@ -180,7 +188,7 @@ export async function getActiveBattlePasses(): Promise<ActiveBpView[]> {
   const [{ data: ubpRows }, { data: claimRows }] = await Promise.all([
     admin
       .from("user_battle_passes")
-      .select("pass_id, has_premium, has_elite, progress_days")
+      .select("pass_id, has_premium, has_elite, progress_days, bp_xp")
       .eq("user_id", user.id)
       .in("pass_id", passIds),
     admin
@@ -202,6 +210,7 @@ export async function getActiveBattlePasses(): Promise<ActiveBpView[]> {
       hasElite: ubp?.has_elite ?? false,
       progressDays: ubp?.progress_days ?? 0,
       claimedTierIds: claims,
+      bpXp: (ubp?.bp_xp as number | null) ?? 0,
     };
     return { pass, userStatus };
   });
@@ -729,6 +738,9 @@ export interface AdminPassInput {
   showCountdown: boolean;
   passIcon: string;
   incompatibleWith?: string[];
+  progressionType?: "days" | "xp";
+  bpXpPerTier?: number;
+  bpXpCapPerDay?: number;
 }
 
 export async function adminCreateBattlePass(
@@ -819,6 +831,9 @@ export async function adminUpdateBattlePass(
       show_countdown: input.showCountdown ?? true,
       pass_icon: input.passIcon?.trim() || "🏆",
       incompatible_with: input.incompatibleWith ?? [],
+      progression_type: input.progressionType ?? "days",
+      bp_xp_per_tier: input.bpXpPerTier ?? 1000,
+      bp_xp_cap_per_day: input.bpXpCapPerDay ?? 0,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);

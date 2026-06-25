@@ -213,6 +213,11 @@ export async function registerStreakKill(monsterTypeId: string): Promise<Registe
     void awardXp(user.id, xpCfg.sources.world_kill ?? 10, "world_kill", `Monster: ${monsterTypeId} (Kill #${newStreakKillCount})`);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementBpQuestProgress } = await import("@/lib/actions/bp-quests");
+    void incrementBpQuestProgress(user.id, "monster_kill", 1);
+  } catch { /* non-fatal */ }
+
   return { success: true, reward, newStreakKillCount, newPendingStreakCr };
 }
 

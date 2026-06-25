@@ -115,6 +115,7 @@ export interface BalanceStudioData {
   xpWorldKill: number;
   xpBpTierClaim: number;
   xpPvpKill: number;
+  abilitySlotCount: number;
   // Item stats (for health panel, readonly)
   itemStats: BalanceItemStats[];
 }
@@ -147,7 +148,7 @@ export async function getBalanceStudioData(): Promise<BalanceStudioData | null> 
     admin.from("case_tiers").select("id,label,price,rarity_weights,group_id").order("group_id").order("price"),
     admin.from("name_style_rarity_config").select("rarity,base_shop_price_cr,max_shop_price_cr,case_drop_weight,case_drop_enabled").order("base_shop_price_cr"),
     admin.from("shop_settings").select("auto_generate_price_multiplier_min,auto_generate_price_multiplier_max").eq("id", "default").single(),
-    admin.from("xp_config").select("sources").eq("id", "default").maybeSingle(),
+    admin.from("xp_config").select("sources, ability_slot_count").eq("id", "default").maybeSingle(),
     admin.from("items").select("rarity, price_cr").then((res) => {
       if (!res.data) return { data: [] as BalanceItemStats[] };
       const map: Record<string, { count: number; sum: number; min: number; max: number }> = {};
@@ -185,6 +186,7 @@ export async function getBalanceStudioData(): Promise<BalanceStudioData | null> 
   }
 
   const xpSources = (xpRow?.data?.sources as Record<string, number> | null) ?? {};
+  const abilitySlotCount = Number(xpRow?.data?.ability_slot_count ?? 1);
 
   const modes = snake.modes_config as Record<string, Record<string, unknown>>;
   const snakeModes: BalanceStudioData["snakeModes"] = {};
@@ -248,6 +250,7 @@ export async function getBalanceStudioData(): Promise<BalanceStudioData | null> 
     xpWorldKill: Number(xpSources.world_kill ?? 10),
     xpBpTierClaim: Number(xpSources.bp_tier_claim ?? 50),
     xpPvpKill: Number(xpSources.pvp_kill ?? 25),
+    abilitySlotCount,
     itemStats: (itemStatsRows.data ?? []) as BalanceItemStats[],
   };
 }
@@ -468,6 +471,7 @@ export async function saveXpSources(data: {
   xpWorldKill: number;
   xpBpTierClaim: number;
   xpPvpKill: number;
+  abilitySlotCount?: number;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const admin = await requireAdmin();
@@ -487,6 +491,7 @@ export async function saveXpSources(data: {
       id: "default",
       sources,
       levels: existing?.levels ?? [],
+      ability_slot_count: data.abilitySlotCount ?? 1,
       updated_at: new Date().toISOString(),
     }, { onConflict: "id" });
     revalidatePath("/admin");
