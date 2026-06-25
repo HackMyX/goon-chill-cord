@@ -78,6 +78,7 @@ export async function getModPermissions(): Promise<ModPermissions> {
     canUpdateTicketStatus: data.can_update_ticket_status ?? false,
     canRewardTickets: data.can_reward_tickets ?? false,
     maxRewardPerTicket: data.max_reward_per_ticket ?? 0,
+    canPauseTickets: data.can_pause_tickets ?? false,
   };
 }
 
@@ -122,6 +123,7 @@ export async function updateModPermissions(
       can_update_ticket_status: perms.canUpdateTicketStatus,
       can_reward_tickets: perms.canRewardTickets,
       max_reward_per_ticket: perms.maxRewardPerTicket,
+      can_pause_tickets: perms.canPauseTickets,
       updated_at: new Date().toISOString(),
     });
     if (error) return { success: false, error: error.message };
@@ -253,7 +255,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, created_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending, escalated_to_admin")
+    .select("id, user_id, subject, description, status, category, priority, created_at, updated_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending, escalated_to_admin")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -279,6 +281,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
     category: t.category ?? "other",
     priority: t.priority ?? "normal",
     createdAt: t.created_at,
+    updatedAt: (t as Record<string, unknown>).updated_at as string ?? t.created_at,
     closedAt: t.closed_at,
     closedByUsername: t.closed_by ? (byId.get(t.closed_by)?.username ?? null) : null,
     attachmentUrl: (t as Record<string, unknown>).attachment_url as string | null ?? null,
@@ -742,7 +745,7 @@ export async function modUpdateTicketStatus(
     }
 
     if (ticket?.user_id) {
-      const LABELS: Record<string, string> = { open: "Offen", in_progress: "In Bearbeitung", resolved: "Gelöst/Geschlossen", closed: "Gelöst/Geschlossen" };
+      const LABELS: Record<string, string> = { open: "Offen", in_progress: "In Bearbeitung", paused: "Pausiert", resolved: "Gelöst/Geschlossen", closed: "Gelöst/Geschlossen" };
       let notifyMsg = `Dein Ticket „${ticket.subject}" ist jetzt: ${LABELS[status] ?? status}`;
       if (hasPendingReward && rewardCredits && rewardCredits > 0) {
         notifyMsg += ` · +${rewardCredits} Credits wurden gutgeschrieben!`;
@@ -755,6 +758,25 @@ export async function modUpdateTicketStatus(
         link: `/?openTicket=${ticketId}`,
       });
     }
+    return { success: true };
+  } catch (e) { return { success: false, error: String(e) }; }
+}
+
+export async function modPauseTicket(
+  ticketId: string,
+  pause: boolean
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser, user.id);
+    if (!perms.canPauseTickets) return { success: false, error: "Keine Berechtigung zum Pausieren von Tickets." };
+    const admin = createAdminClient();
+    const newStatus = pause ? "paused" : "in_progress";
+    const { error } = await admin
+      .from("tickets")
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq("id", ticketId);
+    if (error) return { success: false, error: error.message };
     return { success: true };
   } catch (e) { return { success: false, error: String(e) }; }
 }

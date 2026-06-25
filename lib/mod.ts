@@ -22,6 +22,7 @@ export interface ModPermissions {
   canUpdateTicketStatus: boolean;
   canRewardTickets: boolean;
   maxRewardPerTicket: number; // 0 = kein Limit
+  canPauseTickets: boolean;
 }
 
 export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
@@ -40,6 +41,7 @@ export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
   canUpdateTicketStatus: false,
   canRewardTickets: false,
   maxRewardPerTicket: 0,
+  canPauseTickets: false,
 };
 
 export const ADMIN_MOD_PERMISSIONS: ModPermissions = {
@@ -58,6 +60,7 @@ export const ADMIN_MOD_PERMISSIONS: ModPermissions = {
   canUpdateTicketStatus: true,
   canRewardTickets: true,
   maxRewardPerTicket: 0,
+  canPauseTickets: true,
 };
 
 export interface ChatConfig {
@@ -119,10 +122,11 @@ export interface ModTicket {
   nameStyleKey?: string;
   subject: string;
   message: string;
-  status: "open" | "in_progress" | "closed" | string;
+  status: "open" | "in_progress" | "paused" | "closed" | string;
   category: string;
   priority: string;
   createdAt: string;
+  updatedAt: string;
   closedAt: string | null;
   closedByUsername: string | null;
   attachmentUrl: string | null;

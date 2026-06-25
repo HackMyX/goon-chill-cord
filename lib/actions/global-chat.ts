@@ -161,6 +161,7 @@ export async function clearGlobalChat(): Promise<{ success: boolean; error?: str
             canUpdateTicketStatus: globalRow.can_update_ticket_status ?? DEFAULT_MOD_PERMISSIONS.canUpdateTicketStatus,
             canRewardTickets: globalRow.can_reward_tickets ?? DEFAULT_MOD_PERMISSIONS.canRewardTickets,
             maxRewardPerTicket: (globalRow as Record<string, unknown>).max_reward_per_ticket as number ?? DEFAULT_MOD_PERMISSIONS.maxRewardPerTicket,
+            canPauseTickets: (globalRow as Record<string, unknown>).can_pause_tickets as boolean ?? DEFAULT_MOD_PERMISSIONS.canPauseTickets,
           }
         : DEFAULT_MOD_PERMISSIONS;
       const override = ((profile as Record<string, unknown>).mod_permissions_override as Partial<ModPermissions>) ?? null;

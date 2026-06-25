@@ -7,7 +7,7 @@ import { isModerator } from "@/lib/admin";
 import { notifyUser, notifyStaff } from "@/lib/notifications-internal";
 import { logDebugEvent } from "@/lib/debug-log-server";
 
-export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+export type TicketStatus = "open" | "in_progress" | "paused" | "resolved" | "closed";
 export type TicketCategory = "bug" | "suggestion";
 export type TicketPriority = "low" | "normal" | "high" | "urgent";
 
@@ -510,6 +510,7 @@ export async function updateTicketStatus(input: {
   const STATUS_LABELS: Record<TicketStatus, string> = {
     open: "Offen",
     in_progress: "In Bearbeitung",
+    paused: "Pausiert",
     resolved: "Gelöst/Geschlossen",
     closed: "Gelöst/Geschlossen",
   };

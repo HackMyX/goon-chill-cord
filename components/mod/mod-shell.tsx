@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition, useEffect, useMemo, useRef, Suspense } from "react";
+import { useState, useTransition, useEffect, useMemo, useRef, Suspense, type ReactNode } from "react";
 import {
   Shield, Users, Ticket, Activity, AlertTriangle, Ban, StickyNote,
   ChevronDown, Check, X, Coins, Clock, Search, LogOut, Trash2, Loader2,
   Sparkles, LayoutDashboard, RefreshCw, History, NotepadText, FileText,
   Trophy, Paperclip, MessageSquare, Bug, Lightbulb, ArrowUpRight,
+  PauseCircle, PlayCircle, SortAsc, SortDesc, BarChart3, Filter,
 } from "lucide-react";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { GlobalChatPanel } from "@/components/global/global-chat-panel";
@@ -20,7 +21,7 @@ import {
   modWarnUser, modAddNote, modTempBan, modLiftBan, modCloseTicket, modAddCredits,
   modRemoveWarning, getModUserHistory, getTicketMessages, modMarkInProgress, modReplyToTicket,
   modDeleteTicket, modSetTicketPriority, modUpdateTicketStatus, modGrantTicketReward,
-  modRemoveTicketReward, modEscalateTicket, getMyEffectivePermissions,
+  modRemoveTicketReward, modEscalateTicket, modPauseTicket, getMyEffectivePermissions,
 } from "@/lib/actions/mod";
 import { addInternalNote, getInternalNotes, getTicketRewards, type InternalNote, type TicketReward } from "@/lib/actions/tickets";
 import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage } from "@/lib/mod";
@@ -430,6 +431,7 @@ function UserActionsPanel({ user: u, perms, onDone }: {
 // ---------------------------------------------------------------------------
 
 type UserFilter = "all" | "banned" | "warned";
+type UserSortField = "username" | "credits" | "streak" | "warnings" | "joined";
 
 function UsersTab({ users: initialUsers, perms, onRefresh }: {
   users: ModUserSummary[];
@@ -439,11 +441,20 @@ function UsersTab({ users: initialUsers, perms, onRefresh }: {
   const [users, setUsers] = useState(initialUsers);
   const [query, setQuery] = useState("");
   const [userFilter, setUserFilter] = useState<UserFilter>("all");
+  const [sortBy, setSortBy] = useState<UserSortField>(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("mod:u:sort") as UserSortField) ?? "joined" : "joined"
+  );
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("mod:u:dir") as "asc" | "desc") ?? "desc" : "desc"
+  );
   const [expanded, setExpanded] = useState<string | null>(null);
   const { currencyName } = useSiteConfig();
 
   // Sync with server refresh
   useEffect(() => { setUsers(initialUsers); }, [initialUsers]);
+
+  function setSort(v: UserSortField) { setSortBy(v); localStorage.setItem("mod:u:sort", v); }
+  function toggleDir() { const d = sortDir === "desc" ? "asc" : "desc"; setSortDir(d); localStorage.setItem("mod:u:dir", d); }
 
   const bannedCount = useMemo(
     () => users.filter((u) => u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date()).length,
@@ -452,12 +463,21 @@ function UsersTab({ users: initialUsers, perms, onRefresh }: {
   const warnedCount = useMemo(() => users.filter((u) => u.warningCount > 0).length, [users]);
 
   const filtered = useMemo(() => {
-    let list = users;
+    let list = [...users];
     if (userFilter === "banned") list = list.filter((u) => u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date());
     if (userFilter === "warned") list = list.filter((u) => u.warningCount > 0);
     if (query.trim()) list = list.filter((u) => u.username.toLowerCase().includes(query.toLowerCase()));
+    const mul = sortDir === "desc" ? -1 : 1;
+    list.sort((a, b) => {
+      if (sortBy === "username") return mul * a.username.localeCompare(b.username);
+      if (sortBy === "credits") return mul * (b.credits - a.credits);
+      if (sortBy === "streak") return mul * (b.streakDays - a.streakDays);
+      if (sortBy === "warnings") return mul * (b.warningCount - a.warningCount);
+      // joined
+      return mul * (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    });
     return list;
-  }, [users, userFilter, query]);
+  }, [users, userFilter, query, sortBy, sortDir]);
 
   function handleWarningRemoved(userId: string) {
     setUsers((prev) =>
@@ -469,35 +489,72 @@ function UsersTab({ users: initialUsers, perms, onRefresh }: {
   return (
     <div className="flex flex-col gap-4">
       {/* Search + filter chips */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+      <div className="flex flex-col gap-2 rounded-2xl border border-white/8 bg-white/[0.02] p-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Nutzer suchen…"
-            className="w-full rounded-xl border border-white/8 bg-white/[0.03] py-2.5 pl-10 pr-3 text-sm text-zinc-100 outline-none transition-colors focus:border-sky-400/40"
+            className="w-full rounded-xl border border-white/8 bg-black/20 py-2 pl-9 pr-9 text-xs text-zinc-200 outline-none transition-colors focus:border-sky-400/40 placeholder:text-zinc-600"
           />
-        </div>
-        <div className="flex gap-1.5">
-          {([
-            { key: "all",    label: `Alle (${users.length})` },
-            { key: "banned", label: `Gesperrt (${bannedCount})` },
-            { key: "warned", label: `Verwarnt (${warnedCount})` },
-          ] as const).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setUserFilter(key)}
-              className={`rounded-xl border px-3 py-2 text-xs font-bold transition-colors ${
-                userFilter === key
-                  ? "border-sky-500/40 bg-sky-500/15 text-sky-300"
-                  : "border-white/8 bg-white/[0.02] text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              {label}
+          {query && (
+            <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-300">
+              <X className="h-3.5 w-3.5" />
             </button>
-          ))}
+          )}
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1">
+            {([
+              { key: "all",    label: `Alle (${users.length})` },
+              { key: "banned", label: `Gesperrt (${bannedCount})` },
+              { key: "warned", label: `Verwarnt (${warnedCount})` },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setUserFilter(key)}
+                className={`rounded-xl border px-2.5 py-1 text-xs font-bold transition-colors ${
+                  userFilter === key
+                    ? "border-sky-500/40 bg-sky-500/15 text-sky-300"
+                    : "border-white/8 bg-white/[0.02] text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Filter className="h-3 w-3 text-zinc-600" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSort(e.target.value as UserSortField)}
+              className="cursor-pointer appearance-none rounded-xl border border-white/8 bg-black/30 py-1 pl-2.5 pr-5 text-xs text-zinc-400 outline-none focus:border-sky-500/40"
+            >
+              <option value="joined">Beitrittsdatum</option>
+              <option value="username">Name A–Z</option>
+              <option value="credits">Credits</option>
+              <option value="streak">Streak</option>
+              <option value="warnings">Verwarnungen</option>
+            </select>
+            <button
+              onClick={toggleDir}
+              title={sortDir === "desc" ? "Absteigend" : "Aufsteigend"}
+              className="flex h-7 w-7 items-center justify-center rounded-xl border border-white/8 text-zinc-500 transition-colors hover:border-white/20 hover:text-zinc-300"
+            >
+              {sortDir === "desc" ? <SortDesc className="h-3.5 w-3.5" /> : <SortAsc className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        </div>
+        <p className="text-[11px] text-zinc-600">
+          {filtered.length} von {users.length} Nutzern
+          {(query || userFilter !== "all") && (
+            <> · <button
+              onClick={() => { setQuery(""); setUserFilter("all"); }}
+              className="text-sky-400 hover:text-sky-300 transition-colors"
+            >Filter zurücksetzen</button></>
+          )}
+        </p>
       </div>
 
       {/* User list */}
@@ -650,9 +707,9 @@ function PriorityBadge({ priority }: { priority: string }) {
 // Ticket Item — own state, thread messages, category/priority, in_progress
 // ---------------------------------------------------------------------------
 
-const ALL_TICKET_STATUSES = ["open", "in_progress", "closed"] as const;
+const ALL_TICKET_STATUSES = ["open", "in_progress", "paused", "closed"] as const;
 const ALL_TICKET_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
-const STATUS_LABEL: Record<string, string> = { open: "Offen", in_progress: "In Bearb.", resolved: "Gelöst/Geschlossen", closed: "Gelöst/Geschlossen" };
+const STATUS_LABEL: Record<string, string> = { open: "Offen", in_progress: "In Bearb.", paused: "Pausiert", resolved: "Gelöst", closed: "Geschlossen" };
 const PRIORITY_LABEL: Record<string, string> = { low: "Niedrig", normal: "Normal", high: "Hoch", urgent: "Dringend" };
 
 function TicketItem({ t, perms, onRefresh, defaultOpen }: {
@@ -679,7 +736,8 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
-  const isActionable = t.status === "open" || t.status === "in_progress";
+  const isPaused = t.status === "paused";
+  const isActionable = t.status === "open" || t.status === "in_progress" || isPaused;
   const isInProgress = t.status === "in_progress";
   const isClosed = t.status === "closed" || t.status === "resolved";
   const alreadyRewarded = !!t.rewardGrantedAt;
@@ -747,6 +805,24 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
     startTransition(async () => {
       const res = await modMarkInProgress(t.id);
       if (res.success) { showFlash("Als 'In Bearbeitung' markiert.", true); onRefresh(); }
+      else showFlash(res.error ?? "Fehler.", false);
+    });
+  }
+
+  function handlePause() {
+    sound.click();
+    startTransition(async () => {
+      const res = await modPauseTicket(t.id, true);
+      if (res.success) { showFlash("Ticket pausiert.", true); onRefresh(); }
+      else showFlash(res.error ?? "Fehler.", false);
+    });
+  }
+
+  function handleResume() {
+    sound.click();
+    startTransition(async () => {
+      const res = await modPauseTicket(t.id, false);
+      if (res.success) { showFlash("Ticket fortgesetzt.", true); onRefresh(); }
       else showFlash(res.error ?? "Fehler.", false);
     });
   }
@@ -845,48 +921,70 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
     }
   }
 
-  const statusCls = isActionable
-    ? isInProgress
+  const statusCls = isPaused
+    ? "border-slate-500/25 bg-slate-500/5"
+    : isInProgress
       ? "border-amber-500/20 bg-amber-500/5"
-      : "border-purple-500/20 bg-purple-500/5"
-    : "border-white/8 bg-white/[0.02]";
+      : isActionable
+        ? "border-purple-500/20 bg-purple-500/5"
+        : "border-white/8 bg-white/[0.02]";
 
-  const dotCls = isActionable
-    ? isInProgress
+  const dotCls = isPaused
+    ? "bg-slate-400"
+    : isInProgress
       ? "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]"
-      : "bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]"
-    : "bg-zinc-600";
+      : isActionable
+        ? "bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]"
+        : "bg-zinc-600";
 
   return (
     <div ref={itemRef} className={`overflow-hidden rounded-2xl border transition-colors ${statusCls}`}>
       <button
-        className="flex w-full items-center justify-between gap-2 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.02]"
+        className="relative flex w-full items-center gap-3 py-3.5 pr-4 pl-5 text-left transition-colors hover:bg-white/[0.03]"
         onClick={() => setOpen((o) => !o)}
       >
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className={`h-2 w-2 shrink-0 rounded-full ${dotCls}`} />
-            <span className="break-words font-semibold text-zinc-100">{t.subject}</span>
+        {/* Priority color strip */}
+        <div className={`absolute inset-y-0 left-0 w-[3px] ${
+          t.priority === "urgent" ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" :
+          t.priority === "high" ? "bg-orange-500 shadow-[0_0_6px_rgba(249,115,22,0.4)]" :
+          t.priority === "normal" ? "bg-amber-400/70" : "bg-zinc-700"
+        }`} />
+
+        {/* Status dot */}
+        <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${dotCls}`} />
+
+        {/* Category icon */}
+        {t.category === "bug"
+          ? <Bug className="h-3.5 w-3.5 shrink-0 text-red-400/60" />
+          : <Lightbulb className="h-3.5 w-3.5 shrink-0 text-sky-400/60" />}
+
+        {/* Subject + meta */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-semibold text-zinc-100">{t.subject}</span>
             {t.escalatedToAdmin && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-orange-500/40 bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-300">
-                <ArrowUpRight className="h-2.5 w-2.5" />
-                Weitergeleitet
+              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-orange-500/40 bg-orange-500/15 px-1.5 py-0.5 text-[9px] font-bold text-orange-300">
+                <ArrowUpRight className="h-2.5 w-2.5" />Eskaliert
               </span>
             )}
-            {alreadyRewarded && <Trophy className="h-3 w-3 shrink-0 text-amber-400" aria-label="Bereits belohnt" />}
-            {t.attachmentUrl && <Paperclip className="h-3 w-3 shrink-0 text-zinc-500" aria-label="Hat Anhang" />}
+            {isPaused && (
+              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-slate-500/30 bg-slate-500/15 px-1.5 py-0.5 text-[9px] font-bold text-slate-300">
+                ⏸ Pausiert
+              </span>
+            )}
           </div>
-          <span className="text-[11px] text-zinc-500">von <span className="font-semibold text-zinc-300">{t.username}</span></span>
+          <div className="mt-0.5 flex items-center gap-2 text-[11px]">
+            <span className="font-medium text-zinc-400">{t.username}</span>
+            {(alreadyRewarded || rewardIsPending) && <Trophy className="h-3 w-3 text-amber-400" />}
+            {t.attachmentUrl && <Paperclip className="h-3 w-3 text-zinc-600" />}
+          </div>
         </div>
+
+        {/* Right: priority + time + chevron */}
         <div className="flex shrink-0 items-center gap-2">
-          {isInProgress && (
-            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">In Bearb.</span>
-          )}
-          {t.status === "open" && (
-            <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">Offen</span>
-          )}
-          <span className="text-[10px] text-zinc-600">{timeAgo(t.createdAt)}</span>
-          <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          <PriorityBadge priority={t.priority} />
+          <span className="w-14 text-right text-[10px] text-zinc-600">{timeAgo(t.updatedAt ?? t.createdAt)}</span>
+          <ChevronDown className={`h-4 w-4 text-zinc-600 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
         </div>
       </button>
 
@@ -1167,8 +1265,28 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           )}
 
           {/* Extended actions row */}
-          {(perms.canDeleteTickets || perms.canRewardTickets || (perms.canCloseTickets && !t.escalatedToAdmin)) && (
+          {(perms.canDeleteTickets || perms.canRewardTickets || perms.canPauseTickets || (perms.canCloseTickets && !t.escalatedToAdmin)) && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/5 pt-3">
+              {/* Pause / Resume */}
+              {perms.canPauseTickets && !isClosed && (isPaused ? (
+                <button
+                  onClick={handleResume}
+                  disabled={pending}
+                  className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+                >
+                  {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                  Fortsetzen
+                </button>
+              ) : (isActionable && (
+                <button
+                  onClick={handlePause}
+                  disabled={pending}
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-500/30 bg-slate-500/10 px-3 py-1.5 text-xs font-bold text-slate-300 transition-colors hover:bg-slate-500/20 disabled:opacity-50"
+                >
+                  {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PauseCircle className="h-3.5 w-3.5" />}
+                  Pausieren
+                </button>
+              )))}
               {perms.canCloseTickets && !t.escalatedToAdmin && isActionable && (
                 <button
                   onClick={async () => {
@@ -1356,34 +1474,11 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
 // Tickets Tab
 // ---------------------------------------------------------------------------
 
-const TICKET_STATUS_CONFIG = [
-  {
-    key: "open",
-    label: "Offen",
-    dot: "bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]",
-    badge: "bg-purple-500/20 text-purple-300",
-    heading: "text-zinc-200",
-    empty: "Keine offenen Tickets. Alles erledigt!",
-  },
-  {
-    key: "in_progress",
-    label: "In Bearbeitung",
-    dot: "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]",
-    badge: "bg-amber-500/20 text-amber-300",
-    heading: "text-zinc-200",
-    empty: "Keine Tickets in Bearbeitung.",
-  },
-  {
-    key: "closed",
-    label: "Gelöst/Geschlossen",
-    dot: "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]",
-    badge: "bg-emerald-500/20 text-emerald-300",
-    heading: "text-zinc-400",
-    empty: "",
-  },
-] as const;
+type TicketStatusFilter = "open" | "in_progress" | "paused" | "closed" | "all";
+type SortField = "updated" | "created" | "priority" | "status";
 
-type TicketStatusFilter = "open" | "in_progress" | "closed" | "all";
+const PRIO_ORDER: Record<string, number> = { urgent: 4, high: 3, normal: 2, low: 1 };
+const STATUS_SORT_ORDER: Record<string, number> = { open: 0, in_progress: 1, paused: 2, resolved: 3, closed: 4 };
 
 function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }: {
   tickets: ModTicket[];
@@ -1392,12 +1487,35 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
   openTicketId?: string | null;
   onTicketOpened?: () => void;
 }) {
-  const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>(() =>
-    openTicketId ? "all" : "open"
-  );
+  const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>(() => {
+    if (openTicketId) return "all";
+    if (typeof window !== "undefined") return (localStorage.getItem("mod:t:sf") as TicketStatusFilter) ?? "open";
+    return "open";
+  });
+  const [catFilter, setCatFilter] = useState<"all" | "bug" | "suggestion">(() => {
+    if (typeof window !== "undefined") return (localStorage.getItem("mod:t:cf") as "all" | "bug" | "suggestion") ?? "all";
+    return "all";
+  });
+  const [prioFilter, setPrioFilter] = useState<string>(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("mod:t:pf") ?? "all";
+    return "all";
+  });
+  const [sortBy, setSortBy] = useState<SortField>(() => {
+    if (typeof window !== "undefined") return (localStorage.getItem("mod:t:sort") as SortField) ?? "updated";
+    return "updated";
+  });
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() => {
+    if (typeof window !== "undefined") return (localStorage.getItem("mod:t:dir") as "asc" | "desc") ?? "desc";
+    return "desc";
+  });
+  const [search, setSearch] = useState("");
 
-  // When a deep-link ticket arrives (even dynamically), ensure it's visible and
-  // delay clearing the id until after the scroll animation has had time to run.
+  function setStatus(v: TicketStatusFilter) { setStatusFilter(v); localStorage.setItem("mod:t:sf", v); }
+  function setCat(v: "all" | "bug" | "suggestion") { setCatFilter(v); localStorage.setItem("mod:t:cf", v); }
+  function setPrio(v: string) { setPrioFilter(v); localStorage.setItem("mod:t:pf", v); }
+  function setSort(v: SortField) { setSortBy(v); localStorage.setItem("mod:t:sort", v); }
+  function toggleDir() { const d = sortDir === "desc" ? "asc" : "desc"; setSortDir(d); localStorage.setItem("mod:t:dir", d); }
+
   useEffect(() => {
     if (!openTicketId) return;
     setStatusFilter("all");
@@ -1405,7 +1523,6 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
     return () => clearTimeout(timer);
   }, [openTicketId, onTicketOpened]);
 
-  // Realtime: refresh ticket list on any ticket INSERT/UPDATE
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -1417,159 +1534,205 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const bugTickets = tickets.filter((t) => t.category === "bug");
-  const suggestionTickets = tickets.filter((t) => t.category === "suggestion");
-
-  const countByStatus = {
+  const counts = useMemo(() => ({
     open: tickets.filter((t) => t.status === "open").length,
     in_progress: tickets.filter((t) => t.status === "in_progress").length,
+    paused: tickets.filter((t) => t.status === "paused").length,
     closed: tickets.filter((t) => t.status === "closed" || t.status === "resolved").length,
-  };
+    bugs: tickets.filter((t) => t.category === "bug").length,
+    suggestions: tickets.filter((t) => t.category === "suggestion").length,
+  }), [tickets]);
 
-  const filterButtons: Array<{ key: TicketStatusFilter; label: string; count?: number }> = [
-    { key: "all", label: `Alle (${tickets.length})` },
-    { key: "open", label: `Offen`, count: countByStatus.open },
-    { key: "in_progress", label: `In Bearb.`, count: countByStatus.in_progress },
-    { key: "closed", label: `Gelöst/Geschlossen`, count: countByStatus.closed },
+  const displayed = useMemo(() => {
+    let arr = [...tickets];
+    if (statusFilter !== "all") {
+      arr = arr.filter((t) => statusFilter === "closed"
+        ? (t.status === "closed" || t.status === "resolved")
+        : t.status === statusFilter);
+    }
+    if (catFilter !== "all") arr = arr.filter((t) => t.category === catFilter);
+    if (prioFilter !== "all") arr = arr.filter((t) => t.priority === prioFilter);
+    if (search.trim()) {
+      const s = search.toLowerCase();
+      arr = arr.filter((t) =>
+        t.subject.toLowerCase().includes(s) ||
+        t.username.toLowerCase().includes(s) ||
+        t.message.toLowerCase().includes(s)
+      );
+    }
+    const mul = sortDir === "desc" ? -1 : 1;
+    arr.sort((a, b) => {
+      if (sortBy === "priority") return mul * ((PRIO_ORDER[b.priority] ?? 2) - (PRIO_ORDER[a.priority] ?? 2));
+      if (sortBy === "status") return mul * ((STATUS_SORT_ORDER[b.status] ?? 99) - (STATUS_SORT_ORDER[a.status] ?? 99));
+      if (sortBy === "created") return mul * (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      // default: updated
+      return mul * (new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime());
+    });
+    return arr;
+  }, [tickets, statusFilter, catFilter, prioFilter, search, sortBy, sortDir]);
+
+  const hasActiveFilter = search.trim() || statusFilter !== "all" || catFilter !== "all" || prioFilter !== "all";
+
+  const STATS = [
+    { label: "Offen",       count: counts.open,        dot: "bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.5)]", bg: "from-purple-950/30", text: "text-purple-300",  border: "border-purple-500/20"  },
+    { label: "Bearbeitung", count: counts.in_progress,  dot: "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.4)]",  bg: "from-amber-950/20",  text: "text-amber-300",  border: "border-amber-500/20"   },
+    { label: "Pausiert",    count: counts.paused,       dot: "bg-slate-400",                                         bg: "from-slate-950/20",  text: "text-slate-300",  border: "border-slate-500/20"   },
+    { label: "Erledigt",    count: counts.closed,       dot: "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]", bg: "from-emerald-950/20",text: "text-emerald-300",border: "border-emerald-500/20"  },
+    { label: "Bugs",        count: counts.bugs,         dot: "bg-red-400",                                           bg: "from-red-950/20",    text: "text-red-300",    border: "border-red-500/20"     },
+    { label: "Vorschläge",  count: counts.suggestions,  dot: "bg-sky-400",                                           bg: "from-sky-950/20",    text: "text-sky-300",    border: "border-sky-500/20"     },
   ];
 
-  function renderTicketGroup(group: ModTicket[]) {
-    const filtered = statusFilter === "all" ? group : group.filter((t) =>
-      statusFilter === "closed"
-        ? (t.status === "closed" || t.status === "resolved")
-        : t.status === statusFilter
-    );
-
-    if (filtered.length === 0) {
-      return (
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] py-8 text-center">
-          <Ticket className="mx-auto mb-2 h-6 w-6 text-zinc-700" />
-          <p className="text-sm text-zinc-600">Keine Tickets in diesem Filter.</p>
-        </div>
-      );
-    }
-
-    if (statusFilter === "all") {
-      return (
-        <div className="flex flex-col gap-3">
-          {TICKET_STATUS_CONFIG.map((cfg) => {
-            const statusGroup = filtered.filter((t) =>
-              cfg.key === "closed"
-                ? (t.status === "closed" || t.status === "resolved")
-                : t.status === cfg.key
-            );
-            if (statusGroup.length === 0) return null;
-            return (
-              <div key={cfg.key}>
-                <div className="mb-1.5 flex items-center gap-1.5">
-                  <div className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${cfg.heading}`}>{cfg.label}</span>
-                  <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${cfg.badge}`}>{statusGroup.length}</span>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {(cfg.key === "closed" ? statusGroup.slice(0, 15) : statusGroup).map((t) => (
-                    <TicketItem key={t.id} t={t} perms={perms} onRefresh={onRefresh} defaultOpen={openTicketId === t.id} />
-                  ))}
-                  {cfg.key === "closed" && statusGroup.length > 15 && (
-                    <p className="text-center text-[11px] text-zinc-600">+ {statusGroup.length - 15} weitere</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      );
-    }
-
-    const sliceLimit = statusFilter === "closed" ? 30 : filtered.length;
-    return (
-      <div className="flex flex-col gap-2">
-        {filtered.slice(0, sliceLimit).map((t) => (
-          <TicketItem key={t.id} t={t} perms={perms} onRefresh={onRefresh} defaultOpen={openTicketId === t.id} />
-        ))}
-        {statusFilter === "closed" && filtered.length > 30 && (
-          <p className="text-center text-[11px] text-zinc-600">+ {filtered.length - 30} weitere</p>
-        )}
-      </div>
-    );
-  }
-
-  const bugOpen = bugTickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
-  const suggestionOpen = suggestionTickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
+  const STATUS_PILLS: Array<{ key: TicketStatusFilter; label: string; dot: string; cnt: number }> = [
+    { key: "all",         label: "Alle",        dot: "bg-zinc-500",    cnt: tickets.length      },
+    { key: "open",        label: "Offen",       dot: "bg-purple-400",  cnt: counts.open         },
+    { key: "in_progress", label: "In Bearb.",   dot: "bg-amber-400",   cnt: counts.in_progress  },
+    { key: "paused",      label: "Pausiert",    dot: "bg-slate-400",   cnt: counts.paused       },
+    { key: "closed",      label: "Erledigt",    dot: "bg-emerald-500", cnt: counts.closed       },
+  ];
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Status filter bar */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {filterButtons.map(({ key, label, count }) => {
-          const active = statusFilter === key;
-          return (
-            <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              className={`flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
-                active
-                  ? "border-sky-500/40 bg-sky-500/15 text-sky-200"
-                  : "border-white/8 bg-white/[0.02] text-zinc-500 hover:border-white/20 hover:text-zinc-300"
-              }`}
-            >
-              {label}
-              {count !== undefined && count > 0 && (
-                <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
-                  active ? "bg-sky-500/30 text-sky-200" : "bg-white/10 text-zinc-400"
-                }`}>
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      {/* Stats bar */}
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {STATS.map(({ label, count, dot, bg, text, border }) => (
+          <div key={label} className={`flex flex-col gap-1 rounded-xl border ${border} bg-gradient-to-b ${bg} via-transparent to-transparent p-3`}>
+            <div className="flex items-center gap-1.5">
+              <div className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
+              <span className="truncate text-[10px] text-zinc-500">{label}</span>
+            </div>
+            <span className={`text-2xl font-black tracking-tight ${text}`}>{count}</span>
+          </div>
+        ))}
       </div>
 
+      {/* Filter + sort controls */}
+      <div className="flex flex-col gap-2.5 rounded-2xl border border-white/8 bg-white/[0.02] p-3">
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tickets durchsuchen (Betreff, User, Inhalt)…"
+            className="w-full rounded-xl border border-white/8 bg-black/20 py-2 pl-9 pr-9 text-xs text-zinc-200 outline-none focus:border-sky-500/40 placeholder:text-zinc-600"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-300">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Status filter */}
+        <div className="flex flex-wrap items-center gap-1">
+          {STATUS_PILLS.map(({ key, label, dot, cnt }) => {
+            const active = statusFilter === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setStatus(key)}
+                className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-bold transition-colors ${
+                  active ? "border-sky-500/40 bg-sky-500/15 text-sky-200" : "border-white/8 text-zinc-500 hover:border-white/20 hover:text-zinc-300"
+                }`}
+              >
+                {key !== "all" && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />}
+                {label}
+                {key !== "all" && cnt > 0 && (
+                  <span className={`rounded-full px-1 text-[9px] font-black ${active ? "bg-sky-500/30 text-sky-200" : "bg-white/10 text-zinc-500"}`}>{cnt}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Category + Priority + Sort row */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Category */}
+          <div className="flex items-center gap-1 rounded-xl border border-white/5 bg-black/20 p-1">
+            {([["all", "Alle", null], ["bug", "Bugs", <Bug key="b" className="h-3 w-3" />], ["suggestion", "Ideen", <Lightbulb key="l" className="h-3 w-3" />]] as [string, string, ReactNode][]).map(([key, label, icon]) => (
+              <button
+                key={key}
+                onClick={() => setCat(key as "all" | "bug" | "suggestion")}
+                className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold transition-colors ${
+                  catFilter === key ? "bg-white/10 text-zinc-200" : "text-zinc-600 hover:text-zinc-400"
+                }`}
+              >
+                {icon}{label}
+              </button>
+            ))}
+          </div>
+
+          {/* Priority */}
+          <div className="flex items-center gap-1 rounded-xl border border-white/5 bg-black/20 p-1">
+            {([["all","Alle","text-zinc-600"],["urgent","Dringend","text-red-400/80"],["high","Hoch","text-orange-400/80"],["normal","Normal","text-amber-400/80"],["low","Niedrig","text-zinc-500"]] as [string, string, string][]).map(([key, label, cls]) => (
+              <button
+                key={key}
+                onClick={() => setPrio(key)}
+                className={`rounded-lg px-2 py-1 text-[11px] font-bold transition-colors ${
+                  prioFilter === key ? "bg-white/10 text-zinc-200" : `${cls} hover:text-zinc-300`
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Sort controls */}
+          <div className="ml-auto flex items-center gap-1.5">
+            <Filter className="h-3 w-3 text-zinc-600" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSort(e.target.value as SortField)}
+              className="cursor-pointer appearance-none rounded-xl border border-white/8 bg-black/30 py-1 pl-2.5 pr-5 text-xs text-zinc-400 outline-none focus:border-sky-500/40"
+            >
+              <option value="updated">Letzte Aktivität</option>
+              <option value="created">Erstellt</option>
+              <option value="priority">Priorität</option>
+              <option value="status">Status</option>
+            </select>
+            <button
+              onClick={toggleDir}
+              title={sortDir === "desc" ? "Absteigend" : "Aufsteigend"}
+              className="flex h-7 w-7 items-center justify-center rounded-xl border border-white/8 text-zinc-500 transition-colors hover:border-white/20 hover:text-zinc-300"
+            >
+              {sortDir === "desc" ? <SortDesc className="h-3.5 w-3.5" /> : <SortAsc className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Result info */}
+      {hasActiveFilter && (
+        <p className="text-[11px] text-zinc-600">
+          {displayed.length} {displayed.length === 1 ? "Ticket" : "Tickets"} gefunden
+          {tickets.length !== displayed.length && (
+            <> · <button
+              onClick={() => { setSearch(""); setStatus("all"); setCat("all"); setPrio("all"); }}
+              className="text-sky-400 hover:text-sky-300 transition-colors"
+            >Filter zurücksetzen</button></>
+          )}
+        </p>
+      )}
+
+      {/* Ticket list */}
       {tickets.length === 0 ? (
         <div className="rounded-2xl border border-white/5 bg-white/[0.02] py-16 text-center">
           <Ticket className="mx-auto mb-3 h-10 w-10 text-zinc-700" />
           <p className="text-sm font-semibold text-zinc-500">Keine Tickets vorhanden.</p>
         </div>
+      ) : displayed.length === 0 ? (
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] py-10 text-center">
+          <Search className="mx-auto mb-2 h-7 w-7 text-zinc-700" />
+          <p className="text-sm text-zinc-600">Keine Tickets passen zu deinen Filtern.</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {/* Left column: Bugs */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-red-500/25 bg-gradient-to-br from-red-950/20 via-transparent to-transparent p-4">
-            <div className="flex items-center gap-2 border-b border-red-500/15 pb-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/15">
-                <Bug className="h-3.5 w-3.5 text-red-400" />
-              </div>
-              <h3 className="font-bold text-red-300">Bugs</h3>
-              <span className="rounded-full border border-red-500/30 bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
-                {bugTickets.length}
-              </span>
-              {bugOpen > 0 && (
-                <span className="ml-auto rounded-full bg-orange-500/20 px-2 py-0.5 text-[10px] font-bold text-orange-300">
-                  {bugOpen} aktiv
-                </span>
-              )}
-            </div>
-            {renderTicketGroup(bugTickets)}
-          </div>
-
-          {/* Right column: Verbesserungsvorschläge */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-sky-500/25 bg-gradient-to-br from-sky-950/20 via-transparent to-transparent p-4">
-            <div className="flex items-center gap-2 border-b border-sky-500/15 pb-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-sky-500/30 bg-sky-500/15">
-                <Lightbulb className="h-3.5 w-3.5 text-sky-400" />
-              </div>
-              <h3 className="font-bold text-sky-300">Verbesserungsvorschläge</h3>
-              <span className="rounded-full border border-sky-500/30 bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold text-sky-300">
-                {suggestionTickets.length}
-              </span>
-              {suggestionOpen > 0 && (
-                <span className="ml-auto rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
-                  {suggestionOpen} aktiv
-                </span>
-              )}
-            </div>
-            {renderTicketGroup(suggestionTickets)}
-          </div>
+        <div className="flex flex-col divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/8 bg-white/[0.015]">
+          {displayed.map((t) => (
+            <TicketItem key={t.id} t={t} perms={perms} onRefresh={onRefresh} defaultOpen={openTicketId === t.id} />
+          ))}
+          {displayed.length >= 50 && (
+            <p className="py-3 text-center text-[11px] text-zinc-600">Zeige {displayed.length} Tickets — verfeinere den Filter für genauere Ergebnisse.</p>
+          )}
         </div>
       )}
     </div>
@@ -1588,34 +1751,46 @@ function OverviewTab({ users, tickets, perms, myActions }: {
 }) {
   const bannedCount = users.filter((u) => u.tempBannedUntil && new Date(u.tempBannedUntil) > new Date()).length;
   const openTickets = tickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
+  const pausedTickets = tickets.filter((t) => t.status === "paused").length;
+  const escalatedTickets = tickets.filter((t) => t.escalatedToAdmin).length;
   const totalWarnings = users.reduce((s, u) => s + u.warningCount, 0);
   const totalNotes = users.reduce((s, u) => s + u.noteCount, 0);
 
   const stats = [
-    { label: "Nutzer gesamt",   value: users.length,   Icon: Users,         color: "text-sky-300",    glow: "from-sky-500/10" },
-    { label: "Offene Tickets",  value: openTickets,    Icon: Ticket,        color: "text-purple-300", glow: "from-purple-500/10" },
-    { label: "Temp-Gesperrt",   value: bannedCount,    Icon: Ban,           color: "text-red-300",    glow: "from-red-500/10" },
-    { label: "Aktive Verw.",    value: totalWarnings,  Icon: AlertTriangle, color: "text-amber-300",  glow: "from-amber-500/10" },
+    { label: "Nutzer gesamt",   value: users.length,      Icon: Users,         color: "text-sky-300",    glow: "from-sky-500/10" },
+    { label: "Offene Tickets",  value: openTickets,       Icon: Ticket,        color: "text-purple-300", glow: "from-purple-500/10" },
+    { label: "Temp-Gesperrt",   value: bannedCount,       Icon: Ban,           color: "text-red-300",    glow: "from-red-500/10" },
+    { label: "Aktive Verw.",    value: totalWarnings,     Icon: AlertTriangle, color: "text-amber-300",  glow: "from-amber-500/10" },
+    { label: "Pausiert",        value: pausedTickets,     Icon: PauseCircle,   color: "text-slate-300",  glow: "from-slate-500/10" },
+    { label: "Eskaliert",       value: escalatedTickets,  Icon: ArrowUpRight,  color: "text-orange-300", glow: "from-orange-500/10" },
   ];
 
   const permRows = [
-    { label: "Tickets ansehen",   val: perms.canViewTickets,    Icon: Ticket },
-    { label: "Tickets schließen", val: perms.canCloseTickets,   Icon: Check },
-    { label: "Nutzer verwarnen",  val: perms.canWarnUsers,      Icon: AlertTriangle },
-    { label: "Temp-Ban",          val: perms.canTempBanUsers,   Icon: Ban },
-    { label: "Nutzerdetails",     val: perms.canViewUserDetails, Icon: Users },
-    { label: "Audit-Log",         val: perms.canViewAuditLog,   Icon: Activity },
-    { label: "Credits vergeben",  val: perms.canAddCredits,     Icon: Coins },
-    { label: "Ticket-Belohnungen", val: perms.canRewardTickets, Icon: Trophy },
-    { label: `Max Ban: ${perms.maxTempBanHours}h`, val: perms.canTempBanUsers, Icon: Clock },
-    { label: perms.maxRewardPerTicket > 0 ? `Max Reward: ${fmt(perms.maxRewardPerTicket)} CR` : "Reward: unbegrenzt", val: perms.canRewardTickets, Icon: Sparkles },
-    { label: perms.warnRequiresReason ? "Begr. Pflicht" : "Begr. Optional", val: true, Icon: FileText },
+    { label: "Tickets ansehen",    val: perms.canViewTickets,       Icon: Ticket },
+    { label: "Tickets schließen",  val: perms.canCloseTickets,      Icon: Check },
+    { label: "Tickets löschen",    val: perms.canDeleteTickets,     Icon: Trash2 },
+    { label: "Ticket-Status",      val: perms.canUpdateTicketStatus,Icon: Activity },
+    { label: "Ticket-Priorität",   val: perms.canSetTicketPriority, Icon: BarChart3 },
+    { label: "Tickets pausieren",  val: perms.canPauseTickets,      Icon: PauseCircle },
+    { label: "Ticket-Belohnungen", val: perms.canRewardTickets,     Icon: Trophy },
+    { label: "Nutzer verwarnen",   val: perms.canWarnUsers,         Icon: AlertTriangle },
+    { label: "Temp-Ban",           val: perms.canTempBanUsers,      Icon: Ban },
+    { label: "Nutzerdetails",      val: perms.canViewUserDetails,   Icon: Users },
+    { label: "Audit-Log",          val: perms.canViewAuditLog,      Icon: Activity },
+    { label: "Credits vergeben",   val: perms.canAddCredits,        Icon: Coins },
+    { label: "Chat leeren",        val: perms.canClearChat,         Icon: MessageSquare },
+    { label: `Max Ban: ${perms.maxTempBanHours}h`,
+      val: perms.canTempBanUsers, Icon: Clock },
+    { label: perms.maxRewardPerTicket > 0 ? `Max Reward: ${fmt(perms.maxRewardPerTicket)} CR` : "Reward: unbegrenzt",
+      val: perms.canRewardTickets, Icon: Sparkles },
+    { label: perms.warnRequiresReason ? "Begr. Pflicht" : "Begr. Optional",
+      val: true, Icon: FileText },
   ];
 
   return (
     <div className="flex flex-col gap-6">
       {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
         {stats.map(({ label, value, Icon, color, glow }) => (
           <div key={label} className={`relative overflow-hidden rounded-2xl border border-white/8 bg-gradient-to-br ${glow} to-transparent px-4 py-4`}>
             <div className="pointer-events-none absolute right-3 top-3 opacity-[0.07]">

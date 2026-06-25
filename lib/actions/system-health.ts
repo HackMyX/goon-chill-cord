@@ -110,6 +110,7 @@ const COLUMN_CHECKS: Array<{
 }> = [
   // Mod permissions — live update extension (2026-06-25)
   { id: "col_mod_maxreward",      category: "Mod-Berechtigungen", table: "mod_permissions",    col: "max_reward_per_ticket",   detail: "ALTER TABLE mod_permissions ADD COLUMN max_reward_per_ticket integer DEFAULT 0;" },
+  { id: "col_mod_pausetickets",   category: "Mod-Berechtigungen", table: "mod_permissions",    col: "can_pause_tickets",       detail: "ALTER TABLE mod_permissions ADD COLUMN IF NOT EXISTS can_pause_tickets boolean NOT NULL DEFAULT false;" },
   // Profiles — DON upgrade & verified (2026-06-25)
   { id: "col_profiles_donupgrade",category: "DON-System",         table: "profiles",            col: "don_upgrade_tier",        detail: "ALTER TABLE profiles ADD COLUMN don_upgrade_tier integer NOT NULL DEFAULT 0;" },
   { id: "col_profiles_verified",  category: "Battle Pass",        table: "profiles",            col: "verified",                detail: "ALTER TABLE profiles ADD COLUMN verified boolean NOT NULL DEFAULT false;" },

@@ -155,6 +155,12 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
             value={perms.canRewardTickets}
             onChange={(v) => set("canRewardTickets", v)}
           />
+          <Toggle
+            label="Tickets pausieren"
+            description="Moderatoren können Tickets auf 'Pausiert' setzen und wieder fortsetzen (z.B. wartend auf User-Antwort)"
+            value={perms.canPauseTickets}
+            onChange={(v) => set("canPauseTickets", v)}
+          />
         </div>
 
         {perms.canRewardTickets && (

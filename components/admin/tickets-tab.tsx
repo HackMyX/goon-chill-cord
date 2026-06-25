@@ -62,6 +62,7 @@ function isImageUrl(url: string): boolean {
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: "Offen",
   in_progress: "In Bearbeitung",
+  paused: "Pausiert",
   resolved: "Gelöst",
   closed: "Geschlossen",
 };
@@ -69,6 +70,7 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
 const STATUS_STYLE: Record<TicketStatus, string> = {
   open: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
   in_progress: "text-blue-300 bg-blue-500/10 border-blue-500/30",
+  paused: "text-slate-300 bg-slate-500/10 border-slate-500/30",
   resolved: "text-purple-300 bg-purple-500/10 border-purple-500/30",
   closed: "text-zinc-400 bg-zinc-500/10 border-zinc-500/30",
 };
@@ -76,11 +78,12 @@ const STATUS_STYLE: Record<TicketStatus, string> = {
 const STATUS_ICON: Record<TicketStatus, typeof MessageCircle> = {
   open: MessageCircle,
   in_progress: Clock,
+  paused: Clock,
   resolved: CheckCircle2,
   closed: XCircle,
 };
 
-const ALL_STATUSES: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
+const ALL_STATUSES: TicketStatus[] = ["open", "in_progress", "paused", "resolved", "closed"];
 const ALL_PRIORITIES: TicketPriority[] = ["low", "normal", "high", "urgent"];
 
 const PRIORITY_LABEL: Record<TicketPriority, string> = {

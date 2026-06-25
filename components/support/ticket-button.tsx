@@ -46,6 +46,7 @@ type TicketListFilter = "all" | "open" | "in_progress" | "closed";
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: "Offen",
   in_progress: "In Bearbeitung",
+  paused: "Pausiert",
   resolved: "Gelöst",
   closed: "Geschlossen",
 };
@@ -53,6 +54,7 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
 const STATUS_STYLE: Record<TicketStatus, string> = {
   open: "text-emerald-300 bg-emerald-500/10 border-emerald-500/30",
   in_progress: "text-blue-300 bg-blue-500/10 border-blue-500/30",
+  paused: "text-slate-300 bg-slate-500/10 border-slate-500/30",
   resolved: "text-purple-300 bg-purple-500/10 border-purple-500/30",
   closed: "text-zinc-400 bg-zinc-500/10 border-zinc-500/30",
 };
@@ -60,6 +62,7 @@ const STATUS_STYLE: Record<TicketStatus, string> = {
 const STATUS_DOT: Record<TicketStatus, string> = {
   open: "bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.6)]",
   in_progress: "bg-blue-400 shadow-[0_0_5px_rgba(96,165,250,0.6)]",
+  paused: "bg-slate-400",
   resolved: "bg-purple-400 shadow-[0_0_5px_rgba(167,139,250,0.6)]",
   closed: "bg-zinc-500",
 };
@@ -67,6 +70,7 @@ const STATUS_DOT: Record<TicketStatus, string> = {
 const STATUS_ICON: Record<TicketStatus, typeof MessageCircle> = {
   open: MessageCircle,
   in_progress: Clock,
+  paused: Clock,
   resolved: CheckCircle2,
   closed: XCircle,
 };

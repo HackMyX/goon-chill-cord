@@ -20,6 +20,7 @@ const PERM_LABELS: { key: keyof ModPermissions; label: string; description: stri
   { key: "canSetTicketPriority", label: "Ticket-Priorität", description: "Kann Priorität (Niedrig/Normal/Hoch/Dringend) ändern" },
   { key: "canUpdateTicketStatus", label: "Ticket-Status", description: "Kann Status (Offen/Bearbeitung/Gelöst/Geschlossen) setzen" },
   { key: "canRewardTickets", label: "Ticketbelohnungen", description: "Kann Credits-Belohnungen für hilfreiche Reports vergeben" },
+  { key: "canPauseTickets", label: "Tickets pausieren", description: "Kann Tickets auf 'Pausiert' setzen und wieder fortsetzen" },
   { key: "maxTempBanHours", label: "Max. Temp-Ban (Stunden)", description: "Maximale Dauer eines Temp-Bans in Stunden", isNumber: true, min: 1, max: 8760 },
   { key: "maxRewardPerTicket", label: "Max. Belohnung pro Ticket (CR)", description: "Maximale Credits pro Ticketbelohnung (0 = kein Limit)", isNumber: true, min: 0, max: 1000000 },
 ];
