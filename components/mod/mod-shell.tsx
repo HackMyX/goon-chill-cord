@@ -19,6 +19,7 @@ import {
   modWarnUser, modAddNote, modTempBan, modLiftBan, modCloseTicket, modAddCredits,
   modRemoveWarning, getModUserHistory, getTicketMessages, modMarkInProgress, modReplyToTicket,
   modDeleteTicket, modSetTicketPriority, modUpdateTicketStatus, modGrantTicketReward,
+  getMyEffectivePermissions,
 } from "@/lib/actions/mod";
 import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage } from "@/lib/mod";
 import { ADMIN_MOD_PERMISSIONS } from "@/lib/mod";
@@ -1012,14 +1013,27 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           {/* Reward form */}
           {showReward && perms.canRewardTickets && (
             <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-              <p className="mb-2 text-[11px] font-bold text-amber-300">Belohnung vergeben:</p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[11px] font-bold text-amber-300">Belohnung vergeben</p>
+                {perms.maxRewardPerTicket > 0 && (
+                  <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+                    max. {fmt(perms.maxRewardPerTicket)} CR
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-3">
                 <label className="flex flex-col gap-1">
                   <span className="text-[10px] text-zinc-500">Credits</span>
                   <input
-                    type="number" min={0} value={rewardCredits}
-                    onChange={(e) => setRewardCredits(Math.max(0, Number(e.target.value)))}
-                    className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-amber-400/40"
+                    type="number"
+                    min={0}
+                    max={perms.maxRewardPerTicket > 0 ? perms.maxRewardPerTicket : undefined}
+                    value={rewardCredits}
+                    onChange={(e) => {
+                      const v = Math.max(0, Number(e.target.value));
+                      setRewardCredits(perms.maxRewardPerTicket > 0 ? Math.min(v, perms.maxRewardPerTicket) : v);
+                    }}
+                    className="w-28 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-amber-400/40"
                   />
                 </label>
                 <label className="flex flex-1 flex-col gap-1">
@@ -1031,9 +1045,14 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                   />
                 </label>
               </div>
+              {perms.maxRewardPerTicket > 0 && rewardCredits > perms.maxRewardPerTicket && (
+                <p className="mt-1.5 text-[10px] text-red-400">
+                  Limit überschritten — max. {fmt(perms.maxRewardPerTicket)} CR erlaubt.
+                </p>
+              )}
               <button
                 onClick={handleGrantReward}
-                disabled={pending || rewardCredits < 1}
+                disabled={pending || rewardCredits < 1 || (perms.maxRewardPerTicket > 0 && rewardCredits > perms.maxRewardPerTicket)}
                 className="mt-2 flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 transition-colors"
               >
                 {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trophy className="h-3.5 w-3.5" />}
@@ -1296,7 +1315,9 @@ function OverviewTab({ users, tickets, perms, myActions }: {
     { label: "Nutzerdetails",     val: perms.canViewUserDetails, Icon: Users },
     { label: "Audit-Log",         val: perms.canViewAuditLog,   Icon: Activity },
     { label: "Credits vergeben",  val: perms.canAddCredits,     Icon: Coins },
+    { label: "Ticket-Belohnungen", val: perms.canRewardTickets, Icon: Trophy },
     { label: `Max Ban: ${perms.maxTempBanHours}h`, val: perms.canTempBanUsers, Icon: Clock },
+    { label: perms.maxRewardPerTicket > 0 ? `Max Reward: ${fmt(perms.maxRewardPerTicket)} CR` : "Reward: unbegrenzt", val: perms.canRewardTickets, Icon: Sparkles },
     { label: perms.warnRequiresReason ? "Begr. Pflicht" : "Begr. Optional", val: true, Icon: FileText },
   ];
 
@@ -1458,15 +1479,18 @@ interface ModShellProps {
   recentActions: ModActionRow[];
   myActions: ModActionRow[];
   isAdminUser?: boolean;
+  userId?: string;
 }
 
 const ADMIN_PERMS = ADMIN_MOD_PERMISSIONS;
 
 function ModShellInner({
   modUsername, credits, streakDays, permissions: rawPerms,
-  users, tickets, recentActions, myActions, isAdminUser = false,
+  users, tickets, recentActions, myActions, isAdminUser = false, userId,
 }: ModShellProps) {
-  const permissions = isAdminUser ? ADMIN_PERMS : rawPerms;
+  const [permissions, setPermissions] = useState<ModPermissions>(
+    isAdminUser ? ADMIN_PERMS : rawPerms
+  );
   const searchParams = useSearchParams();
   const router = useRouter();
   const sound = useSoundManager();
@@ -1495,6 +1519,20 @@ function ModShellInner({
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, []);
+
+  // Realtime: live-update permissions whenever admin changes them (global or per-user).
+  // Admin broadcasts on "mod-permissions-live" after every permission save.
+  useEffect(() => {
+    if (isAdminUser) return; // admins always have full perms, no need to re-fetch
+    const supabase = createClient();
+    const channel = supabase
+      .channel("mod-permissions-live")
+      .on("broadcast", { event: "permissions_changed" }, () => {
+        getMyEffectivePermissions().then((p) => setPermissions(p));
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [isAdminUser]);
 
   useEffect(() => {
     const q = searchParams.get("tab");

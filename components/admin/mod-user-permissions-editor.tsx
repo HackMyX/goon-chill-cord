@@ -6,7 +6,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { getModeratorUsers, setModUserPermissions } from "@/lib/actions/mod";
 import { ADMIN_MOD_PERMISSIONS, type ModPermissions, type ModeratorWithPermissions } from "@/lib/mod";
 
-const PERM_LABELS: { key: keyof ModPermissions; label: string; description: string; isNumber?: true }[] = [
+const PERM_LABELS: { key: keyof ModPermissions; label: string; description: string; isNumber?: true; min?: number; max?: number }[] = [
   { key: "canViewTickets", label: "Tickets ansehen", description: "Kann alle Support-Tickets lesen" },
   { key: "canCloseTickets", label: "Tickets schließen", description: "Kann Tickets als erledigt markieren" },
   { key: "canWarnUsers", label: "Nutzer verwarnen", description: "Kann Verwarnungen und Notizen erfassen" },
@@ -20,7 +20,8 @@ const PERM_LABELS: { key: keyof ModPermissions; label: string; description: stri
   { key: "canSetTicketPriority", label: "Ticket-Priorität", description: "Kann Priorität (Niedrig/Normal/Hoch/Dringend) ändern" },
   { key: "canUpdateTicketStatus", label: "Ticket-Status", description: "Kann Status (Offen/Bearbeitung/Gelöst/Geschlossen) setzen" },
   { key: "canRewardTickets", label: "Ticketbelohnungen", description: "Kann Credits-Belohnungen für hilfreiche Reports vergeben" },
-  { key: "maxTempBanHours", label: "Max. Temp-Ban (Stunden)", description: "Maximale Dauer eines Temp-Bans in Stunden", isNumber: true },
+  { key: "maxTempBanHours", label: "Max. Temp-Ban (Stunden)", description: "Maximale Dauer eines Temp-Bans in Stunden", isNumber: true, min: 1, max: 8760 },
+  { key: "maxRewardPerTicket", label: "Max. Belohnung pro Ticket (CR)", description: "Maximale Credits pro Ticketbelohnung (0 = kein Limit)", isNumber: true, min: 0, max: 1000000 },
 ];
 
 function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -116,7 +117,7 @@ function ModRow({ mod, globalPerms }: { mod: ModeratorWithPermissions; globalPer
               </p>
 
               <div className="flex flex-col gap-1.5">
-                {PERM_LABELS.map(({ key, label, description, isNumber }) => {
+                {PERM_LABELS.map(({ key, label, description, isNumber, min, max }) => {
                   const val = getVal(key);
                   const hasLocalOverride = override !== null && key in override;
 
@@ -129,11 +130,11 @@ function ModRow({ mod, globalPerms }: { mod: ModeratorWithPermissions; globalPer
                         </div>
                         <input
                           type="number"
-                          min={1}
-                          max={8760}
+                          min={min ?? 0}
+                          max={max ?? 9999999}
                           value={val as number}
-                          onChange={(e) => setVal(key as "maxTempBanHours", Number(e.target.value))}
-                          className="w-20 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+                          onChange={(e) => setVal(key as "maxTempBanHours" | "maxRewardPerTicket", Number(e.target.value))}
+                          className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
                         />
                       </div>
                     );

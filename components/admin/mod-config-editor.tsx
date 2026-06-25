@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Shield, Save, Loader2, Info } from "lucide-react";
+import { Shield, Save, Loader2, Info, Trophy } from "lucide-react";
+
+function fmt(n: number) { return new Intl.NumberFormat("de-DE").format(n); }
 import { useSoundManager } from "@/lib/sound-manager";
 import { updateModPermissions } from "@/lib/actions/mod";
 import type { ModPermissions } from "@/lib/mod";
@@ -154,6 +156,30 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
             onChange={(v) => set("canRewardTickets", v)}
           />
         </div>
+
+        {perms.canRewardTickets && (
+          <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+            <label className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                <Trophy className="h-3.5 w-3.5" />
+                Max. Belohnung pro Ticket (Credits, 0 = kein Limit)
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  value={perms.maxRewardPerTicket}
+                  onChange={(e) => set("maxRewardPerTicket", Number(e.target.value))}
+                  className="w-32 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60"
+                />
+                <span className="text-xs text-zinc-500">
+                  {perms.maxRewardPerTicket === 0 ? "kein Limit" : `max. ${fmt(perms.maxRewardPerTicket)} CR`}
+                </span>
+              </div>
+            </label>
+          </div>
+        )}
 
         <h3 className="mt-5 mb-3 flex items-center gap-2 text-sm font-bold text-zinc-300">
           Chat-Berechtigungen

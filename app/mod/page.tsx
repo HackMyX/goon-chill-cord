@@ -42,6 +42,7 @@ export default async function ModPage() {
       recentActions={recentActions}
       myActions={myActions}
       isAdminUser={isAdmin(profile)}
+      userId={user.id}
     />
   );
 }

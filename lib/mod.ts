@@ -21,6 +21,7 @@ export interface ModPermissions {
   canSetTicketPriority: boolean;
   canUpdateTicketStatus: boolean;
   canRewardTickets: boolean;
+  maxRewardPerTicket: number; // 0 = kein Limit
 }
 
 export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
@@ -38,6 +39,7 @@ export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
   canSetTicketPriority: false,
   canUpdateTicketStatus: false,
   canRewardTickets: false,
+  maxRewardPerTicket: 0,
 };
 
 export const ADMIN_MOD_PERMISSIONS: ModPermissions = {
@@ -55,6 +57,7 @@ export const ADMIN_MOD_PERMISSIONS: ModPermissions = {
   canSetTicketPriority: true,
   canUpdateTicketStatus: true,
   canRewardTickets: true,
+  maxRewardPerTicket: 0,
 };
 
 export interface ChatConfig {

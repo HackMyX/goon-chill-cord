@@ -77,7 +77,26 @@ export async function getModPermissions(): Promise<ModPermissions> {
     canSetTicketPriority: data.can_set_ticket_priority ?? false,
     canUpdateTicketStatus: data.can_update_ticket_status ?? false,
     canRewardTickets: data.can_reward_tickets ?? false,
+    maxRewardPerTicket: data.max_reward_per_ticket ?? 0,
   };
+}
+
+/** Broadcasts a permission-changed event to all connected mod-panel clients. */
+async function broadcastPermissionChange() {
+  try {
+    const admin = createAdminClient();
+    const ch = admin.channel("mod-permissions-live");
+    await ch.send({ type: "broadcast", event: "permissions_changed", payload: { ts: Date.now() } });
+    await admin.removeChannel(ch);
+  } catch {
+    // non-critical — clients will refresh on next manual reload
+  }
+}
+
+/** Returns the effective permissions for the currently logged-in mod/admin. */
+export async function getMyEffectivePermissions(): Promise<ModPermissions> {
+  const { user, isAdminUser } = await requireMod();
+  return effectivePerms(isAdminUser, user.id);
 }
 
 export async function updateModPermissions(
@@ -102,9 +121,11 @@ export async function updateModPermissions(
       can_set_ticket_priority: perms.canSetTicketPriority,
       can_update_ticket_status: perms.canUpdateTicketStatus,
       can_reward_tickets: perms.canRewardTickets,
+      max_reward_per_ticket: perms.maxRewardPerTicket,
       updated_at: new Date().toISOString(),
     });
     if (error) return { success: false, error: error.message };
+    await broadcastPermissionChange();
     return { success: true };
   } catch (e) {
     return { success: false, error: String(e) };
@@ -685,6 +706,9 @@ export async function modGrantTicketReward(
     const { user, isAdminUser } = await requireMod();
     const perms = await effectivePerms(isAdminUser, user.id);
     if (!perms.canRewardTickets) return { success: false, error: "Keine Berechtigung für Ticketbelohnungen." };
+    if (perms.maxRewardPerTicket > 0 && opts.credits && opts.credits > perms.maxRewardPerTicket) {
+      return { success: false, error: `Maximale Belohnung: ${perms.maxRewardPerTicket} Credits.` };
+    }
     const admin = createAdminClient();
     const { data: ticket } = await admin.from("tickets").select("user_id, subject").eq("id", ticketId).single();
     if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
@@ -789,6 +813,7 @@ export async function setModUserPermissions(
       .update({ mod_permissions_override: override })
       .eq("id", modUserId);
     if (error) return { success: false, error: error.message };
+    await broadcastPermissionChange();
     return { success: true };
   } catch (e) {
     return { success: false, error: String(e) };
