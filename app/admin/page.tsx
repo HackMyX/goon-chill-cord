@@ -20,6 +20,7 @@ import { getSnakeConfig } from "@/lib/actions/snake";
 import { getMineConfig } from "@/lib/actions/mine";
 import { getCleanupRules } from "@/lib/actions/cleanup-config";
 import { adminListBattlePasses, checkBattlePassMigration } from "@/lib/actions/battle-pass";
+import { getPlinkoConfig } from "@/lib/actions/plinko";
 import { CASE_GROUPS } from "@/lib/cases";
 import {
   AdminShell,
@@ -144,6 +145,7 @@ export default async function AdminPage() {
     cleanupRules,
     battlePasses,
     battlePassMigrationNeeded,
+    adminPlinkoConfig,
   ] = await Promise.all([
     admin
       .from("audit_logs")
@@ -177,6 +179,7 @@ export default async function AdminPage() {
     getCleanupRules(),
     adminListBattlePasses(),
     checkBattlePassMigration(),
+    getPlinkoConfig(),
   ]);
 
   // Keep case tiers in the same order as CASE_GROUPS (standard before premium,
@@ -221,6 +224,7 @@ export default async function AdminPage() {
       cleanupRules={cleanupRules}
       battlePasses={battlePasses}
       battlePassMigrationNeeded={battlePassMigrationNeeded}
+      plinkoConfig={adminPlinkoConfig}
     />
     </Suspense>
   );

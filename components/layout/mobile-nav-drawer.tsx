@@ -22,6 +22,7 @@ import {
   TrendingUp,
   BarChart2,
   LogOut,
+  Disc3,
 } from "lucide-react";
 import { GamesMenu } from "@/components/layout/games-menu";
 import { LogoutButton } from "@/components/auth/logout-button";
@@ -128,8 +129,9 @@ export function MobileNavDrawer({
           <div className="px-2 pt-3 pb-1">
             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Spiele</span>
           </div>
-          <NavItem icon={Globe} label="3D Welt" href="/world" onClose={onClose} />
+          <NavItem icon={Globe} label="Farmwelt" href="/world" onClose={onClose} />
           <NavItem icon={Gamepad2} label="Snake" href="/snake" onClose={onClose} />
+          <NavItem icon={Disc3} label="Plinko" href="/plinko" onClose={onClose} />
           <NavItem icon={Dices} label="Double or Nothing" href="/don" onClose={onClose} />
           <NavItem icon={Package} label="Cases" href="/cases" onClose={onClose} />
           <NavItem icon={TrendingUp} label="Mining" href="/mine" onClose={onClose} />

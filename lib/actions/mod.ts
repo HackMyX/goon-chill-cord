@@ -252,7 +252,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, created_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at")
+    .select("id, user_id, subject, description, status, category, priority, created_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -283,6 +283,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
     rewardCredits: (t as Record<string, unknown>).reward_credits as number | null ?? null,
     rewardNote: (t as Record<string, unknown>).reward_note as string | null ?? null,
     rewardGrantedAt: (t as Record<string, unknown>).reward_granted_at as string | null ?? null,
+    rewardPending: ((t as Record<string, unknown>).reward_pending as boolean) ?? false,
   }));
 }
 
@@ -713,31 +714,25 @@ export async function modGrantTicketReward(
     const { data: ticket } = await admin.from("tickets").select("user_id, subject").eq("id", ticketId).single();
     if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
 
+    // Pin reward — credits paid out when ticket is closed/resolved
     const now = new Date().toISOString();
     const updatePayload: Record<string, unknown> = {
-      reward_granted_at: now, reward_granted_by: user.id, updated_at: now,
+      reward_pending: true,
+      reward_granted_by: user.id,
+      updated_at: now,
     };
     if (opts.note) updatePayload.reward_note = opts.note;
-    if (opts.credits && opts.credits > 0) {
-      updatePayload.reward_credits = opts.credits;
-      const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
-      const newCredits = (targetProfile?.credits ?? 0) + opts.credits;
-      await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
-    }
+    if (opts.credits && opts.credits > 0) updatePayload.reward_credits = opts.credits;
+
     const { error } = await admin.from("tickets").update(updatePayload).eq("id", ticketId);
     if (error) return { success: false, error: error.message };
-    await admin.from("mod_actions").insert({
-      mod_id: user.id, target_user_id: ticket.user_id,
-      action_type: "credits_add", reason: `Ticketbelohnung: ${opts.note ?? ticket.subject}`,
-      details: { ticket_id: ticketId, credits: opts.credits ?? 0 },
-    });
     await notifyUser({
       userId: ticket.user_id,
       type: "admin_credits",
-      title: "🏆 Belohnung erhalten!",
+      title: "🏆 Belohnung angepinnt!",
       message: opts.credits
-        ? `Dein hilfreicher Report wurde mit +${opts.credits} Credits belohnt!${opts.note ? ` — ${opts.note}` : ""}`
-        : `Dein hilfreicher Report wurde belohnt!${opts.note ? ` — ${opts.note}` : ""}`,
+        ? `Dein Ticket enthält eine Belohnung von +${opts.credits} Credits — wird ausgezahlt wenn das Ticket gelöst wird.`
+        : `Dein Ticket enthält eine Belohnung — wird ausgezahlt wenn das Ticket gelöst wird.`,
       link: `/?openTicket=${ticketId}`,
     });
     return { success: true };

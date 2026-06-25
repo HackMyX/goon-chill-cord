@@ -127,6 +127,7 @@ export interface ModTicket {
   rewardCredits: number | null;
   rewardNote: string | null;
   rewardGrantedAt: string | null;
+  rewardPending: boolean;
 }
 
 export interface TicketMessage {

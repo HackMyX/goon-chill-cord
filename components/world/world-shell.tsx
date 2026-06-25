@@ -558,7 +558,7 @@ export function WorldShell({
           <RotateCcw className="h-16 w-16 animate-spin text-purple-400" style={{ animationDuration: "3s" }} />
           <div>
             <h2 className="text-2xl font-extrabold text-white">Gerät drehen</h2>
-            <p className="mt-2 text-sm text-zinc-400">Die 3D-Welt funktioniert nur im Querformat.</p>
+            <p className="mt-2 text-sm text-zinc-400">Die Farmwelt funktioniert nur im Querformat.</p>
           </div>
         </div>
       )}

@@ -86,7 +86,7 @@ const GAME_TABS: {
   {
     id: "snake_farm",
     label: "Snake",
-    sublabel: "Farm",
+    sublabel: "Endless",
     href: "/snake",
     icon: Joystick,
     accent: "text-yellow-400",

@@ -20,9 +20,10 @@ Antworte immer auf Deutsch. Sei präzise, freundlich und direkt.
 - **Auktionshaus** — Items versteigern oder auf Auktionen bieten. Höchstbietender gewinnt das Item.
 - **Trading** — direkte Item-Trades mit anderen Spielern (1:1 oder Items gegen Credits).
 - **Community** — Spielerliste, Online-Status, Rangliste nach Credits.
-- **3D-Welt** — Online-Browsergame im 3D-Browser. Kämpfe gegen andere Spieler und Monster mit Waffen aus der Garderobe.
+- **Farmwelt** — Online-Browsergame im 3D-Browser. Kämpfe gegen andere Spieler und Monster mit Waffen aus der Garderobe.
 - **Snake** — Snake-Minigame (Klassisches Snake-Spiel).
 - **Mine** — Mining-Minigame zum Credits verdienen.
+- **Plinko** — Plinko-Spiel mit verschiedenen Risikostufen (Niedrig/Mittel/Hoch). Stündliches Ball-Limit, konfigurierbare Multiplikatoren. Erreichbar unter /plinko.
 - **Umfragen** — aktive Umfragen der Community mitmachen. Erscheinen unter /surveys.
 - **Streak** — täglicher Login-Bonus. Je mehr aufeinanderfolgende Tage, desto höher die Credits. Beim Patchnote-/Sonderevent gibt es Multiplikatoren.
 - **Support-Tickets** — Bugs oder Verbesserungsvorschläge an das Team melden (Kategorie: Bug / Verbesserungsvorschlag). Antwort kommt vom Team.

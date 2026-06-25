@@ -43,6 +43,7 @@ export interface TicketDetail extends Ticket {
   rewardCredits?: number | null;
   rewardNote?: string | null;
   rewardGrantedAt?: string | null;
+  rewardPending?: boolean;
 }
 
 // ─── User actions ─────────────────────────────────────────────────────────────
@@ -128,7 +129,7 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
   // Users can only view their own tickets; staff can view all
   const query = admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, attachment_url, reward_credits, reward_note, reward_granted_at, ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending, ticket_messages(count)")
     .eq("id", ticketId);
 
   if (!isModerator(profile)) {
@@ -154,6 +155,7 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
     rewardCredits: (data as Record<string, unknown>).reward_credits as number | null ?? null,
     rewardNote: (data as Record<string, unknown>).reward_note as string | null ?? null,
     rewardGrantedAt: (data as Record<string, unknown>).reward_granted_at as string | null ?? null,
+    rewardPending: ((data as Record<string, unknown>).reward_pending as boolean) ?? false,
     messages: (messages ?? []).map((m) => ({
       id: m.id,
       ticketId: m.ticket_id,
@@ -292,19 +294,37 @@ export async function updateTicketStatus(input: {
   const { data: profile } = await admin.from("profiles").select("role, username").eq("id", user.id).single();
   if (!isModerator(profile)) return { success: false, error: "Kein Zugriff." };
 
-  const { data: ticket } = await admin.from("tickets").select("user_id, subject").eq("id", input.ticketId).single();
+  const { data: ticket } = await admin.from("tickets").select("user_id, subject, reward_pending, reward_credits, reward_note, reward_granted_by").eq("id", input.ticketId).single();
   if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
 
   const isClosing = input.status === "closed" || input.status === "resolved";
+  const hasPendingReward = !!(ticket as Record<string, unknown>).reward_pending;
+
+  // If a reward is pinned to this ticket, closing always auto-resolves (never "geschlossen")
+  const effectiveStatus: TicketStatus = (isClosing && hasPendingReward) ? "resolved" : input.status;
   const now = new Date().toISOString();
-  await admin
-    .from("tickets")
-    .update({
-      status: input.status,
-      updated_at: now,
-      ...(isClosing ? { closed_at: now, closed_by: user.id } : {}),
-    })
-    .eq("id", input.ticketId);
+
+  const updatePayload: Record<string, unknown> = {
+    status: effectiveStatus,
+    updated_at: now,
+    ...(isClosing ? { closed_at: now, closed_by: user.id } : {}),
+  };
+
+  // Pay out pending reward when closing
+  if (isClosing && hasPendingReward) {
+    const rewardCredits = (ticket as Record<string, unknown>).reward_credits as number | null;
+    if (rewardCredits && rewardCredits > 0) {
+      const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
+      const newCredits = ((targetProfile?.credits as number) ?? 0) + rewardCredits;
+      await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
+    }
+    updatePayload.reward_pending = false;
+    updatePayload.reward_granted_at = now;
+    const grantedBy = (ticket as Record<string, unknown>).reward_granted_by as string | null;
+    if (!grantedBy) updatePayload.reward_granted_by = user.id;
+  }
+
+  await admin.from("tickets").update(updatePayload).eq("id", input.ticketId);
 
   const STATUS_LABELS: Record<TicketStatus, string> = {
     open: "Offen",
@@ -313,11 +333,17 @@ export async function updateTicketStatus(input: {
     closed: "Geschlossen",
   };
 
+  let notifyMsg = `Dein Ticket „${ticket.subject}" ist jetzt: ${STATUS_LABELS[effectiveStatus]}`;
+  if (isClosing && hasPendingReward) {
+    const credits = (ticket as Record<string, unknown>).reward_credits as number | null;
+    notifyMsg += credits ? ` · +${credits} Credits wurden gutgeschrieben!` : " · Deine Belohnung wurde ausgezahlt!";
+  }
+
   await notifyUser({
     userId: ticket.user_id,
     type: "ticket_status",
     title: "Ticket-Status geändert",
-    message: `Dein Ticket „${ticket.subject}" ist jetzt: ${STATUS_LABELS[input.status]}`,
+    message: notifyMsg,
     link: `/?openTicket=${input.ticketId}`,
   });
 
@@ -403,44 +429,27 @@ export async function adminGrantTicketReward(
   const { data: ticket } = await admin.from("tickets").select("user_id, subject, category").eq("id", ticketId).single();
   if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
 
+  // Pin reward to ticket — credits are paid out when ticket is closed/resolved
   const now = new Date().toISOString();
   const updatePayload: Record<string, unknown> = {
-    reward_granted_at: now, reward_granted_by: user.id, updated_at: now,
+    reward_pending: true,
+    reward_granted_by: user.id,
+    updated_at: now,
   };
   if (opts.note) updatePayload.reward_note = opts.note;
+  if (opts.credits && opts.credits > 0) updatePayload.reward_credits = opts.credits;
 
-  const { data: targetProfile } = await admin.from("profiles").select("credits, username").eq("id", ticket.user_id).single();
-  const targetUsername: string = (targetProfile?.username as string) ?? "Unbekannt";
-
-  if (opts.credits && opts.credits > 0) {
-    updatePayload.reward_credits = opts.credits;
-    const newCredits = (targetProfile?.credits ?? 0) + opts.credits;
-    await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
-  }
   const { error } = await admin.from("tickets").update(updatePayload).eq("id", ticketId);
   if (error) return { success: false, error: error.message };
 
   await notifyUser({
     userId: ticket.user_id,
     type: "admin_credits",
-    title: "🏆 Belohnung erhalten!",
+    title: "🏆 Belohnung angepinnt!",
     message: opts.credits
-      ? `Dein hilfreicher Report wurde mit +${opts.credits} Credits belohnt!${opts.note ? ` — ${opts.note}` : ""}`
-      : `Dein hilfreicher Report wurde belohnt!${opts.note ? ` — ${opts.note}` : ""}`,
+      ? `Dein Ticket „${ticket.subject}" enthält eine Belohnung von +${opts.credits} Credits — wird ausgezahlt wenn das Ticket gelöst wird.`
+      : `Dein Ticket enthält eine Belohnung — wird ausgezahlt wenn das Ticket gelöst wird.`,
     link: `/?openTicket=${ticketId}`,
-  });
-
-  // Broadcast trophy message to global chat so everyone sees rewards are real
-  const categoryLabel = ticket.category === "suggestion" ? "Vorschlag" : "Problemmeldung";
-  const chatContent = opts.credits
-    ? `🏆 ${targetUsername} wurde für ${categoryLabel === "Vorschlag" ? "einen" : "eine"} ${categoryLabel} mit +${opts.credits} Credits belohnt!`
-    : `🏆 ${targetUsername} wurde für ${categoryLabel === "Vorschlag" ? "einen" : "eine"} ${categoryLabel} belohnt!`;
-  await admin.from("global_chat_messages").insert({
-    username: "System",
-    role: "system",
-    content: chatContent,
-    is_system: true,
-    metadata: { type: "ticket_reward", credits: opts.credits ?? 0, category: ticket.category },
   });
 
   revalidatePath("/admin");

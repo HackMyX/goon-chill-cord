@@ -307,9 +307,9 @@ export function DonConfigEditor({ config }: Props) {
             <button
               type="button"
               onClick={() => setForm((f) => ({ ...f, upgradeEnabled: !f.upgradeEnabled }))}
-              className={`relative h-5 w-9 rounded-full transition-colors ${form.upgradeEnabled ? "bg-purple-500" : "bg-zinc-700"}`}
+              className={`relative block h-6 w-11 overflow-hidden rounded-full transition-colors duration-200 ${form.upgradeEnabled ? "bg-purple-600" : "bg-zinc-700"}`}
             >
-              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${form.upgradeEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
+              <span className={`absolute left-0 top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${form.upgradeEnabled ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
             </button>
           </label>
         </div>

@@ -665,6 +665,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   const isInProgress = t.status === "in_progress";
   const isClosed = t.status === "closed";
   const alreadyRewarded = !!t.rewardGrantedAt;
+  const rewardIsPending = !alreadyRewarded && t.rewardPending;
   const sound = useSoundManager();
   const itemRef = useRef<HTMLDivElement>(null);
   const prevDefaultOpen = useRef(defaultOpen ?? false);
@@ -912,12 +913,24 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
             </div>
           )}
 
-          {/* Reward banner if already granted */}
+          {/* Reward banner */}
           {alreadyRewarded && (
             <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
               <Trophy className="h-3.5 w-3.5 shrink-0" />
-              Belohnt{t.rewardCredits ? ` · +${t.rewardCredits} Credits` : ""}
+              Belohnung ausgezahlt{t.rewardCredits ? ` · +${t.rewardCredits} Credits` : ""}
               {t.rewardNote && <span className="text-amber-400/70"> — {t.rewardNote}</span>}
+            </div>
+          )}
+          {rewardIsPending && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-[11px]">
+              <Trophy className="h-3.5 w-3.5 shrink-0 animate-pulse text-amber-400" />
+              <span className="font-bold text-amber-300">
+                Belohnung angepinnt{t.rewardCredits ? ` · +${t.rewardCredits} Credits` : ""}
+              </span>
+              {t.rewardNote && <span className="text-amber-400/70"> — {t.rewardNote}</span>}
+              <span className="ml-auto rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+                Auszahlung bei Lösung
+              </span>
             </div>
           )}
 
@@ -980,7 +993,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           {/* Extended actions row */}
           {(perms.canDeleteTickets || perms.canRewardTickets) && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/5 pt-3">
-              {perms.canRewardTickets && !alreadyRewarded && (
+              {perms.canRewardTickets && !alreadyRewarded && !rewardIsPending && (
                 <button
                   onClick={() => setShowReward((v) => !v)}
                   className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
@@ -990,7 +1003,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                   }`}
                 >
                   <Trophy className="h-3.5 w-3.5" />
-                  Belohnung vergeben
+                  Belohnung anpinnen
                 </button>
               )}
               {perms.canDeleteTickets && (
@@ -1056,7 +1069,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
                 className="mt-2 flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 transition-colors"
               >
                 {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trophy className="h-3.5 w-3.5" />}
-                Belohnung senden
+                Belohnung anpinnen
               </button>
             </div>
           )}

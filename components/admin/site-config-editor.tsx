@@ -36,7 +36,7 @@ const CARD_LABELS: Record<HomepageCardId, string> = {
   shop: "Shop",
   cases: "Cases",
   garderobe: "Garderobe",
-  world: "3D-Welt",
+  world: "Farmwelt",
   snake: "Snake",
   mine: "Mine",
   don: "Double or Nothing",

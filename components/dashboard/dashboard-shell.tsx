@@ -85,7 +85,7 @@ const CARD_DEFS: Record<HomepageCardId, CardDef> = {
     shadow: "hover:shadow-[0_4px_24px_rgba(99,102,241,0.15)]", accentBar: "bg-indigo-500",
   },
   world: {
-    label: "3D-Welt", description: "Erkunde die Online-3D-Welt im Browser.", href: "/world",
+    label: "Farmwelt", description: "Erkunde die Farmwelt im Browser.", href: "/world",
     icon: Globe, gradient: "from-emerald-500/10 via-emerald-500/3 to-transparent",
     border: "border-emerald-500/20", iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400",
     shadow: "hover:shadow-[0_4px_24px_rgba(52,211,153,0.12)]", accentBar: "bg-emerald-500",

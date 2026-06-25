@@ -739,7 +739,7 @@ function Leaderboard({ entries, myBest, userId, mode }: {
     : mode === "grind" ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
     : mode === "farm" ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
     : "border-emerald-400/30 bg-emerald-500/10 text-emerald-300";
-  const modeLabel = mode === "grind" ? "🔥 Grind" : mode === "x2" ? "⚡ x2" : mode === "farm" ? "🌾 Farm" : "🌿 Classic";
+  const modeLabel = mode === "grind" ? "🔥 Grind" : mode === "x2" ? "⚡ x2" : mode === "farm" ? "♾️ Endless" : "🌿 Classic";
   return (
     <div className="flex flex-col overflow-hidden rounded-2xl border border-white/8 bg-[#080712]">
       <div className="flex items-center gap-2 border-b border-white/8 px-4 py-3">
@@ -816,7 +816,7 @@ function ModeCard({
       badge: "bg-amber-500/20 text-amber-300 border-amber-500/30",
     },
     farm: {
-      label: "Farm", emoji: "🌾",
+      label: "Endless", emoji: "♾️",
       desc: `20×20 Feld · ${modeCfg.creditsPerApple} CR/Apfel · Wächst nicht · Konstante Geschwindigkeit`,
       gradient: "from-violet-900/60 to-violet-950/80",
       ring: "ring-violet-500/40",
@@ -1596,7 +1596,7 @@ export function SnakeShell({
                     : "bg-emerald-500/20 text-emerald-300"
                     : "text-zinc-500 hover:text-zinc-300"
                 }`}>
-                {m === "grind" ? "🔥" : m === "x2" ? "⚡" : m === "farm" ? "🌾" : "🌿"}{m}
+                {m === "grind" ? "🔥" : m === "x2" ? "⚡" : m === "farm" ? "♾️" : "🌿"}{m === "farm" ? "endless" : m}
               </button>
             ))}
           </div>
@@ -1623,7 +1623,7 @@ export function SnakeShell({
                     : "bg-emerald-500/20 text-emerald-300"
                     : "text-zinc-500"
                 }`}>
-                {m === "grind" ? "🔥 Grind" : m === "x2" ? "⚡ x2" : m === "farm" ? "🌾 Farm" : "🌿 x1"}
+                {m === "grind" ? "🔥 Grind" : m === "x2" ? "⚡ x2" : m === "farm" ? "♾️ Endless" : "🌿 x1"}
               </button>
             ))}
           </div>

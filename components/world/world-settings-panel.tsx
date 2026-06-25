@@ -157,7 +157,7 @@ export function WorldSettingsPanel({ settings, onChange, onClose, userId, userna
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-purple-400" />
-            <h2 className="text-lg font-bold text-zinc-100">3D Welt</h2>
+            <h2 className="text-lg font-bold text-zinc-100">Farmwelt</h2>
           </div>
           <button
             onClick={() => { setListeningFor(null); onClose(); }}

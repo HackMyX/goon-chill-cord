@@ -429,10 +429,23 @@ function TicketRow({
                 {detail.rewardGrantedAt ? (
                   <div className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
                     <Trophy className="h-3.5 w-3.5 shrink-0" />
-                    Belohnt{detail.rewardCredits ? ` · +${detail.rewardCredits} Credits` : ""}
+                    Belohnung ausgezahlt{detail.rewardCredits ? ` · +${detail.rewardCredits} Credits` : ""}
                     {detail.rewardNote && (
                       <span className="text-amber-400/70"> — {detail.rewardNote}</span>
                     )}
+                  </div>
+                ) : detail.rewardPending ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-[11px]">
+                    <Trophy className="h-3.5 w-3.5 shrink-0 text-amber-400 animate-pulse" />
+                    <span className="font-bold text-amber-300">
+                      Belohnung angepinnt{detail.rewardCredits ? ` · +${detail.rewardCredits} Credits` : ""}
+                    </span>
+                    {detail.rewardNote && (
+                      <span className="text-amber-400/70"> — {detail.rewardNote}</span>
+                    )}
+                    <span className="ml-auto rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+                      Wird bei Lösung ausgezahlt
+                    </span>
                   </div>
                 ) : (
                   <>
@@ -445,11 +458,11 @@ function TicketRow({
                       }`}
                     >
                       <Trophy className="h-3.5 w-3.5" />
-                      Belohnung vergeben
+                      Belohnung anpinnen
                     </button>
                     {showReward && (
                       <div className="mt-3 flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-                        <p className="text-[11px] font-bold text-amber-300">Belohnung für hilfreichen Report:</p>
+                        <p className="text-[11px] font-bold text-amber-300">Belohnung anpinnen (Auszahlung bei Ticketlösung):</p>
                         <div className="flex flex-wrap gap-3">
                           <label className="flex flex-col gap-1">
                             <span className="text-[10px] text-zinc-500 flex items-center gap-1"><Coins className="h-3 w-3" /> Credits</span>
@@ -480,7 +493,7 @@ function TicketRow({
                             className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 transition-colors"
                           >
                             {rewarding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trophy className="h-3.5 w-3.5" />}
-                            Belohnung vergeben
+                            Belohnung anpinnen
                           </button>
                           {rewardMessage && (
                             <span className={`text-[11px] ${rewardMessage.ok ? "text-emerald-400" : "text-red-400"}`}>
