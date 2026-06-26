@@ -339,7 +339,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
 
       {/* Messages */}
       <div
-        className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5 min-h-0"
+        className="flex-1 overflow-y-auto chat-scroll px-3 py-2 space-y-0.5 min-h-0"
         style={msgAreaStyle}
       >
         {loading && (
@@ -363,21 +363,22 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
             const isClear = msgType === "chat_clear";
             const isReward = msgType === "ticket_reward";
             return (
-              <div
-                key={msg.id}
-                className={`rounded-lg px-3 py-2 text-xs text-center font-semibold my-1 ${
-                  isClear
-                    ? "bg-zinc-800/60 text-zinc-500 border border-zinc-700/50"
-                    : isReward
-                    ? "bg-amber-500/15 text-amber-200 border border-amber-400/40 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
-                    : rarity === "ultra"
-                    ? "bg-fuchsia-500/15 text-fuchsia-200 border border-fuchsia-500/30"
-                    : rarity === "mythisch"
-                    ? "bg-purple-500/15 text-purple-200 border border-purple-500/30"
-                    : "bg-blue-500/10 text-blue-200 border border-blue-500/20"
-                }`}
-              >
-                {msg.content}
+              <div key={msg.id} className="flex justify-center chat-msg-enter">
+                <span
+                  className={`chat-sys-msg ${
+                    isClear
+                      ? "bg-zinc-800/30 text-zinc-600 border-zinc-700/25"
+                      : isReward
+                      ? "bg-amber-500/10 text-amber-300/90 border-amber-400/25"
+                      : rarity === "ultra"
+                      ? "bg-fuchsia-500/10 text-fuchsia-300/90 border-fuchsia-500/20"
+                      : rarity === "mythisch"
+                      ? "bg-purple-500/10 text-purple-300/90 border-purple-500/20"
+                      : "bg-blue-500/8 text-blue-300/80 border-blue-500/15"
+                  }`}
+                >
+                  {msg.content}
+                </span>
               </div>
             );
           }
@@ -390,33 +391,33 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
           return (
             <div
               key={msg.id}
-              className={`group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.025] ${
-                isSpecial ? "hover:bg-amber-500/[0.03]" : ""
-              } ${isOptimistic ? "opacity-60" : ""}`}
+              className={`chat-msg-enter group flex items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-white/[0.03] ${
+                isSpecial ? "hover:bg-amber-500/[0.04]" : ""
+              } ${isOptimistic ? "opacity-50" : ""}`}
             >
-              <div className="mt-0.5">
+              <div className="shrink-0">
                 <UserAvatar avatarUrl={msg.avatarUrl} username={msg.username} role={msg.role} size={22} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1 leading-none">
                   {RoleIcon && (
                     <RoleIcon className={`h-2.5 w-2.5 shrink-0 ${badge?.color ?? "text-zinc-400"}`} />
                   )}
-                  <span className={`text-[10px] font-bold truncate max-w-[120px] ${badge?.color ?? "text-zinc-300"}`}>
+                  <span className={`text-[10px] font-bold truncate max-w-[110px] ${badge?.color ?? "text-zinc-300"}`}>
                     <StyledUsername name={msg.username} styleKey={msg.nameStyleKey} size="sm" userId={msg.userId} />
-                    {badge && msg.role !== "user" && (
-                      <span className="ml-1 opacity-60 font-normal">({badge.label})</span>
-                    )}
                   </span>
+                  {badge && msg.role !== "user" && (
+                    <span className={`text-[9px] opacity-55 shrink-0 ${badge.color}`}>({badge.label})</span>
+                  )}
                   {msg.prioBadges && msg.prioBadges.length > 0
                     ? <PrioBadgeRow badgeKeys={msg.prioBadges} size="xs" max={2} />
                     : displayBadge && <BadgePill badgeKey={displayBadge} />
                   }
-                  <span className="text-[9px] text-zinc-600 ml-auto shrink-0">
-                    {isOptimistic ? "Sendet…" : formatTime(msg.createdAt)}
+                  <span className="text-[9px] text-zinc-600 ml-auto shrink-0 tabular-nums">
+                    {isOptimistic ? "…" : formatTime(msg.createdAt)}
                   </span>
                 </div>
-                <p className="text-xs leading-snug text-zinc-300 break-words mt-0.5">{msg.content}</p>
+                <p className="text-[11px] leading-snug text-zinc-300/90 break-words mt-0.5">{msg.content}</p>
               </div>
             </div>
           );

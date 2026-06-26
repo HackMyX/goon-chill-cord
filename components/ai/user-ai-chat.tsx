@@ -114,7 +114,7 @@ export function UserAiChat() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
+      <div className="flex-1 overflow-y-auto chat-scroll px-3 py-3 space-y-3 min-h-0">
         {messages.length === 0 && (
           <div className="flex flex-col gap-3">
             <div className="flex items-start gap-2.5">
@@ -144,7 +144,7 @@ export function UserAiChat() {
         {messages.map((msg, i) => {
           const isUser = msg.role === "user";
           return (
-            <div key={i} className={`flex items-start gap-2.5 ${isUser ? "flex-row-reverse" : ""}`}>
+            <div key={i} className={`chat-msg-enter flex items-start gap-2.5 ${isUser ? "flex-row-reverse" : ""}`}>
               <div className={`flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full ${isUser ? (myAvatar ? "" : "bg-zinc-700") : "bg-purple-500/20"}`}>
                 {isUser ? (
                   myAvatar

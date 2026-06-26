@@ -154,7 +154,7 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-0">
+      <div className="flex-1 overflow-y-auto chat-scroll space-y-3 pr-1 min-h-0">
         {messages.length === 0 && (
           <div className="flex flex-col gap-4">
             <div className="flex items-start gap-3">
@@ -192,7 +192,7 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
         {messages.map((msg, i) => {
           const isUser = msg.role === "user";
           return (
-            <div key={i} className={`flex items-start gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+            <div key={i} className={`chat-msg-enter flex items-start gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
               <div className={`flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full ${isUser ? (myAvatar ? "" : "bg-zinc-700") : "bg-purple-500/20"}`}>
                 {isUser ? (
                   myAvatar

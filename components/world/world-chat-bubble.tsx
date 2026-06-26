@@ -165,7 +165,7 @@ export function WorldChatBubble({ username }: { username: string }) {
     >
       {open && (
         <div
-          className="flex flex-col rounded-2xl border border-white/12 bg-black/85 shadow-[0_12px_48px_rgba(0,0,0,0.8)] backdrop-blur-xl"
+          className="flex flex-col rounded-2xl border border-white/[0.09] bg-black/[0.42] shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
           style={{
             width: typeof panelW === "number" ? `${panelW}px` : panelW,
             height: `${height}px`,
@@ -221,43 +221,60 @@ export function WorldChatBubble({ username }: { username: string }) {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+          <div className="flex-1 overflow-y-auto chat-scroll px-3 py-2 space-y-1 min-h-0">
             {messages.length === 0 && (
               <p className="text-center text-[10px] text-zinc-600 py-6">Noch keine Nachrichten — schreib als Erster!</p>
             )}
-            {messages.map((msg) => (
-              <div key={msg.id} className={`flex gap-2 ${msg.isSystem ? "opacity-70" : ""}`}>
-                <div className="shrink-0 mt-0.5">
-                  {msg.avatarUrl ? (
-                    <img src={msg.avatarUrl} alt="" className="h-5 w-5 rounded-full object-cover ring-1 ring-white/10" />
-                  ) : (
-                    <div className="h-5 w-5 rounded-full bg-purple-500/30 flex items-center justify-center text-[8px] font-bold text-purple-300">
-                      {(msg.username ?? "?").charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-bold leading-none">
-                      <StyledUsername
-                        name={msg.username ?? "Anon"}
-                        styleKey={msg.nameStyleKey}
-                        userId={msg.userId}
-                        size="sm"
-                        staticMode
-                      />
+            {messages.map((msg) => {
+              if (msg.isSystem) {
+                return (
+                  <div key={msg.id} className="flex justify-center chat-msg-enter">
+                    <span className={`chat-sys-msg ${
+                      (msg.metadata?.rarity as string) === "ultra"
+                        ? "bg-fuchsia-500/10 text-fuchsia-300/90 border-fuchsia-500/20"
+                        : (msg.metadata?.rarity as string) === "mythisch"
+                        ? "bg-purple-500/10 text-purple-300/90 border-purple-500/20"
+                        : "bg-blue-500/8 text-blue-300/80 border-blue-500/15"
+                    }`}>
+                      {msg.content}
                     </span>
-                    <span className="text-[9px] text-zinc-600 shrink-0">{formatTime(msg.createdAt)}</span>
                   </div>
-                  <p className="text-[11px] text-zinc-200 break-words leading-snug mt-0.5">{msg.content}</p>
+                );
+              }
+              return (
+                <div key={msg.id} className="chat-msg-enter flex items-center gap-2 rounded-lg px-1.5 py-0.5 hover:bg-white/[0.03] transition-colors">
+                  <div className="shrink-0">
+                    {msg.avatarUrl ? (
+                      <img src={msg.avatarUrl} alt="" className="h-5 w-5 rounded-full object-cover ring-1 ring-white/10" />
+                    ) : (
+                      <div className="h-5 w-5 rounded-full bg-purple-500/25 flex items-center justify-center text-[8px] font-bold text-purple-300">
+                        {(msg.username ?? "?").charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 leading-none">
+                      <span className="text-[10px] font-bold shrink-0 truncate max-w-[100px]">
+                        <StyledUsername
+                          name={msg.username ?? "Anon"}
+                          styleKey={msg.nameStyleKey}
+                          userId={msg.userId}
+                          size="sm"
+                          staticMode
+                        />
+                      </span>
+                      <span className="text-[9px] text-zinc-600 shrink-0 tabular-nums ml-auto">{formatTime(msg.createdAt)}</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-200/90 break-words leading-snug mt-0.5">{msg.content}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <div ref={messagesEndRef} />
           </div>
 
           {/* Input */}
-          <div className="flex shrink-0 gap-1.5 rounded-b-2xl border-t border-white/10 bg-black/30 p-2.5">
+          <div className="flex shrink-0 gap-1.5 rounded-b-2xl border-t border-white/[0.07] bg-black/[0.2] p-2.5">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}

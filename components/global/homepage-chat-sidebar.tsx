@@ -177,29 +177,31 @@ function MessageRow({
     const isReward = msgType === "ticket_reward";
 
     const content = (
-      <div
-        className={`rounded-lg border pl-3 pr-3 py-2 ${fontCls} my-1 text-center font-semibold ${
-          isClear
-            ? "bg-zinc-800/60 text-zinc-500 border-zinc-700/50"
-            : isReward
-            ? "bg-amber-500/15 text-amber-200 border-amber-400/40"
-            : rarity === "ultra"
-            ? "bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/30"
-            : rarity === "mythisch"
-            ? "bg-purple-500/15 text-purple-200 border-purple-500/30"
-            : "bg-blue-500/10 text-blue-200 border-blue-500/20"
-        }`}
-      >
-        {msg.content}
+      <div className="flex justify-center">
+        <span
+          className={`chat-sys-msg ${
+            isClear
+              ? "bg-zinc-800/30 text-zinc-600 border-zinc-700/25"
+              : isReward
+              ? "bg-amber-500/10 text-amber-300/90 border-amber-400/25"
+              : rarity === "ultra"
+              ? "bg-fuchsia-500/10 text-fuchsia-300/90 border-fuchsia-500/20"
+              : rarity === "mythisch"
+              ? "bg-purple-500/10 text-purple-300/90 border-purple-500/20"
+              : "bg-blue-500/8 text-blue-300/80 border-blue-500/15"
+          }`}
+        >
+          {msg.content}
+        </span>
       </div>
     );
 
     if (doAnimate) {
       return (
         <motion.div
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.25 }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
           {content}
         </motion.div>
@@ -216,23 +218,23 @@ function MessageRow({
 
   const inner = (
     <div
-      className={`flex items-start gap-1.5 rounded-lg px-2 py-1.5 hover:bg-white/[0.025] transition-colors ${
-        isOptimistic ? "opacity-60" : ""
+      className={`flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-white/[0.03] transition-colors ${
+        isOptimistic ? "opacity-50" : ""
       } ${config.compactMode ? "py-0.5" : ""}`}
     >
       {config.showAvatars && (
-        <div className="mt-0.5 shrink-0">
+        <div className="shrink-0">
           <UserAvatar
             avatarUrl={msg.avatarUrl}
             username={msg.username}
             role={msg.role}
-            size={config.compactMode ? 20 : 28}
+            size={config.compactMode ? 20 : 24}
           />
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1 flex-wrap">
-          <span className={`${fontCls} font-bold truncate max-w-[130px]`}>
+        <div className="flex items-center gap-1 leading-none">
+          <span className={`${fontCls} font-bold truncate max-w-[120px]`}>
             <StyledUsername
               name={msg.username}
               styleKey={nameStyleKey}
@@ -245,16 +247,16 @@ function MessageRow({
             <BadgePill key={bk} badgeKey={bk} />
           ))}
           {config.showTimestamps && (
-            <span className="text-[9px] text-zinc-600 ml-auto shrink-0">
+            <span className="text-[9px] text-zinc-600 ml-auto shrink-0 tabular-nums">
               {isOptimistic
-                ? "Sendet…"
+                ? "…"
                 : config.showTimestampsRelative
                 ? formatRelative(msg.createdAt)
                 : formatAbsolute(msg.createdAt)}
             </span>
           )}
         </div>
-        <p className={`${fontCls} leading-snug text-zinc-300 break-words mt-0.5`}>
+        <p className={`${fontCls} leading-snug text-zinc-300/90 break-words mt-0.5`}>
           {config.highlightMentions
             ? highlightMentions(msg.content, ownUsername)
             : msg.content}
@@ -266,9 +268,9 @@ function MessageRow({
   if (doAnimate) {
     return (
       <motion.div
-        initial={{ opacity: 0, x: -12 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.2 }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
         {inner}
       </motion.div>
@@ -778,7 +780,7 @@ function ChatPanel({
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-2 py-1.5 space-y-0.5 min-h-0">
+      <div className="flex-1 overflow-y-auto chat-scroll px-2 py-1.5 space-y-0.5 min-h-0">
         {loading && (
           <div className="flex justify-center py-6">
             <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
