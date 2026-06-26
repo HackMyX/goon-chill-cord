@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 import {
   DEFAULT_SITE_CONFIG,
   DEFAULT_TOPBAR_RIGHT_SLOTS,
@@ -196,9 +197,11 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
   });
 
   if (error) {
+    void logDebugEvent({ level: "error", scope: "admin:site-config", message: "Site-Config Speichern fehlgeschlagen", detail: error.message, context: { userId: user.id } });
     return { success: false, error: "Speichern fehlgeschlagen — ist die site_config-Migration eingespielt?" };
   }
 
+  void logActivity("admin:site-config", `Site-Config gespeichert: "${input.siteName}"`, { userId: user.id, siteName: input.siteName });
   revalidatePath("/", "layout");
   return { success: true };
 }

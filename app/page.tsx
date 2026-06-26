@@ -84,6 +84,29 @@ export default async function Home() {
     getHomepageChatConfig(),
   ]);
 
+  // Fetch badges for all leaderboard users (silently skip if table missing)
+  const leaderboardUserIds = [
+    ...(topProfiles ?? []).map((p) => p.id),
+    ...(streakProfiles ?? []).map((p) => p.id),
+  ];
+  const badgesByUser: Record<string, string[]> = {};
+  if (leaderboardUserIds.length > 0) {
+    try {
+      const { data: badgeRows } = await supabase
+        .from("user_badges")
+        .select("user_id, badge_key")
+        .in("user_id", leaderboardUserIds);
+      for (const row of badgeRows ?? []) {
+        const uid = (row as Record<string, unknown>).user_id as string;
+        const key = (row as Record<string, unknown>).badge_key as string;
+        if (!badgesByUser[uid]) badgesByUser[uid] = [];
+        badgesByUser[uid].push(key);
+      }
+    } catch {
+      // user_badges table not yet created — skip silently
+    }
+  }
+
   return (
     <DashboardShell
       initialCredits={profile?.credits ?? 0}
@@ -94,12 +117,14 @@ export default async function Home() {
         username: p.username,
         credits: p.credits,
         active_name_style_key: (p as Record<string, unknown>).active_name_style_key as string | undefined,
+        badges: badgesByUser[p.id] ?? [],
       }))}
       streakLeaderboard={(streakProfiles ?? []).map((p) => ({
         id: p.id,
         username: p.username,
         streak_days: p.streak_days ?? 0,
         active_name_style_key: (p as Record<string, unknown>).active_name_style_key as string | undefined,
+        badges: badgesByUser[p.id] ?? [],
       }))}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}

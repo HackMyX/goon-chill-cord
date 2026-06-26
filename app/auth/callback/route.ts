@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isDeviceBanned } from "@/lib/actions/fingerprint";
+import { logDebugEvent } from "@/lib/debug-log-server";
 
 function sanitizeNext(value: string | null): string {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
@@ -102,6 +103,7 @@ export async function GET(request: Request) {
           fingerprint: fpCookie ?? null,
         });
       } catch { /* login_events may not exist yet on fresh installs — never block auth */ }
+      void logDebugEvent({ level: "info", scope: "auth:login", message: `Benutzer eingeloggt${!existing ? " (NEU)" : ""}: ${userId}`, context: { userId, ip, isNew: !existing } });
 
       return NextResponse.redirect(`${origin}${next}`);
     }

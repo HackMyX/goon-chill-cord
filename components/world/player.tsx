@@ -129,7 +129,7 @@ const SLIDE_PARTICLE_INTERVAL  = 0.033; // seconds between spawns
 const MIN_CAMERA_WORLD_Y = 0.35;
 const GRAVITY = -18;
 const JUMP_VELOCITY = 6.2;
-const STATS_SYNC_INTERVAL = 0.1;
+const STATS_SYNC_INTERVAL = 0.05; // 20 Hz — halved from 0.1 to halve animation-state lag
 
 // Mouse-look controls: the camera's yaw (use-camera-controls.ts, driven
 // directly by mouse movement while pointer-locked) *is* the crosshair's

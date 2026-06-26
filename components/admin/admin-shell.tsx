@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Zap, Volume2 } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Zap, Volume2, Eye, Settings2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CasesAdminTab } from "@/components/admin/case-group-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -35,7 +35,10 @@ import { BalanceStudioTab } from "@/components/admin/balance-studio-tab";
 import { LevelConfigEditor } from "@/components/admin/level-config-editor";
 import { AbilityAdminTab } from "@/components/admin/ability-admin-tab";
 import { SoundConfigEditor } from "@/components/admin/sound-config-editor";
+import { PreviewConfigTab } from "@/components/admin/preview-config-tab";
 import HomepageChatConfigEditor from "@/components/admin/homepage-chat-config-editor";
+import { FineConfigEditor } from "@/components/admin/fine-config-editor";
+import type { FineConfig } from "@/lib/fine-config-types";
 import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
 import type { DonConfig } from "@/lib/don-config";
@@ -159,9 +162,10 @@ interface AdminShellProps {
   plinkoConfig: PlinkoConfig;
   xpConfig: XpConfig;
   soundConfig: SoundConfig;
+  fineConfig: FineConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "sounds";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "sounds" | "preview_config" | "fine_config";
 
 const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string }[] = [
   { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
@@ -179,6 +183,7 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Level & XP Quellen", tab: "level_xp", keywords: ["level", "xp", "erfahrung", "aufstieg", "quellen"], description: "XP-Quellen und Level-Definitionen" },
   { label: "Fähigkeiten", tab: "abilities", keywords: ["fähigkeit", "ability", "mine", "speed", "boost", "rüstung"], description: "Fähigkeiten-Definitionen und Grants" },
   { label: "Sound-Einstellungen", tab: "sounds", keywords: ["sound", "ton", "lautstärke", "audio", "musik"], description: "Sound-Events und Lautstärken" },
+  { label: "Preview-Engine", tab: "preview_config", keywords: ["preview", "vorschau", "3d", "rotation", "zoom", "partikel", "glow", "badge", "item", "namestyle"], description: "Vorschau-Engine Konfiguration für Items, Badges, Name-Styles" },
   { label: "Name-Styles", tab: "namestyles", keywords: ["namestyle", "name", "animation", "shimmer", "rainbow", "glitch"], description: "Name-Stil Katalog und Shop" },
   { label: "Badges & Sondertags", tab: "badges", keywords: ["badge", "tag", "sondertag", "vergabe", "farbe"], description: "Badge-Definitionen und Vergaben" },
   { label: "Chat-Einstellungen", tab: "chat", keywords: ["chat", "nachrichten", "filter", "rate", "limit", "global"], description: "Chat-Konfiguration und Moderation" },
@@ -196,37 +201,40 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Verlaufs-Bereinigung", tab: "cleanup", keywords: ["cleanup", "bereinigung", "löschen", "retention", "logs", "chat"], description: "Automatische Bereinigung alter Daten" },
   { label: "Items", tab: "items", keywords: ["item", "waffe", "rüstung", "schild", "perk", "preis", "selten"], description: "Item-Katalog und Preise" },
   { label: "Pets", tab: "pets", keywords: ["pet", "tier", "haustier", "hund", "katze", "drache"], description: "Pet-Spezies und Stats" },
+  { label: "Feintuning", tab: "fine_config", keywords: ["feintuning", "fine", "nametag", "lerp", "sync", "blut", "partikel", "chat", "polling", "badges", "limit", "höhe", "geschwindigkeit", "multiplayer", "dead reckoning", "swing"], description: "Alle feingranularen konfigurierbaren Werte: Nametag, MP-Sync, Hit-Effekte, Chat" },
 ];
 
 const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
-  { id: "balance", label: "⚡ Balance Studio", icon: SlidersHorizontal },
-  { id: "economy", label: "Economy & Cases", icon: Coins },
-  { id: "streak", label: "Daily-Streak", icon: Flame },
-  { id: "shop", label: "Shop", icon: Store },
-  { id: "users", label: "User-Management", icon: Users },
-  { id: "items", label: "Items", icon: Package },
-  { id: "monsters", label: "Monster", icon: Skull },
-  { id: "pets", label: "Pets", icon: PawPrint },
-  { id: "games", label: "Games", icon: Gamepad2 },
-  { id: "branding", label: "Branding", icon: Palette },
-  { id: "audit", label: "Audit-Log", icon: ScrollText },
-  { id: "tickets", label: "Tickets", icon: MessageCircle },
-  { id: "moderators", label: "Moderatoren", icon: Shield },
-  { id: "chat", label: "Chat", icon: MessageCircle },
-  { id: "homepage_chat", label: "Startseite Chat", icon: MessageSquare },
-  { id: "surveys", label: "Umfragen", icon: BarChart3 },
-  { id: "ki", label: "KI-Assistent", icon: Sparkles },
-  { id: "debug", label: "Debug Log", icon: Bug },
-  { id: "backup", label: "Backup", icon: Database },
-  { id: "security", label: "Sicherheit", icon: ShieldAlert },
-  { id: "patchnotes", label: "Patch Notes", icon: FileText },
-  { id: "cleanup", label: "Verlaufs-Bereinigung", icon: Trash2 },
-  { id: "battlepass", label: "Battle Pass", icon: Sparkles },
-  { id: "badges", label: "Badges", icon: Crown },
-  { id: "namestyles", label: "Name-Styles", icon: Wand2 },
-  { id: "level_xp", label: "Level & XP", icon: TrendingUp },
-  { id: "abilities", label: "Fähigkeiten", icon: Zap },
-  { id: "sounds", label: "Sound Manager", icon: Volume2 },
+  { id: "audit",          label: "Audit-Log",           icon: ScrollText },
+  { id: "backup",         label: "Backup",               icon: Database },
+  { id: "badges",         label: "Badges",               icon: Crown },
+  { id: "balance",        label: "⚡ Balance Studio",    icon: SlidersHorizontal },
+  { id: "battlepass",     label: "Battle Pass",          icon: Sparkles },
+  { id: "branding",       label: "Branding",             icon: Palette },
+  { id: "chat",           label: "Chat",                 icon: MessageCircle },
+  { id: "streak",         label: "Daily-Streak",         icon: Flame },
+  { id: "debug",          label: "Debug Log",            icon: Bug },
+  { id: "economy",        label: "Economy & Cases",      icon: Coins },
+  { id: "abilities",      label: "Fähigkeiten",          icon: Zap },
+  { id: "fine_config",    label: "Feintuning",           icon: Settings2 },
+  { id: "games",          label: "Games",                icon: Gamepad2 },
+  { id: "items",          label: "Items",                icon: Package },
+  { id: "ki",             label: "KI-Assistent",         icon: Sparkles },
+  { id: "level_xp",       label: "Level & XP",           icon: TrendingUp },
+  { id: "moderators",     label: "Moderatoren",          icon: Shield },
+  { id: "monsters",       label: "Monster",              icon: Skull },
+  { id: "namestyles",     label: "Name-Styles",          icon: Wand2 },
+  { id: "patchnotes",     label: "Patch Notes",          icon: FileText },
+  { id: "pets",           label: "Pets",                 icon: PawPrint },
+  { id: "preview_config", label: "Preview-Engine",       icon: Eye },
+  { id: "shop",           label: "Shop",                 icon: Store },
+  { id: "security",       label: "Sicherheit",           icon: ShieldAlert },
+  { id: "sounds",         label: "Sound Manager",        icon: Volume2 },
+  { id: "homepage_chat",  label: "Startseite Chat",      icon: MessageSquare },
+  { id: "tickets",        label: "Tickets",              icon: MessageCircle },
+  { id: "surveys",        label: "Umfragen",             icon: BarChart3 },
+  { id: "users",          label: "User-Management",      icon: Users },
+  { id: "cleanup",        label: "Verlaufs-Bereinigung", icon: Trash2 },
 ];
 
 export function AdminShell({
@@ -260,6 +268,7 @@ export function AdminShell({
   plinkoConfig,
   xpConfig,
   soundConfig,
+  fineConfig,
 }: AdminShellProps) {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>(() => {
@@ -609,6 +618,10 @@ export function AdminShell({
         {tab === "sounds" && (
           <SoundConfigEditor initialConfig={soundConfig} />
         )}
+
+        {tab === "preview_config" && <PreviewConfigTab />}
+
+        {tab === "fine_config" && <FineConfigEditor initial={fineConfig} />}
 
         {tab === "ki" && (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">

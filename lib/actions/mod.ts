@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isModerator, isAdmin } from "@/lib/admin";
 import { notifyUser, notifyStaff } from "@/lib/notifications-internal";
-import { logDebugEvent } from "@/lib/debug-log-server";
+import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
 import {
   DEFAULT_MOD_PERMISSIONS,
   ADMIN_MOD_PERMISSIONS,
@@ -400,6 +400,7 @@ export async function modWarnUser(
       message: reason.trim() ? `Grund: ${reason.trim()}` : "Du hast eine Verwarnung erhalten.",
       link: "/account",
     });
+    void logActivity("mod:warn", `Benutzer verwarnt: ${targetUserId}`, { modId: user.id, targetUserId, reason: reason.trim() || null });
     return { success: true };
   } catch (e) {
     void logDebugEvent({ level: "error", scope: "mod", message: "modWarnUser fehlgeschlagen", detail: String(e), context: { targetUserId } });
@@ -456,6 +457,7 @@ export async function modTempBan(
         : `Du wurdest für ${cappedHours}h temporär gesperrt.`,
       link: "/account",
     });
+    void logActivity("mod:tempban", `Temp-Ban gesetzt: ${targetUserId} für ${cappedHours}h`, { modId: user.id, targetUserId, hours: cappedHours, reason: reason.trim() || null });
     return { success: true };
   } catch (e) {
     void logDebugEvent({ level: "error", scope: "mod", message: "modTempBan fehlgeschlagen", detail: String(e), context: { targetUserId, hours } });
@@ -480,6 +482,7 @@ export async function modLiftBan(
     ]);
     if (liftRes.error) return { success: false, error: liftRes.error.message };
     if (actionRes.error) return { success: false, error: actionRes.error.message };
+    void logActivity("mod:liftban", `Ban aufgehoben: ${targetUserId}`, { modId: user.id, targetUserId });
     return { success: true };
   } catch (e) {
     void logDebugEvent({ level: "error", scope: "mod", message: "modLiftBan fehlgeschlagen", detail: String(e), context: { targetUserId } });
@@ -658,6 +661,7 @@ export async function modAddCredits(
         : `${amount > 0 ? "+" : ""}${amount} Credits durch Mod-Aktion.`,
       link: "/account",
     });
+    void logActivity("mod:credits", `Credits ${amount > 0 ? "gutgeschrieben" : "abgezogen"}: ${amount > 0 ? "+" : ""}${amount} CR → ${targetUserId}`, { modId: user.id, targetUserId, amount, newTotal: newCredits, reason: reason.trim() || null });
     return { success: true };
   } catch (e) {
     void logDebugEvent({ level: "error", scope: "mod", message: "modAddCredits fehlgeschlagen", detail: String(e), context: { targetUserId, amount } });

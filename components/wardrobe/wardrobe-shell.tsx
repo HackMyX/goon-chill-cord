@@ -9,7 +9,7 @@ import { CharacterViewer, type EquippedItem } from "@/components/wardrobe/charac
 import { CategoryFilters } from "@/components/wardrobe/category-filters";
 import { WardrobeFilters, type SortKey } from "@/components/wardrobe/wardrobe-filters";
 import { ItemRow } from "@/components/wardrobe/item-row";
-import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
+import { UniversalPreviewModal } from "@/components/ui/universal-preview-modal";
 import { toggleEquip, updateGender } from "@/lib/actions/wardrobe";
 import { getCategoryByDbType, getCategories, ALL_CATEGORY } from "@/lib/wardrobe";
 import { getTotalArmor, getPerkMultiplier, getEquippedDamage, FIST_DAMAGE } from "@/lib/combat";
@@ -562,20 +562,23 @@ export function WardrobeShell({
       </main>
 
       {previewRow && (
-        <ItemPreviewModal
-          item={{
-            id: previewRow.item.id,
-            name: previewRow.item.name,
-            rarity: previewRow.item.rarity,
-            type: previewRow.item.type,
-            damage: previewRow.item.damage,
-            armor: previewRow.item.armor,
-            perk_type: previewRow.item.perk_type,
-            perk_magnitude: previewRow.item.perk_magnitude,
-            shield_hp: previewRow.item.shield_hp,
-            shield_regen_cooldown_sec: previewRow.item.shield_regen_cooldown_sec,
+        <UniversalPreviewModal
+          subject={{
+            kind: "item",
+            item: {
+              id: previewRow.item.id,
+              name: previewRow.item.name,
+              rarity: previewRow.item.rarity,
+              type: previewRow.item.type,
+              damage: previewRow.item.damage,
+              armor: previewRow.item.armor,
+              perk_type: previewRow.item.perk_type,
+              perk_magnitude: previewRow.item.perk_magnitude,
+              shield_hp: previewRow.item.shield_hp,
+              shield_regen_cooldown_sec: previewRow.item.shield_regen_cooldown_sec,
+            },
+            gender,
           }}
-          gender={gender}
           onClose={() => setPreviewId(null)}
         />
       )}

@@ -23,6 +23,7 @@ import { adminListBattlePasses, checkBattlePassMigration } from "@/lib/actions/b
 import { getPlinkoConfig } from "@/lib/actions/plinko";
 import { getXpConfig } from "@/lib/actions/level-system";
 import { getSoundConfig } from "@/lib/actions/sound-config";
+import { getFineConfig } from "@/lib/actions/fine-config";
 import { CASE_GROUPS } from "@/lib/cases";
 import { getCaseGroups } from "@/lib/actions/cases-admin";
 import {
@@ -200,9 +201,10 @@ export default async function AdminPage() {
     getPlinkoConfig(),
   ]);
 
-  const [xpConfig, soundConfig] = await Promise.all([
+  const [xpConfig, soundConfig, fineConfig] = await Promise.all([
     getXpConfig(),
     getSoundConfig(),
+    getFineConfig(),
   ]);
 
   // Load case groups (new dynamic system — graceful if table not yet migrated)
@@ -254,6 +256,7 @@ export default async function AdminPage() {
       plinkoConfig={adminPlinkoConfig}
       xpConfig={xpConfig}
       soundConfig={soundConfig}
+      fineConfig={fineConfig}
     />
     </Suspense>
   );

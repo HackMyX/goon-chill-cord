@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
-import { logDebugEvent } from "@/lib/debug-log-server";
+import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
 import {
   DEFAULT_PET_TYPES,
   PET_TYPE_IDS,

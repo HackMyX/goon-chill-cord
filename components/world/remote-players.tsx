@@ -9,7 +9,6 @@ import { angleDelta } from "@/components/world/player";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { getPublicLoadout, type RemoteLoadout } from "@/lib/actions/world";
 import { StyledUsername } from "@/components/ui/styled-username";
-import { getBadgeStyle } from "@/lib/badges";
 import {
   subscribeToWorldRoster,
   subscribeToWorldTransforms,
@@ -17,12 +16,15 @@ import {
 } from "@/lib/world-realtime";
 import { debugWarn } from "@/lib/debug";
 import type { RemotePlayerRegistry } from "@/components/world/combat-types";
+import { useFineConfig } from "@/lib/fine-config-context";
 
-const POSITION_LERP_RATE = 14;
-const HEADING_TURN_RATE = 12;
-// Dead-reckoning: max look-ahead window (seconds). Keeps prediction
-// from overshooting when a sync is late or the peer stops abruptly.
-const DR_MAX_LOOKAHEAD = 0.12;
+// Tuned for 20 Hz WebSocket broadcasts (~50 ms interval, ~5–20 ms latency).
+// Higher lerp rate snaps faster to dead-reckoned position without overshoot.
+const POSITION_LERP_RATE = 20;
+const HEADING_TURN_RATE = 16;
+// Look-ahead window: at 20 Hz a sync arrives every 50 ms; 150 ms lets us
+// bridge 3 dropped packets before the avatar visibly lags.
+const DR_MAX_LOOKAHEAD = 0.15;
 
 let pvpBloodBurstSeq = 0;
 const REMOTE_ATTACK_SWING_DURATION = 0.38;
@@ -149,12 +151,19 @@ function RemotePlayerAvatar({
   // Smoothly interpolated Y offset for the jump visual (peer Y is never
   // broadcast — only X/Z are — so we fake height from animState alone).
   const remoteYRef = useRef(0);
-  // HP bar: updated from transform broadcasts (10Hz). Using state so the
-  // Html overlay re-renders when HP changes, but only at 10Hz max.
+  // HP bar: updated from transform broadcasts (20Hz). Using state so the
+  // Html overlay re-renders when HP changes, but only at 20Hz max.
   const [displayHp, setDisplayHp] = useState(maxHp);
   const [displayShieldHp, setDisplayShieldHp] = useState(0);
   const [displayShieldMaxHp, setDisplayShieldMaxHp] = useState(0);
   const [isDead, setIsDead] = useState(false);
+  // Brief white flash on the HP bar when this avatar takes a hit — set true
+  // in the pvpDamage listener, auto-cleared 200 ms later.
+  const [hurtFlash, setHurtFlash] = useState(false);
+  const hurtFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fineConfig = useFineConfig();
+  const fineConfigRef = useRef(fineConfig);
+  useEffect(() => { fineConfigRef.current = fineConfig; }, [fineConfig]);
 
   // Registers this avatar into the shared registry Player.tsx's melee scan
   // reads — and into the bargain, gives the scan a live `getPosition()`
@@ -193,6 +202,10 @@ function RemotePlayerAvatar({
         const id = ++pvpBloodBurstSeq;
         setBloodBursts((curr) => [...curr, { id, amount: payload.amount }]);
         setTimeout(() => setBloodBursts((curr) => curr.filter((b) => b.id !== id)), BLOOD_BURST_LIFETIME_MS);
+        // Flash the HP bar white briefly for hit feedback.
+        if (hurtFlashTimer.current) clearTimeout(hurtFlashTimer.current);
+        setHurtFlash(true);
+        hurtFlashTimer.current = setTimeout(() => setHurtFlash(false), 200);
       }
       if (payload.attackerId === userId) {
         // This avatar just landed a PvP hit — play the arm swing so observers
@@ -251,13 +264,14 @@ function RemotePlayerAvatar({
     // sync (capped at DR_MAX_LOOKAHEAD so a late packet can't fling the avatar
     // far off course). When the peer is standing still velocity is zero so the
     // predicted position equals the authoritative one — no drift.
-    const timeSinceSync = Math.min((performance.now() - lastSyncTime.current) / 1000, DR_MAX_LOOKAHEAD);
+    const { mpPositionLerpRate, mpHeadingTurnRate, mpDeadReckoningLookahead, mpAttackSwingDuration: _swingDur } = fineConfigRef.current;
+    const timeSinceSync = Math.min((performance.now() - lastSyncTime.current) / 1000, mpDeadReckoningLookahead);
     const predX = target.current.x + velocity.current.vx * timeSinceSync;
     const predZ = target.current.z + velocity.current.vz * timeSinceSync;
 
-    g.position.x = THREE.MathUtils.lerp(g.position.x, predX, Math.min(1, delta * POSITION_LERP_RATE));
-    g.position.z = THREE.MathUtils.lerp(g.position.z, predZ, Math.min(1, delta * POSITION_LERP_RATE));
-    g.rotation.y += angleDelta(g.rotation.y, target.current.yaw) * Math.min(1, delta * HEADING_TURN_RATE);
+    g.position.x = THREE.MathUtils.lerp(g.position.x, predX, Math.min(1, delta * mpPositionLerpRate));
+    g.position.z = THREE.MathUtils.lerp(g.position.z, predZ, Math.min(1, delta * mpPositionLerpRate));
+    g.rotation.y += angleDelta(g.rotation.y, target.current.yaw) * Math.min(1, delta * mpHeadingTurnRate);
 
     // Cosmetic walk-cycle driven by the peer's own reported moving/sprinting
     // flags (not by locally inferring it from position deltas, which at a
@@ -286,7 +300,7 @@ function RemotePlayerAvatar({
         attackProgressRef.current = 0.001;
       }
       if (attackProgressRef.current > 0) {
-        attackProgressRef.current = Math.min(1, attackProgressRef.current + delta / REMOTE_ATTACK_SWING_DURATION);
+        attackProgressRef.current = Math.min(1, attackProgressRef.current + delta / fineConfigRef.current.mpAttackSwingDuration);
         const a = attackProgressRef.current < 1 ? Math.sin(attackProgressRef.current * Math.PI) : 0;
         if (l.armR.current) l.armR.current.rotation.x = -1.4 * a;
         if (attackProgressRef.current >= 1) attackProgressRef.current = 0;
@@ -316,13 +330,19 @@ function RemotePlayerAvatar({
 
   const hpPct = Math.max(0, Math.min(100, (displayHp / maxHp) * 100));
   const hpColor = hpPct > 60 ? "#4ade80" : hpPct > 30 ? "#facc15" : hpPct > 10 ? "#f97316" : "#ef4444";
-  const hpGlow = hpPct > 60 ? "rgba(74,222,128,0.5)" : hpPct > 30 ? "rgba(250,204,21,0.5)" : hpPct > 10 ? "rgba(249,115,22,0.5)" : "rgba(239,68,68,0.5)";
   const hasShield = displayShieldMaxHp > 0;
   const shieldPct = hasShield ? Math.max(0, Math.min(100, (displayShieldHp / displayShieldMaxHp) * 100)) : 0;
   const shieldBroken = hasShield && displayShieldHp <= 0;
 
   const isAdmin = loadout.role === "admin";
   const isMod = loadout.role === "moderator";
+  // Role accent colour — drives nametag pill border + glow
+  const roleColor = isAdmin ? "#f87171" : isMod ? "#22d3ee" : loadout.verified ? "#c084fc" : null;
+  // Pill border/shadow based on role (or subtle white for everyone else)
+  const pillBorder = roleColor ? `1px solid ${roleColor}44` : "1px solid rgba(255,255,255,0.08)";
+  const pillShadow = roleColor
+    ? `0 0 10px ${roleColor}33, 0 2px 8px rgba(0,0,0,0.55)`
+    : "0 2px 8px rgba(0,0,0,0.5)";
 
   return (
     <group ref={group} position={[0, 0, 0]}>
@@ -338,188 +358,112 @@ function RemotePlayerAvatar({
           <FloatingDamageNumber amount={b.amount} />
         </group>
       ))}
-      {/* HUD nametag + HP bars — transparent game-style overlay */}
+
+      {/* ── Minimal game-style nametag ── */}
       <Html
-        position={[0, 2.85, 0]}
+        position={[0, fineConfig.nametagHeightOffset, 0]}
         center
         occlude={false}
-        distanceFactor={7}
+        distanceFactor={fineConfig.nametagDistanceFactor}
         style={{ pointerEvents: "none", userSelect: "none" }}
       >
-        <style>{`
-          @keyframes nametag-float {
-            0%, 100% { transform: translateY(0px); }
-            50%       { transform: translateY(-2px); }
-          }
-        `}</style>
         <div style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "5px",
-          opacity: isDead ? 0.3 : 1,
-          transition: "opacity 0.4s ease",
+          gap: "3px",
+          opacity: isDead ? 0.2 : 1,
+          transition: "opacity 0.5s ease",
           pointerEvents: "none",
           userSelect: "none",
         }}>
 
-          {/* ── Floating nametag (transparent HUD) ── */}
+          {/* Name pill */}
           <div style={{
             display: "flex",
-            flexDirection: "column",
             alignItems: "center",
-            gap: "3px",
-            animation: "nametag-float 3s ease-in-out infinite",
+            gap: "4px",
+            padding: "2px 7px 2px 6px",
+            background: "rgba(0,0,0,0.52)",
+            backdropFilter: "blur(4px)",
+            borderRadius: "10px",
+            border: pillBorder,
+            boxShadow: pillShadow,
+            whiteSpace: "nowrap",
           }}>
-            {/* Name row: role icon + styled name + online dot */}
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              {isAdmin && (
-                <span style={{ fontSize: "10px", filter: "drop-shadow(0 0 4px rgba(239,68,68,0.9))" }}>⚡</span>
-              )}
-              {!isAdmin && isMod && (
-                <span style={{ fontSize: "10px", filter: "drop-shadow(0 0 4px rgba(34,211,238,0.9))" }}>🛡</span>
-              )}
-              {!isAdmin && !isMod && loadout.verified && (
-                <span style={{ fontSize: "10px", filter: "drop-shadow(0 0 4px rgba(168,85,247,0.9))" }}>✦</span>
-              )}
-              <div style={{
-                fontSize: "12px",
-                fontFamily: "system-ui, sans-serif",
-                fontWeight: 800,
-                whiteSpace: "nowrap",
-                textShadow: "0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5)",
-              }}>
-                <StyledUsername
-                  name={loadout.username}
-                  styleKey={loadout.nameStyleKey}
-                  size="sm"
-                  staticMode={true}
-                />
-              </div>
+            {/* Role indicator dot */}
+            {roleColor && (
               <span style={{
-                width: "5px", height: "5px", borderRadius: "50%",
-                background: "#4ade80",
-                boxShadow: "0 0 4px rgba(74,222,128,0.9)",
-                flexShrink: 0, display: "inline-block",
+                display: "inline-block",
+                width: "5px",
+                height: "5px",
+                borderRadius: "50%",
+                background: roleColor,
+                boxShadow: `0 0 5px ${roleColor}bb`,
+                flexShrink: 0,
+              }} />
+            )}
+            {/* Styled username */}
+            <div style={{ fontSize: "11px", fontWeight: 800, lineHeight: 1 }}>
+              <StyledUsername
+                name={loadout.username}
+                styleKey={loadout.nameStyleKey}
+                size="xs"
+                staticMode={true}
+              />
+            </div>
+            {/* Online dot */}
+            <span style={{
+              display: "inline-block",
+              width: "4px",
+              height: "4px",
+              borderRadius: "50%",
+              background: "#4ade80",
+              boxShadow: "0 0 4px rgba(74,222,128,0.85)",
+              flexShrink: 0,
+            }} />
+          </div>
+
+          {/* HP bar — no text, just a slim coloured fill */}
+          <div style={{
+            width: "72px",
+            height: "3px",
+            borderRadius: "2px",
+            background: "rgba(0,0,0,0.48)",
+            overflow: "hidden",
+          }}>
+            <div style={{
+              width: isDead ? "0%" : `${hpPct}%`,
+              height: "100%",
+              // Brief white flash on hit, then back to health-colour gradient
+              background: hurtFlash
+                ? "rgba(255,255,255,0.95)"
+                : `linear-gradient(90deg, ${hpColor}99, ${hpColor})`,
+              borderRadius: "2px",
+              transition: hurtFlash ? "none" : "width 0.15s ease, background 0.35s ease",
+              boxShadow: hurtFlash ? "0 0 6px #fff9" : `0 0 4px ${hpColor}88`,
+            }} />
+          </div>
+
+          {/* Shield bar — shown only when a shield is equipped */}
+          {hasShield && (
+            <div style={{
+              width: "72px",
+              height: "2px",
+              borderRadius: "1px",
+              background: "rgba(0,0,0,0.4)",
+              overflow: "hidden",
+            }}>
+              <div style={{
+                width: shieldBroken ? "0%" : `${shieldPct}%`,
+                height: "100%",
+                background: "linear-gradient(90deg, rgba(96,165,250,0.75), rgba(147,197,253,0.9))",
+                borderRadius: "1px",
+                transition: "width 0.15s ease",
+                boxShadow: "0 0 3px rgba(96,165,250,0.55)",
               }} />
             </div>
-
-            {/* Role-colored divider line */}
-            <div style={{
-              width: "80px", height: "1px",
-              background: isAdmin
-                ? "#ef4444"
-                : isMod
-                ? "#22d3ee"
-                : loadout.verified
-                ? "#a855f7"
-                : "rgba(255,255,255,0.25)",
-              boxShadow: isAdmin
-                ? "0 0 6px rgba(239,68,68,0.8)"
-                : isMod
-                ? "0 0 6px rgba(34,211,238,0.8)"
-                : loadout.verified
-                ? "0 0 6px rgba(168,85,247,0.7)"
-                : "none",
-            }} />
-
-            {/* Badge dots — up to 3 from loadout.badges */}
-            {loadout.badges.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                {loadout.badges.slice(0, 3).map((key) => {
-                  const s = getBadgeStyle(key);
-                  const icon =
-                    key === "admin" ? "⚡" :
-                    key === "mod" ? "🛡" :
-                    key === "verified" ? "✦" :
-                    key === "premium" ? "★" :
-                    key === "elite" ? "◆" :
-                    key === "og" ? "🔥" :
-                    key === "streaker" ? "🔥" :
-                    key === "vip" ? "💎" :
-                    key === "helper" ? "🤝" :
-                    key === "ns_ultra" ? "👑" :
-                    key === "grinder" ? "⚔" :
-                    key === "season_vet" ? "🏆" :
-                    "•";
-                  return (
-                    <span key={key} style={{
-                      display: "inline-flex", alignItems: "center", justifyContent: "center",
-                      width: "16px", height: "16px", borderRadius: "50%",
-                      background: s.bg,
-                      border: `1px solid ${s.border}`,
-                      boxShadow: `0 0 5px ${s.glow}`,
-                      color: s.text,
-                      fontSize: "9px",
-                    }}>{icon}</span>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* ── HP + Shield bars (below the float, not animated) ── */}
-          <div style={{
-            display: "flex", flexDirection: "column", gap: "2px",
-            width: "88px",
-          }}>
-            {/* Shield bar */}
-            {hasShield && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
-                <div style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  fontSize: "7px", fontWeight: 700, fontFamily: "monospace",
-                  color: shieldBroken ? "rgba(100,116,139,0.7)" : "rgba(96,165,250,0.9)",
-                }}>
-                  <span>🛡</span>
-                  <span>{shieldBroken ? "LÄDT…" : `${displayShieldHp}/${displayShieldMaxHp}`}</span>
-                </div>
-                <div style={{
-                  width: "100%", height: "5px", borderRadius: "3px",
-                  background: "rgba(0,0,0,0.55)",
-                  overflow: "hidden",
-                  boxShadow: shieldBroken ? "none" : "0 0 0 1px rgba(96,165,250,0.25)",
-                }}>
-                  <div style={{
-                    width: shieldBroken ? "0%" : `${shieldPct}%`,
-                    height: "100%",
-                    background: `linear-gradient(90deg, rgba(96,165,250,0.9), rgba(147,197,253,1))`,
-                    borderRadius: "3px",
-                    transition: "width 0.12s ease",
-                    boxShadow: shieldBroken ? "none" : "0 0 6px rgba(96,165,250,0.6)",
-                  }} />
-                </div>
-              </div>
-            )}
-            {/* HP bar */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                fontSize: "7px", fontWeight: 700, fontFamily: "monospace",
-                color: isDead ? "rgba(239,68,68,0.7)" : hpColor,
-              }}>
-                <span>❤</span>
-                <span>{isDead ? "☠ TOT" : `${displayHp}/${maxHp}`}</span>
-              </div>
-              <div style={{
-                width: "100%", height: "6px", borderRadius: "3px",
-                background: "rgba(0,0,0,0.55)",
-                overflow: "hidden",
-                boxShadow: `0 0 0 1px rgba(255,255,255,0.07)`,
-              }}>
-                <div style={{
-                  width: isDead ? "0%" : `${hpPct}%`,
-                  height: "100%",
-                  background: isDead
-                    ? "#ef4444"
-                    : `linear-gradient(90deg, ${hpColor}cc, ${hpColor})`,
-                  borderRadius: "3px",
-                  transition: "width 0.12s ease, background 0.3s ease",
-                  boxShadow: isDead ? "none" : `0 0 8px ${hpGlow}`,
-                }} />
-              </div>
-            </div>
-          </div>
+          )}
 
         </div>
       </Html>

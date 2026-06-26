@@ -13,7 +13,7 @@ import {
   shopDateKey,
   type ShopSettings,
 } from "@/lib/shop";
-import { logDebugEvent } from "@/lib/debug-log-server";
+import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
 import type { Rarity } from "@/lib/cases";
 
 function logServerError(scope: string, message: string, detail?: string) {
@@ -323,10 +323,12 @@ export async function updateShopSettings(
   });
 
   if (error) {
+    void logDebugEvent({ level: "error", scope: "admin:shop", message: "Shop-Settings Speichern fehlgeschlagen", detail: error.message, context: { userId: user.id } });
     logServerError("Shop", "updateShopSettings failed", error.message);
     return { success: false, error: "Speichern fehlgeschlagen." };
   }
 
+  void logActivity("admin:shop", `Shop-Settings gespeichert (${input.autoGenerateItemCount} Items/Tag, AutoGen: ${input.autoGenerateEnabled ? "an" : "aus"})`, { userId: user.id });
   revalidatePath("/admin");
   revalidatePath("/shop");
   return { success: true };
@@ -891,10 +893,12 @@ export async function addManualShopListing(input: {
   });
 
   if (error) {
+    void logDebugEvent({ level: "error", scope: "admin:shop", message: "Shop-Listing Hinzufügen fehlgeschlagen", detail: error.message, context: { itemId: input.itemId, dateKey } });
     logServerError("Shop", "addManualShopListing failed", error.message);
     return { success: false, error: "Hinzufügen fehlgeschlagen." };
   }
 
+  void logActivity("admin:shop", `Manuelles Shop-Listing hinzugefügt: Item ${input.itemId} für ${input.priceCr} CR am ${dateKey}`, { itemId: input.itemId, priceCr: input.priceCr, dateKey });
   revalidatePath("/admin");
   revalidatePath("/shop");
   return { success: true };
@@ -950,6 +954,7 @@ export async function regenerateAutoShopListings(
   await admin.from("shop_listings").delete().eq("shop_date", dateKey).eq("source", "auto");
   await ensureShopGenerated(dateKey);
 
+  void logActivity("admin:shop", `Auto-Shop-Listings neu generiert für ${dateKey}`, { dateKey, dateOffsetDays });
   revalidatePath("/admin");
   revalidatePath("/shop");
   return { success: true };

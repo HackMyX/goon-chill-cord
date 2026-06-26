@@ -6,6 +6,7 @@ import { Crown, Trophy, Medal, Coins, Flame, Zap } from "lucide-react";
 import { useRealtimeAllProfiles } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { BadgePill } from "@/components/ui/badge-pill";
 
 export interface LeaderboardEntry {
   id: string;
@@ -13,6 +14,7 @@ export interface LeaderboardEntry {
   credits: number;
   streak_days?: number;
   active_name_style_key?: string;
+  badges?: string[];
 }
 
 export interface StreakEntry {
@@ -20,6 +22,7 @@ export interface StreakEntry {
   username: string;
   streak_days: number;
   active_name_style_key?: string;
+  badges?: string[];
 }
 
 interface LeaderboardProps {
@@ -266,6 +269,13 @@ export function Leaderboard({
                               size={isFirst ? "lg" : "md"}
                             />
                           </span>
+                          {entry.badges && entry.badges.length > 0 && (
+                            <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+                              {entry.badges.slice(0, 2).map((bk) => (
+                                <BadgePill key={bk} badgeKey={bk} />
+                              ))}
+                            </div>
+                          )}
                           {isCredits ? (
                             <span className={`text-xs font-bold ${textClass} tabular-nums`}>
                               {(entry as LeaderboardEntry).credits.toLocaleString("de-DE")}
@@ -334,15 +344,20 @@ export function Leaderboard({
                         )}
                       </div>
 
-                      {/* Name */}
-                      <span className="flex-1 truncate text-sm font-semibold text-zinc-100">
-                        <StyledUsername
-                          name={entry.username}
-                          styleKey={entry.active_name_style_key}
-                          userId={entry.id}
-                          size="sm"
-                        />
-                      </span>
+                      {/* Name + badges */}
+                      <div className="flex flex-1 min-w-0 items-center gap-1.5 flex-wrap">
+                        <span className="truncate text-sm font-semibold text-zinc-100">
+                          <StyledUsername
+                            name={entry.username}
+                            styleKey={entry.active_name_style_key}
+                            userId={entry.id}
+                            size="sm"
+                          />
+                        </span>
+                        {entry.badges && entry.badges.slice(0, 2).map((bk) => (
+                          <BadgePill key={bk} badgeKey={bk} />
+                        ))}
+                      </div>
 
                       {/* Value */}
                       {isCredits ? (

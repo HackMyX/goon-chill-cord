@@ -24,7 +24,10 @@ import {
   Paperclip,
   NotepadText,
   Search,
+  PauseCircle,
+  Maximize2,
 } from "lucide-react";
+import { TicketDetailModal } from "@/components/admin/ticket-detail-modal";
 import {
   getAdminTickets,
   getTicketDetail,
@@ -78,7 +81,7 @@ const STATUS_STYLE: Record<TicketStatus, string> = {
 const STATUS_ICON: Record<TicketStatus, typeof MessageCircle> = {
   open: MessageCircle,
   in_progress: Clock,
-  paused: Clock,
+  paused: PauseCircle,
   resolved: CheckCircle2,
   closed: XCircle,
 };
@@ -150,6 +153,7 @@ function TicketRow({
   onSelect,
   autoExpand = false,
   onAutoExpanded,
+  onOpenModal,
 }: {
   ticket: Ticket;
   onUpdated: () => void;
@@ -157,6 +161,7 @@ function TicketRow({
   onSelect: (id: string, value: boolean) => void;
   autoExpand?: boolean;
   onAutoExpanded?: () => void;
+  onOpenModal: (ticket: Ticket) => void;
 }) {
   const [expanded, setExpanded] = useState(autoExpand);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -318,9 +323,10 @@ function TicketRow({
           {selected ? <CheckSquare className="h-4 w-4 text-purple-400" /> : <Square className="h-4 w-4" />}
         </button>
 
-        {/* Main row button */}
+        {/* Main row button — single click = expand inline, double click = modal */}
         <button
           onClick={handleExpand}
+          onDoubleClick={(e) => { e.stopPropagation(); onOpenModal(ticket); }}
           className="flex flex-1 min-w-0 items-center gap-3 py-3 pr-3 text-left hover:bg-white/[0.03] transition-colors"
         >
           <StatusBadge status={ticket.status} />
@@ -350,7 +356,19 @@ function TicketRow({
             </p>
           </div>
 
-          {/* Delete button — visible for all tickets */}
+          {/* Vollbild-Modus */}
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); onOpenModal(ticket); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onOpenModal(ticket); } }}
+            title="Vollbild-Bearbeitung (Doppelklick)"
+            className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-zinc-500 transition-colors hover:border-purple-500/40 hover:text-purple-400"
+          >
+            <Maximize2 className="h-3 w-3" />
+          </span>
+
+          {/* Delete button */}
           <span
             role="button"
             tabIndex={0}
@@ -771,9 +789,10 @@ export function TicketsTab({
   const [dateBefore, setDateBefore] = useState("");
   const [dateStatuses, setDateStatuses] = useState<TicketStatus[]>([]);
   const [dateDeleteConfirm, setDateDeleteConfirm] = useState(false);
-  // auto-open a specific ticket from deep-link
+  // auto-open a specific ticket from deep-link / notification click
   const [autoOpenId, setAutoOpenId] = useState<string | null>(openTicketId ?? null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [modalTicket, setModalTicket] = useState<Ticket | null>(null);
   const sound = useSoundManager();
 
   const load = useCallback(async () => {
@@ -803,12 +822,13 @@ export function TicketsTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When a deep-link ticket loads, switch filter to "all" so it's visible
+  // When a notification-linked ticket is found, open it in the modal
   useEffect(() => {
     if (autoOpenId && tickets.length > 0) {
       const target = tickets.find((t) => t.id === autoOpenId);
       if (target) {
-        setFilter("all");
+        setAutoOpenId(null);
+        setModalTicket(target);
         onTicketOpened?.();
       }
     }
@@ -943,7 +963,7 @@ export function TicketsTab({
 
       {/* Status filter bar */}
       <div className="flex flex-wrap items-center gap-2">
-        {(["all", "open", "in_progress", "resolved", "closed", "escalated"] as FilterStatus[]).map((s) => (
+        {(["all", "open", "in_progress", "paused", "resolved", "closed", "escalated"] as FilterStatus[]).map((s) => (
           <button
             key={s}
             onMouseEnter={sound.hover}
@@ -1129,11 +1149,19 @@ export function TicketsTab({
               onUpdated={load}
               selected={selected.has(ticket.id)}
               onSelect={toggleSelect}
-              autoExpand={ticket.id === autoOpenId}
-              onAutoExpanded={() => setAutoOpenId(null)}
+              autoExpand={false}
+              onOpenModal={setModalTicket}
             />
           ))}
         </div>
+      )}
+
+      {modalTicket && (
+        <TicketDetailModal
+          ticket={modalTicket}
+          onClose={() => setModalTicket(null)}
+          onUpdated={load}
+        />
       )}
 
       {loadError && !loading && (

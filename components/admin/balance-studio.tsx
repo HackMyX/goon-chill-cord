@@ -662,8 +662,8 @@ function WorldSection({ data, onChange }: {
         killStreakMultiplierPerKill: data.killStreakMultiplierPerKill,
         killStreakMaxMultiplier: data.killStreakMaxMultiplier,
         monsters: data.monsters.map((m) => ({
-          id: m.id, credits_reward: m.credits_reward, hp: m.hp,
-          atk_dmg: m.atk_dmg, move_speed: m.move_speed,
+          id: m.id, credits_reward: m.credits_reward, health: m.health,
+          attack_damage: m.attack_damage, move_speed: m.move_speed,
           reward_min: m.reward_min, reward_max: m.reward_max,
           spawn_weight: m.spawn_weight,
         })),
@@ -730,7 +730,7 @@ function WorldSection({ data, onChange }: {
               {data.monsters.map((m) => (
                 <tr key={m.id} className="border-t border-white/5">
                   <td className="py-1.5 pr-2 font-semibold text-purple-300">{m.name}</td>
-                  {(["hp", "atk_dmg", "move_speed", "reward_min", "reward_max", "credits_reward", "spawn_weight"] as (keyof BalanceMonsterRow)[]).map((field) => (
+                  {(["health", "attack_damage", "move_speed", "reward_min", "reward_max", "credits_reward", "spawn_weight"] as (keyof BalanceMonsterRow)[]).map((field) => (
                     <td key={field} className="py-1.5 pr-2">
                       <input
                         type="number"

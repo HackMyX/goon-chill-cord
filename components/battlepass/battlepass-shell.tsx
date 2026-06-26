@@ -4,7 +4,7 @@ import { useState, useTransition, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Crown, Zap, Lock, CheckCircle2, Star, Calendar, Award, Layers, Gift,
+  Crown, Eye, Zap, Lock, CheckCircle2, Star, Calendar, Award, Layers, Gift,
   Sparkles, ChevronLeft, ChevronRight, Clock, Coins, TrendingUp, Shield,
   Package, Palette, Trophy, ChevronDown, ChevronUp,
   Target,
@@ -15,10 +15,52 @@ import { getBpQuestsWithProgress } from "@/lib/actions/bp-quests";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { useSoundManager } from "@/lib/sound-manager";
 import { ItemStandaloneCanvas, type ItemForPreview } from "@/components/shop/shop-character-view";
+import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
+import { getBadgeStyle } from "@/lib/badges";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 type TierState = "claimed" | "available" | "locked";
+
+function tierToPreviewSubject(tier: BattlePassTier): PreviewSubject | null {
+  switch (tier.rewardType) {
+    case "item":
+      if (!tier.rewardItemName || !tier.rewardItemType) return null;
+      return {
+        kind: "item",
+        item: {
+          id: tier.rewardItemId ?? tier.id,
+          name: tier.rewardItemName,
+          rarity: tier.rewardItemRarity ?? "normal",
+          type: tier.rewardItemType,
+        },
+      };
+    case "random_item":
+      return { kind: "random_item", rarity: tier.rewardItemRarity ?? undefined };
+    case "badge":
+      if (!tier.rewardBadgeKey) return null;
+      return { kind: "badge", badgeKey: tier.rewardBadgeKey, badgeText: tier.rewardBadgeText ?? undefined };
+    case "name_style":
+      if (!tier.rewardNameStyleKey) return null;
+      return { kind: "name_style", styleKey: tier.rewardNameStyleKey };
+    case "ability":
+      if (!tier.rewardAbilityKey) return null;
+      return {
+        kind: "ability",
+        abilityKey: tier.rewardAbilityKey,
+        name: tier.rewardAbilityName ?? tier.name,
+      };
+    case "xp_boost":
+      return { kind: "xp_boost", days: tier.rewardXpBoost ?? 1 };
+    case "credits":
+      return {
+        kind: "credits",
+        amount: (tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1),
+      };
+    default:
+      return null;
+  }
+}
 
 function getTierState(tier: BattlePassTier, userStatus: UserBpStatus | null, progressDays: number): TierState {
   if (!userStatus) return "locked";
@@ -218,7 +260,8 @@ function RewardPreviewCard({ tier, accent, glow }: { tier: BattlePassTier; accen
   }
 
   if (tier.rewardType === "badge") {
-    const badgeColor = "#f59e0b";
+    const badgeStyle = tier.rewardBadgeKey ? getBadgeStyle(tier.rewardBadgeKey) : null;
+    const badgeColor = badgeStyle?.glow ?? "#f59e0b";
     return (
       <div className="flex flex-col items-center gap-4">
         <motion.div
@@ -240,8 +283,12 @@ function RewardPreviewCard({ tier, accent, glow }: { tier: BattlePassTier; accen
         </motion.div>
         {tier.rewardBadgeText && (
           <span
-            className="rounded-full border px-4 py-1.5 text-xs font-black"
-            style={{ borderColor: `${badgeColor}40`, color: badgeColor, background: `${badgeColor}15`, boxShadow: `0 0 16px ${badgeColor}30` }}
+            className="rounded-xl border px-4 py-1.5 text-xs font-black"
+            style={
+              badgeStyle
+                ? { background: badgeStyle.bg, color: badgeStyle.text, border: `1px solid ${badgeStyle.border}`, boxShadow: `0 0 16px ${badgeColor}40` }
+                : { borderColor: `${badgeColor}40`, color: badgeColor, background: `${badgeColor}15` }
+            }
           >
             {tier.rewardBadgeText}
           </span>
@@ -793,6 +840,7 @@ function HorizontalTrack({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
+  const [fullPreviewSubject, setFullPreviewSubject] = useState<PreviewSubject | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
 
@@ -830,6 +878,7 @@ function HorizontalTrack({
   }, [tiers, userStatus, progressDays]);
 
   const selectedTierData = selectedTier ? tiers.find((t) => t.id === selectedTier) : null;
+  const selectedSubject = selectedTierData ? tierToPreviewSubject(selectedTierData) : null;
 
   return (
     <div className="space-y-3">
@@ -966,6 +1015,14 @@ function HorizontalTrack({
                         <Zap className="h-3 w-3" />{selectedTierData.bpXpRequired.toLocaleString("de-DE")} BP-XP
                       </span>
                     )}
+                    {selectedSubject && (
+                      <button
+                        onClick={() => setFullPreviewSubject(selectedSubject)}
+                        className="flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-[10px] font-black text-purple-300 transition-colors hover:bg-purple-500/20"
+                      >
+                        <Eye className="h-3 w-3" />Vollbild-Vorschau
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -973,6 +1030,13 @@ function HorizontalTrack({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {fullPreviewSubject && (
+        <UniversalPreviewModal
+          subject={fullPreviewSubject}
+          onClose={() => setFullPreviewSubject(null)}
+        />
+      )}
     </div>
   );
 }

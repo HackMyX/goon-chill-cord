@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 import { DEFAULT_SOUND_CONFIG, type SoundConfig } from "@/lib/sound-config";
 
 export async function getSoundConfig(): Promise<SoundConfig> {
@@ -40,6 +41,10 @@ export async function updateSoundConfig(
     updated_at: new Date().toISOString(),
   });
 
-  if (error) return { success: false, error: error.message };
+  if (error) {
+    void logDebugEvent({ level: "error", scope: "admin:sound-config", message: "Sound-Config speichern fehlgeschlagen", detail: error.message });
+    return { success: false, error: error.message };
+  }
+  void logActivity("admin:sound-config", `Sound-Config gespeichert (${Object.keys(config).length} Events)`, { userId: user.id });
   return { success: true };
 }

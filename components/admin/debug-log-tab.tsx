@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Bug, AlertTriangle, Info, RefreshCw, Trash2,
   ChevronDown, ChevronUp, Loader2, Calendar, FileDown,
-  CheckCircle2, XCircle, AlertCircle, Activity, FileText,
+  CheckCircle2, XCircle, AlertCircle, Activity, FileText, Search, X,
 } from "lucide-react";
 import {
   getDebugLogs, deleteAllDebugLogs, deleteDebugLogsInRange, deleteDebugLog, resolveUserIdsToNames,
@@ -375,6 +375,8 @@ export function DebugLogTab() {
   const [uuidMap, setUuidMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<LevelFilter>("all");
+  const [scopeFilter, setScopeFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
   const [rangeOpen, setRangeOpen] = useState(false);
@@ -382,6 +384,8 @@ export function DebugLogTab() {
   const [toDate, setToDate] = useState("");
   const [rangeDeleting, setRangeDeleting] = useState(false);
   const [rangeError, setRangeError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sound = useSoundManager();
 
   const load = useCallback(async () => {
@@ -389,7 +393,6 @@ export function DebugLogTab() {
     const result = await getDebugLogs();
     setLogs(result);
     setLoading(false);
-    // Extract all UUIDs from messages, detail, and context; resolve to usernames
     const allText = result.map((e) =>
       `${e.message} ${e.detail ?? ""} ${e.context ? JSON.stringify(e.context) : ""}`
     ).join(" ");
@@ -401,7 +404,28 @@ export function DebugLogTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  const displayed = filter === "all" ? logs : logs.filter((l) => l.level === filter);
+  useEffect(() => {
+    if (autoRefresh) {
+      autoRefreshRef.current = setInterval(() => { load(); }, 10_000);
+    } else {
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    }
+    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current); };
+  }, [autoRefresh, load]);
+
+  // Unique scopes for the scope dropdown
+  const allScopes = Array.from(new Set(logs.map((l) => l.scope))).sort();
+
+  const displayed = logs.filter((l) => {
+    if (filter !== "all" && l.level !== filter) return false;
+    if (scopeFilter !== "all" && l.scope !== scopeFilter) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const hay = `${l.message} ${l.detail ?? ""} ${l.scope}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
   const countFor = (l: LevelFilter) => (l === "all" ? logs.length : logs.filter((x) => x.level === l).length);
 
   async function handleDeleteAll() {
@@ -445,13 +469,31 @@ export function DebugLogTab() {
       <SystemHealthPanel />
 
       <p className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] px-4 py-3 text-xs text-zinc-400">
-        Erfasst automatisch jeden Server-Fehler (Server Components, Route Handler, Server Actions —
-        über instrumentation.ts) sowie Client-Fehler (app/error.tsx, app/global-error.tsx) und
-        gezielt geloggte Probleme aus den Trading-/Auktions-/Shop-Aktionen. Nichts davon muss manuell
-        instrumentiert werden, damit es hier ankommt.
+        Erfasst automatisch: Server-Fehler (instrumentation.ts), Client-Fehler (error.tsx), Admin-Saves
+        (admin:site-config, admin:streak-config, admin:shop, admin:monsters, admin:patchnotes,
+        admin:fine-config, admin:sound-config, admin:preview-config), Badge-Aktionen, Mod-Aktionen,
+        Auth-Events (auth:login) und alle Battle-Pass-/Auktions-Operationen. Auto-Refresh: alle 10 Sek.
       </p>
 
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+        <input
+          type="text"
+          placeholder="Suche in Nachricht / Detail / Scope…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full rounded-lg border border-white/10 bg-black/30 py-1.5 pl-8 pr-8 text-xs text-zinc-100 outline-none focus:border-purple-400/60 placeholder:text-zinc-600"
+        />
+        {search && (
+          <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
+        {/* Level filter */}
         {(["all", "error", "warn", "info"] as LevelFilter[]).map((l) => (
           <button
             key={l}
@@ -467,6 +509,19 @@ export function DebugLogTab() {
             <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px]">{countFor(l)}</span>
           </button>
         ))}
+        {/* Scope filter */}
+        {allScopes.length > 0 && (
+          <select
+            value={scopeFilter}
+            onChange={(e) => { sound.click(); setScopeFilter(e.target.value); }}
+            className="rounded-lg border border-white/10 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 outline-none focus:border-purple-400/60"
+          >
+            <option value="all">Alle Scopes ({allScopes.length})</option>
+            {allScopes.map((s) => (
+              <option key={s} value={s}>{s} ({logs.filter((l) => l.scope === s).length})</option>
+            ))}
+          </select>
+        )}
 
         <div className="ml-auto flex items-center gap-1.5">
           {displayed.length > 0 && (
@@ -480,6 +535,19 @@ export function DebugLogTab() {
               Als PDF
             </button>
           )}
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => { sound.click(); setAutoRefresh((a) => !a); }}
+            title={autoRefresh ? "Auto-Refresh deaktivieren" : "Auto-Refresh alle 10 Sek. aktivieren"}
+            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
+              autoRefresh
+                ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
+                : "border-white/10 text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-400"
+            }`}
+          >
+            <Activity className="h-3 w-3" />
+            {autoRefresh ? "Live" : "Auto"}
+          </button>
           <button
             onMouseEnter={sound.hover}
             onClick={() => { sound.click(); load(); }}

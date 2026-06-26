@@ -4,6 +4,7 @@ import { revalidatePath, unstable_noStore } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { logActivity } from "@/lib/debug-log-server";
 import type { PatchNote, PatchNoteType, PatchNoteStatus, PatchNoteSection } from "@/lib/patchnotes";
 
 async function requireAdmin() {
@@ -129,6 +130,7 @@ export async function createPatchNote(input: {
     .select("id")
     .single();
   if (error) return { success: false, error: error.message };
+  void logActivity("admin:patchnotes", `Patchnote erstellt: "${input.version} — ${input.title}"`, { userId: user.id, noteId: data.id, version: input.version });
   revalidatePath("/patchnotes");
   return { success: true, id: data.id };
 }
@@ -177,6 +179,7 @@ export async function publishPatchNote(
     updated_at: new Date().toISOString(),
   }).eq("id", id);
   if (error) return { success: false, error: error.message };
+  void logActivity("admin:patchnotes", `Patchnote veröffentlicht: ID ${id}`, { userId: user.id, noteId: id });
   revalidatePath("/patchnotes");
   revalidatePath("/", "layout");
   return { success: true };
@@ -203,6 +206,7 @@ export async function deletePatchNote(id: string): Promise<{ success: boolean; e
   const admin = createAdminClient();
   const { error } = await admin.from("patch_notes").delete().eq("id", id);
   if (error) return { success: false, error: error.message };
+  void logActivity("admin:patchnotes", `Patchnote gelöscht: ID ${id}`, { userId: user.id, noteId: id });
   revalidatePath("/patchnotes");
   return { success: true };
 }

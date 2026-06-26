@@ -12,7 +12,7 @@ import { Canvas } from "@react-three/fiber";
 import { View } from "@react-three/drei";
 import { TopBar } from "@/components/layout/top-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
-import { ItemPreviewModal } from "@/components/wardrobe/item-preview-modal";
+import { UniversalPreviewModal } from "@/components/ui/universal-preview-modal";
 import { ShopCharacterView, type ItemForPreview } from "@/components/shop/shop-character-view";
 import { useSoundManager } from "@/lib/sound-manager";
 import { ItemStatBadges } from "@/components/items/item-stat-badges";
@@ -1000,11 +1000,12 @@ export function ShopShell({
         <View.Port />
       </Canvas>
 
-      {/* Preview modal — z-[200], above the shared Canvas */}
-      <AnimatePresence>
-        {previewListing && (
-          <ItemPreviewModal
-            item={{
+      {/* Preview modal — z-[300], universal preview engine */}
+      {previewListing && (
+        <UniversalPreviewModal
+          subject={{
+            kind: "item",
+            item: {
               id: previewListing.itemId,
               name: previewListing.itemName,
               rarity: previewListing.itemRarity,
@@ -1015,12 +1016,12 @@ export function ShopShell({
               perk_magnitude: previewListing.itemPerkMagnitude,
               shield_hp: previewListing.itemShieldHp,
               shield_regen_cooldown_sec: previewListing.itemShieldCooldown,
-            }}
-            gender={gender}
-            onClose={() => setPreviewListing(null)}
-          />
-        )}
-      </AnimatePresence>
+            },
+            gender,
+          }}
+          onClose={() => setPreviewListing(null)}
+        />
+      )}
     </div>
   );
 }

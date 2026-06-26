@@ -13,6 +13,8 @@ import { FpRegistrar } from "@/components/auth/fp-registrar";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getPetConfigs } from "@/lib/actions/pets";
 import { getSoundConfig } from "@/lib/actions/sound-config";
+import { getFineConfig } from "@/lib/actions/fine-config";
+import { FineConfigProvider } from "@/lib/fine-config-context";
 import { SoundConfigLoader } from "@/components/layout/sound-config-loader";
 import { LevelUpPopup } from "@/components/layout/level-up-popup";
 import { XpGainToast } from "@/components/layout/xp-gain-toast";
@@ -61,7 +63,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [siteConfig, petConfigs, soundConfig] = await Promise.all([getSiteConfig(), getPetConfigs(), getSoundConfig()]);
+  const [siteConfig, petConfigs, soundConfig, fineConfig] = await Promise.all([getSiteConfig(), getPetConfigs(), getSoundConfig(), getFineConfig()]);
   return (
     <html
       lang="de"
@@ -73,13 +75,15 @@ export default async function RootLayout({
         <AmbientGlow />
         <PresenceHeartbeat />
         <FpRegistrar />
-        <SiteConfigProvider config={siteConfig}>
-          <PetConfigProvider initialConfigs={petConfigs}>
-            <ConfirmDialogProvider>
-              <ProfilePopupProvider>{children}</ProfilePopupProvider>
-            </ConfirmDialogProvider>
-          </PetConfigProvider>
-        </SiteConfigProvider>
+        <FineConfigProvider initial={fineConfig}>
+          <SiteConfigProvider config={siteConfig}>
+            <PetConfigProvider initialConfigs={petConfigs}>
+              <ConfirmDialogProvider>
+                <ProfilePopupProvider>{children}</ProfilePopupProvider>
+              </ConfirmDialogProvider>
+            </PetConfigProvider>
+          </SiteConfigProvider>
+        </FineConfigProvider>
         <SoundConfigLoader config={soundConfig} />
         <LevelUpPopup />
         <XpGainToast />

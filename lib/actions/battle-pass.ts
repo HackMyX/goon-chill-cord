@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
-import { logDebugEvent } from "@/lib/debug-log-server";
+import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
 import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize, BpAutoFillConfig } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
 
@@ -299,6 +299,7 @@ export async function purchaseBattlePass(passId: string): Promise<{ success: boo
     });
   } catch { /* ignore */ }
 
+  void logActivity("battlepass:purchase", `Battle Pass gekauft: ${passId}`, { userId: user.id, passId, cost: passRow.price_cr });
   revalidatePath("/battlepass");
   revalidatePath("/");
   return { success: true };
@@ -550,6 +551,7 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
     });
   } catch { /* ignore */ }
 
+  void logActivity("battlepass:claim", `BP-Tier eingelöst: ${tierId} (${rewardType})`, { userId: user.id, tierId, passId, tierNum, rewardType, reward: rewardMsg });
   revalidatePath("/battlepass");
   revalidatePath("/");
   return { success: true, reward: rewardMsg, rewardType };

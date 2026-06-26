@@ -5,8 +5,9 @@ import { Send, Loader2, MessageSquare, Crown, Shield, Zap, Trash2 } from "lucide
 import { createClient } from "@/lib/supabase/client";
 import { getGlobalChatMessages, sendGlobalChatMessage, clearGlobalChat, type GlobalChatMessage } from "@/lib/actions/global-chat";
 import { useSoundManager } from "@/lib/sound-manager";
-import { getBadgeStyle } from "@/lib/badges";
+import { BadgePill } from "@/components/ui/badge-pill";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { useFineConfig } from "@/lib/fine-config-context";
 
 const ROLE_BADGE: Record<string, { label: string; color: string } | undefined> = {
   admin:     { label: "Admin", color: "text-amber-300" },
@@ -47,35 +48,6 @@ function pickDisplayBadge(badges: string[], role: string): string | null {
   return null;
 }
 
-function ChatBadgePill({ badgeKey }: { badgeKey: string }) {
-  const style = getBadgeStyle(badgeKey);
-  // Map badge key to a short display label
-  const BADGE_LABELS: Record<string, string> = {
-    admin:    "Admin",
-    mod:      "Mod",
-    elite:    "Elite",
-    premium:  "Premium",
-    vip:      "VIP",
-    og:       "OG",
-    verified: "Verified",
-    streaker: "Streaker",
-    helper:   "Helper",
-  };
-  const label = BADGE_LABELS[badgeKey] ?? badgeKey;
-
-  return (
-    <span
-      className="inline-flex items-center rounded px-1 py-px text-[8px] font-bold leading-none shrink-0"
-      style={{
-        background: style.bg,
-        color: style.text,
-        border: `1px solid ${style.border}`,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
@@ -120,6 +92,7 @@ interface GlobalChatPanelProps {
 }
 
 export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPanelProps) {
+  const fineConfig = useFineConfig();
   const [messages, setMessages] = useState<GlobalChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
@@ -164,13 +137,13 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
   }, []);
 
   useEffect(() => {
-    getGlobalChatMessages(60).then((msgs) => {
+    getGlobalChatMessages(fineConfig.chatMaxHistory).then((msgs) => {
       setMessages(msgs);
       if (msgs.length > 0) latestIdRef.current = msgs[msgs.length - 1].id;
       setLoading(false);
       setTimeout(scrollToBottom, 50);
     });
-  }, [scrollToBottom]);
+  }, [scrollToBottom]); // intentionally excludes chatMaxHistory — re-running would reset the chat
 
   const appendMessage = useCallback((row: Record<string, unknown>) => {
     const id = row.id as string;
@@ -222,7 +195,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
         "postgres_changes",
         { event: "DELETE", schema: "public", table: "global_chat_messages" },
         () => {
-          getGlobalChatMessages(60).then((msgs) => {
+          getGlobalChatMessages(fineConfig.chatMaxHistory).then((msgs) => {
             setMessages(msgs);
             if (msgs.length > 0) latestIdRef.current = msgs[msgs.length - 1].id;
           });
@@ -235,7 +208,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
   // Polling fallback
   useEffect(() => {
     const poll = setInterval(async () => {
-      const fresh = await getGlobalChatMessages(60);
+      const fresh = await getGlobalChatMessages(fineConfig.chatMaxHistory);
       if (fresh.length === 0) {
         setMessages([]);
         return;
@@ -258,9 +231,9 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
         return [...withoutOptimistic, ...added];
       });
       setTimeout(scrollToBottom, 30);
-    }, 8000);
+    }, fineConfig.chatPollIntervalMs);
     return () => clearInterval(poll);
-  }, [scrollToBottom]);
+  }, [scrollToBottom, fineConfig.chatPollIntervalMs, fineConfig.chatMaxHistory]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -433,7 +406,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
                     )}
                   </span>
                   {displayBadge && (
-                    <ChatBadgePill badgeKey={displayBadge} />
+                    <BadgePill badgeKey={displayBadge} />
                   )}
                   <span className="text-[9px] text-zinc-600 ml-auto shrink-0">
                     {isOptimistic ? "Sendet…" : formatTime(msg.createdAt)}
@@ -454,7 +427,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            maxLength={500}
+            maxLength={fineConfig.chatMaxMessageLength}
             placeholder="Nachricht an alle…"
             className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-purple-400/60"
           />

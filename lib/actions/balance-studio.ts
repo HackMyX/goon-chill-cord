@@ -20,8 +20,8 @@ export interface BalanceItemStats {
 export interface BalanceMonsterRow {
   id: string;
   name: string;
-  hp: number;
-  atk_dmg: number;
+  health: number;
+  attack_damage: number;
   move_speed: number;
   credits_reward: number;
   reward_min: number;
@@ -144,7 +144,7 @@ export async function getBalanceStudioData(): Promise<BalanceStudioData | null> 
     admin.from("world_config").select("max_alive_monsters,spawn_interval_min_sec,spawn_interval_max_sec,alive_cap_max,alive_cap_per_extra_player").eq("id", "default").single(),
     admin.from("character_config").select("attack_cooldown,hp_regen_per_sec,hp_regen_delay_after_hit_sec,pvp_damage_multiplier,perk_multiplier_cap,fist_damage,move_speed,sprint_multiplier,sprint_damage_multiplier").eq("id", "default").single(),
     admin.from("kill_streak_config").select("multiplier_per_kill,max_multiplier").eq("id", "default").single(),
-    admin.from("monster_types").select("id,name,hp,atk_dmg,move_speed,credits_reward,reward_min,reward_max,spawn_weight").order("spawn_weight", { ascending: false }),
+    admin.from("monster_types").select("id,name,health,attack_damage,move_speed,credits_reward,reward_min,reward_max,spawn_weight").order("spawn_weight", { ascending: false }),
     admin.from("case_tiers").select("id,label,price,rarity_weights,group_id").order("group_id").order("price"),
     admin.from("name_style_rarity_config").select("rarity,base_shop_price_cr,max_shop_price_cr,case_drop_weight,case_drop_enabled").order("base_shop_price_cr"),
     admin.from("shop_settings").select("auto_generate_price_multiplier_min,auto_generate_price_multiplier_max").eq("id", "default").single(),
@@ -415,7 +415,7 @@ export async function saveWorldSettings(data: {
   characterSprintDamageMultiplier: number;
   killStreakMultiplierPerKill: number;
   killStreakMaxMultiplier: number;
-  monsters: Array<{ id: string; credits_reward: number; hp: number; atk_dmg: number; move_speed: number; reward_min: number; reward_max: number; spawn_weight: number }>;
+  monsters: Array<{ id: string; credits_reward: number; health: number; attack_damage: number; move_speed: number; reward_min: number; reward_max: number; spawn_weight: number }>;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const admin = await requireAdmin();
@@ -445,8 +445,8 @@ export async function saveWorldSettings(data: {
       ...data.monsters.map((m) =>
         admin.from("monster_types").update({
           credits_reward: m.credits_reward,
-          hp: m.hp,
-          atk_dmg: m.atk_dmg,
+          health: m.health,
+          attack_damage: m.attack_damage,
           move_speed: m.move_speed,
           reward_min: m.reward_min,
           reward_max: m.reward_max,

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { DEFAULT_MONSTER_TYPES, MONSTER_TYPE_IDS, type MonsterTypeConfig } from "@/lib/monsters";
+import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 
 interface MonsterTypeRow {
   id: string;
@@ -220,6 +221,7 @@ export async function updateMonsterType(input: UpdateMonsterTypeInput): Promise<
   });
 
   if (error) {
+    void logDebugEvent({ level: "error", scope: "admin:monsters", message: `Monster "${input.id}" Speichern fehlgeschlagen`, detail: error.message, context: { userId: user.id, monsterId: input.id } });
     return { success: false, error: "Speichern fehlgeschlagen — ist die Monster-Migration eingespielt?" };
   }
 
@@ -233,6 +235,7 @@ export async function updateMonsterType(input: UpdateMonsterTypeInput): Promise<
     // best-effort
   }
 
+  void logActivity("admin:monsters", `Monster "${input.id}" (${input.name}) gespeichert: HP=${input.health}, ATK=${input.attackDamage}`, { userId: user.id, monsterId: input.id, name: input.name });
   revalidatePath("/admin");
   revalidatePath("/world");
   return { success: true };

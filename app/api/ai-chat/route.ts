@@ -330,8 +330,8 @@ async function executeFunction(
         const results = await Promise.allSettled([
           adminDb.from("profiles").select("*", { count: "exact", head: true }),
           adminDb.from("inventory").select("*", { count: "exact", head: true }),
-          adminDb.from("case_groups").select("id, name").eq("is_active", true).limit(30),
-          adminDb.from("shop_items").select("*", { count: "exact", head: true }).eq("is_active", true),
+          adminDb.from("case_groups").select("id, title").eq("enabled", true).limit(30),
+          adminDb.from("shop_listings").select("*", { count: "exact", head: true }).eq("shop_date", new Date().toISOString().slice(0, 10)),
           adminDb.from("auctions").select("*", { count: "exact", head: true }).eq("status", "active"),
         ]);
         const userCount   = results[0].status === "fulfilled" ? (results[0].value.count ?? 0) : 0;
@@ -343,7 +343,7 @@ async function executeFunction(
           registered_players: userCount,
           collectible_items_in_circulation: itemCount,
           active_case_groups: caseGroups.length,
-          case_group_names: (caseGroups as Array<{ name: string }>).map((g) => g.name),
+          case_group_names: (caseGroups as Array<{ title: string }>).map((g) => g.title),
           active_shop_offers: shopCount,
           active_auctions: auctionCount,
         };

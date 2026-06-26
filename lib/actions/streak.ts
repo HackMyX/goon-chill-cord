@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
+import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import {
   computeStreakReward,
@@ -400,7 +401,10 @@ export async function updateStreakConfig(input: StreakConfig): Promise<{ success
     }
   }
 
-  if (error) return { success: false, error: "Speichern fehlgeschlagen." };
+  if (error) {
+    void logDebugEvent({ level: "error", scope: "admin:streak-config", message: "Streak-Config Speichern fehlgeschlagen", detail: error.message, context: { userId: user.id } });
+    return { success: false, error: "Speichern fehlgeschlagen." };
+  }
 
   try {
     await admin.from("audit_logs").insert({
@@ -412,6 +416,7 @@ export async function updateStreakConfig(input: StreakConfig): Promise<{ success
     // best-effort
   }
 
+  void logActivity("admin:streak-config", `Streak-Config gespeichert (Basis: ${input.baseReward} CR, Max: ${input.maxReward} CR)`, { userId: user.id, enabled: input.enabled, baseReward: input.baseReward, maxReward: input.maxReward });
   revalidatePath("/admin");
   return { success: true };
 }

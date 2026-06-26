@@ -3,13 +3,28 @@
 import type { SoundConfig } from "@/lib/sound-config";
 
 export type FxSound =
+  // UI
   | "win" | "ultraWin" | "click" | "error" | "flip" | "save"
-  | "levelUp" | "xpGain" | "abilityEquip"
-  | "questComplete" | "bpTierClaim" | "monsterKill"
-  | "pvpHit" | "pvpKill" | "purchaseSuccess"
-  | "purchaseFail" | "streakClaim" | "notificationPing"
-  | "caseOpen" | "caseReveal" | "achievementUnlock"
-  | "messageReceive" | "shopPurchase" | "upgradeSuccess";
+  | "modalOpen" | "modalClose" | "tabSwitch" | "toggleOn" | "toggleOff"
+  // Level & XP
+  | "levelUp" | "xpGain" | "abilityEquip" | "achievementUnlock"
+  // Battle Pass
+  | "questComplete" | "bpTierClaim" | "bpUnlock" | "bpEliteUnlock"
+  // World / Combat
+  | "monsterKill" | "pvpHit" | "pvpKill"
+  | "playerDeath" | "playerRespawn" | "mineCollect" | "shieldBlock" | "itemPickup"
+  // Shop & Economy
+  | "purchaseSuccess" | "purchaseFail" | "shopPurchase" | "upgradeSuccess"
+  | "itemEquip" | "itemUnequip" | "auctionBid" | "auctionWin"
+  // Games
+  | "streakClaim" | "notificationPing"
+  | "caseOpen" | "caseReveal"
+  | "plinkoLand" | "snakeEat" | "snakeDie" | "donFlip"
+  // Chat
+  | "messageReceive" | "messageSend" | "mentionReceive" | "chatPing"
+  // System
+  | "ticketOpen" | "badgeEarned";
+
 // "hit" is an interrupt channel, not a queued Fx one, on purpose — sustained
 // melee (clicking as fast as ATTACK_COOLDOWN allows) needs every landed hit
 // to play immediately, the same way tick/hover never queue. Routing it
@@ -18,30 +33,63 @@ export type FxSound =
 export type InterruptSound = "tick" | "hover" | "hit";
 
 const DEFAULT_FX_SRC: Record<FxSound, string> = {
-  win: "/sounds/win.wav",
-  ultraWin: "/sounds/ultra-win.wav",
-  click: "/sounds/click.wav",
-  error: "/sounds/error.wav",
-  flip: "/sounds/flip.wav",
-  save: "/sounds/save.wav",
-  levelUp: "/sounds/win.wav",
-  xpGain: "/sounds/tick.wav",
-  abilityEquip: "/sounds/save.wav",
+  // UI
+  win:              "/sounds/win.wav",
+  ultraWin:         "/sounds/ultra-win.wav",
+  click:            "/sounds/click.wav",
+  error:            "/sounds/error.wav",
+  flip:             "/sounds/flip.wav",
+  save:             "/sounds/save.wav",
+  modalOpen:        "/sounds/click.wav",
+  modalClose:       "/sounds/click.wav",
+  tabSwitch:        "/sounds/hover.wav",
+  toggleOn:         "/sounds/save.wav",
+  toggleOff:        "/sounds/hover.wav",
+  // Level & XP
+  levelUp:          "/sounds/win.wav",
+  xpGain:           "/sounds/tick.wav",
+  abilityEquip:     "/sounds/save.wav",
+  achievementUnlock:"/sounds/win.wav",
+  // Battle Pass
   questComplete:    "/sounds/win.wav",
   bpTierClaim:      "/sounds/save.wav",
+  bpUnlock:         "/sounds/ultra-win.wav",
+  bpEliteUnlock:    "/sounds/ultra-win.wav",
+  // World
   monsterKill:      "/sounds/hit.wav",
   pvpHit:           "/sounds/hit.wav",
   pvpKill:          "/sounds/win.wav",
+  playerDeath:      "/sounds/error.wav",
+  playerRespawn:    "/sounds/save.wav",
+  mineCollect:      "/sounds/tick.wav",
+  shieldBlock:      "/sounds/hit.wav",
+  itemPickup:       "/sounds/save.wav",
+  // Shop
   purchaseSuccess:  "/sounds/save.wav",
   purchaseFail:     "/sounds/error.wav",
+  shopPurchase:     "/sounds/save.wav",
+  upgradeSuccess:   "/sounds/win.wav",
+  itemEquip:        "/sounds/save.wav",
+  itemUnequip:      "/sounds/hover.wav",
+  auctionBid:       "/sounds/flip.wav",
+  auctionWin:       "/sounds/win.wav",
+  // Games
   streakClaim:      "/sounds/win.wav",
   notificationPing: "/sounds/tick.wav",
   caseOpen:         "/sounds/flip.wav",
   caseReveal:       "/sounds/ultra-win.wav",
-  achievementUnlock:"/sounds/win.wav",
+  plinkoLand:       "/sounds/hit.wav",
+  snakeEat:         "/sounds/tick.wav",
+  snakeDie:         "/sounds/error.wav",
+  donFlip:          "/sounds/flip.wav",
+  // Chat
   messageReceive:   "/sounds/hover.wav",
-  shopPurchase:     "/sounds/save.wav",
-  upgradeSuccess:   "/sounds/win.wav",
+  messageSend:      "/sounds/click.wav",
+  mentionReceive:   "/sounds/win.wav",
+  chatPing:         "/sounds/hover.wav",
+  // System
+  ticketOpen:       "/sounds/save.wav",
+  badgeEarned:      "/sounds/win.wav",
 };
 
 const DEFAULT_INTERRUPT_SRC: Record<InterruptSound, string> = {
@@ -51,13 +99,27 @@ const DEFAULT_INTERRUPT_SRC: Record<InterruptSound, string> = {
 };
 
 const DEFAULT_FX_VOL: Record<FxSound, number> = {
+  // UI
   win: 0.35, ultraWin: 0.35, click: 0.18, error: 0.35, flip: 0.35, save: 0.20,
-  levelUp: 0.40, xpGain: 0.15, abilityEquip: 0.25,
-  questComplete: 0.38,    bpTierClaim: 0.32,       monsterKill: 0.22,
-  pvpHit: 0.30,           pvpKill: 0.35,           purchaseSuccess: 0.28,
-  purchaseFail: 0.30,     streakClaim: 0.38,       notificationPing: 0.18,
-  caseOpen: 0.25,         caseReveal: 0.40,        achievementUnlock: 0.42,
-  messageReceive: 0.12,   shopPurchase: 0.28,      upgradeSuccess: 0.35,
+  modalOpen: 0.12, modalClose: 0.10, tabSwitch: 0.12, toggleOn: 0.14, toggleOff: 0.10,
+  // Level & XP
+  levelUp: 0.40, xpGain: 0.15, abilityEquip: 0.25, achievementUnlock: 0.42,
+  // Battle Pass
+  questComplete: 0.38, bpTierClaim: 0.32, bpUnlock: 0.38, bpEliteUnlock: 0.42,
+  // World
+  monsterKill: 0.22, pvpHit: 0.30, pvpKill: 0.35,
+  playerDeath: 0.35, playerRespawn: 0.22, mineCollect: 0.18, shieldBlock: 0.25, itemPickup: 0.20,
+  // Shop
+  purchaseSuccess: 0.28, purchaseFail: 0.30, shopPurchase: 0.28, upgradeSuccess: 0.35,
+  itemEquip: 0.25, itemUnequip: 0.15, auctionBid: 0.28, auctionWin: 0.40,
+  // Games
+  streakClaim: 0.38, notificationPing: 0.18,
+  caseOpen: 0.25, caseReveal: 0.40,
+  plinkoLand: 0.22, snakeEat: 0.20, snakeDie: 0.28, donFlip: 0.32,
+  // Chat
+  messageReceive: 0.12, messageSend: 0.15, mentionReceive: 0.30, chatPing: 0.20,
+  // System
+  ticketOpen: 0.18, badgeEarned: 0.38,
 };
 
 const DEFAULT_INTERRUPT_VOL: Record<InterruptSound, number> = {
@@ -69,18 +131,13 @@ const HOVER_THROTTLE_MS = 70;
 /**
  * App-wide audio singleton.
  *
- * - `tick`/`hover` are "interrupt" channels: each gets a single reusable
- *   <audio> element that restarts on every call. They must NEVER queue —
- *   queuing would desync `tick` from the reel animation it follows
- *   frame-for-frame, and `hover` fires far too rapidly (mouse movement
- *   across many elements) to ever sit in a FIFO queue without becoming a
- *   delayed, garbled mess. `hover` is additionally throttled so fast mouse
- *   movement doesn't fire a sound burst.
+ * - `tick`/`hover`/`hit` are "interrupt" channels: each gets a single reusable
+ *   <audio> element that restarts on every call. They must NEVER queue.
  * - Everything else goes through a real FIFO queue on the `fx` channel so
- *   two effects (e.g. a win sound and a click) never overlap each other.
+ *   two effects never overlap each other.
  *
- * Missing/unplayable files (dummy paths before real assets are dropped in)
- * fail silently — sound is cosmetic and must never break the UI.
+ * Missing/unplayable files fail silently — sound is cosmetic and must never
+ * break the UI.
  */
 class SoundManager {
   private interruptAudio = new Map<InterruptSound, HTMLAudioElement>();
@@ -94,10 +151,8 @@ class SoundManager {
 
   loadConfig(config: SoundConfig): void {
     this._config = config;
-    // Clear cached audio elements so new files/volumes take effect
     this.interruptAudio.clear();
     this.fxPool.clear();
-    // Rebuild disabled set
     this._disabledEvents.clear();
     for (const [key, val] of Object.entries(config)) {
       if (!val.enabled) this._disabledEvents.add(key);
@@ -121,12 +176,9 @@ class SoundManager {
     let audio = this.interruptAudio.get(name);
     if (!audio) {
       const src = this._config?.[name]?.file ?? DEFAULT_INTERRUPT_SRC[name];
-      // Skip silent placeholder — never create an Audio element for it.
       if (src === "/sounds/none" || src === "none") return null;
       audio = new Audio(src);
       const vol = this._config?.[name]?.volume ?? DEFAULT_INTERRUPT_VOL[name];
-      // hover/tick fire constantly (mouse movement, reel spin) — kept quiet
-      // so a session of moving the mouse around doesn't wear the ears down.
       audio.volume = vol * this._volume;
       this.interruptAudio.set(name, audio);
     }
@@ -138,7 +190,6 @@ class SoundManager {
     let audio = this.fxPool.get(name);
     if (!audio) {
       const src = this._config?.[name]?.file ?? DEFAULT_FX_SRC[name];
-      // Skip silent placeholder — never create an Audio element for it.
       if (src === "/sounds/none" || src === "none") return null;
       audio = new Audio(src);
       const vol = this._config?.[name]?.volume ?? DEFAULT_FX_VOL[name];
@@ -148,20 +199,14 @@ class SoundManager {
     return audio;
   }
 
-  tick(): void {
-    this.playInterrupt("tick");
-  }
-
+  tick(): void { this.playInterrupt("tick"); }
   hover(): void {
     const now = Date.now();
     if (now - this.lastHoverAt < HOVER_THROTTLE_MS) return;
     this.lastHoverAt = now;
     this.playInterrupt("hover");
   }
-
-  hit(): void {
-    this.playInterrupt("hit");
-  }
+  hit(): void { this.playInterrupt("hit"); }
 
   private playInterrupt(name: InterruptSound): void {
     if (this._disabledEvents.has(name)) return;
@@ -170,9 +215,7 @@ class SoundManager {
       if (!audio) return;
       audio.currentTime = 0;
       void audio.play().catch(() => {});
-    } catch {
-      // Web Audio unavailable/blocked — ignore, purely cosmetic.
-    }
+    } catch { /* Web Audio unavailable/blocked — purely cosmetic */ }
   }
 
   play(name: FxSound): void {
@@ -195,24 +238,17 @@ class SoundManager {
       try {
         const audio = this.getFxAudio(name);
         if (!audio) return resolve();
-
         const done = () => {
           audio.removeEventListener("ended", done);
           audio.removeEventListener("error", done);
           resolve();
         };
-
         audio.currentTime = 0;
         audio.addEventListener("ended", done);
         audio.addEventListener("error", done);
-
         audio.play().catch(() => resolve());
-
-        // Safety net in case `ended` never fires (blocked autoplay, etc.).
         setTimeout(done, 4000);
-      } catch {
-        resolve();
-      }
+      } catch { resolve(); }
     });
   }
 }
@@ -221,33 +257,68 @@ const soundManager = new SoundManager();
 
 export function useSoundManager() {
   return {
+    // Interrupt channels
     tick: () => soundManager.tick(),
     hover: () => soundManager.hover(),
     hit: () => soundManager.hit(),
-    win: () => soundManager.play("win"),
-    ultraWin: () => soundManager.play("ultraWin"),
-    click: () => soundManager.play("click"),
-    error: () => soundManager.play("error"),
-    flip: () => soundManager.play("flip"),
-    save: () => soundManager.play("save"),
-    levelUp: () => soundManager.play("levelUp"),
-    xpGain: () => soundManager.play("xpGain"),
-    abilityEquip: () => soundManager.play("abilityEquip"),
+    // UI
+    win:              () => soundManager.play("win"),
+    ultraWin:         () => soundManager.play("ultraWin"),
+    click:            () => soundManager.play("click"),
+    error:            () => soundManager.play("error"),
+    flip:             () => soundManager.play("flip"),
+    save:             () => soundManager.play("save"),
+    modalOpen:        () => soundManager.play("modalOpen"),
+    modalClose:       () => soundManager.play("modalClose"),
+    tabSwitch:        () => soundManager.play("tabSwitch"),
+    toggleOn:         () => soundManager.play("toggleOn"),
+    toggleOff:        () => soundManager.play("toggleOff"),
+    // Level & XP
+    levelUp:          () => soundManager.play("levelUp"),
+    xpGain:           () => soundManager.play("xpGain"),
+    abilityEquip:     () => soundManager.play("abilityEquip"),
+    achievementUnlock:() => soundManager.play("achievementUnlock"),
+    // Battle Pass
     questComplete:    () => soundManager.play("questComplete"),
     bpTierClaim:      () => soundManager.play("bpTierClaim"),
+    bpUnlock:         () => soundManager.play("bpUnlock"),
+    bpEliteUnlock:    () => soundManager.play("bpEliteUnlock"),
+    // World
     monsterKill:      () => soundManager.play("monsterKill"),
     pvpHit:           () => soundManager.play("pvpHit"),
     pvpKill:          () => soundManager.play("pvpKill"),
+    playerDeath:      () => soundManager.play("playerDeath"),
+    playerRespawn:    () => soundManager.play("playerRespawn"),
+    mineCollect:      () => soundManager.play("mineCollect"),
+    shieldBlock:      () => soundManager.play("shieldBlock"),
+    itemPickup:       () => soundManager.play("itemPickup"),
+    // Shop & Economy
     purchaseSuccess:  () => soundManager.play("purchaseSuccess"),
     purchaseFail:     () => soundManager.play("purchaseFail"),
+    shopPurchase:     () => soundManager.play("shopPurchase"),
+    upgradeSuccess:   () => soundManager.play("upgradeSuccess"),
+    itemEquip:        () => soundManager.play("itemEquip"),
+    itemUnequip:      () => soundManager.play("itemUnequip"),
+    auctionBid:       () => soundManager.play("auctionBid"),
+    auctionWin:       () => soundManager.play("auctionWin"),
+    // Games
     streakClaim:      () => soundManager.play("streakClaim"),
     notificationPing: () => soundManager.play("notificationPing"),
     caseOpen:         () => soundManager.play("caseOpen"),
     caseReveal:       () => soundManager.play("caseReveal"),
-    achievementUnlock:() => soundManager.play("achievementUnlock"),
+    plinkoLand:       () => soundManager.play("plinkoLand"),
+    snakeEat:         () => soundManager.play("snakeEat"),
+    snakeDie:         () => soundManager.play("snakeDie"),
+    donFlip:          () => soundManager.play("donFlip"),
+    // Chat
     messageReceive:   () => soundManager.play("messageReceive"),
-    shopPurchase:     () => soundManager.play("shopPurchase"),
-    upgradeSuccess:   () => soundManager.play("upgradeSuccess"),
+    messageSend:      () => soundManager.play("messageSend"),
+    mentionReceive:   () => soundManager.play("mentionReceive"),
+    chatPing:         () => soundManager.play("chatPing"),
+    // System
+    ticketOpen:       () => soundManager.play("ticketOpen"),
+    badgeEarned:      () => soundManager.play("badgeEarned"),
+    // Config
     setVolume: (v: number) => soundManager.setVolume(v),
     loadConfig: (cfg: SoundConfig) => soundManager.loadConfig(cfg),
   };

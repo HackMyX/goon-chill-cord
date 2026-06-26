@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
+import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 import {
   DEFAULT_HOMEPAGE_CHAT_CONFIG,
   type HomepageChatConfig,
@@ -107,9 +108,14 @@ export async function adminUpdateHomepageChatConfig(
       .from("homepage_chat_config")
       .upsert(patch);
 
-    if (error) return { success: false, error: error.message };
+    if (error) {
+      void logDebugEvent({ level: "error", scope: "admin:homepage-chat-config", message: "Speichern fehlgeschlagen", detail: error.message, context: { userId: user.id } });
+      return { success: false, error: error.message };
+    }
+    void logActivity("admin:homepage-chat-config", "Homepage-Chat-Config gespeichert", { userId: user.id });
     return { success: true };
   } catch (e) {
+    void logDebugEvent({ level: "error", scope: "admin:homepage-chat-config", message: "Unbekannter Fehler", detail: String(e) });
     return { success: false, error: String(e) };
   }
 }

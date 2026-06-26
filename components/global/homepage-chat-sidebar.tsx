@@ -17,8 +17,9 @@ import {
   sendGlobalChatMessage,
   type GlobalChatMessage,
 } from "@/lib/actions/global-chat";
-import { getBadgeStyle } from "@/lib/badges";
+import { BadgePill } from "@/components/ui/badge-pill";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { useSoundManager } from "@/lib/sound-manager";
 import type { HomepageChatConfig } from "@/lib/homepage-chat-config-types";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,45 +123,46 @@ function UserAvatar({
   );
 }
 
-function BadgePill({ badgeKey }: { badgeKey: string }) {
-  const style = getBadgeStyle(badgeKey);
-  const LABELS: Record<string, string> = {
-    admin: "Admin",
-    mod: "Mod",
-    elite: "Elite",
-    premium: "Premium",
-    vip: "VIP",
-    og: "OG",
-    verified: "Verified",
-    streaker: "Streaker",
-    helper: "Helper",
-  };
-  return (
-    <span
-      className="inline-flex items-center rounded px-1 py-px text-[8px] font-bold leading-none shrink-0"
-      style={{
-        background: style.bg,
-        color: style.text,
-        border: `1px solid ${style.border}`,
-      }}
-    >
-      {LABELS[badgeKey] ?? badgeKey}
-    </span>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Message row
 // ─────────────────────────────────────────────────────────────────────────────
+
+function highlightMentions(content: string, ownUsername: string | null): React.ReactNode {
+  if (!ownUsername) return content;
+  const mention = `@${ownUsername.toLowerCase()}`;
+  const lower = content.toLowerCase();
+  if (!lower.includes(mention)) return content;
+
+  const parts: React.ReactNode[] = [];
+  let rest = content;
+  while (true) {
+    const idx = rest.toLowerCase().indexOf(mention);
+    if (idx === -1) break;
+    if (idx > 0) parts.push(rest.slice(0, idx));
+    parts.push(
+      <span
+        key={parts.length}
+        className="rounded bg-purple-500/25 px-0.5 font-semibold text-purple-300"
+      >
+        {rest.slice(idx, idx + mention.length)}
+      </span>
+    );
+    rest = rest.slice(idx + mention.length);
+  }
+  if (rest) parts.push(rest);
+  return <>{parts}</>;
+}
 
 function MessageRow({
   msg,
   config,
   animate: doAnimate,
+  ownUsername,
 }: {
   msg: GlobalChatMessage;
   config: HomepageChatConfig;
   animate: boolean;
+  ownUsername: string | null;
 }) {
   const isOptimistic = msg.id.startsWith("__opt_");
   const fontCls = getFontClass(config.fontSize);
@@ -251,7 +253,9 @@ function MessageRow({
           )}
         </div>
         <p className={`${fontCls} leading-snug text-zinc-300 break-words mt-0.5`}>
-          {msg.content}
+          {config.highlightMentions
+            ? highlightMentions(msg.content, ownUsername)
+            : msg.content}
         </p>
       </div>
     </div>
@@ -291,13 +295,18 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
   const [onCooldown, setOnCooldown] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(false);
+  const [ownUsername, setOwnUsername] = useState<string | null>(null);
   const [newMsgCount, setNewMsgCount] = useState(0);
   const [animateNewIds, setAnimateNewIds] = useState<Set<string>>(new Set());
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const latestIdRef = useRef<string | null>(null);
   const pendingOptimisticRef = useRef<string | null>(null);
+  const loadedRef = useRef(false);
   const supabase = useRef(createClient());
+  const sound = useSoundManager();
+  const soundRef = useRef(sound);
+  soundRef.current = sound;
 
   // ── Responsive detection ──────────────────────────────────────────────────
   useEffect(() => {
@@ -323,10 +332,18 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
     setHydrated(true);
   }, [config.defaultOpenDesktop, config.defaultOpenMobile]);
 
-  // ── Check auth ────────────────────────────────────────────────────────────
+  // ── Check auth + load own username ───────────────────────────────────────
   useEffect(() => {
-    supabase.current.auth.getUser().then(({ data: { user } }) => {
+    supabase.current.auth.getUser().then(async ({ data: { user } }) => {
       setIsAuthed(!!user);
+      if (user) {
+        const { data } = await supabase.current
+          .from("profiles")
+          .select("username")
+          .eq("id", user.id)
+          .single();
+        if (data?.username) setOwnUsername(data.username as string);
+      }
     });
   }, []);
 
@@ -338,10 +355,12 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
 
   // ── Load initial messages ─────────────────────────────────────────────────
   useEffect(() => {
+    loadedRef.current = false;
     getGlobalChatMessages(config.maxMessages).then((msgs) => {
       setMessages(msgs);
       if (msgs.length > 0) latestIdRef.current = msgs[msgs.length - 1].id;
       setLoading(false);
+      loadedRef.current = true;
       setTimeout(scrollToBottom, 50);
     });
   }, [config.maxMessages, scrollToBottom]);
@@ -397,6 +416,15 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
         }, 500);
       }
 
+      // Mention sound
+      if (loadedRef.current && config.mentionSound) {
+        const content = (row.content as string) ?? "";
+        const uname = ownUsername ?? "";
+        if (uname && content.toLowerCase().includes(`@${uname.toLowerCase()}`)) {
+          soundRef.current.mentionReceive();
+        }
+      }
+
       // Unread counter when sidebar is closed
       if (!isOpen) {
         setNewMsgCount((c) => c + 1);
@@ -404,7 +432,7 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
         setTimeout(scrollToBottom, 30);
       }
     },
-    [config.maxMessages, config.messageAnimation, isOpen, scrollToBottom]
+    [config.maxMessages, config.messageAnimation, config.mentionSound, isOpen, ownUsername, scrollToBottom]
   );
 
   // ── Realtime subscription ─────────────────────────────────────────────────
@@ -543,6 +571,7 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
                 error={error}
                 config={config}
                 isAuthed={isAuthed}
+                ownUsername={ownUsername}
                 animateNewIds={animateNewIds}
                 bottomRef={bottomRef}
                 onSend={handleSend}
@@ -616,6 +645,7 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
           error={error}
           config={config}
           isAuthed={isAuthed}
+          ownUsername={ownUsername}
           animateNewIds={animateNewIds}
           bottomRef={bottomRef}
           onSend={handleSend}
@@ -639,6 +669,7 @@ interface ChatPanelProps {
   error: string | null;
   config: HomepageChatConfig;
   isAuthed: boolean;
+  ownUsername: string | null;
   animateNewIds: Set<string>;
   bottomRef: React.RefObject<HTMLDivElement | null>;
   onSend: (e: React.FormEvent) => void;
@@ -656,12 +687,26 @@ function ChatPanel({
   error,
   config,
   isAuthed,
+  ownUsername,
   animateNewIds,
   bottomRef,
   onSend,
   onClose,
   showClose = false,
 }: ChatPanelProps) {
+  const onlineCount = config.showOnlineCount
+    ? new Set(
+        messages
+          .filter(
+            (m) =>
+              !m.isSystem &&
+              m.userId &&
+              Date.now() - new Date(m.createdAt).getTime() < 5 * 60 * 1000
+          )
+          .map((m) => m.userId)
+      ).size
+    : 0;
+
   return (
     <div className="flex flex-col h-full w-full min-w-0">
       {/* Header */}
@@ -674,6 +719,7 @@ function ChatPanel({
           {config.showOnlineCount && (
             <span className="flex items-center gap-1 text-[10px] text-zinc-500 shrink-0">
               <Users className="h-3 w-3" />
+              {onlineCount > 0 && <span>{onlineCount}</span>}
             </span>
           )}
           <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" />
@@ -707,6 +753,7 @@ function ChatPanel({
             msg={msg}
             config={config}
             animate={config.messageAnimation && animateNewIds.has(msg.id)}
+            ownUsername={ownUsername}
           />
         ))}
         <div ref={bottomRef} />

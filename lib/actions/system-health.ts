@@ -81,6 +81,10 @@ const REQUIRED_TABLES = [
   "xp_config", "xp_events", "ability_definitions", "user_abilities",
   // Sound
   "sound_config",
+  // Preview Engine config singleton
+  "preview_config",
+  // Fine-grained config (run scripts/add-fine-config.cjs)
+  "fine_config",
   // Mine (used by mine.ts, balance-studio.ts — was missing from full-db-sync.cjs)
   "mine_config",
   // Backup system (used by backup.ts — was missing from full-db-sync.cjs)
@@ -111,6 +115,8 @@ const SINGLETON_CONFIGS: Array<{ id: string; table: string; name: string; catego
   { id: "cfg_sound",       table: "sound_config",        name: "sound_config (default)",      category: "Sound Manager" },
   { id: "cfg_mine",        table: "mine_config",         name: "mine_config (default)",        category: "Mine" },
   { id: "cfg_homepage_chat", table: "homepage_chat_config", name: "homepage_chat_config (default)", category: "Homepage Chat Sidebar" },
+  { id: "cfg_preview",     table: "preview_config",       name: "preview_config (default)",       category: "Preview-Engine" },
+  { id: "cfg_fine",        table: "fine_config",          name: "fine_config (default)",          category: "Feintuning" },
 ];
 
 /**
@@ -251,12 +257,28 @@ const COLUMN_CHECKS: Array<{
   { id: "col_profiles_ability_key",  category: "Level & XP",  table: "profiles",           col: "equipped_ability_key",   detail: "node scripts/add-level-xp-abilities.cjs" },
   // Battle Pass tier — ability reward (2026-06-25)
   { id: "col_bpt_ability_key",       category: "Battle Pass", table: "battle_pass_tiers",  col: "reward_ability_key",     detail: "node scripts/add-level-xp-abilities.cjs" },
+  // Patch notes — dismissed popup per user (2026-06-26)
+  { id: "col_profiles_dismissed_patchnote", category: "Patch Notes", table: "profiles", col: "dismissed_patchnote_id", detail: "node scripts/add-dismissed-patchnote.cjs" },
   // Battle Pass Quest System (2026-06-25) — node scripts/add-bp-quests.cjs
   { id: "col_bp_progression_type",   category: "Battle Pass", table: "battle_passes",       col: "progression_type",       detail: "node scripts/add-bp-quests.cjs" },
   { id: "col_bp_xp_per_tier",        category: "Battle Pass", table: "battle_passes",       col: "bp_xp_per_tier",         detail: "node scripts/add-bp-quests.cjs" },
   { id: "col_bp_xp_cap_per_day",     category: "Battle Pass", table: "battle_passes",       col: "bp_xp_cap_per_day",      detail: "node scripts/add-bp-quests.cjs" },
   { id: "col_bpt_bp_xp_required",    category: "Battle Pass", table: "battle_pass_tiers",   col: "bp_xp_required",         detail: "node scripts/add-bp-quests.cjs" },
   { id: "col_ubp_bp_xp",             category: "Battle Pass", table: "user_battle_passes",  col: "bp_xp",                  detail: "node scripts/add-bp-quests.cjs" },
+  // Fine-Config — all columns (node scripts/add-fine-config.cjs)
+  { id: "col_fine_nametag_dist",     category: "Feintuning",  table: "fine_config", col: "nametag_distance_factor",     detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_nametag_height",   category: "Feintuning",  table: "fine_config", col: "nametag_height_offset",       detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_mp_lerp",          category: "Feintuning",  table: "fine_config", col: "mp_position_lerp_rate",       detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_mp_turn",          category: "Feintuning",  table: "fine_config", col: "mp_heading_turn_rate",        detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_mp_dr",            category: "Feintuning",  table: "fine_config", col: "mp_dead_reckoning_lookahead", detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_mp_swing",         category: "Feintuning",  table: "fine_config", col: "mp_attack_swing_duration",    detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_blood_count",      category: "Feintuning",  table: "fine_config", col: "blood_burst_particle_count",  detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_blood_ms",         category: "Feintuning",  table: "fine_config", col: "blood_burst_lifetime_ms",     detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_slash_ms",         category: "Feintuning",  table: "fine_config", col: "slash_lifetime_ms",           detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_chat_history",     category: "Feintuning",  table: "fine_config", col: "chat_max_history",            detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_chat_maxlen",      category: "Feintuning",  table: "fine_config", col: "chat_max_message_length",     detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_chat_poll",        category: "Feintuning",  table: "fine_config", col: "chat_poll_interval_ms",       detail: "node scripts/add-fine-config.cjs" },
+  { id: "col_fine_community_badges", category: "Feintuning",  table: "fine_config", col: "community_max_badges_shown",  detail: "node scripts/add-fine-config.cjs" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -948,9 +970,11 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
     } else {
       const cfg = soundCfg as { config?: Record<string, unknown> };
       const eventCount = Object.keys(cfg.config ?? {}).length;
-      results.push(eventCount >= 12
+      results.push(eventCount >= 52
         ? ok("sound_cfg_row", "Sound Manager", "sound_config (default)", `${eventCount} Sound-Events konfiguriert`)
-        : warn("sound_cfg_row", "Sound Manager", "sound_config (default)", `${eventCount}/12 Events konfiguriert`));
+        : eventCount >= 27
+          ? ok("sound_cfg_row", "Sound Manager", "sound_config (default)", `${eventCount} Sound-Events — node scripts/update-sound-config.cjs für 52+ Events`)
+          : warn("sound_cfg_row", "Sound Manager", "sound_config (default)", `${eventCount}/52 Events — node scripts/update-sound-config.cjs ausführen`));
     }
   } catch (e) {
     results.push(warn("sound_cfg_row", "Sound Manager", "sound_config (default)", String(e)));
@@ -1014,14 +1038,14 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
   // ── 33. Homepage Chat Sidebar ────────────────────────────────────────────
   try {
     const { data: hccRow, error: hccErr } = await admin
-      .from("homepage_chat_config").select("enabled,title,position").eq("id", "default").maybeSingle();
+      .from("homepage_chat_config").select("enabled,tab_title,sidebar_position").eq("id", "default").maybeSingle();
     if (hccErr || !hccRow) {
       results.push(warn("homepage_chat_cfg", "Homepage Chat Sidebar", "homepage_chat_config (default)",
-        "Kein Konfigurationseintrag — node scripts/db-audit-fix.cjs ausführen"));
+        "Kein Konfigurationseintrag — node scripts/create-homepage-chat-config.cjs ausführen"));
     } else {
-      const row = hccRow as { enabled?: boolean; title?: string; position?: string };
+      const row = hccRow as { enabled?: boolean; tab_title?: string; sidebar_position?: string };
       results.push(ok("homepage_chat_cfg", "Homepage Chat Sidebar", "homepage_chat_config (default)",
-        `enabled: ${row.enabled ?? false}, position: ${row.position ?? "right"}, title: "${row.title ?? "Live Chat"}"`));
+        `enabled: ${row.enabled ?? false}, position: ${row.sidebar_position ?? "left"}, title: "${row.tab_title ?? "Community Chat"}"`));
     }
   } catch (e) {
     results.push(warn("homepage_chat_cfg", "Homepage Chat Sidebar", "homepage_chat_config (default)", String(e)));
