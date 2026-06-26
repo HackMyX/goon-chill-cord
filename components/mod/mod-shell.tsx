@@ -962,13 +962,6 @@ function TicketItem({ t, perms, onRefresh, defaultOpen, isSelected, onToggleSele
         className="relative flex flex-1 items-center gap-3 py-3.5 pr-4 pl-5 text-left transition-colors hover:bg-white/[0.03]"
         onClick={() => setOpen((o) => !o)}
       >
-        {/* Priority color strip */}
-        <div className={`absolute inset-y-0 left-0 w-[3px] ${
-          t.priority === "urgent" ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" :
-          t.priority === "high" ? "bg-orange-500 shadow-[0_0_6px_rgba(249,115,22,0.4)]" :
-          t.priority === "normal" ? "bg-amber-400/70" : "bg-zinc-700"
-        }`} />
-
         {/* Status dot */}
         <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${dotCls}`} />
 
