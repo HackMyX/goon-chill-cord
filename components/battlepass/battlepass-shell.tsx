@@ -9,7 +9,7 @@ import {
   Package, Palette, Trophy, ChevronDown, ChevronUp,
   Target, Wand2, Gem, Flame,
 } from "lucide-react";
-import { BP_THEMES, DEFAULT_BP_VISUAL_CONFIG, type BattlePass, type BattlePassTier, type UserBpStatus, type BpQuestWithProgress, type BpVisualConfig } from "@/lib/battle-pass";
+import { BP_THEMES, DEFAULT_BP_VISUAL_CONFIG, type BattlePass, type BattlePassTier, type UserBpStatus, type BpQuestWithProgress, type BpVisualConfig, type BpLayoutMode } from "@/lib/battle-pass";
 import { purchaseBattlePass, purchaseEliteBattlePass, claimBpTier } from "@/lib/actions/battle-pass";
 import { getBpQuestsWithProgress } from "@/lib/actions/bp-quests";
 import { StyledUsername } from "@/components/ui/styled-username";
@@ -925,7 +925,7 @@ function ParticleField({ accent, count = 40 }: { accent: string; count?: number 
 
 function TrackTileCard({
   tier, state, accent, glow, trackColor, onClaim, claiming, isSelected, onClick,
-  visualConfig,
+  visualConfig, onDirectPreview, fillWidth,
 }: {
   tier: BattlePassTier;
   state: TierState;
@@ -937,11 +937,16 @@ function TrackTileCard({
   isSelected: boolean;
   onClick: () => void;
   visualConfig: BpVisualConfig;
+  onDirectPreview?: (subject: PreviewSubject) => void;
+  fillWidth?: boolean;
 }) {
   const isClaimed = state === "claimed";
   const isAvailable = state === "available";
   const isLocked = state === "locked";
   const isMilestone = tier.highlightTier;
+  const displayMode = tier.displayMode ?? "auto";
+  const previewSubject = tierToPreviewSubject(tier);
+  const hasDirectPreview = displayMode === "3d" && previewSubject !== null && onDirectPreview;
   const tileScale = visualConfig.tileScale ?? 1.0;
   const showAnimations = visualConfig.showTileAnimations ?? true;
   const rarity = tier.rewardItemRarity ?? "normal";
@@ -1007,10 +1012,22 @@ function TrackTileCard({
       ? "linear-gradient(170deg, rgba(52,211,153,0.08) 0%, rgba(0,0,0,0.55) 100%)"
       : "linear-gradient(170deg, rgba(255,255,255,0.025) 0%, rgba(0,0,0,0.65) 100%)";
 
+  const handleTileClick = () => {
+    if (hasDirectPreview) {
+      onDirectPreview(previewSubject!);
+    } else {
+      onClick();
+    }
+  };
+
+  const tooltipName = tier.rewardItemName ?? (tier.rewardType === "credits" ? null : tier.name);
+  const tooltipRarity = tier.rewardItemRarity;
+  const tooltipTrack = tier.isElite ? "Elite" : tier.isPremium ? "Premium" : "Free";
+
   return (
     <motion.div
       ref={cardRef}
-      onClick={onClick}
+      onClick={handleTileClick}
       whileTap={{ scale: 0.95 }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
@@ -1018,7 +1035,7 @@ function TrackTileCard({
         rotateX: springRotX,
         rotateY: springRotY,
         transformPerspective: 900,
-        width: tileW,
+        width: fillWidth ? undefined : tileW,
         height: tileH,
         flexShrink: 0,
         ...borderStyle,
@@ -1026,8 +1043,23 @@ function TrackTileCard({
         backdropFilter: glassOpacity > 0 ? `blur(${Math.round(glassOpacity * 12)}px)` : undefined,
         WebkitBackdropFilter: glassOpacity > 0 ? `blur(${Math.round(glassOpacity * 12)}px)` : undefined,
       }}
-      className="relative cursor-pointer rounded-3xl border transition-colors duration-200"
+      className={`group/tile relative cursor-pointer rounded-3xl border transition-colors duration-200 ${fillWidth ? "w-full" : ""}`}
     >
+      {/* ── Hover tooltip ── */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-full mb-2 z-[60] flex justify-center opacity-0 group-hover/tile:opacity-100 transition-opacity duration-150">
+        <div className="w-max max-w-[160px] rounded-xl border border-white/15 bg-zinc-950/98 px-3 py-2 text-center shadow-2xl backdrop-blur-md">
+          {tooltipName && <p className="text-[11px] font-black text-white leading-tight">{tooltipName}</p>}
+          {tooltipRarity && (
+            <p className="text-[9px] font-bold capitalize mt-0.5" style={{ color: RARITY_COLORS[tooltipRarity] }}>
+              {tooltipRarity}
+            </p>
+          )}
+          <p className="text-[9px] text-white/40 mt-0.5">{tooltipTrack} · Tier {tier.tierNumber}</p>
+          {hasDirectPreview && (
+            <p className="text-[9px] text-purple-300 mt-1">🔍 Klicken für 3D-Vorschau</p>
+          )}
+        </div>
+      </div>
       {/* ── Isolated overflow layer for ALL decorative animations ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
         {/* Milestone top shine bar */}
@@ -1154,23 +1186,36 @@ function TrackTileCard({
 
         {/* Name + reward label */}
         <div className="w-full">
-          <p
-            className={`font-black leading-tight text-white ${isMilestone ? "text-[11px]" : "text-[10px]"}`}
-            style={{ opacity: isLocked ? 0.22 : 1 }}
-          >
-            {tier.name}
-          </p>
-          <p
-            className={`mt-0.5 font-bold leading-tight truncate ${isMilestone ? "text-[10px]" : "text-[9px]"}`}
-            style={
-              isClaimed ? { color: "#34d39970" }
-                : isAvailable ? { color: `${effectiveTrackColor}cc` }
-                  : { color: "rgba(255,255,255,0.18)" }
-            }
-            title={rewardLabel(tier)}
-          >
-            {rewardLabel(tier)}
-          </p>
+          {tier.showTierName !== false && (
+            <p
+              className={`font-black leading-tight text-white ${isMilestone ? "text-[11px]" : "text-[10px]"}`}
+              style={{ opacity: isLocked ? 0.22 : 1 }}
+            >
+              {tier.name}
+            </p>
+          )}
+          <div className="flex items-center gap-1">
+            <p
+              className={`mt-0.5 font-bold leading-tight truncate flex-1 ${isMilestone ? "text-[10px]" : "text-[9px]"}`}
+              style={
+                isClaimed ? { color: "#34d39970" }
+                  : isAvailable ? { color: `${effectiveTrackColor}cc` }
+                    : { color: "rgba(255,255,255,0.18)" }
+              }
+              title={rewardLabel(tier)}
+            >
+              {rewardLabel(tier)}
+            </p>
+            {/* 3D-mode indicator badge */}
+            {displayMode === "3d" && !isLocked && (
+              <span
+                className="shrink-0 rounded-full px-1 text-[7px] font-black uppercase tracking-widest"
+                style={{ background: `${effectiveTrackColor}25`, color: effectiveTrackColor, border: `1px solid ${effectiveTrackColor}50` }}
+              >
+                3D
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Claim button */}
@@ -1208,10 +1253,7 @@ function TrackTileCard({
 
 // ── Horizontal scrollable track ───────────────────────────────────────────────
 
-function HorizontalTrack({
-  tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor,
-  onClaim, claimingId, visualConfig,
-}: {
+interface TrackProps {
   tiers: BattlePassTier[];
   label: string;
   labelColor: string;
@@ -1224,7 +1266,12 @@ function HorizontalTrack({
   onClaim: (id: string) => void;
   claimingId: string | null;
   visualConfig: BpVisualConfig;
-}) {
+}
+
+function HorizontalTrack({
+  tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor,
+  onClaim, claimingId, visualConfig,
+}: TrackProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [fullPreviewSubject, setFullPreviewSubject] = useState<PreviewSubject | null>(null);
@@ -1313,6 +1360,7 @@ function HorizontalTrack({
                 isSelected={selectedTier === tier.id}
                 onClick={() => setSelectedTier((prev) => (prev === tier.id ? null : tier.id))}
                 visualConfig={visualConfig}
+                onDirectPreview={setFullPreviewSubject}
               />
             );
           })}
@@ -1379,7 +1427,7 @@ function HorizontalTrack({
                     <p className="text-sm font-semibold" style={{ color: `${trackColor}cc` }}>
                       {rewardLabel(selectedTierData)}
                     </p>
-                    {selectedTierData.description && (
+                    {selectedTierData.description && selectedTierData.showTierDescription !== false && (
                       <p className="mt-2 text-xs text-white/40 leading-relaxed">{selectedTierData.description}</p>
                     )}
                   </div>
@@ -1425,6 +1473,201 @@ function HorizontalTrack({
           subject={fullPreviewSubject}
           onClose={() => setFullPreviewSubject(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// ── Grid track layout ─────────────────────────────────────────────────────────
+
+function GridTrack({ tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor, onClaim, claimingId, visualConfig }: TrackProps) {
+  const [fullPreviewSubject, setFullPreviewSubject] = useState<PreviewSubject | null>(null);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <span style={{ color: labelColor }}>{trackIcon}</span>
+        <h2 className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: labelColor }}>{label}</h2>
+        <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${labelColor}30, transparent)` }} />
+        <span className="text-[10px] text-white/30">{tiers.length} Tiers</span>
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 pt-3">
+        {tiers.map((tier) => {
+          const state = getTierState(tier, userStatus, progressDays);
+          return (
+            <TrackTileCard
+              key={tier.id}
+              tier={tier}
+              state={state}
+              accent={accent}
+              glow={glow}
+              trackColor={trackColor}
+              onClaim={onClaim}
+              claiming={claimingId === tier.id}
+              isSelected={false}
+              onClick={() => {}}
+              visualConfig={{ ...visualConfig, normalTileWidth: 120, normalTileHeight: 180, milestoneTileWidth: 120, milestoneTileHeight: 180 }}
+              onDirectPreview={setFullPreviewSubject}
+              fillWidth
+            />
+          );
+        })}
+      </div>
+      {fullPreviewSubject && (
+        <UniversalPreviewModal subject={fullPreviewSubject} onClose={() => setFullPreviewSubject(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── List track layout ─────────────────────────────────────────────────────────
+
+function ListTierRow({
+  tier, state, trackColor, accent, glow, onClaim, claiming, onDirectPreview,
+}: {
+  tier: BattlePassTier;
+  state: TierState;
+  trackColor: string;
+  accent: string;
+  glow: string;
+  onClaim: (id: string) => void;
+  claiming: boolean;
+  onDirectPreview: (s: PreviewSubject) => void;
+}) {
+  const isClaimed = state === "claimed";
+  const isAvailable = state === "available";
+  const isLocked = state === "locked";
+  const rarity = tier.rewardItemRarity ?? "normal";
+  const rarityColor = RARITY_COLORS[rarity] ?? trackColor;
+  const previewSubject = tierToPreviewSubject(tier);
+  const has3d = tier.displayMode === "3d" && previewSubject !== null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="group/tile relative flex items-center gap-3 rounded-2xl border px-4 py-3 transition-colors"
+      style={
+        isClaimed
+          ? { borderColor: "rgba(52,211,153,0.2)", background: "rgba(52,211,153,0.03)" }
+          : isAvailable
+            ? { borderColor: `${trackColor}40`, background: `${trackColor}06`, cursor: has3d ? "pointer" : "default" }
+            : { borderColor: "rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.01)" }
+      }
+      onClick={() => { if (has3d && previewSubject) onDirectPreview(previewSubject); }}
+    >
+      {/* Hover tooltip */}
+      <div className="pointer-events-none absolute inset-x-0 top-full mt-1 z-50 hidden group-hover/tile:block">
+        <div className="mx-4 rounded-xl border border-white/10 bg-zinc-950/95 px-3 py-2 text-xs shadow-2xl backdrop-blur-md">
+          <span className="font-black text-white">{tier.rewardItemName ?? tier.name}</span>
+          {tier.rewardItemRarity && <span className="ml-2 font-bold capitalize" style={{ color: rarityColor }}>{tier.rewardItemRarity}</span>}
+          {has3d && <span className="ml-2 text-purple-300">· Klicken für 3D</span>}
+        </div>
+      </div>
+
+      {/* Tier number badge */}
+      <div
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black tabular-nums"
+        style={
+          isClaimed
+            ? { background: "rgba(52,211,153,0.15)", color: "#34d399" }
+            : isAvailable
+              ? { background: `${trackColor}20`, color: trackColor }
+              : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.2)" }
+        }
+      >
+        {isClaimed ? <CheckCircle2 className="h-4 w-4" /> : tier.tierNumber}
+      </div>
+
+      {/* Mini icon */}
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
+        style={{
+          borderColor: isLocked ? "rgba(255,255,255,0.06)" : `${rarityColor}40`,
+          background: isLocked ? "rgba(255,255,255,0.02)" : `${rarityColor}12`,
+          color: isLocked ? "rgba(255,255,255,0.2)" : rarityColor,
+          filter: isLocked ? "grayscale(1) brightness(0.4)" : undefined,
+        }}
+      >
+        <span className="text-base">{rewardIcon(tier)}</span>
+      </div>
+
+      {/* Name + reward */}
+      <div className="flex-1 min-w-0">
+        {tier.showTierName !== false && (
+          <p className="text-sm font-black truncate" style={{ color: isLocked ? "rgba(255,255,255,0.2)" : "white" }}>
+            {tier.name}
+          </p>
+        )}
+        <p className="text-[11px] truncate" style={{ color: isLocked ? "rgba(255,255,255,0.15)" : `${trackColor}cc` }}>
+          {rewardLabel(tier)}
+        </p>
+      </div>
+
+      {/* Track badges */}
+      <div className="flex shrink-0 items-center gap-2">
+        {tier.isElite && (
+          <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[9px] font-black text-violet-300">Elite</span>
+        )}
+        {tier.isPremium && !tier.isElite && (
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black text-amber-300">Premium</span>
+        )}
+        {tier.highlightTier && (
+          <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[9px] font-black text-amber-200">★</span>
+        )}
+        {has3d && !isLocked && (
+          <span className="rounded-full px-1.5 py-0.5 text-[7px] font-black" style={{ background: `${trackColor}25`, color: trackColor, border: `1px solid ${trackColor}50` }}>3D</span>
+        )}
+        {isAvailable && (
+          <motion.button
+            whileTap={{ scale: 0.88 }}
+            disabled={claiming}
+            onClick={(e) => { e.stopPropagation(); if (!claiming) onClaim(tier.id); }}
+            className="rounded-xl px-3 py-1.5 text-xs font-black text-white disabled:opacity-50"
+            style={{ background: `linear-gradient(135deg, ${trackColor}, ${trackColor}bb)`, boxShadow: `0 2px 12px ${glow}` }}
+          >
+            {claiming ? "…" : "Abholen"}
+          </motion.button>
+        )}
+        {isClaimed && (
+          <span className="text-[11px] text-emerald-400/60 font-black">✓ Abgeholt</span>
+        )}
+        {isLocked && (
+          <Lock className="h-4 w-4 text-white/15" />
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function ListTrack({ tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor, onClaim, claimingId, visualConfig }: TrackProps) {
+  const [fullPreviewSubject, setFullPreviewSubject] = useState<PreviewSubject | null>(null);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <span style={{ color: labelColor }}>{trackIcon}</span>
+        <h2 className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: labelColor }}>{label}</h2>
+        <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${labelColor}30, transparent)` }} />
+        <span className="text-[10px] text-white/30">{tiers.length} Tiers</span>
+      </div>
+      <div className="space-y-1.5">
+        {tiers.map((tier) => (
+          <ListTierRow
+            key={tier.id}
+            tier={tier}
+            state={getTierState(tier, userStatus, progressDays)}
+            trackColor={trackColor}
+            accent={accent}
+            glow={glow}
+            onClaim={onClaim}
+            claiming={claimingId === tier.id}
+            onDirectPreview={setFullPreviewSubject}
+          />
+        ))}
+      </div>
+      {fullPreviewSubject && (
+        <UniversalPreviewModal subject={fullPreviewSubject} onClose={() => setFullPreviewSubject(null)} />
       )}
     </div>
   );
@@ -1823,115 +2066,105 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
               </motion.div>
             )}
 
-            {/* FREE TRACK */}
-            {freeTiers.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 }}
-                className="rounded-2xl border border-white/[0.07] bg-white/[0.015] p-5"
-                style={{ boxShadow: "0 0 30px rgba(148,163,184,0.04)" }}
-              >
-                <HorizontalTrack
-                  tiers={freeTiers}
-                  label="Free Track"
-                  labelColor="rgba(255,255,255,0.5)"
-                  trackIcon={<Gift className="h-4 w-4" />}
-                  userStatus={userStatus}
-                  progressDays={progressDays}
-                  accent={accent}
-                  glow="rgba(148,163,184,0.45)"
-                  trackColor="rgba(148,163,184,0.8)"
-                  onClaim={handleClaim}
-                  claimingId={claimingId}
-                  visualConfig={visualConfig}
-                />
-              </motion.div>
-            )}
+            {/* ── Track renderer — switches based on layoutMode ── */}
+            {(() => {
+              const layoutMode: BpLayoutMode = visualConfig.layoutMode ?? "carousel";
+              const TrackComponent = layoutMode === "grid" ? GridTrack : layoutMode === "list" ? ListTrack : HorizontalTrack;
 
-            {/* PREMIUM TRACK */}
-            {premiumTiers.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="rounded-2xl border p-5"
-                style={{
-                  borderColor: "rgba(245,158,11,0.25)",
-                  background: "linear-gradient(170deg, rgba(245,158,11,0.06) 0%, rgba(0,0,0,0) 100%)",
-                  boxShadow: "0 0 60px rgba(245,158,11,0.08)",
-                }}
-              >
-                {!hasPremium && (
-                  <motion.div
-                    className="mb-4 flex items-center gap-3 rounded-xl border border-amber-500/25 bg-amber-500/6 px-4 py-2.5"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                  >
-                    <Lock className="h-4 w-4 shrink-0 text-amber-400/60" />
-                    <p className="text-xs text-amber-300/70 font-semibold">
-                      Premium Pass benötigt — schalte {premiumTiers.length} exklusive Rewards frei.
-                    </p>
-                  </motion.div>
-                )}
-                <HorizontalTrack
-                  tiers={premiumTiers}
-                  label="Premium Track"
-                  labelColor="#f59e0bcc"
-                  trackIcon={<Crown className="h-4 w-4" />}
-                  userStatus={userStatus}
-                  progressDays={progressDays}
-                  accent={accent}
-                  glow="rgba(245,158,11,0.55)"
-                  trackColor="#f59e0b"
-                  onClaim={handleClaim}
-                  claimingId={claimingId}
-                  visualConfig={visualConfig}
-                />
-              </motion.div>
-            )}
+              const freeTrackProps = {
+                label: "Free Track", labelColor: "rgba(255,255,255,0.5)",
+                trackIcon: <Gift className="h-4 w-4" />, accent,
+                glow: "rgba(148,163,184,0.45)", trackColor: "rgba(148,163,184,0.8)",
+                userStatus, progressDays, onClaim: handleClaim, claimingId, visualConfig,
+              };
+              const premiumTrackProps = {
+                label: "Premium Track", labelColor: "#f59e0bcc",
+                trackIcon: <Crown className="h-4 w-4" />, accent,
+                glow: "rgba(245,158,11,0.55)", trackColor: "#f59e0b",
+                userStatus, progressDays, onClaim: handleClaim, claimingId, visualConfig,
+              };
+              const eliteTrackProps = {
+                label: "Elite Track", labelColor: "#a78bfa",
+                trackIcon: <Sparkles className="h-4 w-4" />, accent,
+                glow: "rgba(167,139,250,0.55)", trackColor: "#a78bfa",
+                userStatus, progressDays, onClaim: handleClaim, claimingId, visualConfig,
+              };
 
-            {/* ELITE TRACK */}
-            {pass.eliteEnabled && eliteTiers.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
-                className="rounded-2xl border p-5"
-                style={{
-                  borderColor: "rgba(167,139,250,0.25)",
-                  background: "linear-gradient(170deg, rgba(167,139,250,0.06) 0%, rgba(0,0,0,0) 100%)",
-                  boxShadow: "0 0 60px rgba(167,139,250,0.10)",
-                }}
-              >
-                {!hasElite && (
-                  <motion.div
-                    className="mb-4 flex items-center gap-3 rounded-xl border border-violet-500/25 bg-violet-500/6 px-4 py-2.5"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                  >
-                    <Zap className="h-4 w-4 shrink-0 text-violet-400/60" />
-                    <p className="text-xs text-violet-300/70 font-semibold">
-                      Elite Pass benötigt — {eliteTiers.length} legendary Rewards warten auf dich.
-                    </p>
-                  </motion.div>
-                )}
-                <HorizontalTrack
-                  tiers={eliteTiers}
-                  label="Elite Track"
-                  labelColor="#a78bfa"
-                  trackIcon={<Sparkles className="h-4 w-4" />}
-                  userStatus={userStatus}
-                  progressDays={progressDays}
-                  accent={accent}
-                  glow="rgba(167,139,250,0.55)"
-                  trackColor="#a78bfa"
-                  onClaim={handleClaim}
-                  claimingId={claimingId}
-                  visualConfig={visualConfig}
-                />
-              </motion.div>
-            )}
+              return (
+                <>
+                  {/* FREE TRACK */}
+                  {freeTiers.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.05 }}
+                      className="rounded-2xl border border-white/[0.07] bg-white/[0.015] p-5"
+                      style={{ boxShadow: "0 0 30px rgba(148,163,184,0.04)" }}
+                    >
+                      <TrackComponent tiers={freeTiers} {...freeTrackProps} />
+                    </motion.div>
+                  )}
+
+                  {/* PREMIUM TRACK */}
+                  {premiumTiers.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1 }}
+                      className="rounded-2xl border p-5"
+                      style={{
+                        borderColor: "rgba(245,158,11,0.25)",
+                        background: "linear-gradient(170deg, rgba(245,158,11,0.06) 0%, rgba(0,0,0,0) 100%)",
+                        boxShadow: "0 0 60px rgba(245,158,11,0.08)",
+                      }}
+                    >
+                      {!hasPremium && (
+                        <motion.div
+                          className="mb-4 flex items-center gap-3 rounded-xl border border-amber-500/25 bg-amber-500/6 px-4 py-2.5"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                        >
+                          <Lock className="h-4 w-4 shrink-0 text-amber-400/60" />
+                          <p className="text-xs text-amber-300/70 font-semibold">
+                            Premium Pass benötigt — schalte {premiumTiers.length} exklusive Rewards frei.
+                          </p>
+                        </motion.div>
+                      )}
+                      <TrackComponent tiers={premiumTiers} {...premiumTrackProps} />
+                    </motion.div>
+                  )}
+
+                  {/* ELITE TRACK */}
+                  {pass.eliteEnabled && eliteTiers.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.15 }}
+                      className="rounded-2xl border p-5"
+                      style={{
+                        borderColor: "rgba(167,139,250,0.25)",
+                        background: "linear-gradient(170deg, rgba(167,139,250,0.06) 0%, rgba(0,0,0,0) 100%)",
+                        boxShadow: "0 0 60px rgba(167,139,250,0.10)",
+                      }}
+                    >
+                      {!hasElite && (
+                        <motion.div
+                          className="mb-4 flex items-center gap-3 rounded-xl border border-violet-500/25 bg-violet-500/6 px-4 py-2.5"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                        >
+                          <Zap className="h-4 w-4 shrink-0 text-violet-400/60" />
+                          <p className="text-xs text-violet-300/70 font-semibold">
+                            Elite Pass benötigt — {eliteTiers.length} legendary Rewards warten auf dich.
+                          </p>
+                        </motion.div>
+                      )}
+                      <TrackComponent tiers={eliteTiers} {...eliteTrackProps} />
+                    </motion.div>
+                  )}
+                </>
+              );
+            })()}
             {/* QUEST PANEL */}
             <QuestPanel passId={pass.id} accent={accent} glow={glow} />
 

@@ -4,6 +4,8 @@ export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_bo
 
 // ── Visual config (per-pass) ──────────────────────────────────────────────────
 
+export type BpLayoutMode = "carousel" | "grid" | "list";
+
 export interface BpVisualConfig {
   tileScale: number;
   tileOffsetX: number;
@@ -25,6 +27,7 @@ export interface BpVisualConfig {
     mythisch?: string;
     ultra?: string;
   };
+  layoutMode: BpLayoutMode;
 }
 
 export const DEFAULT_BP_VISUAL_CONFIG: BpVisualConfig = {
@@ -43,6 +46,7 @@ export const DEFAULT_BP_VISUAL_CONFIG: BpVisualConfig = {
   milestoneGlowIntensity: 0.6,
   trackGlowIntensity: 0.5,
   rarityColorOverrides: {},
+  layoutMode: "carousel",
 };
 export type BpProgressionType = "days" | "xp";
 export type QuestDifficulty = "easy" | "medium" | "hard" | "legendary";
@@ -96,6 +100,8 @@ export type BpTheme = "default" | "gold" | "neon" | "fire" | "ice";
 export type BpShopPosition = "top" | "below_motd" | "below_featured" | "between_categories" | "bottom";
 export type BpShopBannerSize = "card" | "banner" | "hero";
 
+export type BpTileDisplayMode = "auto" | "3d" | "icon";
+
 export interface BattlePassTier {
   id: string;
   passId: string;
@@ -120,6 +126,9 @@ export interface BattlePassTier {
   description: string | null;
   icon: string;
   bpXpRequired: number | null;
+  displayMode: BpTileDisplayMode;
+  showTierName: boolean;
+  showTierDescription: boolean;
 }
 
 export interface BattlePass {

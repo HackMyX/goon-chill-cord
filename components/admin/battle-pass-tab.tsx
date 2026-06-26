@@ -28,7 +28,7 @@ import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
 import type {
   BattlePass, BattlePassTier, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize,
   BpQuestDefinition, BpQuest, QuestDifficulty, QuestFrequency, QuestType, BpProgressionType,
-  BpAutoFillConfig, BpVisualConfig,
+  BpAutoFillConfig, BpVisualConfig, BpTileDisplayMode, BpLayoutMode,
 } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
 
@@ -616,6 +616,9 @@ function TierEditorModal({
   const [rewardQuantity, setRewardQuantity] = useState(existing?.rewardQuantity ?? 1);
   const [highlightTier, setHighlightTier] = useState(existing?.highlightTier ?? false);
   const [description, setDescription] = useState(existing?.description ?? "");
+  const [displayMode, setDisplayMode] = useState<BpTileDisplayMode>(existing?.displayMode ?? "auto");
+  const [showTierName, setShowTierName] = useState(existing?.showTierName ?? true);
+  const [showTierDescription, setShowTierDescription] = useState(existing?.showTierDescription ?? true);
   const [showItemPicker, setShowItemPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -646,6 +649,9 @@ function TierEditorModal({
       highlightTier,
       description: description.trim() || null,
       icon: icon.trim() || "🎁",
+      displayMode,
+      showTierName,
+      showTierDescription,
     };
     const res = await adminUpsertBpTier(passId, input);
     setSaving(false);
@@ -760,6 +766,75 @@ function TierEditorModal({
               <Star className="h-3.5 w-3.5" />
               {highlightTier ? "⭐ Milestone-Tier (hervorgehoben)" : "Als Milestone-Tier markieren"}
             </button>
+
+            {/* ── Visualisierungs-Profil ── */}
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.015] p-3 space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Visualisierungs-Profil</p>
+
+              {/* Display-Modus */}
+              <div className="space-y-1.5">
+                <div className="group/tip relative flex items-center gap-1.5">
+                  <label className="text-[10px] font-semibold text-zinc-400">Anzeige-Modus</label>
+                  <span className="cursor-help text-[9px] text-zinc-600">(?)</span>
+                  <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-72 rounded-lg border border-purple-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+                    <strong>Auto:</strong> Verwendet die Standard-Darstellung — CSS-basiertes Icon für jedes Item-Type.<br />
+                    <strong>3D-Rotation:</strong> Beim Klick auf die Kachel öffnet sich sofort das 3D-Vollbild-Modal mit rotierendem Item. Außerdem erscheint ein &quot;3D&quot;-Badge auf der Kachel.<br />
+                    <strong>Nur Icon:</strong> Zeigt ausschließlich das Emoji-Icon — keine Detail-Vorschau, kein Vollbild-Modal. Ideal für Credits, Badges oder einfache Rewards.
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([
+                    { val: "auto" as BpTileDisplayMode, label: "Auto", icon: "⚙️", desc: "Standard CSS-Icon" },
+                    { val: "3d" as BpTileDisplayMode, label: "3D-Rotation", icon: "🔄", desc: "Klick → 3D-Modal" },
+                    { val: "icon" as BpTileDisplayMode, label: "Nur Icon", icon: "🖼️", desc: "Kein Vollbild" },
+                  ]).map(({ val, label, icon, desc }) => (
+                    <button
+                      key={val}
+                      onClick={() => setDisplayMode(val)}
+                      className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-center transition-colors ${
+                        displayMode === val
+                          ? "border-purple-400/60 bg-purple-500/20 text-purple-200"
+                          : "border-white/10 text-zinc-400 hover:border-white/25"
+                      }`}
+                    >
+                      <span className="text-base">{icon}</span>
+                      <span className="text-[9px] font-black leading-tight">{label}</span>
+                      <span className="text-[8px] text-zinc-600 leading-tight">{desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sichtbarkeits-Schalter */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="group/tip relative">
+                  <button
+                    onClick={() => setShowTierName((v) => !v)}
+                    className={`w-full flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-[11px] font-semibold transition-colors ${
+                      showTierName ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-white/10 text-zinc-500 hover:border-white/20"
+                    }`}
+                  >
+                    <span>{showTierName ? "✓" : "✗"}</span> Name einblenden
+                  </button>
+                  <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-64 rounded-lg border border-purple-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+                    Zeigt oder versteckt den Tier-Namen (z.B. &quot;Tier 5&quot; oder &quot;Legendäre Rüstung&quot;) unterhalb des Vorschau-Icons auf der Kachel. Bei Kacheln mit wenig Platz oder rein visuellen Rewards kann das Ausblenden cleaner wirken.
+                  </div>
+                </div>
+                <div className="group/tip relative">
+                  <button
+                    onClick={() => setShowTierDescription((v) => !v)}
+                    className={`w-full flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-[11px] font-semibold transition-colors ${
+                      showTierDescription ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-white/10 text-zinc-500 hover:border-white/20"
+                    }`}
+                  >
+                    <span>{showTierDescription ? "✓" : "✗"}</span> Beschreibung
+                  </button>
+                  <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-64 rounded-lg border border-purple-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+                    Zeigt oder versteckt den Beschreibungstext im Tier-Detail-Panel (erscheint wenn User auf die Kachel klickt). Nützlich um storytelling hinzuzufügen oder bei einfachen Rewards wegzulassen.
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Reward type */}
             <label className="flex flex-col gap-1 text-xs text-zinc-400">
@@ -1764,6 +1839,40 @@ function PassEditor({
             ))}
           </div>
           <p className="text-[10px] text-zinc-600">Tipp: Gilt für alle Tiles dieses Passes gleichzeitig. Für feingranulare Kontrolle pro Item-Typ das Item selbst bearbeiten.</p>
+        </div>
+
+        {/* ── Layout-Modus ──────────────────────────────────────── */}
+        <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.015] p-3">
+          <div className="group/tip relative">
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Layout-Modus</p>
+            <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+              Bestimmt, wie die Tier-Kacheln des Battle-Passes angeordnet werden.<br />
+              <strong>Karussell:</strong> Horizontales Scrollen pro Track — der bewährte Battle-Pass-Look (Fortnite-Stil). Ideal für 8–30 Tiers.<br />
+              <strong>Klassik-Grid:</strong> Responsives Raster das sich an die Bildschirmbreite anpasst — gut für kompakte Pässe mit 6–12 Tiers.<br />
+              <strong>Vertical-Liste:</strong> Jeder Tier als Zeile — übersichtlich für Pässe mit langer Beschreibung oder vielen Metadaten. Empfohlen für Wartungs- oder Sonder-Pässe.
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { val: "carousel" as BpLayoutMode, label: "Karussell", icon: "↔️", desc: "Horizontal scrollbar" },
+              { val: "grid" as BpLayoutMode, label: "Grid", icon: "⊞", desc: "Responsives Raster" },
+              { val: "list" as BpLayoutMode, label: "Liste", icon: "☰", desc: "Vertikale Zeilen" },
+            ]).map(({ val, label, icon, desc }) => (
+              <button
+                key={val}
+                onClick={() => setVC("layoutMode", val)}
+                className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-center transition-colors ${
+                  (visualConfig.layoutMode ?? "carousel") === val
+                    ? "border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-200"
+                    : "border-white/10 text-zinc-400 hover:border-white/25"
+                }`}
+              >
+                <span className="text-xl">{icon}</span>
+                <span className="text-[10px] font-black">{label}</span>
+                <span className="text-[9px] text-zinc-600 leading-tight">{desc}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ── 3D-Tilt + Glassmorphismus + Container-Gap ─────────── */}

@@ -37,6 +37,9 @@ function rowToTier(r: Record<string, unknown>): BattlePassTier {
     description: r.description as string | null,
     icon: r.icon as string,
     bpXpRequired: (r.bp_xp_required as number | null) ?? null,
+    displayMode: ((r.display_mode as string | null) ?? "auto") as import("@/lib/battle-pass").BpTileDisplayMode,
+    showTierName: (r.show_tier_name as boolean | null) ?? true,
+    showTierDescription: (r.show_tier_description as boolean | null) ?? true,
   };
 }
 
@@ -903,6 +906,9 @@ export interface AdminTierInput {
   highlightTier: boolean;
   description: string | null;
   icon: string;
+  displayMode?: string;
+  showTierName?: boolean;
+  showTierDescription?: boolean;
 }
 
 export async function adminUpsertBpTier(
@@ -934,6 +940,9 @@ export async function adminUpsertBpTier(
       highlight_tier: input.highlightTier,
       description: input.description?.trim() || null,
       icon: input.icon.trim() || "🎁",
+      display_mode: input.displayMode ?? "auto",
+      show_tier_name: input.showTierName ?? true,
+      show_tier_description: input.showTierDescription ?? true,
     }, { onConflict: "pass_id,tier_number" });
 
   if (error) return { success: false, error: "Tier speichern fehlgeschlagen." };
