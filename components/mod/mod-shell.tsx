@@ -752,23 +752,18 @@ function TicketItem({ t, perms, onRefresh, defaultOpen, isSelected, onToggleSele
   const itemRef = useRef<HTMLDivElement>(null);
   const prevDefaultOpen = useRef(defaultOpen ?? false);
 
-  // On mount: if already flagged as "open via deep link", scroll into view.
+  // On mount: if already flagged as "open via deep link", open fullscreen modal.
   useEffect(() => {
     if (!defaultOpen) return;
-    const timer = setTimeout(() => {
-      itemRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 250);
+    const timer = setTimeout(() => setModalOpen(true), 150);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Dynamic deep-link: if defaultOpen flips to true after initial mount, open + scroll.
+  // Dynamic deep-link: if defaultOpen flips to true after initial mount, open modal.
   useEffect(() => {
     if (defaultOpen && !prevDefaultOpen.current) {
-      setOpen(true);
-      const timer = setTimeout(() => {
-        itemRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 250);
+      const timer = setTimeout(() => setModalOpen(true), 150);
       prevDefaultOpen.current = true;
       return () => clearTimeout(timer);
     }
