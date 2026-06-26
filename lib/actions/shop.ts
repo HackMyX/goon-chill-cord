@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import {
@@ -329,6 +330,7 @@ export async function updateShopSettings(
   }
 
   void logActivity("admin:shop", `Shop-Settings gespeichert (${input.autoGenerateItemCount} Items/Tag, AutoGen: ${input.autoGenerateEnabled ? "an" : "aus"})`, { userId: user.id });
+  await broadcastLive("shop-live");
   revalidatePath("/admin");
   revalidatePath("/shop");
   return { success: true };

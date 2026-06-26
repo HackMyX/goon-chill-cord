@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
 import {
   DEFAULT_GAME_LEADERBOARD_CONFIG,
@@ -106,6 +107,7 @@ export async function updateGameLeaderboardConfig(
     `Leaderboard-Konfig gespeichert von ${user.id}`,
     { count: items.length, enabled: items.filter((i) => i.enabled).length }
   );
+  await broadcastLive("game-leaderboard-live");
   revalidatePath("/");
   return { success: true };
 }

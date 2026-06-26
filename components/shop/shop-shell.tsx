@@ -16,8 +16,9 @@ import { UniversalPreviewModal } from "@/components/ui/universal-preview-modal";
 import { ShopCharacterView, type ItemForPreview } from "@/components/shop/shop-character-view";
 import { useSoundManager } from "@/lib/sound-manager";
 import { ItemStatBadges } from "@/components/items/item-stat-badges";
-import { purchaseShopItem, type ShopListingEntry, type ShopCategoryMeta } from "@/lib/actions/shop";
+import { purchaseShopItem, getTodayShop, type ShopListingEntry, type ShopCategoryMeta } from "@/lib/actions/shop";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { useLiveConfig } from "@/lib/use-live-config";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { resolveShopCategoryIcon, resolveShopCategoryColor } from "@/lib/shop-category-icons";
 import { RARITY_STYLES, type Rarity } from "@/lib/cases";
@@ -717,16 +718,27 @@ export function ShopShell({
   credits: initialCredits,
   streakDays,
   gender,
-  listings,
-  resetsAt,
-  motd,
-  categories,
+  listings: initialListings,
+  resetsAt: initialResetsAt,
+  motd: initialMotd,
+  categories: initialCategories,
   isAdmin = false,
   isModerator = false,
   activeBattlePasses = [],
 }: ShopShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => { if (typeof row.credits === "number") setCredits(row.credits); });
+  // Live shop updates (admin saves shop settings / MOTD) — no reload.
+  const [listings, setListings] = useState(initialListings);
+  const [resetsAt, setResetsAt] = useState(initialResetsAt);
+  const [motd, setMotd] = useState(initialMotd);
+  const [categories, setCategories] = useState(initialCategories);
+  useLiveConfig("shop-live", getTodayShop, (r) => {
+    setListings(r.listings);
+    setResetsAt(r.resetsAt);
+    setMotd(r.motdEnabled ? (r.motd ?? null) : null);
+    setCategories(r.categories);
+  });
   const [rarityFilter, setRarityFilter] = useState<Rarity | "all">("all");
   const [previewListing, setPreviewListing] = useState<ShopListingEntry | null>(null);
   const [motdDismissed, setMotdDismissed] = useState(false);

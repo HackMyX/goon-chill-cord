@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Crown, Trophy, Medal, ChevronRight, Gamepad2, Joystick, Pickaxe, Zap, CircleDot, Globe, Package, TrendingUp } from "lucide-react";
@@ -7,6 +8,8 @@ import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 import type { GameLeaderboardSection, GameLeaderboardListId } from "@/lib/actions/homepage-leaderboards";
+import { fetchGameLeaderboards } from "@/lib/actions/homepage-leaderboards";
+import { useLiveConfig } from "@/lib/use-live-config";
 
 export type { GameLeaderboardSection };
 
@@ -336,8 +339,10 @@ function GameLeaderboardCard({
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function GameLeaderboards({ sections }: { sections: GameLeaderboardSection[] }) {
+export function GameLeaderboards({ sections: initialSections }: { sections: GameLeaderboardSection[] }) {
   const { currencyName } = useSiteConfig();
+  const [sections, setSections] = useState(initialSections);
+  useLiveConfig("game-leaderboard-live", fetchGameLeaderboards, setSections);
 
   if (sections.length === 0) return null;
 

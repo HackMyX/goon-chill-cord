@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 import {
   DEFAULT_HOMEPAGE_CHAT_CONFIG,
@@ -113,6 +114,7 @@ export async function adminUpdateHomepageChatConfig(
       return { success: false, error: error.message };
     }
     void logActivity("admin:homepage-chat-config", "Homepage-Chat-Config gespeichert", { userId: user.id });
+    await broadcastLive("homepage-chat-live");
     return { success: true };
   } catch (e) {
     void logDebugEvent({ level: "error", scope: "admin:homepage-chat-config", message: "Unbekannter Fehler", detail: String(e) });

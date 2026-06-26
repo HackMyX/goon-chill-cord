@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useLiveConfig } from "@/lib/use-live-config";
+import { getHomepageChatConfig } from "@/lib/actions/homepage-chat-config";
 import {
   getGlobalChatMessages,
   sendGlobalChatMessage,
@@ -287,7 +289,9 @@ interface HomepageChatSidebarProps {
   config: HomepageChatConfig;
 }
 
-export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
+export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSidebarProps) {
+  const [config, setConfig] = useState(initialConfig);
+  useLiveConfig("homepage-chat-live", getHomepageChatConfig, setConfig);
   const [isOpen, setIsOpen] = useState(false); // start closed; hydrate from localStorage
   const [isMobile, setIsMobile] = useState(false);
   const [hydrated, setHydrated] = useState(false);
