@@ -1545,7 +1545,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen, isSelected, onToggleSele
           ticket={t}
           perms={perms}
           onClose={() => setModalOpen(false)}
-          onUpdated={() => { setModalOpen(false); onRefresh(); }}
+          onUpdated={() => { onRefresh(); }}
         />
       )}
     </div>
