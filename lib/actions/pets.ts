@@ -174,9 +174,21 @@ export async function updatePetConfig(input: UpdatePetConfigInput): Promise<PetA
     // best-effort
   }
 
+  await broadcastPetChange();
   revalidatePath("/admin");
   revalidatePath("/world");
   return { success: true };
+}
+
+/** Live-broadcast to all connected clients (no reload) — AGENTS §3.
+ * PetConfigProvider re-fetches so pet display stats update everywhere. */
+async function broadcastPetChange() {
+  try {
+    const admin = createAdminClient();
+    const ch = admin.channel("pets-live");
+    await ch.send({ type: "broadcast", event: "pets_changed", payload: { updatedAt: new Date().toISOString() } });
+    await admin.removeChannel(ch);
+  } catch { /* best-effort */ }
 }
 
 /** Upserts per-rarity stat overrides for one pet species × rarity combination.
@@ -238,6 +250,7 @@ export async function updatePetRarityOverride(input: UpdatePetRarityOverrideInpu
     // best-effort
   }
 
+  await broadcastPetChange();
   revalidatePath("/admin");
   revalidatePath("/world");
   return { success: true };
@@ -264,6 +277,7 @@ export async function deletePetRarityOverride(petTypeId: string, rarity: PetRari
     message: `Admin ${auth.profile?.username ?? auth.user.id} löschte Rarität-Override für "${petTypeId}" / "${rarity}" → zurück zu Standardwerten`,
   }).catch(() => {});
 
+  await broadcastPetChange();
   revalidatePath("/admin");
   revalidatePath("/world");
   return { success: true };

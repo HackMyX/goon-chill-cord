@@ -45,6 +45,15 @@ export async function updateSoundConfig(
     void logDebugEvent({ level: "error", scope: "admin:sound-config", message: "Sound-Config speichern fehlgeschlagen", detail: error.message });
     return { success: false, error: error.message };
   }
+
+  // Live-broadcast to all connected clients (no reload) — AGENTS §3.
+  // SoundConfigLoader re-fetches and re-applies to the global SoundManager.
+  try {
+    const ch = admin.channel("sound-config-live");
+    await ch.send({ type: "broadcast", event: "sound_config_changed", payload: { updatedAt: new Date().toISOString() } });
+    await admin.removeChannel(ch);
+  } catch { /* broadcast is best-effort */ }
+
   void logActivity("admin:sound-config", `Sound-Config gespeichert (${Object.keys(config).length} Events)`, { userId: user.id });
   return { success: true };
 }

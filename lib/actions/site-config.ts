@@ -204,6 +204,15 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
     return { success: false, error: "Speichern fehlgeschlagen — ist die site_config-Migration eingespielt?" };
   }
 
+  // Live-broadcast to all connected clients (no reload) — AGENTS §3.
+  // SiteConfigProvider re-fetches and re-applies name/logo/topbar/homepage
+  // instantly for every user on every page.
+  try {
+    const ch = admin.channel("site-config-live");
+    await ch.send({ type: "broadcast", event: "site_config_changed", payload: { updatedAt: new Date().toISOString() } });
+    await admin.removeChannel(ch);
+  } catch { /* broadcast is best-effort */ }
+
   void logActivity("admin:site-config", `Site-Config gespeichert: "${input.siteName}"`, { userId: user.id, siteName: input.siteName });
   revalidatePath("/", "layout");
   return { success: true };
