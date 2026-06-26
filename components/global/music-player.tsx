@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Music, VolumeX, Volume1, Volume2 } from "lucide-react";
 import { getMusicConfig } from "@/lib/actions/music";
+import { createClient } from "@/lib/supabase/client";
 import { MusicSynth } from "@/lib/music-synth";
 import { resolvePageVolume, clampVolume, type MusicConfig, type MusicPageKey } from "@/lib/music-config";
 
@@ -100,6 +101,19 @@ export function MusicPlayer() {
   // ── Load music config ────────────────────────────────────────────────────────
   useEffect(() => {
     getMusicConfig().then(setConfig);
+  }, []);
+
+  // ── Live updates: admin saves broadcast on "music-live" → re-fetch & re-apply
+  //    per-page volume / track assignments without a page reload (AGENTS §3).
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("music-live")
+      .on("broadcast", { event: "music_changed" }, () => {
+        getMusicConfig().then(setConfig);
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
   }, []);
 
   // ── File-based fade helpers ──────────────────────────────────────────────────

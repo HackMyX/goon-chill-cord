@@ -43,6 +43,15 @@ export async function saveMusicConfig(
       void logDebugEvent({ level: "error", scope: "admin:music", message: "Music-Config speichern fehlgeschlagen", detail: error.message });
       return { success: false, error: error.message };
     }
+
+    // Live-broadcast to all connected players (no reload) — AGENTS §3.
+    // Players re-fetch the config and re-apply per-page volume / track instantly.
+    try {
+      const ch = admin.channel("music-live");
+      await ch.send({ type: "broadcast", event: "music_changed", payload: { updatedAt: new Date().toISOString() } });
+      await admin.removeChannel(ch);
+    } catch { /* broadcast is best-effort */ }
+
     void logActivity("admin:music", `Music-Config gespeichert (${config.tracks.length} Tracks, enabled=${config.enabled})`, { userId: user.id });
     return { success: true };
   } catch (e) {
