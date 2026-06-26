@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Zap, Volume2, Eye, Settings2, Music, ListChecks } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Zap, Volume2, Eye, Settings2, Music, ListChecks, SwatchBook } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CasesAdminTab } from "@/components/admin/case-group-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -33,6 +33,7 @@ import { LevelConfigEditor } from "@/components/admin/level-config-editor";
 import { AbilityAdminTab } from "@/components/admin/ability-admin-tab";
 import { SoundConfigEditor } from "@/components/admin/sound-config-editor";
 import { MusicConfigEditor } from "@/components/admin/music-config-editor";
+import { ThemeConfigEditor } from "@/components/admin/theme-config-editor";
 import { PreviewConfigTab } from "@/components/admin/preview-config-tab";
 import { DailyQuestsTab } from "@/components/admin/daily-quests-tab";
 import HomepageChatConfigEditor from "@/components/admin/homepage-chat-config-editor";
@@ -164,7 +165,7 @@ interface AdminShellProps {
   fineConfig: FineConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "sounds" | "music" | "preview_config" | "fine_config" | "daily_quests";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "sounds" | "music" | "theme" | "preview_config" | "fine_config" | "daily_quests";
 
 const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string }[] = [
   { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
@@ -184,6 +185,7 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Fähigkeiten", tab: "abilities", keywords: ["fähigkeit", "ability", "mine", "speed", "boost", "rüstung"], description: "Fähigkeiten-Definitionen und Grants" },
   { label: "Sound-Einstellungen", tab: "sounds", keywords: ["sound", "ton", "lautstärke", "audio"], description: "Sound-Events und Lautstärken" },
   { label: "Hintergrundmusik", tab: "music", keywords: ["musik", "music", "bgm", "hintergrund", "track", "loop", "arcade", "chill", "adventure", "fade", "lautstärke"], description: "BGM pro Seite zuweisen, Track-Bibliothek verwalten" },
+  { label: "Theming / Designs", tab: "theme", keywords: ["theme", "design", "farbe", "color", "palette", "skin", "darkmode", "neon", "cyber", "matrix", "vaporwave", "look", "stil", "akzentfarbe"], description: "Seitenweites Gesamt-Design wählen (Farben, Glow), Live-Vorschau" },
   { label: "Preview-Engine", tab: "preview_config", keywords: ["preview", "vorschau", "3d", "rotation", "zoom", "partikel", "glow", "badge", "item", "namestyle"], description: "Vorschau-Engine Konfiguration für Items, Badges, Name-Styles" },
   { label: "Name-Styles", tab: "namestyles", keywords: ["namestyle", "name", "animation", "shimmer", "rainbow", "glitch"], description: "Name-Stil Katalog und Shop" },
   { label: "Badges & Sondertags", tab: "badges", keywords: ["badge", "tag", "sondertag", "vergabe", "farbe"], description: "Badge-Definitionen und Vergaben" },
@@ -229,6 +231,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "security",       label: "Sicherheit",           icon: ShieldAlert },
   { id: "sounds",         label: "Sound Manager",        icon: Volume2 },
   { id: "music",          label: "Hintergrundmusik",     icon: Music },
+  { id: "theme",          label: "Theming / Designs",    icon: SwatchBook },
   { id: "homepage_chat",  label: "Startseite Chat",      icon: MessageSquare },
   { id: "surveys",        label: "Umfragen",             icon: BarChart3 },
   { id: "users",          label: "User-Management",      icon: Users },
@@ -595,6 +598,8 @@ export function AdminShell({
         )}
 
         {tab === "music" && <MusicConfigEditor />}
+
+        {tab === "theme" && <ThemeConfigEditor />}
 
         {tab === "preview_config" && <PreviewConfigTab />}
 

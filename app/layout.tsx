@@ -11,6 +11,8 @@ import { PresenceHeartbeat } from "@/components/layout/presence-heartbeat";
 import { SupportButton } from "@/components/support/ticket-button";
 import { FpRegistrar } from "@/components/auth/fp-registrar";
 import { getSiteConfig } from "@/lib/actions/site-config";
+import { getThemeConfig } from "@/lib/actions/theme";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { getPetConfigs } from "@/lib/actions/pets";
 import { getSoundConfig } from "@/lib/actions/sound-config";
 import { getFineConfig } from "@/lib/actions/fine-config";
@@ -65,11 +67,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [siteConfig, petConfigs, soundConfig, fineConfig] = await Promise.all([getSiteConfig(), getPetConfigs(), getSoundConfig(), getFineConfig()]);
+  const [siteConfig, petConfigs, soundConfig, fineConfig, themeConfig] = await Promise.all([getSiteConfig(), getPetConfigs(), getSoundConfig(), getFineConfig(), getThemeConfig()]);
   return (
     <html
       lang="de"
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      data-theme={themeConfig.activeTheme === "default" ? undefined : themeConfig.activeTheme}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThreeWarningsSuppressor />
@@ -77,15 +80,17 @@ export default async function RootLayout({
         <AmbientGlow />
         <PresenceHeartbeat />
         <FpRegistrar />
-        <FineConfigProvider initial={fineConfig}>
-          <SiteConfigProvider config={siteConfig}>
-            <PetConfigProvider initialConfigs={petConfigs}>
-              <ConfirmDialogProvider>
-                <ProfilePopupProvider>{children}</ProfilePopupProvider>
-              </ConfirmDialogProvider>
-            </PetConfigProvider>
-          </SiteConfigProvider>
-        </FineConfigProvider>
+        <ThemeProvider initial={themeConfig}>
+          <FineConfigProvider initial={fineConfig}>
+            <SiteConfigProvider config={siteConfig}>
+              <PetConfigProvider initialConfigs={petConfigs}>
+                <ConfirmDialogProvider>
+                  <ProfilePopupProvider>{children}</ProfilePopupProvider>
+                </ConfirmDialogProvider>
+              </PetConfigProvider>
+            </SiteConfigProvider>
+          </FineConfigProvider>
+        </ThemeProvider>
         <SoundConfigLoader config={soundConfig} />
         <LevelUpPopup />
         <XpGainToast />

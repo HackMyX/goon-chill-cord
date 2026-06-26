@@ -608,6 +608,22 @@ async function main() {
   ], client);
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // 17. THEME CONFIG (Theming Engine)
+  // ─────────────────────────────────────────────────────────────────────────────
+  await run("theme_config singleton", [
+    `CREATE TABLE IF NOT EXISTS theme_config (
+      id         TEXT        PRIMARY KEY DEFAULT 'default',
+      config     JSONB       NOT NULL    DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL    DEFAULT now()
+    )`,
+    `ALTER TABLE theme_config ENABLE ROW LEVEL SECURITY`,
+    `INSERT INTO theme_config (id, config) VALUES ('default', '{
+      "activeTheme":"default",
+      "allowUserChoice":false
+    }'::jsonb) ON CONFLICT (id) DO NOTHING`,
+  ], client);
+
+  // ─────────────────────────────────────────────────────────────────────────────
   await client.end();
   console.log("\n🎉 All migrations complete!\n");
 }
