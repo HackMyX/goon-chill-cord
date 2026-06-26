@@ -275,7 +275,6 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
     setSending(false);
 
     if (!res.success) {
-      // Remove optimistic message on failure and restore input
       if (pendingOptimisticRef.current) {
         const optId = pendingOptimisticRef.current;
         pendingOptimisticRef.current = null;
@@ -284,8 +283,23 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
       setInput(text);
       sound.error();
       setError(res.error ?? "Fehler.");
+    } else {
+      // Eagerly resolve the optimistic — don't rely on realtime alone (can be delayed or miss).
+      // Realtime will dedup via the existingIds check in appendMessage when it fires.
+      const optId = pendingOptimisticRef.current;
+      pendingOptimisticRef.current = null;
+      const fresh = await getGlobalChatMessages(fineConfig.chatMaxHistory);
+      if (fresh.length > 0) {
+        latestIdRef.current = fresh[fresh.length - 1].id;
+        setMessages((prev) => {
+          const withoutOpt = optId ? prev.filter((m) => m.id !== optId) : prev;
+          const existingIds = new Set(withoutOpt.map((m) => m.id));
+          const added = fresh.filter((m) => !existingIds.has(m.id));
+          return added.length > 0 ? [...withoutOpt, ...added] : withoutOpt;
+        });
+        setTimeout(scrollToBottom, 30);
+      }
     }
-    // On success: realtime INSERT fires → appendMessage removes the optimistic + adds the real message
   }
 
   async function handleClear() {

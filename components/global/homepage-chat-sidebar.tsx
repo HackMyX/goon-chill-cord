@@ -529,7 +529,23 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
       setInput(text);
       setError(res.error ?? "Fehler beim Senden.");
     } else {
-      // Cooldown
+      // Eagerly resolve the optimistic immediately after confirmed send.
+      // homepage-chat-sidebar has no polling fallback — without this, a missed
+      // realtime event leaves the "…" stuck until reload.
+      const optId = pendingOptimisticRef.current;
+      pendingOptimisticRef.current = null;
+      const fresh = await getGlobalChatMessages(config.maxMessages);
+      if (fresh.length > 0) {
+        latestIdRef.current = fresh[fresh.length - 1].id;
+        setMessages((prev) => {
+          const withoutOpt = optId ? prev.filter((m) => m.id !== optId) : prev;
+          const existingIds = new Set(withoutOpt.map((m) => m.id));
+          const added = fresh.filter((m) => !existingIds.has(m.id));
+          const next = added.length > 0 ? [...withoutOpt, ...added] : withoutOpt;
+          return next.slice(-config.maxMessages);
+        });
+        setTimeout(scrollToBottom, 50);
+      }
       setOnCooldown(true);
       setTimeout(() => setOnCooldown(false), COOLDOWN_MS);
     }

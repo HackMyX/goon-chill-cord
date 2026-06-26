@@ -144,6 +144,17 @@ export function WorldChatBubble({ username }: { username: string }) {
     if (!res.success) {
       setInput(text);
       sound.error();
+    } else {
+      // Ensure message is visible immediately — don't wait for realtime alone
+      const fresh = await getGlobalChatMessages(MAX_DISPLAY);
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const added = fresh.filter((m) => !existingIds.has(m.id));
+        if (added.length === 0) return prev;
+        const next = [...prev, ...added];
+        return next.length > MAX_DISPLAY ? next.slice(next.length - MAX_DISPLAY) : next;
+      });
+      scrollToBottom();
     }
   }
 
