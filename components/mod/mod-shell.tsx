@@ -7,6 +7,7 @@ import {
   Sparkles, LayoutDashboard, RefreshCw, History, NotepadText, FileText,
   Trophy, Paperclip, MessageSquare, Bug, Lightbulb, ArrowUpRight,
   PauseCircle, PlayCircle, SortAsc, SortDesc, BarChart3, Filter,
+  Maximize2, CalendarDays,
 } from "lucide-react";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { GlobalChatPanel } from "@/components/global/global-chat-panel";
@@ -23,7 +24,8 @@ import {
   modDeleteTicket, modSetTicketPriority, modUpdateTicketStatus, modGrantTicketReward,
   modRemoveTicketReward, modEscalateTicket, modPauseTicket, getMyEffectivePermissions,
 } from "@/lib/actions/mod";
-import { addInternalNote, getInternalNotes, getTicketRewards, type InternalNote, type TicketReward } from "@/lib/actions/tickets";
+import { addInternalNote, getInternalNotes, getTicketRewards, deleteTicketsBulk, deleteTicketsByDateRange, type InternalNote, type TicketReward } from "@/lib/actions/tickets";
+import { ModTicketDetailModal } from "@/components/mod/mod-ticket-detail-modal";
 import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage } from "@/lib/mod";
 import { ADMIN_MOD_PERMISSIONS } from "@/lib/mod";
 
@@ -712,11 +714,13 @@ const ALL_TICKET_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 const STATUS_LABEL: Record<string, string> = { open: "Offen", in_progress: "In Bearb.", paused: "Pausiert", resolved: "Gelöst", closed: "Geschlossen" };
 const PRIORITY_LABEL: Record<string, string> = { low: "Niedrig", normal: "Normal", high: "Hoch", urgent: "Dringend" };
 
-function TicketItem({ t, perms, onRefresh, defaultOpen }: {
+function TicketItem({ t, perms, onRefresh, defaultOpen, isSelected, onToggleSelect }: {
   t: ModTicket;
   perms: ModPermissions;
   onRefresh: () => void;
   defaultOpen?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [closeReason, setCloseReason] = useState("");
@@ -743,6 +747,7 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
   const alreadyRewarded = !!t.rewardGrantedAt;
   const rewardIsPending = !alreadyRewarded && t.rewardPending;
   const [escalating, setEscalating] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const sound = useSoundManager();
   const itemRef = useRef<HTMLDivElement>(null);
   const prevDefaultOpen = useRef(defaultOpen ?? false);
@@ -939,8 +944,22 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
 
   return (
     <div ref={itemRef} className={`overflow-hidden rounded-2xl border transition-colors ${statusCls}`}>
+      <div className="relative flex w-full items-center">
+        {/* Checkbox for bulk select */}
+        {onToggleSelect && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleSelect(t.id); }}
+            className={`ml-3 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+              isSelected
+                ? "border-indigo-500 bg-indigo-500 text-white"
+                : "border-white/20 bg-transparent hover:border-indigo-400/60"
+            }`}
+          >
+            {isSelected && <Check className="h-3 w-3" />}
+          </button>
+        )}
       <button
-        className="relative flex w-full items-center gap-3 py-3.5 pr-4 pl-5 text-left transition-colors hover:bg-white/[0.03]"
+        className="relative flex flex-1 items-center gap-3 py-3.5 pr-4 pl-5 text-left transition-colors hover:bg-white/[0.03]"
         onClick={() => setOpen((o) => !o)}
       >
         {/* Priority color strip */}
@@ -980,13 +999,22 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           </div>
         </div>
 
-        {/* Right: priority + time + chevron */}
+        {/* Right: priority + time + maximize + chevron */}
         <div className="flex shrink-0 items-center gap-2">
           <PriorityBadge priority={t.priority} />
           <span className="w-14 text-right text-[10px] text-zinc-600">{timeAgo(t.updatedAt ?? t.createdAt)}</span>
           <ChevronDown className={`h-4 w-4 text-zinc-600 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
         </div>
       </button>
+        {/* Vollbild button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setModalOpen(true); }}
+          title="Vollbild öffnen"
+          className="mr-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] text-zinc-600 transition-all hover:border-indigo-500/40 hover:bg-indigo-500/10 hover:text-indigo-400"
+        >
+          <Maximize2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
       {open && (
         <div className="border-t border-white/5 px-4 pb-4 pt-3">
@@ -1466,6 +1494,16 @@ function TicketItem({ t, perms, onRefresh, defaultOpen }: {
           )}
         </div>
       )}
+
+      {/* Vollbild-Modal */}
+      {modalOpen && (
+        <ModTicketDetailModal
+          ticket={t}
+          perms={perms}
+          onClose={() => setModalOpen(false)}
+          onUpdated={() => { setModalOpen(false); onRefresh(); }}
+        />
+      )}
     </div>
   );
 }
@@ -1487,6 +1525,53 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
   openTicketId?: string | null;
   onTicketOpened?: () => void;
 }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [showDateRange, setShowDateRange] = useState(false);
+  const [dateRangeBefore, setDateRangeBefore] = useState("");
+  const [dateRangeStatuses, setDateRangeStatuses] = useState<string[]>(["closed", "resolved"]);
+  const [dateDeleting, setDateDeleting] = useState(false);
+  const [dateDeleteMsg, setDateDeleteMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function selectAll() { setSelected(new Set(displayed.map((t) => t.id))); }
+  function clearSelect() { setSelected(new Set()); }
+
+  async function handleBulkDelete() {
+    if (!bulkConfirm) { setBulkConfirm(true); setTimeout(() => setBulkConfirm(false), 4000); return; }
+    setBulkDeleting(true);
+    setBulkConfirm(false);
+    const ids = [...selected];
+    await deleteTicketsBulk(ids);
+    setSelected(new Set());
+    setBulkDeleting(false);
+    onRefresh();
+  }
+
+  async function handleDateRangeDelete() {
+    if (!dateRangeBefore) return;
+    setDateDeleting(true);
+    const res = await deleteTicketsByDateRange({
+      before: new Date(dateRangeBefore).toISOString(),
+      statuses: dateRangeStatuses.length > 0 ? (dateRangeStatuses as ("closed" | "resolved")[]) : undefined,
+    });
+    setDateDeleting(false);
+    if (res.success) {
+      setDateDeleteMsg({ text: `${res.deleted} Ticket${res.deleted !== 1 ? "s" : ""} gelöscht.`, ok: true });
+      onRefresh();
+    } else {
+      setDateDeleteMsg({ text: res.error ?? "Fehler.", ok: false });
+    }
+    setTimeout(() => setDateDeleteMsg(null), 4000);
+  }
+
   const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>(() => {
     if (openTicketId) return "all";
     if (typeof window !== "undefined") return (localStorage.getItem("mod:t:sf") as TicketStatusFilter) ?? "open";
@@ -1701,17 +1786,120 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
         </div>
       </div>
 
-      {/* Result info */}
-      {hasActiveFilter && (
-        <p className="text-[11px] text-zinc-600">
-          {displayed.length} {displayed.length === 1 ? "Ticket" : "Tickets"} gefunden
-          {tickets.length !== displayed.length && (
-            <> · <button
-              onClick={() => { setSearch(""); setStatus("all"); setCat("all"); setPrio("all"); }}
-              className="text-sky-400 hover:text-sky-300 transition-colors"
-            >Filter zurücksetzen</button></>
+      {/* Result info + bulk controls row */}
+      <div className="flex flex-wrap items-center gap-2 min-h-[24px]">
+        {hasActiveFilter && (
+          <p className="text-[11px] text-zinc-600">
+            {displayed.length} {displayed.length === 1 ? "Ticket" : "Tickets"} gefunden
+            {tickets.length !== displayed.length && (
+              <> · <button
+                onClick={() => { setSearch(""); setStatus("all"); setCat("all"); setPrio("all"); }}
+                className="text-sky-400 hover:text-sky-300 transition-colors"
+              >Filter zurücksetzen</button></>
+            )}
+          </p>
+        )}
+
+        {perms.canDeleteTickets && displayed.length > 0 && (
+          <div className="ml-auto flex items-center gap-2">
+            {/* Auswahl-Kontrollen */}
+            {selected.size === 0 ? (
+              <button
+                onClick={selectAll}
+                className="text-[11px] text-zinc-600 hover:text-zinc-300 transition-colors"
+              >
+                Alle auswählen
+              </button>
+            ) : (
+              <>
+                <span className="text-[11px] font-semibold text-indigo-300">
+                  {selected.size} ausgewählt
+                </span>
+                <button onClick={clearSelect} className="text-[11px] text-zinc-600 hover:text-zinc-300 transition-colors">
+                  Aufheben
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors disabled:opacity-50 ${
+                    bulkConfirm
+                      ? "border-red-500/50 bg-red-500/20 text-red-300"
+                      : "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                  }`}
+                >
+                  {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                  {bulkConfirm ? "Wirklich löschen?" : `${selected.size} löschen`}
+                </button>
+              </>
+            )}
+
+            {/* Zeitraum löschen toggle */}
+            <button
+              onClick={() => setShowDateRange((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                showDateRange
+                  ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                  : "border-white/10 text-zinc-600 hover:border-amber-500/30 hover:text-amber-400"
+              }`}
+            >
+              <CalendarDays className="h-3 w-3" />
+              Zeitraum
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Date range delete panel */}
+      {showDateRange && perms.canDeleteTickets && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+          <p className="mb-3 flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-amber-400">
+            <CalendarDays className="h-3.5 w-3.5" />Tickets nach Zeitraum löschen
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500">Tickets älter als</label>
+              <input
+                type="date"
+                value={dateRangeBefore}
+                onChange={(e) => setDateRangeBefore(e.target.value)}
+                className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-amber-400/40"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-zinc-500">Nur mit Status</label>
+              <div className="flex gap-1">
+                {(["closed", "resolved", "open", "in_progress"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setDateRangeStatuses((prev) =>
+                      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
+                    )}
+                    className={`rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors ${
+                      dateRangeStatuses.includes(s)
+                        ? "border-amber-500/40 bg-amber-500/20 text-amber-200"
+                        : "border-white/10 text-zinc-600 hover:text-zinc-400"
+                    }`}
+                  >
+                    {s === "closed" ? "Geschlossen" : s === "resolved" ? "Gelöst" : s === "open" ? "Offen" : "In Bearb."}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={handleDateRangeDelete}
+              disabled={dateDeleting || !dateRangeBefore}
+              className="flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-1.5 text-[11px] font-bold text-red-300 hover:bg-red-500/25 disabled:opacity-50 transition-colors"
+            >
+              {dateDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Löschen
+            </button>
+          </div>
+          {dateDeleteMsg && (
+            <p className={`mt-2 text-xs font-semibold ${dateDeleteMsg.ok ? "text-emerald-400" : "text-red-400"}`}>
+              {dateDeleteMsg.text}
+            </p>
           )}
-        </p>
+        </div>
       )}
 
       {/* Ticket list */}
@@ -1728,7 +1916,15 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
       ) : (
         <div className="flex flex-col divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/8 bg-white/[0.015]">
           {displayed.map((t) => (
-            <TicketItem key={t.id} t={t} perms={perms} onRefresh={onRefresh} defaultOpen={openTicketId === t.id} />
+            <TicketItem
+              key={t.id}
+              t={t}
+              perms={perms}
+              onRefresh={onRefresh}
+              defaultOpen={openTicketId === t.id}
+              isSelected={selected.has(t.id)}
+              onToggleSelect={perms.canDeleteTickets ? toggleSelect : undefined}
+            />
           ))}
           {displayed.length >= 50 && (
             <p className="py-3 text-center text-[11px] text-zinc-600">Zeige {displayed.length} Tickets — verfeinere den Filter für genauere Ergebnisse.</p>

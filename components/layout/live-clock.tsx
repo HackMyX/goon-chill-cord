@@ -122,8 +122,8 @@ export function LiveClock({ streakDays: initialStreakDays = 0, onClaimed }: Live
 
   return (
     <div className="flex items-center gap-2">
-      {/* Streak + countdown box */}
-      {showBox && (
+      {/* Streak + countdown box — hidden while reward is claimable to prevent layout overflow */}
+      {showBox && !(hydrated && canClaim) && (
         <div className={`hidden sm:flex [@media(max-height:600px)]:hidden flex-col items-center gap-0.5 rounded-2xl px-3 py-1.5 sm:px-5 sm:py-2 transition-all ${
           streakDays >= 7
             ? `bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-transparent border border-orange-500/20 ${streakGlow(streakDays)}`
