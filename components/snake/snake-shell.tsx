@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { useSoundManager } from "@/lib/sound-manager";
-import { submitSnakeScore } from "@/lib/actions/snake";
+import { submitSnakeScore, getSnakeConfig } from "@/lib/actions/snake";
+import { useLiveConfig } from "@/lib/use-live-config";
 import type { SnakeConfig, SnakeMode, SnakeModeConfig, SnakeGrindConfig } from "@/lib/snake-config";
 import type { SnakeLeaderboardEntry } from "@/lib/actions/snake";
 import { StyledUsername } from "@/components/ui/styled-username";
@@ -875,10 +876,12 @@ interface SnakeShellProps {
 
 export function SnakeShell({
   userId, credits: initialCredits, streakDays, isAdmin, isModerator,
-  config, leaderboardX1, leaderboardX2, leaderboardGrind, leaderboardFarm,
+  config: initialConfig, leaderboardX1, leaderboardX2, leaderboardGrind, leaderboardFarm,
   myBestX1, myBestX2, myBestGrind, myBestFarm, dailyCrEarned: initDaily,
   dailyGamesX1 = 0, dailyGamesX2 = 0, dailyGamesGrind = 0, dailyGamesFarm = 0,
 }: SnakeShellProps) {
+  const [config, setConfig] = useState(initialConfig);
+  useLiveConfig("snake-config-live", getSnakeConfig, setConfig);
   const [credits, setCredits] = useState(initialCredits);
   const [activeMode, setActiveMode] = useState<SnakeMode>("x1");
   const [phase, setPhase] = useState<Phase>("idle");

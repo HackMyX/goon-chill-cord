@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { DEFAULT_DON_CONFIG, DEFAULT_UPGRADE_TIERS, type DonConfig, type DonUpgradeTier } from "@/lib/don-config";
 
 interface DonConfigRow {
@@ -90,6 +91,7 @@ export async function updateDonConfig(
   });
 
   if (error) return { success: false, error: "Speichern fehlgeschlagen — ist die don_config-Tabelle angelegt?" };
+  await broadcastLive("don-config-live");
   revalidatePath("/");
   revalidatePath("/", "layout");
   return { success: true };

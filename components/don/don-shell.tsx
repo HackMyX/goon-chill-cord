@@ -10,6 +10,8 @@ import { flipDouble } from "@/lib/actions/double-or-nothing";
 import { purchaseDonUpgrade } from "@/lib/actions/don-upgrade";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { useLiveConfig } from "@/lib/use-live-config";
+import { getDonConfig } from "@/lib/actions/don-config";
 import type { DonConfig } from "@/lib/don-config";
 
 function fmt(n: number) {
@@ -28,7 +30,7 @@ export function DonShell({
   streakDays,
   isAdmin = false,
   isModerator = false,
-  donConfig,
+  donConfig: initialDonConfig,
   initialFlipsToday,
   initialHourlyFlipsUsed = 0,
   initialUpgradeTier = 0,
@@ -43,6 +45,8 @@ export function DonShell({
   initialHourlyFlipsUsed?: number;
   initialUpgradeTier?: number;
 }) {
+  const [donConfig, setDonConfig] = useState(initialDonConfig);
+  useLiveConfig("don-config-live", getDonConfig, setDonConfig);
   const [credits, setCredits] = useState(initialCredits);
   const [phase, setPhase] = useState<"idle" | "loading" | "flipping" | "won" | "lost">("idle");
   const [selectedQuick, setSelectedQuick] = useState<number>(donConfig.quickAmounts[0] ?? 100);

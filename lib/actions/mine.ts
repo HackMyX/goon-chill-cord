@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { DEFAULT_MINE_CONFIG, DEFAULT_MINE_LEVELS, type MineConfig, type MineLevel } from "@/lib/mine-config";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
@@ -90,6 +91,7 @@ export async function updateMineConfig(
   });
 
   if (error) return { success: false, error: "Speichern fehlgeschlagen." };
+  await broadcastLive("mine-config-live");
   revalidatePath("/mine");
   revalidatePath("/", "layout");
   return { success: true };

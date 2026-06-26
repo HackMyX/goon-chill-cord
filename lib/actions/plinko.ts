@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { DEFAULT_PLINKO_CONFIG, type PlinkoConfig, type PlinkoRiskLevel } from "@/lib/plinko-types";
 export type { PlinkoConfig, PlinkoRiskLevel } from "@/lib/plinko-types";
 
@@ -365,6 +366,7 @@ export async function updatePlinkoConfig(cfg: PlinkoConfig): Promise<{ success: 
     updated_at: new Date().toISOString(),
   });
   if (error) return { success: false, error: error.message };
+  await broadcastLive("plinko-config-live");
   revalidatePath("/plinko");
   revalidatePath("/admin");
   return { success: true };

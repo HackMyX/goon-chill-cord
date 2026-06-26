@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { useSoundManager } from "@/lib/sound-manager";
-import { collectMineCredits, upgradeMine } from "@/lib/actions/mine";
+import { collectMineCredits, upgradeMine, getMineConfig } from "@/lib/actions/mine";
+import { useLiveConfig } from "@/lib/use-live-config";
 import type { MineConfig } from "@/lib/mine-config";
 import type { MineProgress, MineLeaderboardEntry } from "@/lib/actions/mine";
 import { StyledUsername } from "@/components/ui/styled-username";
@@ -162,10 +163,12 @@ export function MineShell({
   streakDays,
   isAdmin,
   isModerator,
-  config,
+  config: initialConfig,
   progress: initialProgress,
   leaderboard,
 }: MineShellProps) {
+  const [config, setConfig] = useState(initialConfig);
+  useLiveConfig("mine-config-live", getMineConfig, setConfig);
   const [credits, setCredits] = useState(initialCredits);
   const [progress, setProgress] = useState(initialProgress);
   const [accumulated, setAccumulated] = useState(() =>

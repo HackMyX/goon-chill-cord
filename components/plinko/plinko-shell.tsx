@@ -17,6 +17,8 @@ import {
   type PlinkoLeaderEntry,
 } from "@/lib/actions/plinko";
 import type { PlinkoConfig } from "@/lib/actions/plinko";
+import { getPlinkoConfig } from "@/lib/actions/plinko";
+import { useLiveConfig } from "@/lib/use-live-config";
 import { useSoundManager } from "@/lib/sound-manager";
 import { StyledUsername } from "@/components/ui/styled-username";
 
@@ -243,7 +245,9 @@ function SessionDots({ history }: { history: PlayResult[] }) {
   );
 }
 
-export function PlinkoShell({ config, initialCredits, initialUsedThisHour, isAdmin = false, isModerator = false }: Props) {
+export function PlinkoShell({ config: initialConfig, initialCredits, initialUsedThisHour, isAdmin = false, isModerator = false }: Props) {
+  const [config, setConfig] = useState(initialConfig);
+  useLiveConfig("plinko-config-live", getPlinkoConfig, setConfig);
   const [credits, setCredits] = useState(initialCredits);
   const [usedThisHour, setUsedThisHour] = useState(initialUsedThisHour);
   const [activeRisk, setActiveRisk] = useState(config.riskLevels[0]?.key ?? "low");

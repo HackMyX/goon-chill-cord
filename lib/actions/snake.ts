@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import {
   DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG, DEFAULT_FARM_CONFIG,
   type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig, type SnakeMode,
@@ -261,6 +262,7 @@ export async function updateSnakeConfig(
   });
 
   if (error) return { success: false, error: "Speichern fehlgeschlagen." };
+  await broadcastLive("snake-config-live");
   revalidatePath("/snake");
   revalidatePath("/", "layout");
   return { success: true };
