@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isModerator } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { logDebugEvent } from "@/lib/debug-log-server";
 import { NAME_STYLES, type NameStyleDef, type NameStyleRarityConfig, type NameStyleRarity } from "@/lib/name-styles";
 import { checkAndAwardNameStyleBadges } from "@/lib/actions/badges";
@@ -272,6 +273,7 @@ export async function adminGrantNameStyle(
     // Auto-award achievement badges
     void checkAndAwardNameStyleBadges(userId);
 
+    await broadcastLive("name-styles-live");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: String(e) };
@@ -299,6 +301,7 @@ export async function adminRevokeNameStyle(
       .eq("style_key", styleKey);
     if (error) return { ok: false, error: error.message };
     await logDebugEvent({ level: "info", scope: "admin", message: `Admin ${actor.id} revoked name style "${styleKey}" from user ${userId}` });
+    await broadcastLive("name-styles-live");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: String(e) };
@@ -346,6 +349,7 @@ export async function adminForceEquipStyle(
       .eq("id", userId);
     if (error) return { ok: false, error: error.message };
     await logDebugEvent({ level: "warn", scope: "admin", message: `Admin ${actor.id} force-equipped style "${styleKey ?? "default"}" on user ${userId}` });
+    await broadcastLive("name-styles-live");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: String(e) };

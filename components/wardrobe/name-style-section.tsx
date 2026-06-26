@@ -11,7 +11,8 @@ import {
   type NameStyleDef,
   type NameStyleRarity,
 } from "@/lib/name-styles";
-import { equipNameStyle, type UserNameStyleRow } from "@/lib/actions/name-styles";
+import { equipNameStyle, getMyNameStyles, type UserNameStyleRow } from "@/lib/actions/name-styles";
+import { useLiveConfig } from "@/lib/use-live-config";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -322,6 +323,8 @@ export function NameStyleSection({
 }: NameStyleSectionProps) {
   const [ownedRows, setOwnedRows]   = useState<UserNameStyleRow[]>(initialOwned);
   const [activeKey, setActiveKey]   = useState<string | null>(initialActiveKey);
+  // Live: admin grants/revokes/force-equips a style → reflect without reload.
+  useLiveConfig("name-styles-live", getMyNameStyles, (r) => { setOwnedRows(r.owned); setActiveKey(r.activeKey); });
   const [activeTab, setActiveTab]   = useState<TabKey>("owned");
   const [flash, setFlash]           = useState<FlashMessage | null>(null);
   const [loading, setLoading]       = useState(false);
