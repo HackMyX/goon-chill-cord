@@ -897,7 +897,14 @@ export function SnakeShell({
 
   const [isMobileDevice, setIsMobileDevice] = useState(false);
   useEffect(() => {
-    setIsMobileDevice(navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches);
+    // Touch-only devices (no mouse) get the on-screen D-pad; a desktop or
+    // laptop with a touchscreen keeps the keyboard-only layout. `(any-pointer:
+    // fine)` is true whenever a mouse exists, so we only treat coarse-only
+    // devices as mobile — matches the world-shell detection.
+    setIsMobileDevice(
+      window.matchMedia("(any-pointer: coarse)").matches &&
+      !window.matchMedia("(any-pointer: fine)").matches
+    );
   }, []);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);

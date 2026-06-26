@@ -280,7 +280,9 @@ export function TopBar({
 
         {liveLevel > 0 && (
           <LevelMenuTrigger level={liveLevel}>
-            <div onMouseEnter={sound.hover} className="hidden sm:block [@media(max-height:600px)]:hidden cursor-pointer">
+            {/* Always visible — including mobile — top-left next to credits.
+                Tapping opens the level progress popup (portaled to <body>). */}
+            <div onMouseEnter={sound.hover} className="block [@media(max-height:600px)]:hidden cursor-pointer">
               <LevelBadge level={liveLevel} size="xs" />
             </div>
           </LevelMenuTrigger>

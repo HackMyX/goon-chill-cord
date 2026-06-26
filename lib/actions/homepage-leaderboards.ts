@@ -23,6 +23,38 @@ export type {
 
 // ── Config read/write ─────────────────────────────────────────────────────────
 
+/**
+ * Reconciles a stored config with DEFAULT_GAME_LEADERBOARD_CONFIG so that any
+ * game list added to the defaults *after* the admin last saved (e.g. plinko,
+ * Farmwelt/world, cases, xp) still shows up in the admin UI and can be embedded
+ * on the homepage — without that merge a stale stored row permanently hid the
+ * newer lists. Existing entries keep all their admin settings (enabled/limit/
+ * sort); brand-new lists are appended at the end. Stored ids that no longer
+ * exist in the defaults are dropped.
+ */
+function mergeWithDefaults(stored: GameLeaderboardItem[]): GameLeaderboardItem[] {
+  const validIds = new Set(DEFAULT_GAME_LEADERBOARD_CONFIG.map((d) => d.id));
+  const byId = new Map(stored.map((it) => [it.id, it] as const));
+
+  // Keep stored entries (in their saved order), dropping any stale ids.
+  const merged: GameLeaderboardItem[] = stored
+    .filter((it) => validIds.has(it.id))
+    .map((it) => ({ ...it }));
+
+  // Append any default list the stored config never knew about, with sensible
+  // defaults so it appears (disabled by default → admin opts in explicitly).
+  let nextSort = merged.length;
+  for (const def of DEFAULT_GAME_LEADERBOARD_CONFIG) {
+    if (!byId.has(def.id)) {
+      merged.push({ ...def, sort: nextSort++ });
+    }
+  }
+  // Normalise sort to a clean 0..n-1 by current order.
+  return merged
+    .sort((a, b) => a.sort - b.sort)
+    .map((it, i) => ({ ...it, sort: i }));
+}
+
 export async function getGameLeaderboardConfig(): Promise<GameLeaderboardItem[]> {
   try {
     const admin = createAdminClient();
@@ -32,7 +64,9 @@ export async function getGameLeaderboardConfig(): Promise<GameLeaderboardItem[]>
       .eq("id", "default")
       .maybeSingle();
     if (error || !data) return DEFAULT_GAME_LEADERBOARD_CONFIG;
-    return (data.items as GameLeaderboardItem[]) ?? DEFAULT_GAME_LEADERBOARD_CONFIG;
+    const stored = (data.items as GameLeaderboardItem[]) ?? [];
+    if (stored.length === 0) return DEFAULT_GAME_LEADERBOARD_CONFIG;
+    return mergeWithDefaults(stored);
   } catch {
     return DEFAULT_GAME_LEADERBOARD_CONFIG;
   }

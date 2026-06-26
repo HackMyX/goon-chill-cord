@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Star, Zap, Trophy, Package, Palette, Crown, Lock,
@@ -250,7 +251,16 @@ export function LevelMenuModal({
   const maxLevel = levels.length > 0 ? Math.max(...levels.map((l) => l.level)) : 50;
   const isMaxLevel = levelInfo.level >= maxLevel;
 
-  return (
+  // Render into <body> so the fixed overlay is positioned against the viewport.
+  // Rendered inline (inside the TopBar) it gets trapped by the TopBar's
+  // `backdrop-blur` — backdrop-filter establishes a containing block for fixed
+  // descendants, so `fixed inset-0` would anchor to the tiny header instead of
+  // the screen, leaving the popup clipped at the very top of the page.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
+
+  return createPortal(
     <AnimatePresence>
       <motion.div
         key="level-menu-overlay"
@@ -494,7 +504,8 @@ export function LevelMenuModal({
           </div>
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
 

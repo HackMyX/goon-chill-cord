@@ -1194,7 +1194,7 @@ function TrackTileCard({
                       type: tier.rewardItemType!,
                     }}
                     viewIndex={viewIndex}
-                    visible={!isLocked}
+                    visible={true}
                   />
                 ) : (
                   <BpRewardView3D
@@ -1202,7 +1202,7 @@ function TrackTileCard({
                     rarity={tier.rewardItemRarity ?? "normal"}
                     creditsAmount={(tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1)}
                     viewIndex={viewIndex}
-                    visible={!isLocked}
+                    visible={true}
                     lightColor={effectiveTrackColor}
                   />
                 )}
@@ -2459,7 +2459,13 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
         )}
       </AnimatePresence>
 
-      {/* ══ Shared WebGL Canvas for 3D tile previews ═════════════════════ */}
+      {/* ══ Shared WebGL Canvas for 3D tile previews ═════════════════════
+          z-[10] (not 0!) puts the transparent canvas ABOVE the tier cards
+          (which are `relative z-10`) so the 3D actually shows — at zIndex 0 it
+          sat behind the opaque page, rendering nowhere. drei's View scissors
+          each scene to its tracking <div>, and pointer-events:none lets clicks
+          fall through to the cards. eventSource is required so the shared
+          canvas measures against the shell. Mirrors the working shop setup. */}
       <Canvas
         style={{
           position: "fixed",
@@ -2468,9 +2474,10 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
           width: "100vw",
           height: "100vh",
           pointerEvents: "none",
-          zIndex: 0,
+          zIndex: 10,
         }}
         gl={{ antialias: true, alpha: true }}
+        eventSource={shellRef as React.RefObject<HTMLElement>}
         dpr={[1, 2]}
       >
         <View.Port />

@@ -194,7 +194,18 @@ export function WorldShell({
   const [isMobile, setIsMobile] = useState(false);
   const [showPortraitGate, setShowPortraitGate] = useState(false);
   useEffect(() => {
-    const checkMobile = () => navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
+    // Treat as mobile ONLY when there is a coarse (touch) pointer AND no fine
+    // pointer (mouse) available at all. The old check —
+    // `navigator.maxTouchPoints > 0 || (pointer: coarse)` — flagged every
+    // touch-capable *desktop/laptop* (extremely common on Windows) as mobile,
+    // which hid the desktop "Klicken zum Spielen" pointer-lock overlay and
+    // rendered the touch joystick instead, so a mouse user could no longer
+    // enter the world at all. `(any-pointer: fine)` is true whenever a mouse
+    // exists, so this keeps desktop-with-touchscreen on desktop controls while
+    // still detecting real phones/tablets (coarse-only).
+    const checkMobile = () =>
+      window.matchMedia("(any-pointer: coarse)").matches &&
+      !window.matchMedia("(any-pointer: fine)").matches;
     const checkPortrait = () => checkMobile() && window.matchMedia("(orientation: portrait)").matches;
     setIsMobile(checkMobile());
     setShowPortraitGate(checkPortrait());
