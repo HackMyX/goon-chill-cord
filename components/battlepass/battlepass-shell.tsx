@@ -171,27 +171,41 @@ function TileMiniPreview({
   // ── Credits ──────────────────────────────────────────────────────────────────
   if (tier.rewardType === "credits") {
     const amount = (tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1);
+    const amountText = amount >= 1000 ? `${(amount / 1000).toFixed(amount % 1000 === 0 ? 0 : 1)}k` : String(amount);
+    const COIN_STACK = [
+      { size: 38, dx: 4,  dy: 5,  z: 1, delay: 0   },
+      { size: 32, dx: 0,  dy: 0,  z: 2, delay: 0.18 },
+      { size: 26, dx: -4, dy: -5, z: 3, delay: 0.36 },
+    ];
     return (
-      <div className="flex flex-col items-center gap-1" style={baseStyle}>
-        <div className="relative flex items-center justify-center" style={{ width: 44, height: 44 }}>
-          {[0, 1, 2].map((i) => (
+      <div className="flex flex-col items-center gap-1.5" style={baseStyle}>
+        <div className="relative" style={{ width: 52, height: 52 }}>
+          {COIN_STACK.map((coin, i) => (
             <motion.div
               key={i}
               className="absolute rounded-full"
               style={{
-                width: 32 + i * 4, height: 32 + i * 4,
-                background: `radial-gradient(circle at 35% 35%, #fde68a, #f59e0b, #92400e)`,
-                boxShadow: `0 0 ${6 + i * 5}px rgba(245,158,11,${0.4 + i * 0.15})`,
-                bottom: i * 2, zIndex: 3 - i,
+                width: coin.size,
+                height: coin.size,
+                top: `calc(50% - ${coin.size / 2}px + ${coin.dy}px)`,
+                left: `calc(50% - ${coin.size / 2}px + ${coin.dx}px)`,
+                zIndex: coin.z,
+                background: `radial-gradient(circle at 33% 28%, #fef3c7, #fde68a, #f59e0b, #92400e)`,
+                boxShadow: `0 0 ${8 + i * 5}px rgba(245,158,11,${0.45 + i * 0.12}), inset 0 -2px 3px rgba(0,0,0,0.25)`,
               }}
-              animate={animated ? { y: [0, -2, 0] } : {}}
-              transition={{ duration: 2 + i * 0.4, repeat: Infinity, delay: i * 0.25, ease: "easeInOut" }}
+              animate={animated ? { y: [0, -3 - i * 0.5, 0] } : {}}
+              transition={{ duration: 2.2 + i * 0.4, repeat: Infinity, delay: coin.delay, ease: "easeInOut" }}
             />
           ))}
-          <span className="relative z-10 text-base">💰</span>
+          <span
+            className="absolute z-10"
+            style={{ top: "50%", left: "50%", transform: "translate(-50%, -50%)", fontSize: 16 }}
+          >
+            💰
+          </span>
         </div>
-        <p className="text-[10px] font-black tabular-nums text-amber-300 leading-none">
-          {amount >= 1000 ? `${(amount / 1000).toFixed(amount % 1000 === 0 ? 0 : 1)}k` : amount} CR
+        <p className="text-[11px] font-black tabular-nums text-amber-300 leading-none tracking-tight">
+          {amountText} CR
         </p>
       </div>
     );
@@ -936,7 +950,7 @@ function TrackTileCard({
       whileHover={{ y: -5, scale: 1.04 }}
       whileTap={{ scale: 0.96 }}
       className={`relative flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl border transition-all duration-200 ${
-        isMilestone ? "w-36 h-56" : "w-28 h-44"
+        isMilestone ? "w-40 h-64" : "w-32 h-52"
       }`}
       style={
         isAvailable
@@ -952,19 +966,41 @@ function TrackTileCard({
             : { borderColor: "rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.01)" }
       }
     >
-      {/* Milestone top bar */}
+      {/* Milestone treatment */}
       {isMilestone && (
         <>
+          {/* Thick gradient top bar */}
           <div
-            className="absolute top-0 inset-x-0 h-1 rounded-t-2xl"
-            style={{ background: `linear-gradient(90deg, transparent, ${trackColor}, transparent)` }}
+            className="absolute top-0 inset-x-0 h-2 rounded-t-2xl z-20"
+            style={{ background: `linear-gradient(90deg, transparent, ${trackColor}, #ffffffcc, ${trackColor}, transparent)` }}
           />
           <motion.div
-            className="absolute top-0 inset-x-0 h-1 rounded-t-2xl"
-            animate={{ opacity: [0, 1, 0] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            style={{ background: `linear-gradient(90deg, transparent, #fff8, transparent)` }}
+            className="absolute top-0 inset-x-0 h-2 rounded-t-2xl z-20"
+            animate={{ opacity: [0, 0.9, 0] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: `linear-gradient(90deg, transparent, #ffffffdd, transparent)` }}
           />
+          {/* Pulsing border glow */}
+          <motion.div
+            className="pointer-events-none absolute inset-0 rounded-2xl z-10"
+            animate={{
+              boxShadow: [
+                `inset 0 0 0 1px ${trackColor}40`,
+                `inset 0 0 0 2px ${trackColor}aa`,
+                `inset 0 0 0 1px ${trackColor}40`,
+              ],
+            }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          />
+          {/* Milestone label */}
+          <div className="absolute top-3 inset-x-0 flex justify-center z-20">
+            <span
+              className="rounded-full px-2 py-px text-[7px] font-black uppercase tracking-[0.15em]"
+              style={{ background: `${trackColor}20`, color: trackColor, border: `1px solid ${trackColor}50` }}
+            >
+              ★ MILESTONE
+            </span>
+          </div>
         </>
       )}
 
@@ -973,17 +1009,26 @@ function TrackTileCard({
         <>
           <motion.div
             className="pointer-events-none absolute inset-0 rounded-2xl"
-            animate={{ opacity: [0, 0.6, 0] }}
-            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-            style={{ background: `linear-gradient(135deg, ${trackColor}30, transparent 60%)` }}
+            animate={{ opacity: [0, 0.7, 0] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: `linear-gradient(135deg, ${trackColor}35, transparent 55%)` }}
           />
-          {/* Scan line */}
+          {/* Diagonal scan line */}
           <motion.div
-            className="pointer-events-none absolute left-0 right-0 h-6"
-            animate={{ top: ["-10%", "110%"] }}
-            transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.8 }}
-            style={{ background: `linear-gradient(180deg, transparent, ${trackColor}18, transparent)` }}
+            className="pointer-events-none absolute left-0 right-0 h-8"
+            animate={{ top: ["-15%", "115%"] }}
+            transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.5 }}
+            style={{ background: `linear-gradient(180deg, transparent, ${trackColor}22, transparent)` }}
           />
+          {/* Corner spark for non-milestone */}
+          {!isMilestone && (
+            <motion.div
+              className="pointer-events-none absolute top-0 right-0 h-8 w-8 rounded-tr-2xl"
+              animate={{ opacity: [0, 0.5, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+              style={{ background: `radial-gradient(circle at top right, ${trackColor}60, transparent 70%)` }}
+            />
+          )}
         </>
       )}
 
@@ -1002,23 +1047,23 @@ function TrackTileCard({
         </div>
       )}
 
-      <div className="relative z-10 flex h-full flex-col items-center justify-between p-3 text-center">
+      <div className={`relative z-10 flex h-full flex-col items-center justify-between text-center ${isMilestone ? "p-3 pt-8" : "p-3"}`}>
         {/* Tier number */}
         <div
-          className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-black"
+          className={`flex items-center justify-center rounded-full font-black ${isMilestone ? "h-6 w-6 text-[10px]" : "h-5 w-5 text-[9px]"}`}
           style={
             isClaimed
-              ? { background: "rgba(52,211,153,0.2)", color: "#34d399" }
+              ? { background: "rgba(52,211,153,0.2)", color: "#34d399", border: "1px solid rgba(52,211,153,0.35)" }
               : isAvailable
-                ? { background: `${trackColor}30`, color: trackColor }
-                : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.2)" }
+                ? { background: `${trackColor}25`, color: trackColor, border: `1px solid ${trackColor}55` }
+                : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.07)" }
           }
         >
           {tier.tierNumber}
         </div>
 
         {/* Rich visual preview — replaces generic emoji */}
-        <div className="flex items-center justify-center" style={{ minHeight: isMilestone ? 56 : 44 }}>
+        <div className="flex items-center justify-center" style={{ minHeight: isMilestone ? 84 : 68 }}>
           <TileMiniPreview
             tier={tier}
             trackColor={effectiveTrackColor}
@@ -1029,17 +1074,18 @@ function TrackTileCard({
         </div>
 
         {/* Name */}
-        <div>
+        <div className="w-full">
           <p className={`font-black leading-tight text-white ${isMilestone ? "text-[11px]" : "text-[10px]"} ${isLocked ? "opacity-25" : ""}`}>
             {tier.name}
           </p>
           <p
-            className={`mt-0.5 text-[9px] font-semibold leading-tight ${isMilestone ? "text-[10px]" : ""}`}
+            className={`mt-0.5 font-bold leading-tight truncate ${isMilestone ? "text-[10px]" : "text-[9px]"}`}
             style={
-              isClaimed ? { color: "#34d39980" }
+              isClaimed ? { color: "#34d39985" }
                 : isAvailable ? { color: `${trackColor}cc` }
                   : { color: "rgba(255,255,255,0.18)" }
             }
+            title={rewardLabel(tier)}
           >
             {rewardLabel(tier)}
           </p>
@@ -1051,13 +1097,19 @@ function TrackTileCard({
             whileTap={{ scale: 0.88 }}
             disabled={claiming}
             onClick={(e) => { e.stopPropagation(); if (!claiming) onClaim(tier.id); }}
-            className={`w-full rounded-xl py-2 text-[10px] font-black text-white transition-all disabled:opacity-50 ${isMilestone ? "py-2.5 text-[11px]" : ""}`}
+            className={`w-full rounded-xl font-black text-white transition-all disabled:opacity-50 ${
+              isMilestone ? "py-2.5 text-[11px]" : "py-2 text-[10px]"
+            }`}
             style={{
-              background: `linear-gradient(135deg, ${trackColor} 0%, ${trackColor}cc 100%)`,
-              boxShadow: `0 3px 16px ${glow}`,
+              background: isMilestone
+                ? `linear-gradient(135deg, ${trackColor} 0%, #ffffff28 40%, ${trackColor}cc 100%)`
+                : `linear-gradient(135deg, ${trackColor} 0%, ${trackColor}cc 100%)`,
+              boxShadow: isMilestone
+                ? `0 4px 20px ${glow}, 0 0 8px rgba(255,255,255,0.12)`
+                : `0 3px 14px ${glow}`,
             }}
           >
-            {claiming ? "…" : "Abholen"}
+            {claiming ? "…" : isMilestone ? "✦ Abholen" : "Abholen"}
           </motion.button>
         )}
       </div>
