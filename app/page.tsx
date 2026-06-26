@@ -6,8 +6,7 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
-import { getSnakeLeaderboard } from "@/lib/actions/snake";
-import { getMineLeaderboard } from "@/lib/actions/mine";
+import { fetchGameLeaderboards } from "@/lib/actions/homepage-leaderboards";
 import { getHomepageChatConfig } from "@/lib/actions/homepage-chat-config";
 
 export default async function Home() {
@@ -43,11 +42,7 @@ export default async function Home() {
     { data: streakProfiles },
     { count: userCount },
     siteConfig,
-    snakeX1,
-    snakeX2,
-    snakeGrind,
-    snakeFarm,
-    mineLeaderboard,
+    gameLeaderboards,
     chatSidebarConfig,
   ] = await Promise.all([
     supabase
@@ -61,13 +56,13 @@ export default async function Home() {
       .eq("user_id", user.id),
     supabase
       .from("profiles")
-      .select("id, username, credits, active_name_style_key")
+      .select("id, username, credits, active_name_style_key, prio_badges, avatar_url")
       .or(`profile_visible.eq.true,id.eq.${user.id}`)
       .order("credits", { ascending: false })
       .limit(10),
     supabase
       .from("profiles")
-      .select("id, username, streak_days, active_name_style_key")
+      .select("id, username, streak_days, active_name_style_key, prio_badges, avatar_url")
       .or(`profile_visible.eq.true,id.eq.${user.id}`)
       .gt("streak_days", 0)
       .order("streak_days", { ascending: false })
@@ -76,11 +71,7 @@ export default async function Home() {
       .from("profiles")
       .select("*", { count: "exact", head: true }),
     getSiteConfig(),
-    getSnakeLeaderboard("x1", 10),
-    getSnakeLeaderboard("x2", 10),
-    getSnakeLeaderboard("grind", 10),
-    getSnakeLeaderboard("farm", 10),
-    getMineLeaderboard(10),
+    fetchGameLeaderboards(),
     getHomepageChatConfig(),
   ]);
 
@@ -117,14 +108,18 @@ export default async function Home() {
         username: p.username,
         credits: p.credits,
         active_name_style_key: (p as Record<string, unknown>).active_name_style_key as string | undefined,
+        avatarUrl: (p as Record<string, unknown>).avatar_url as string | null | undefined,
         badges: badgesByUser[p.id] ?? [],
+        prio_badges: ((p as Record<string, unknown>).prio_badges as string[] | null) ?? [],
       }))}
       streakLeaderboard={(streakProfiles ?? []).map((p) => ({
         id: p.id,
         username: p.username,
         streak_days: p.streak_days ?? 0,
         active_name_style_key: (p as Record<string, unknown>).active_name_style_key as string | undefined,
+        avatarUrl: (p as Record<string, unknown>).avatar_url as string | null | undefined,
         badges: badgesByUser[p.id] ?? [],
+        prio_badges: ((p as Record<string, unknown>).prio_badges as string[] | null) ?? [],
       }))}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}
@@ -133,11 +128,7 @@ export default async function Home() {
       userCount={userCount ?? 0}
       homepageConfig={siteConfig.homepageConfig}
       chatSidebarConfig={chatSidebarConfig}
-      snakeX1={snakeX1}
-      snakeX2={snakeX2}
-      snakeGrind={snakeGrind}
-      snakeFarm={snakeFarm}
-      mineLeaderboard={mineLeaderboard}
+      gameLeaderboards={gameLeaderboards}
     />
   );
 }

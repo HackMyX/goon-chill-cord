@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Shield, Save, Loader2, Info, Trophy } from "lucide-react";
+import { Shield, Save, Loader2, Info, Trophy, Bot } from "lucide-react";
 
 function fmt(n: number) { return new Intl.NumberFormat("de-DE").format(n); }
 import { useSoundManager } from "@/lib/sound-manager";
@@ -196,6 +196,23 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
             description="Moderatoren können den gesamten Chat mit einem Klick löschen (muss auch in Chat-Einstellungen aktiviert sein)"
             value={perms.canClearChat}
             onChange={(v) => set("canClearChat", v)}
+          />
+        </div>
+
+        <h3 className="mt-5 mb-1 flex items-center gap-2 text-sm font-bold text-zinc-300">
+          <Bot className="h-4 w-4 text-rose-400" />
+          KI-Berechtigungen
+        </h3>
+        <p className="mb-3 text-xs text-zinc-500">
+          Steuert, ob Moderatoren Zugriff auf die Admin-KI (mit erweiterten Admin-Werkzeugen wie Credits vergeben, Rollen setzen etc.) haben.
+          <span className="ml-1 text-rose-400 font-semibold">Standard: DEAKTIVIERT</span>
+        </p>
+        <div className="flex flex-col gap-2">
+          <Toggle
+            label="Admin-KI für Mods erlauben"
+            description="Moderatoren können die Admin-KI nutzen (set_role, add_credits, get_user_history etc.) — standardmäßig deaktiviert. Individuelle Ausnahmen im Nutzer-Berechtigungseditor möglich."
+            value={perms.canUseAdminAi}
+            onChange={(v) => set("canUseAdminAi", v)}
           />
         </div>
 

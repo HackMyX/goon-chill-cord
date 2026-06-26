@@ -37,6 +37,7 @@ interface SiteConfigRow {
   topbar_show_labels: boolean | null;
   topbar_button_style: string | null;
   homepage_config: Record<string, unknown> | null;
+  max_prio_badges: number | null;
 }
 
 function parseHomepageConfig(raw: Record<string, unknown> | null): HomepageConfig {
@@ -65,7 +66,7 @@ export async function getSiteConfig(): Promise<SiteConfig> {
   const { data, error } = await admin
     .from("site_config")
     .select(
-      "site_name, logo_url, logo_icon_name, starting_credits, currency_name, damage_label, armor_label, rarity_normal_label, rarity_selten_label, rarity_mythisch_label, rarity_ultra_label, perk_speed_label, perk_jump_label, perk_regen_label, topbar_right_slots, site_version, topbar_show_labels, topbar_button_style, homepage_config"
+      "site_name, logo_url, logo_icon_name, starting_credits, currency_name, damage_label, armor_label, rarity_normal_label, rarity_selten_label, rarity_mythisch_label, rarity_ultra_label, perk_speed_label, perk_jump_label, perk_regen_label, topbar_right_slots, site_version, topbar_show_labels, topbar_button_style, homepage_config, max_prio_badges"
     )
     .eq("id", "default")
     .maybeSingle();
@@ -99,6 +100,7 @@ export async function getSiteConfig(): Promise<SiteConfig> {
     topbarShowLabels: typeof row.topbar_show_labels === "boolean" ? row.topbar_show_labels : false,
     topbarButtonStyle: row.topbar_button_style === "pill" ? "pill" : "icon",
     homepageConfig: parseHomepageConfig(row.homepage_config),
+    maxPrioBadges: typeof row.max_prio_badges === "number" ? Math.max(1, Math.min(4, row.max_prio_badges)) : 2,
   };
 }
 
@@ -193,6 +195,7 @@ export async function updateSiteConfig(input: SiteConfig): Promise<SiteConfigAct
     topbar_show_labels: input.topbarShowLabels ?? false,
     topbar_button_style: input.topbarButtonStyle ?? "icon",
     homepage_config: hpCfg,
+    max_prio_badges: Math.max(1, Math.min(4, Math.round(input.maxPrioBadges ?? 2))),
     updated_at: new Date().toISOString(),
   });
 

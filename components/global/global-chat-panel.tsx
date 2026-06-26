@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getGlobalChatMessages, sendGlobalChatMessage, clearGlobalChat, type GlobalChatMessage } from "@/lib/actions/global-chat";
 import { useSoundManager } from "@/lib/sound-manager";
 import { BadgePill } from "@/components/ui/badge-pill";
+import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { useFineConfig } from "@/lib/fine-config-context";
 
@@ -151,6 +152,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
     const optId = pendingOptimisticRef.current;
     const metadata = (row.metadata as Record<string, unknown>) ?? null;
     const badges = metadata?.badges as string[] | undefined;
+    const prioBadges = metadata?.prio_badges as string[] | undefined;
     const nameStyleKey = metadata?.name_style_key as string | undefined;
 
     setMessages((prev) => {
@@ -171,6 +173,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
           createdAt: row.created_at as string,
           avatarUrl: (row.avatar_url as string) ?? null,
           badges: Array.isArray(badges) ? badges : undefined,
+          prioBadges: Array.isArray(prioBadges) ? prioBadges : undefined,
           nameStyleKey,
         },
       ];
@@ -405,9 +408,10 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
                       <span className="ml-1 opacity-60 font-normal">({badge.label})</span>
                     )}
                   </span>
-                  {displayBadge && (
-                    <BadgePill badgeKey={displayBadge} />
-                  )}
+                  {msg.prioBadges && msg.prioBadges.length > 0
+                    ? <PrioBadgeRow badgeKeys={msg.prioBadges} size="xs" max={2} />
+                    : displayBadge && <BadgePill badgeKey={displayBadge} />
+                  }
                   <span className="text-[9px] text-zinc-600 ml-auto shrink-0">
                     {isOptimistic ? "Sendet…" : formatTime(msg.createdAt)}
                   </span>

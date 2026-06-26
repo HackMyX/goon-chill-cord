@@ -104,6 +104,7 @@ interface PlayerProps {
   isAdmin?: boolean;
   isModerator?: boolean;
   verified?: boolean;
+  prioBadges?: string[];
 }
 
 // Velocity smoothing rate — governs how quickly horizontal speed tracks the
@@ -243,6 +244,7 @@ export function Player({
   isAdmin = false,
   isModerator = false,
   verified = false,
+  prioBadges = [],
 }: PlayerProps) {
   const group = useRef<THREE.Group>(null);
   const limbs = useRef<CharacterLimbRefs>(null);
@@ -1345,6 +1347,32 @@ export function Player({
                     ? "0 0 6px rgba(168,85,247,0.7)"
                     : "none",
                 }} />
+
+                {/* Prio badges — pinned by the player in the Garderobe */}
+                {prioBadges.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "3px", justifyContent: "center" }}>
+                    {prioBadges.slice(0, 2).map((key) => {
+                      const bs = getBadgeStyle(key);
+                      const label: Record<string, string> = {
+                        verified: "Verified", premium: "Premium", elite: "Elite", mod: "Mod",
+                        admin: "Admin", og: "OG", streaker: "Streaker", vip: "VIP", helper: "Helper",
+                        ns_collector: "Collector", ns_mythisch: "Mythisch", ns_ultra: "Ultra",
+                        grinder: "Grinder", season_vet: "Season Vet",
+                      };
+                      return (
+                        <span key={key} title={label[key] ?? key} style={{
+                          display: "inline-flex", alignItems: "center",
+                          borderRadius: "4px", padding: "1px 5px",
+                          fontSize: "8px", fontWeight: 700, lineHeight: 1.4,
+                          background: bs.bg, color: bs.text,
+                          border: `1px solid ${bs.border}`,
+                          boxShadow: `0 0 5px ${bs.glow}88`,
+                          whiteSpace: "nowrap",
+                        }}>{label[key] ?? key}</span>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Badge dots — role-based for the local player */}
                 {(isAdmin || isModerator || verified) && (

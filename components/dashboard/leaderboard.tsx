@@ -7,6 +7,7 @@ import { useRealtimeAllProfiles } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { BadgePill } from "@/components/ui/badge-pill";
+import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 
 export interface LeaderboardEntry {
   id: string;
@@ -14,7 +15,9 @@ export interface LeaderboardEntry {
   credits: number;
   streak_days?: number;
   active_name_style_key?: string;
+  avatarUrl?: string | null;
   badges?: string[];
+  prio_badges?: string[];
 }
 
 export interface StreakEntry {
@@ -22,7 +25,9 @@ export interface StreakEntry {
   username: string;
   streak_days: number;
   active_name_style_key?: string;
+  avatarUrl?: string | null;
   badges?: string[];
+  prio_badges?: string[];
 }
 
 interface LeaderboardProps {
@@ -119,28 +124,69 @@ export function Leaderboard({
     if (typeof row.id !== "string" || typeof row.username !== "string") return;
 
     const activeNameStyleKey = row.active_name_style_key as string | undefined;
+    const prioBadges = Array.isArray(row.prio_badges)
+      ? (row.prio_badges as string[])
+      : undefined;
+    const avatarUrl = typeof row.avatar_url === "string" ? row.avatar_url : undefined;
+    const isHidden = row.profile_visible === false;
 
-    // Update credits leaderboard
-    if (typeof row.credits === "number") {
-      setCreditEntries((curr) => {
-        const without = curr.filter((e) => e.id !== row.id);
-        if (row.profile_visible === false) return without;
-        return [...without, { id: row.id, username: row.username as string, credits: row.credits as number, active_name_style_key: activeNameStyleKey }]
-          .sort((a, b) => b.credits - a.credits)
-          .slice(0, 10);
-      });
-    }
+    // Apply identity fields (name style, prio badges, avatar) to any existing
+    // entry even when credits/streak didn't change — so a name-style or badge
+    // swap is reflected immediately for everyone watching the leaderboard.
+    setCreditEntries((curr) => {
+      const existing = curr.find((e) => e.id === row.id);
+      if (isHidden) return curr.filter((e) => e.id !== row.id);
 
-    // Update streak leaderboard
-    if (typeof row.streak_days === "number") {
-      setStreakEntries((curr) => {
-        const without = curr.filter((e) => e.id !== row.id);
-        if (row.profile_visible === false || row.streak_days === 0) return without;
-        return [...without, { id: row.id, username: row.username as string, streak_days: row.streak_days as number, active_name_style_key: activeNameStyleKey }]
-          .sort((a, b) => b.streak_days - a.streak_days)
-          .slice(0, 10);
-      });
-    }
+      const credits =
+        typeof row.credits === "number" ? row.credits : existing?.credits;
+
+      // Not in the list and no credit data from this event → nothing to do.
+      if (credits === undefined) return curr;
+
+      const without = curr.filter((e) => e.id !== row.id);
+      return [
+        ...without,
+        {
+          id: row.id,
+          username: row.username as string,
+          credits,
+          active_name_style_key: activeNameStyleKey ?? existing?.active_name_style_key,
+          prio_badges: prioBadges ?? existing?.prio_badges,
+          avatarUrl: avatarUrl ?? existing?.avatarUrl,
+        },
+      ]
+        .sort((a, b) => b.credits - a.credits)
+        .slice(0, 10);
+    });
+
+    setStreakEntries((curr) => {
+      const existing = curr.find((e) => e.id === row.id);
+      if (isHidden) return curr.filter((e) => e.id !== row.id);
+
+      const streak =
+        typeof row.streak_days === "number"
+          ? row.streak_days
+          : existing?.streak_days;
+
+      if (streak === undefined || streak === 0) {
+        return curr.filter((e) => e.id !== row.id);
+      }
+
+      const without = curr.filter((e) => e.id !== row.id);
+      return [
+        ...without,
+        {
+          id: row.id,
+          username: row.username as string,
+          streak_days: streak,
+          active_name_style_key: activeNameStyleKey ?? existing?.active_name_style_key,
+          prio_badges: prioBadges ?? existing?.prio_badges,
+          avatarUrl: avatarUrl ?? existing?.avatarUrl,
+        },
+      ]
+        .sort((a, b) => b.streak_days - a.streak_days)
+        .slice(0, 10);
+    });
   });
 
   const isCredits = activeTab === "credits";
@@ -224,6 +270,18 @@ export function Leaderboard({
                     const heightClass = cfg?.height ?? sCfg?.height ?? "h-36";
                     const isFirst = idx === 0;
 
+                    const AVATAR_RING = [
+                      "ring-amber-400/80 shadow-[0_0_22px_rgba(245,158,11,0.55)]",
+                      "ring-zinc-400/60 shadow-[0_0_14px_rgba(161,161,170,0.35)]",
+                      "ring-orange-500/60 shadow-[0_0_14px_rgba(251,146,60,0.35)]",
+                    ] as const;
+                    const AVATAR_FALLBACK_BG = [
+                      "bg-amber-500/20 text-amber-200",
+                      "bg-zinc-500/20 text-zinc-300",
+                      "bg-orange-500/20 text-orange-300",
+                    ] as const;
+                    const RANK_DOT_BG = ["bg-amber-500", "bg-zinc-400", "bg-orange-500"] as const;
+
                     return (
                       <motion.div
                         key={entry.id}
@@ -232,64 +290,89 @@ export function Leaderboard({
                         transition={{ delay: idx * 0.08 }}
                         className={`flex flex-col items-center ${isFirst ? "w-32" : "w-28"}`}
                       >
-                        {/* Icon / rank indicator */}
-                        <div className="mb-2 flex flex-col items-center">
+                        {/* Rank icon above avatar */}
+                        <div className="mb-1.5 flex flex-col items-center">
                           {isCredits ? (
                             cfg && (
                               <cfg.icon
-                                className={`${isFirst ? "h-9 w-9" : "h-7 w-7"} ${cfg.iconClass} ${cfg.iconGlowClass} ${
-                                  isFirst ? "animate-crown-bob" : ""
-                                }`}
+                                className={`${isFirst ? "h-8 w-8" : "h-6 w-6"} ${cfg.iconClass} ${cfg.iconGlowClass} ${isFirst ? "animate-crown-bob" : ""}`}
                               />
                             )
                           ) : (
                             <Flame
-                              className={`${isFirst ? "h-9 w-9 text-orange-400" : "h-7 w-7 text-amber-400"} ${
-                                isFirst ? "animate-flame drop-shadow-[0_0_10px_rgba(251,146,60,0.8)]" : ""
-                              }`}
+                              className={`${isFirst ? "h-8 w-8 text-orange-400" : "h-6 w-6 text-amber-400"} ${isFirst ? "animate-flame drop-shadow-[0_0_10px_rgba(251,146,60,0.8)]" : ""}`}
                             />
                           )}
+                        </div>
+
+                        {/* Avatar with rank glow ring */}
+                        <div className="relative mb-2">
+                          {entry.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={entry.avatarUrl}
+                              alt=""
+                              className={`rounded-full object-cover ring-2 ${AVATAR_RING[idx]} ${isFirst ? "h-14 w-14" : "h-11 w-11"}`}
+                            />
+                          ) : (
+                            <div
+                              className={`flex items-center justify-center rounded-full font-black ring-2 ${AVATAR_RING[idx]} ${AVATAR_FALLBACK_BG[idx]} ${isFirst ? "h-14 w-14 text-xl" : "h-11 w-11 text-base"}`}
+                            >
+                              {entry.username.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          {/* Rank number dot */}
+                          <div
+                            className={`absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-[2.5px] border-[#09090f] text-[9px] font-black text-black ${RANK_DOT_BG[idx]}`}
+                          >
+                            {idx + 1}
+                          </div>
                         </div>
 
                         {/* Card */}
                         <div
-                          className={`relative w-full overflow-hidden rounded-xl border ${borderClass} ${bgClass} ${glowClass} ${heightClass} flex flex-col items-center justify-center gap-1 p-3 text-center`}
+                          className={`relative w-full overflow-hidden rounded-xl border ${borderClass} ${bgClass} ${glowClass} ${heightClass} flex flex-col items-center justify-center gap-1 p-2.5 text-center`}
                         >
-                          {/* Shimmer overlay */}
-                          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.04] to-transparent" />
+                          {/* Shimmer */}
+                          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.06] to-transparent" />
+                          {/* Subtle inner glow at top */}
+                          {isFirst && (
+                            <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-amber-400/10 to-transparent" />
+                          )}
 
-                          <span className={`text-[10px] font-black uppercase tracking-widest ${textClass} opacity-70`}>
+                          <span className={`text-[10px] font-black uppercase tracking-widest ${textClass} opacity-60`}>
                             {isCredits ? cfg?.label : sCfg?.label}
                           </span>
-                          <span className={`font-black ${isFirst ? "text-base" : "text-sm"} text-zinc-50 w-full truncate`}>
+                          <span className={`font-black ${isFirst ? "text-sm" : "text-xs"} text-zinc-50 w-full truncate`}>
                             <StyledUsername
                               name={entry.username}
                               styleKey={entry.active_name_style_key}
                               userId={entry.id}
-                              size={isFirst ? "lg" : "md"}
+                              size={isFirst ? "md" : "sm"}
                             />
                           </span>
-                          {entry.badges && entry.badges.length > 0 && (
-                            <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
-                              {entry.badges.slice(0, 2).map((bk) => (
-                                <BadgePill key={bk} badgeKey={bk} />
-                              ))}
-                            </div>
-                          )}
+                          {entry.prio_badges && entry.prio_badges.length > 0
+                            ? <PrioBadgeRow badgeKeys={entry.prio_badges} size="xs" max={2} className="justify-center" />
+                            : entry.badges && entry.badges.length > 0
+                            ? <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+                                {entry.badges.slice(0, 2).map((bk) => <BadgePill key={bk} badgeKey={bk} />)}
+                              </div>
+                            : null
+                          }
                           {isCredits ? (
                             <span className={`text-xs font-bold ${textClass} tabular-nums`}>
                               {(entry as LeaderboardEntry).credits.toLocaleString("de-DE")}
-                              <span className="ml-1 font-medium opacity-70">{currencyName}</span>
+                              <span className="ml-1 font-medium opacity-60">{currencyName}</span>
                             </span>
                           ) : (
                             <span className={`text-xs font-bold ${textClass}`}>
                               {(entry as StreakEntry).streak_days}
-                              <span className="ml-1 font-medium opacity-70">Tage</span>
+                              <span className="ml-1 font-medium opacity-60">Tage</span>
                             </span>
                           )}
                         </div>
 
-                        {/* Rank number bar */}
+                        {/* Rank bar */}
                         <div
                           className={`mt-1.5 h-1.5 rounded-full ${
                             idx === 0 ? "w-full bg-amber-500/50" : idx === 1 ? "w-3/4 bg-zinc-500/30" : "w-1/2 bg-orange-500/30"
@@ -354,9 +437,10 @@ export function Leaderboard({
                             size="sm"
                           />
                         </span>
-                        {entry.badges && entry.badges.slice(0, 2).map((bk) => (
-                          <BadgePill key={bk} badgeKey={bk} />
-                        ))}
+                        {entry.prio_badges && entry.prio_badges.length > 0
+                          ? <PrioBadgeRow badgeKeys={entry.prio_badges} size="xs" max={2} />
+                          : entry.badges && entry.badges.slice(0, 2).map((bk) => <BadgePill key={bk} badgeKey={bk} />)
+                        }
                       </div>
 
                       {/* Value */}

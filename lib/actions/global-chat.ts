@@ -17,12 +17,14 @@ export interface GlobalChatMessage {
   createdAt: string;
   avatarUrl: string | null;
   badges?: string[];
+  prioBadges?: string[];
   nameStyleKey?: string;
 }
 
 function rowToMsg(r: Record<string, unknown>): GlobalChatMessage {
   const metadata = (r.metadata as Record<string, unknown>) ?? null;
   const badges = metadata?.badges as string[] | undefined;
+  const prioBadges = metadata?.prio_badges as string[] | undefined;
   const nameStyleKey = metadata?.name_style_key as string | undefined;
   return {
     id: r.id as string,
@@ -35,6 +37,7 @@ function rowToMsg(r: Record<string, unknown>): GlobalChatMessage {
     createdAt: r.created_at as string,
     avatarUrl: (r.avatar_url as string) ?? null,
     badges: Array.isArray(badges) ? badges : undefined,
+    prioBadges: Array.isArray(prioBadges) ? prioBadges : undefined,
     nameStyleKey,
   };
 }
@@ -162,6 +165,7 @@ export async function clearGlobalChat(): Promise<{ success: boolean; error?: str
             canRewardTickets: globalRow.can_reward_tickets ?? DEFAULT_MOD_PERMISSIONS.canRewardTickets,
             maxRewardPerTicket: (globalRow as Record<string, unknown>).max_reward_per_ticket as number ?? DEFAULT_MOD_PERMISSIONS.maxRewardPerTicket,
             canPauseTickets: (globalRow as Record<string, unknown>).can_pause_tickets as boolean ?? DEFAULT_MOD_PERMISSIONS.canPauseTickets,
+            canUseAdminAi: (globalRow as Record<string, unknown>).can_use_admin_ai as boolean ?? DEFAULT_MOD_PERMISSIONS.canUseAdminAi,
           }
         : DEFAULT_MOD_PERMISSIONS;
       const override = ((profile as Record<string, unknown>).mod_permissions_override as Partial<ModPermissions>) ?? null;
@@ -216,7 +220,7 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Nicht eingeloggt." };
 
-  const { data: profile } = await supabase.from("profiles").select("username, role, temp_banned_until, avatar_url, active_name_style_key").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("username, role, temp_banned_until, avatar_url, active_name_style_key, prio_badges").eq("id", user.id).single();
   if (!profile) return { success: false, error: "Profil nicht gefunden." };
 
   if (profile.temp_banned_until && new Date(profile.temp_banned_until) > new Date()) {
@@ -278,8 +282,10 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
     avatar_url: (profile as Record<string, unknown>).avatar_url ?? null,
     metadata: (() => {
       const nameStyleKey = (profile as Record<string, unknown>).active_name_style_key as string | null | undefined;
+      const prioBadgeKeys = (profile as Record<string, unknown>).prio_badges as string[] | null | undefined;
       const meta: Record<string, unknown> = {};
       if (badgeKeys.length > 0) meta.badges = badgeKeys;
+      if (Array.isArray(prioBadgeKeys) && prioBadgeKeys.length > 0) meta.prio_badges = prioBadgeKeys;
       if (nameStyleKey) meta.name_style_key = nameStyleKey;
       return Object.keys(meta).length > 0 ? meta : null;
     })(),

@@ -16,6 +16,7 @@ import { useRealtimeProfile, useRealtimeAllProfiles } from "@/lib/use-realtime-p
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { LevelBadge } from "@/components/ui/level-badge";
+import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 
 export interface PlayerCard {
   id: string;
@@ -28,6 +29,7 @@ export interface PlayerCard {
   gender: "m" | "w";
   verified: boolean;
   level?: number;
+  prioBadges?: string[];
   equippedByCategory: Record<string, EquippedItem | undefined>;
   rarityCounts: Record<Rarity, number>;
 }
@@ -310,6 +312,10 @@ function PlayerListShellInner({ players: initialPlayers, credits: initialCredits
                       )}
                     </div>
                   </div>
+
+                  {player.prioBadges && player.prioBadges.length > 0 && (
+                    <PrioBadgeRow badgeKeys={player.prioBadges} size="xs" max={2} />
+                  )}
 
                   <div className="flex items-center justify-between">
                     <p className={`text-sm font-semibold ${isPlayerAdmin ? "text-amber-300" : isPlayerMod ? "text-sky-300" : "text-purple-300"}`}>

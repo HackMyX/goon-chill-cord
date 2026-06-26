@@ -297,7 +297,7 @@ function GamesSection({ data, onChange }: {
   }, [data.snakeModes, onChange]);
 
   const SNAKE_MODES = ["x1", "x2", "farm", "grind"];
-  const SNAKE_MODE_LABELS: Record<string, string> = { x1: "Normal (×1)", x2: "Krass (×2)", farm: "Farm", grind: "Grind" };
+  const SNAKE_MODE_LABELS: Record<string, string> = { x1: "Normal (×1)", x2: "Krass (×2)", farm: "Endless", grind: "Grind" };
 
   return (
     <div className="space-y-5">

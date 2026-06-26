@@ -80,6 +80,7 @@ export async function getModPermissions(): Promise<ModPermissions> {
     canRewardTickets: data.can_reward_tickets ?? false,
     maxRewardPerTicket: data.max_reward_per_ticket ?? 0,
     canPauseTickets: data.can_pause_tickets ?? false,
+    canUseAdminAi: data.can_use_admin_ai ?? false,
   };
 }
 
@@ -125,6 +126,7 @@ export async function updateModPermissions(
       can_reward_tickets: perms.canRewardTickets,
       max_reward_per_ticket: perms.maxRewardPerTicket,
       can_pause_tickets: perms.canPauseTickets,
+      can_use_admin_ai: perms.canUseAdminAi,
       updated_at: new Date().toISOString(),
     });
     if (error) return { success: false, error: error.message };
@@ -1064,5 +1066,49 @@ export async function setModUserPermissions(
     return { success: true };
   } catch (e) {
     return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Called automatically when a user is assigned the "moderator" role.
+ * Writes the current global mod_permissions defaults as their individual
+ * override — so the admin immediately sees all checkboxes populated and
+ * can remove specific permissions with precision (individuelle > Gruppe).
+ */
+export async function syncPermissionsOnModRoleAssign(
+  userId: string
+): Promise<void> {
+  try {
+    const globalPerms = await getModPermissions();
+    const admin = createAdminClient();
+    // Store full copy of group defaults as individual override.
+    // This makes every permission visible and individually editable in the UI.
+    // The golden rule still applies: individual overrides always win.
+    await admin
+      .from("profiles")
+      .update({ mod_permissions_override: globalPerms })
+      .eq("id", userId);
+    await broadcastPermissionChange();
+  } catch {
+    // non-critical — user still gets group defaults via effectivePerms fallback
+  }
+}
+
+/**
+ * Called when a user's role is changed away from "moderator".
+ * Clears their individual override so no stale mod permissions linger.
+ */
+export async function clearModPermissionsOverride(
+  userId: string
+): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    await admin
+      .from("profiles")
+      .update({ mod_permissions_override: null })
+      .eq("id", userId);
+    await broadcastPermissionChange();
+  } catch {
+    // non-critical
   }
 }

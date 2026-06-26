@@ -67,6 +67,7 @@ interface WorldShellProps {
   isModerator?: boolean;
   nameStyleKey?: string | null;
   verified?: boolean;
+  prioBadges?: string[];
 }
 
 interface RewardPopup {
@@ -129,6 +130,7 @@ export function WorldShell({
   isModerator = false,
   nameStyleKey = null,
   verified = false,
+  prioBadges = [],
 }: WorldShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -890,6 +892,7 @@ export function WorldShell({
               isModerator={isModerator}
               nameStyleKey={nameStyleKey}
               verified={verified}
+              prioBadges={prioBadges}
             />
           </Suspense>
         </Canvas>

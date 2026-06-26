@@ -23,6 +23,10 @@ import { NameStyleSection } from "@/components/wardrobe/name-style-section";
 import { getMyNameStyles, type UserNameStyleRow } from "@/lib/actions/name-styles";
 import { AbilitiesSection } from "@/components/garderobe/abilities-section";
 import type { UserAbility } from "@/lib/abilities";
+import { setMyPrioBadges } from "@/lib/actions/prio-badges";
+import { getBadgeStyle } from "@/lib/badges";
+import type { UserBadge } from "@/lib/badges";
+import { Check, Save } from "lucide-react";
 
 export interface InventoryRow {
   id: string;
@@ -58,6 +62,117 @@ interface WardrobeShellProps {
   isModerator?: boolean;
   abilities?: UserAbility[];
   equippedAbilityKey?: string | null;
+  initialBadges?: UserBadge[];
+  initialPrioBadges?: string[];
+  maxPrioBadges?: number;
+}
+
+// ── Prio-Badge selection section ──────────────────────────────────────────────
+
+function PrioBadgeSelectionSection({
+  badges,
+  initialSelected,
+  maxPrioBadges,
+}: {
+  badges: UserBadge[];
+  initialSelected: string[];
+  maxPrioBadges: number;
+}) {
+  const [selected, setSelected] = useState<string[]>(initialSelected);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const sound = useSoundManager();
+
+  const toggle = (key: string) => {
+    setSelected((curr) => {
+      if (curr.includes(key)) return curr.filter((k) => k !== key);
+      if (curr.length >= maxPrioBadges) return curr;
+      return [...curr, key];
+    });
+    setSaved(false);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    sound.click();
+    debugLog("Wardrobe:PrioBadges", "saving prio_badges", { keys: selected, count: selected.length });
+    const res = await setMyPrioBadges(selected);
+    setSaving(false);
+    if (res.success) {
+      debugLog("Wardrobe:PrioBadges", "prio_badges saved successfully", { keys: selected });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2200);
+    } else {
+      debugWarn("Wardrobe:PrioBadges", "setMyPrioBadges failed", res.error);
+      sound.error();
+    }
+  };
+
+  if (badges.length === 0) {
+    return (
+      <p className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-sm text-zinc-500">
+        Du hast noch keine Abzeichen freigeschaltet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-zinc-500">
+        Wähle bis zu <span className="font-bold text-purple-300">{maxPrioBadges}</span> Badges als Prio-Badges.
+        Sie erscheinen in Chat, Ranglisten und der 3D-Welt neben deinem Namen.
+        ({selected.length}/{maxPrioBadges} ausgewählt)
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {badges.map((ub) => {
+          const bs = getBadgeStyle(ub.badgeKey);
+          const isSelected = selected.includes(ub.badgeKey);
+          const isDisabled = !isSelected && selected.length >= maxPrioBadges;
+          return (
+            <button
+              key={ub.id}
+              type="button"
+              disabled={isDisabled}
+              onClick={() => toggle(ub.badgeKey)}
+              title={ub.badge.description ?? ub.badge.label}
+              className="group relative rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all"
+              style={{
+                background: isSelected ? bs.bg : "transparent",
+                color: isSelected ? bs.text : "#71717a",
+                borderColor: isSelected ? bs.border : "#3f3f46",
+                boxShadow: isSelected ? `0 0 10px ${bs.glow}` : "none",
+                opacity: isDisabled ? 0.4 : 1,
+                cursor: isDisabled ? "not-allowed" : "pointer",
+              }}
+            >
+              <span className="mr-1">{ub.badge.icon}</span>
+              {ub.badge.label}
+              {isSelected && (
+                <span className="ml-1.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white/20">
+                  <Check className="h-2 w-2" />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        disabled={saving}
+        onClick={handleSave}
+        className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/15 px-4 py-2 text-sm font-semibold text-purple-300 transition-all hover:bg-purple-500/25 disabled:opacity-50"
+      >
+        {saving ? (
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-purple-400 border-t-transparent" />
+        ) : saved ? (
+          <Check className="h-4 w-4 text-emerald-400" />
+        ) : (
+          <Save className="h-4 w-4" />
+        )}
+        {saved ? "Gespeichert!" : "Prio-Badges speichern"}
+      </button>
+    </div>
+  );
 }
 
 const ROW_HEIGHT = 76; // row height incl. gap, used by the virtualizer's size estimate
@@ -204,6 +319,9 @@ export function WardrobeShell({
   isModerator = false,
   abilities = [],
   equippedAbilityKey = null,
+  initialBadges = [],
+  initialPrioBadges = [],
+  maxPrioBadges = 2,
 }: WardrobeShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -559,6 +677,20 @@ export function WardrobeShell({
           </h2>
           <AbilitiesSection abilities={abilities} equippedKey={equippedAbilityKey} />
         </div>
+
+        {initialBadges.length > 0 && (
+          <div className="mt-6">
+            <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
+              <span>⭐</span>
+              Prio-Badges
+            </h2>
+            <PrioBadgeSelectionSection
+              badges={initialBadges}
+              initialSelected={initialPrioBadges}
+              maxPrioBadges={maxPrioBadges}
+            />
+          </div>
+        )}
       </main>
 
       {previewRow && (

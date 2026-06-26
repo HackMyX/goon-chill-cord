@@ -552,6 +552,62 @@ async function main() {
   ], client);
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // 15. GAME LEADERBOARD CONFIG
+  // ─────────────────────────────────────────────────────────────────────────────
+  await run("game_leaderboard_config singleton", [
+    `CREATE TABLE IF NOT EXISTS game_leaderboard_config (
+      id         TEXT        PRIMARY KEY DEFAULT 'default',
+      items      JSONB       NOT NULL    DEFAULT '[]',
+      updated_at TIMESTAMPTZ NOT NULL    DEFAULT now()
+    )`,
+    `ALTER TABLE game_leaderboard_config ENABLE ROW LEVEL SECURITY`,
+    `INSERT INTO game_leaderboard_config (id, items) VALUES ('default', '[
+      {"id":"snake_x1",   "label":"Snake Classic ×1","enabled":true, "limit":10,"sort":0},
+      {"id":"snake_x2",   "label":"Snake Turbo ×2",  "enabled":true, "limit":10,"sort":1},
+      {"id":"snake_grind","label":"Snake Grind",       "enabled":false,"limit":10,"sort":2},
+      {"id":"snake_farm", "label":"Snake Endless",     "enabled":false,"limit":10,"sort":3},
+      {"id":"mine",       "label":"Mine",              "enabled":true, "limit":10,"sort":4}
+    ]'::jsonb) ON CONFLICT (id) DO NOTHING`,
+  ], client);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 16. MUSIC CONFIG
+  // ─────────────────────────────────────────────────────────────────────────────
+  await run("music_config singleton", [
+    `CREATE TABLE IF NOT EXISTS music_config (
+      id         TEXT        PRIMARY KEY DEFAULT 'default',
+      config     JSONB       NOT NULL    DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL    DEFAULT now()
+    )`,
+    `ALTER TABLE music_config ENABLE ROW LEVEL SECURITY`,
+    `INSERT INTO music_config (id, config) VALUES ('default', '{
+      "enabled":false,
+      "defaultVolume":0.12,
+      "fadeInMs":1200,
+      "fadeOutMs":500,
+      "tracks":[
+        {"id":"arc_neon_rush",  "name":"Neon Rush",       "artist":"Royalty Free","vibe":"arcade",   "url":"/music/arcade-neon-rush.mp3"},
+        {"id":"arc_pixel_chase","name":"Pixel Chase",     "artist":"Royalty Free","vibe":"arcade",   "url":"/music/arcade-pixel-chase.mp3"},
+        {"id":"arc_8bit_fever", "name":"8-Bit Fever",     "artist":"Royalty Free","vibe":"arcade",   "url":"/music/arcade-8bit-fever.mp3"},
+        {"id":"arc_hyper_drive","name":"Hyper Drive",     "artist":"Royalty Free","vibe":"arcade",   "url":"/music/arcade-hyper-drive.mp3"},
+        {"id":"chl_midnight",   "name":"Midnight Lounge", "artist":"Royalty Free","vibe":"chill",    "url":"/music/chill-midnight-lounge.mp3"},
+        {"id":"chl_purple_rain","name":"Purple Rain",     "artist":"Royalty Free","vibe":"chill",    "url":"/music/chill-purple-rain.mp3"},
+        {"id":"chl_crystal",    "name":"Crystal Clear",   "artist":"Royalty Free","vibe":"chill",    "url":"/music/chill-crystal-clear.mp3"},
+        {"id":"chl_lofi_sat",   "name":"Lo-Fi Saturday",  "artist":"Royalty Free","vibe":"chill",    "url":"/music/chill-lofi-saturday.mp3"},
+        {"id":"adv_into_wild",  "name":"Into the Wild",   "artist":"Royalty Free","vibe":"adventure","url":"/music/adventure-into-wild.mp3"},
+        {"id":"adv_ruins",      "name":"Ancient Ruins",   "artist":"Royalty Free","vibe":"adventure","url":"/music/adventure-ancient-ruins.mp3"},
+        {"id":"adv_mystic",     "name":"Mystic Forest",   "artist":"Royalty Free","vibe":"adventure","url":"/music/adventure-mystic-forest.mp3"},
+        {"id":"adv_journey",    "name":"Endless Journey", "artist":"Royalty Free","vibe":"adventure","url":"/music/adventure-endless-journey.mp3"}
+      ],
+      "pageAssignments":{
+        "homepage":"chl_midnight","snake":"arc_neon_rush","don":"arc_8bit_fever",
+        "world":"adv_into_wild","cases":"chl_purple_rain","shop":"chl_crystal",
+        "community":"chl_lofi_sat","dashboard":"chl_midnight"
+      }
+    }'::jsonb) ON CONFLICT (id) DO NOTHING`,
+  ], client);
+
+  // ─────────────────────────────────────────────────────────────────────────────
   await client.end();
   console.log("\n🎉 All migrations complete!\n");
 }

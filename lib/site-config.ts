@@ -71,6 +71,8 @@ export interface SiteConfig {
   topbarButtonStyle: "icon" | "pill";
   /** Full homepage / landing page configuration. */
   homepageConfig: HomepageConfig;
+  /** Max number of "Prio-Badges" a player can pin globally (default 2). */
+  maxPrioBadges: number;
 }
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
@@ -88,6 +90,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   topbarShowLabels: false,
   topbarButtonStyle: "icon",
   homepageConfig: DEFAULT_HOMEPAGE_CONFIG,
+  maxPrioBadges: 2,
 };
 
 export const DEFAULT_TOPBAR_RIGHT_SLOTS = [

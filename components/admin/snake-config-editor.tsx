@@ -249,7 +249,7 @@ export function SnakeConfigEditor({ config }: { config: SnakeConfig }) {
     { id: "x1", label: "Classic x1", icon: <span className="text-sm">🌿</span> },
     { id: "x2", label: "Turbo x2", icon: <span className="text-sm">⚡</span> },
     { id: "grind", label: "Grind", icon: <span className="text-sm">🔥</span> },
-    { id: "farm", label: "Farm", icon: <span className="text-sm">🌾</span> },
+    { id: "farm", label: "Endless", icon: <span className="text-sm">♾️</span> },
   ];
 
   return (
@@ -313,7 +313,7 @@ export function SnakeConfigEditor({ config }: { config: SnakeConfig }) {
           </Section>
           <div className="rounded-xl border border-white/8 bg-white/[0.01] px-4 py-3">
             <p className="text-xs text-zinc-500">
-              Klicke auf <span className="text-emerald-300 font-bold">Classic x1</span>, <span className="text-cyan-300 font-bold">Turbo x2</span>, <span className="text-amber-300 font-bold">Grind</span> oder <span className="text-violet-300 font-bold">Farm</span>, um den jeweiligen Modus einzeln zu konfigurieren — jeder Modus hat eine vollständig getrennte Bestenliste und eigene Einstellungen.
+              Klicke auf <span className="text-emerald-300 font-bold">Classic x1</span>, <span className="text-cyan-300 font-bold">Turbo x2</span>, <span className="text-amber-300 font-bold">Grind</span> oder <span className="text-violet-300 font-bold">Endless</span>, um den jeweiligen Modus einzeln zu konfigurieren — jeder Modus hat eine vollständig getrennte Bestenliste und eigene Einstellungen.
             </p>
           </div>
         </div>

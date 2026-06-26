@@ -19,6 +19,7 @@ import {
   Copy, Check, ExternalLink, Calendar, AlertTriangle,
 } from "lucide-react";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 import { getMinimalProfile, type MinimalProfile } from "@/lib/actions/community";
 
 // ── Context ─────────────────────────────────────────────────────────────────────
@@ -188,7 +189,7 @@ function PopupCard({
           </div>
 
           {/* ── Name ────────────────────────────────────────────────────────── */}
-          <div className="flex items-center gap-1.5 px-4 pb-1.5">
+          <div className="flex items-center gap-1.5 px-4 pb-1">
             <StyledUsername
               name={profile.username}
               styleKey={profile.nameStyleKey}
@@ -198,6 +199,13 @@ function PopupCard({
               <ShieldCheck className="h-4 w-4 shrink-0 text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]" />
             )}
           </div>
+
+          {/* ── Prio Badges ─────────────────────────────────────────────────── */}
+          {profile.prioBadges && profile.prioBadges.length > 0 && (
+            <div className="px-4 pb-2">
+              <PrioBadgeRow badgeKeys={profile.prioBadges} size="sm" max={2} />
+            </div>
+          )}
 
           {/* ── Stats ───────────────────────────────────────────────────────── */}
           <div className="mx-4 mb-3 grid grid-cols-3 gap-1.5">

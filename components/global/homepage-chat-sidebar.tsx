@@ -309,6 +309,14 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
   const sound = useSoundManager();
   const soundRef = useRef(sound);
   soundRef.current = sound;
+  // Ref mirrors of open/username so appendMessage doesn't depend on them
+  // as state values — if it did, changing isOpen would cause the Supabase
+  // channel to be torn down and re-created every time the user opens or
+  // closes the sidebar, creating a window where messages are missed.
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+  const ownUsernameRef = useRef(ownUsername);
+  ownUsernameRef.current = ownUsername;
 
   // ── Responsive detection ──────────────────────────────────────────────────
   useEffect(() => {
@@ -368,6 +376,10 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
   }, [config.maxMessages, scrollToBottom]);
 
   // ── Append incoming message ───────────────────────────────────────────────
+  // Uses isOpenRef / ownUsernameRef instead of capturing isOpen/ownUsername
+  // directly — this keeps the callback reference stable across open/close
+  // toggles so the Supabase channel (subscribed to appendMessage) is never
+  // torn down unnecessarily.
   const appendMessage = useCallback(
     (row: Record<string, unknown>) => {
       const id = row.id as string;
@@ -395,14 +407,12 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
             nameStyleKey,
           },
         ];
-        // Trim to maxMessages
         return next.slice(-config.maxMessages);
       });
 
       if (optId) pendingOptimisticRef.current = null;
       latestIdRef.current = id;
 
-      // Mark as animated
       if (config.messageAnimation) {
         setAnimateNewIds((prev) => {
           const next = new Set(prev);
@@ -418,23 +428,23 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
         }, 500);
       }
 
-      // Mention sound
       if (loadedRef.current && config.mentionSound) {
         const content = (row.content as string) ?? "";
-        const uname = ownUsername ?? "";
+        const uname = ownUsernameRef.current ?? "";
         if (uname && content.toLowerCase().includes(`@${uname.toLowerCase()}`)) {
           soundRef.current.mentionReceive();
         }
       }
 
-      // Unread counter when sidebar is closed
-      if (!isOpen) {
+      if (!isOpenRef.current) {
         setNewMsgCount((c) => c + 1);
       } else {
         setTimeout(scrollToBottom, 30);
       }
     },
-    [config.maxMessages, config.messageAnimation, config.mentionSound, isOpen, ownUsername, scrollToBottom]
+    // isOpen and ownUsername intentionally excluded — read via refs so this
+    // callback stays stable across sidebar open/close and profile load.
+    [config.maxMessages, config.messageAnimation, config.mentionSound, scrollToBottom]
   );
 
   // ── Realtime subscription ─────────────────────────────────────────────────
@@ -533,10 +543,12 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
   if (isMobile) {
     return (
       <>
-        {/* Persistent eye toggle — always visible, floats above bottom sheet */}
+        {/* Persistent eye toggle — floats above the SupportButton (bottom-4
+            right-4 on mobile) so they don't stack on top of each other.
+            bottom-20 gives ~80 px clearance: SupportButton ≈ 16 + 44 = 60 px */}
         <button
           onClick={toggleOpen}
-          className={`fixed bottom-6 right-4 z-50 flex items-center justify-center h-12 w-12 rounded-full border backdrop-blur-md shadow-xl transition-all active:scale-95 ${
+          className={`fixed bottom-20 right-4 z-50 flex items-center justify-center h-10 w-10 rounded-full border backdrop-blur-md shadow-xl transition-all active:scale-95 ${
             isOpen
               ? "bg-purple-600/90 border-purple-400/60 shadow-[0_0_24px_rgba(147,51,234,0.6)] hover:bg-purple-500/90"
               : "bg-black/70 border-white/15 hover:border-purple-400/50 hover:bg-purple-600/30 hover:shadow-[0_0_16px_rgba(147,51,234,0.4)]"
@@ -549,7 +561,7 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
             <Eye className="h-5 w-5 text-purple-400" />
           )}
           {!isOpen && newMsgCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-purple-600 text-[9px] font-bold text-white shadow-[0_0_8px_rgba(147,51,234,0.7)]">
+            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-purple-600 text-[8px] font-bold text-white shadow-[0_0_8px_rgba(147,51,234,0.7)]">
               {newMsgCount > 9 ? "9+" : newMsgCount}
             </span>
           )}

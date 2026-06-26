@@ -1,7 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Box, Joystick, Pickaxe, Trophy, Coins, Dices, CircleDot } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Box, Joystick, Pickaxe, Trophy, Coins, Dices, CircleDot,
+  Loader2, Save, Check, LayoutList, ChevronUp, ChevronDown, Eye, EyeOff,
+} from "lucide-react";
+import {
+  getGameLeaderboardConfig,
+  updateGameLeaderboardConfig,
+  type GameLeaderboardItem,
+} from "@/lib/actions/homepage-leaderboards";
 import { WorldSessionConfigEditor } from "@/components/admin/world-session-config-editor";
 import { WorldSpawnConfigEditor } from "@/components/admin/world-spawn-editor";
 import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
@@ -30,20 +38,12 @@ interface GameDef {
   status: "live" | "soon";
 }
 
-/** Registry of every game the site has (or will have) an admin presence
- * for — Snake/Mine are real placeholder entries in components/layout/
- * games-menu.tsx ("Bald"/Coming Soon, no route yet), listed here too so
- * the framework already has a slot ready for them: once either one
- * actually ships, it just needs its own settings-editor component (the
- * same triad pattern as WorldSessionConfigEditor — see lib/world-session-
- * config.ts's doc comment) slotted into the `live` branch below, nothing
- * about this registry itself has to change. */
 const GAMES: GameDef[] = [
-  { id: "world", name: "3D World", icon: Box, status: "live" },
-  { id: "don", name: "Double or Nothing", icon: Dices, status: "live" },
-  { id: "snake", name: "Snake", icon: Joystick, status: "live" },
-  { id: "mine", name: "Mine", icon: Pickaxe, status: "live" },
-  { id: "plinko", name: "Plinko", icon: CircleDot, status: "live" },
+  { id: "world",  name: "3D World",          icon: Box,       status: "live" },
+  { id: "don",    name: "Double or Nothing",  icon: Dices,     status: "live" },
+  { id: "snake",  name: "Snake",              icon: Joystick,  status: "live" },
+  { id: "mine",   name: "Mine",               icon: Pickaxe,   status: "live" },
+  { id: "plinko", name: "Plinko",             icon: CircleDot, status: "live" },
 ];
 
 interface GamesTabProps {
@@ -58,28 +58,187 @@ interface GamesTabProps {
   plinkoConfig: PlinkoConfig;
 }
 
-/**
- * Per-game admin hub — one card per game (components/layout/games-menu.tsx
- * is the player-facing equivalent of this list), each expandable into its
- * own settings/stats/leaderboard panel. Currently only "3D World" has
- * anything real behind it; Snake/Mine render as inert "Bald" placeholders
- * so the tab's shape doesn't have to change again once they exist.
- */
-export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig, worldSpawnConfig, topProfiles, donConfig, snakeConfig, mineConfig, plinkoConfig }: GamesTabProps) {
+// ── Homepage leaderboard config section ──────────────────────────────────────
+
+const LIMIT_OPTIONS = [5, 10, 20] as const;
+
+function HomepageLeaderboardsSection() {
+  const [items, setItems] = useState<GameLeaderboardItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    getGameLeaderboardConfig().then((cfg) => {
+      setItems([...cfg].sort((a, b) => a.sort - b.sort));
+      setLoading(false);
+    });
+  }, []);
+
+  const move = useCallback((idx: number, dir: -1 | 1) => {
+    setItems((prev) => {
+      const next = [...prev];
+      const swapIdx = idx + dir;
+      if (swapIdx < 0 || swapIdx >= next.length) return prev;
+      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      return next.map((it, i) => ({ ...it, sort: i }));
+    });
+  }, []);
+
+  const toggle = useCallback((id: string) => {
+    setItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, enabled: !it.enabled } : it))
+    );
+  }, []);
+
+  const setLimit = useCallback((id: string, limit: number) => {
+    setItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, limit } : it))
+    );
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    await updateGameLeaderboardConfig(items);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  return (
+    <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.04] overflow-hidden">
+      <div className="flex items-center justify-between border-b border-violet-500/15 px-5 py-4">
+        <div className="flex items-center gap-2.5">
+          <LayoutList className="h-5 w-5 text-violet-400" />
+          <div>
+            <p className="text-sm font-bold text-zinc-100">Startseiten-Bestenlisten</p>
+            <p className="text-[11px] text-zinc-500 mt-0.5">
+              Reihenfolge, Sichtbarkeit &amp; Limit der Spielelisten auf der Startseite
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || loading}
+          className="flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-2 text-xs font-bold text-violet-300 hover:bg-violet-500/20 transition-colors disabled:opacity-40"
+        >
+          {saving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : saved ? (
+            <Check className="h-3.5 w-3.5 text-emerald-400" />
+          ) : (
+            <Save className="h-3.5 w-3.5" />
+          )}
+          {saved ? "Gespeichert" : "Speichern"}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-10 gap-2 text-sm text-zinc-600">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Lade Konfiguration...
+        </div>
+      ) : (
+        <div className="divide-y divide-white/[0.04]">
+          {items.map((item, idx) => (
+            <div key={item.id} className="flex items-center gap-3 px-5 py-3.5">
+              <div className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => move(idx, -1)}
+                  disabled={idx === 0}
+                  className="flex h-5 w-5 items-center justify-center rounded text-zinc-600 hover:text-zinc-300 disabled:opacity-20 transition-colors"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => move(idx, 1)}
+                  disabled={idx === items.length - 1}
+                  className="flex h-5 w-5 items-center justify-center rounded text-zinc-600 hover:text-zinc-300 disabled:opacity-20 transition-colors"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <span className="w-5 text-center text-xs font-black text-zinc-700">{idx + 1}</span>
+
+              <span className="flex-1 text-sm font-semibold text-zinc-200">{item.label}</span>
+
+              <div className="flex items-center gap-1">
+                {LIMIT_OPTIONS.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setLimit(item.id, n)}
+                    className={`rounded px-2 py-0.5 text-xs font-bold transition-colors ${
+                      item.limit === n
+                        ? "bg-violet-500/20 text-violet-300 border border-violet-500/40"
+                        : "text-zinc-600 hover:text-zinc-400 border border-transparent"
+                    }`}
+                  >
+                    Top {n}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => toggle(item.id)}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  item.enabled
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                    : "border-zinc-700/50 bg-zinc-800/50 text-zinc-600 hover:text-zinc-400"
+                }`}
+              >
+                {item.enabled ? (
+                  <Eye className="h-3 w-3" />
+                ) : (
+                  <EyeOff className="h-3 w-3" />
+                )}
+                {item.enabled ? "Aktiv" : "Aus"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main games tab ────────────────────────────────────────────────────────────
+
+export function GamesTab({
+  worldSessionConfig,
+  killStreakConfig,
+  characterConfig,
+  worldSpawnConfig,
+  topProfiles,
+  donConfig,
+  snakeConfig,
+  mineConfig,
+  plinkoConfig,
+}: GamesTabProps) {
   const [openGame, setOpenGame] = useState<string>("");
 
   return (
     <div className="flex flex-col gap-3">
+      <HomepageLeaderboardsSection />
+
       <p className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] px-4 py-3 text-xs text-zinc-400">
         Ein Admin-Tool pro Spiel: Einstellungen, Standard-Werte und die Bestenliste jedes Spiels an
-        einem Ort. Spiele ohne eigene Seite (noch „Bald“) sind als Platzhalter gelistet, damit sie
-        später ohne Umbau hier einsortiert werden können.
+        einem Ort. Spiele ohne eigene Seite (noch "Bald") sind als Platzhalter gelistet, damit sie
+        spaeter ohne Umbau hier einsortiert werden koennen.
       </p>
 
       {GAMES.map((game) => {
         const isOpen = openGame === game.id;
         return (
-          <div key={game.id} className="rounded-xl border border-white/10 bg-[#0c0b14] overflow-hidden">
+          <div
+            key={game.id}
+            className="rounded-xl border border-white/10 bg-[#0c0b14] overflow-hidden"
+          >
             <button
               type="button"
               onClick={() => setOpenGame(isOpen ? "" : game.id)}
@@ -99,12 +258,14 @@ export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig
                   </span>
                 )}
               </span>
-              <span className="text-xs text-zinc-500">{isOpen ? "Einklappen" : "Aufklappen"}</span>
+              <span className="text-xs text-zinc-500">
+                {isOpen ? "Einklappen" : "Aufklappen"}
+              </span>
             </button>
 
             {isOpen && game.status === "soon" && (
               <div className="border-t border-white/10 px-5 py-6 text-sm text-zinc-500">
-                Dieses Spiel ist noch nicht implementiert — sobald es existiert, erscheinen hier
+                Dieses Spiel ist noch nicht implementiert - sobald es existiert, erscheinen hier
                 seine Einstellungen, Standardwerte und seine Bestenliste, genau wie bei 3D World.
               </div>
             )}
@@ -152,8 +313,8 @@ export function GamesTab({ worldSessionConfig, killStreakConfig, characterConfig
                     Bestenliste (nach Credits)
                   </h3>
                   <p className="mb-4 text-xs text-zinc-500">
-                    World-Belohnungen fließen direkt in Credits — diese Liste ist die Bestenliste.
-                    Werte direkt unten bearbeiten (gleiche Bearbeitung wie im Tab „User-Management“).
+                    World-Belohnungen fliessen direkt in Credits - diese Liste ist die Bestenliste.
+                    Werte direkt unten bearbeiten.
                   </p>
                   {topProfiles.length === 0 ? (
                     <p className="flex items-center gap-2 text-sm text-zinc-500">

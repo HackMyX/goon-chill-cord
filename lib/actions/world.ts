@@ -11,9 +11,10 @@ export interface RemoteLoadout {
   role: "user" | "moderator" | "admin";
   nameStyleKey: string | null;
   equippedByCategory: Record<string, EquippedItem>;
-  /** Badge keys granted to this peer — fetched once on join, used by
-   * remote-players.tsx to render up to 3 badge dots below the nametag. */
+  /** All badge keys granted to this peer. */
   badges: string[];
+  /** Pinned Prio-Badge keys (max 2) — shown in the nametag. */
+  prioBadges: string[];
 }
 
 export interface GetPublicLoadoutResult {
@@ -42,7 +43,7 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
   const admin = createAdminClient();
 
   const [{ data: profile }, { data: inventory }, { data: badgeRows }] = await Promise.all([
-    admin.from("profiles").select("username, gender, verified, role, active_name_style_key").eq("id", targetUserId).single(),
+    admin.from("profiles").select("username, gender, verified, role, active_name_style_key, prio_badges").eq("id", targetUserId).single(),
     admin
       .from("inventory")
       .select(
@@ -73,6 +74,7 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
   }
 
   const badges = (badgeRows ?? []).map((r) => (r as { badge_key: string }).badge_key);
+  const prioBadges = (profile.prio_badges as string[] | null) ?? [];
 
   return {
     success: true,
@@ -84,6 +86,7 @@ export async function getPublicLoadout(targetUserId: string): Promise<GetPublicL
       nameStyleKey: (profile.active_name_style_key as string | null) ?? null,
       equippedByCategory,
       badges,
+      prioBadges,
     },
   };
 }

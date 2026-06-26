@@ -9,8 +9,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Loader2, ShieldCheck, BadgeCheck, Package,
   Calendar, Coins, Flame, Star, Copy, Check,
-  AlertTriangle, Crown, Shield, User,
+  AlertTriangle, Crown, Shield, User, Ban,
 } from "lucide-react";
+import {
+  modWarnUser, modTempBan, modLiftBan, modAddCredits, getMyEffectivePermissions,
+} from "@/lib/actions/mod";
+import type { ModPermissions } from "@/lib/mod";
 import { CharacterModel } from "@/components/world/character-model";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, type Rarity } from "@/lib/cases";
 import { RarityChip } from "@/components/ui/rarity-chip";
@@ -18,6 +22,7 @@ import { getPublicProfile, type PublicProfile } from "@/lib/actions/community";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { getBadgeStyle } from "@/lib/badges";
+import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 import { LevelBadge } from "@/components/ui/level-badge";
 import { subscribeToPresence } from "@/lib/presence-client";
 import type { EquippedItem } from "@/lib/rarity-colors";
@@ -120,6 +125,212 @@ function RarityBars({ counts }: { counts: Record<Rarity, number> }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── Moderation panel (elevated viewers only) ───────────────────────────────────
+
+const BAN_HOUR_OPTIONS = [1, 6, 12, 24, 48, 72] as const;
+
+function ModPanel({ profile }: { profile: PublicProfile }) {
+  const [perms, setPerms] = useState<ModPermissions | null>(null);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [warnReason, setWarnReason] = useState("");
+  const [banHours, setBanHours] = useState<number>(24);
+  const [banReason, setBanReason] = useState("");
+  const [creditAmount, setCreditAmount] = useState<number>(0);
+  const [creditReason, setCreditReason] = useState("");
+  const [localBanUntil, setLocalBanUntil] = useState<string | null | undefined>(undefined);
+
+  const effectiveBanUntil = localBanUntil !== undefined ? localBanUntil : profile.tempBannedUntil;
+  const isBanned = !!effectiveBanUntil && new Date(effectiveBanUntil) > new Date();
+
+  useEffect(() => {
+    getMyEffectivePermissions().then(setPerms);
+  }, []);
+
+  function feedback(text: string, ok: boolean) {
+    setMsg({ text, ok });
+    setTimeout(() => setMsg(null), 4000);
+  }
+
+  async function doAction(key: string, fn: () => Promise<{ success: boolean; error?: string }>) {
+    setBusy(key);
+    try {
+      const res = await fn();
+      feedback(res.error ?? (res.success ? "Erfolgreich." : "Fehler"), res.success);
+      return res.success;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const availableHours = BAN_HOUR_OPTIONS.filter((h) => !perms || h <= (perms.maxTempBanHours || 24));
+  const hasAnyPerm = perms && (perms.canWarnUsers || perms.canTempBanUsers || perms.canAddCredits);
+
+  return (
+    <div className="rounded-2xl border border-red-900/40 bg-red-950/15 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Shield className="h-4 w-4 text-red-400" />
+        <p className="text-xs font-bold uppercase tracking-widest text-red-400">Moderations-Panel</p>
+      </div>
+
+      {!perms ? (
+        <div className="flex items-center gap-2 text-xs text-zinc-600">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Lade Berechtigungen…
+        </div>
+      ) : !hasAnyPerm ? (
+        <p className="text-xs text-zinc-600">Keine Moderations-Aktionen verfügbar.</p>
+      ) : (
+        <div className="space-y-3">
+
+          {/* ── Warn ── */}
+          {perms.canWarnUsers && (
+            <div className="rounded-xl border border-orange-900/30 bg-orange-950/20 p-3 space-y-2">
+              <p className="text-[11px] font-bold text-orange-400 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Verwarnung
+              </p>
+              <input
+                type="text"
+                placeholder="Grund"
+                value={warnReason}
+                maxLength={200}
+                onChange={(e) => setWarnReason(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-orange-400/50"
+              />
+              <button
+                type="button"
+                disabled={!!busy || !warnReason.trim()}
+                onClick={async () => {
+                  const ok = await doAction("warn", () => modWarnUser(profile.id, warnReason.trim()));
+                  if (ok) setWarnReason("");
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-bold text-orange-300 hover:bg-orange-500/20 transition-colors disabled:opacity-40"
+              >
+                {busy === "warn" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+                Verwarnen
+              </button>
+            </div>
+          )}
+
+          {/* ── Temp ban / lift ── */}
+          {perms.canTempBanUsers && (
+            <div className="rounded-xl border border-red-900/30 bg-red-950/20 p-3 space-y-2">
+              <p className="text-[11px] font-bold text-red-400 flex items-center gap-1.5">
+                <Ban className="h-3.5 w-3.5" />
+                Temporärer Bann
+              </p>
+              {isBanned ? (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-red-300">
+                    Gebannt bis {new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(effectiveBanUntil!))}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={!!busy}
+                    onClick={async () => {
+                      const ok = await doAction("lift", () => modLiftBan(profile.id));
+                      if (ok) setLocalBanUntil(null);
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-40"
+                  >
+                    {busy === "lift" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    Bann aufheben
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-1 flex-wrap">
+                    {availableHours.map((h) => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setBanHours(h)}
+                        className={`rounded px-2 py-0.5 text-xs font-bold transition-colors ${banHours === h ? "bg-red-500/20 text-red-300 border border-red-500/40" : "text-zinc-600 hover:text-zinc-400 border border-transparent"}`}
+                      >
+                        {h}h
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Grund"
+                    value={banReason}
+                    maxLength={200}
+                    onChange={(e) => setBanReason(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-red-400/50"
+                  />
+                  <button
+                    type="button"
+                    disabled={!!busy || !banReason.trim()}
+                    onClick={async () => {
+                      const expiresAt = new Date();
+                      expiresAt.setHours(expiresAt.getHours() + banHours);
+                      const ok = await doAction("ban", () => modTempBan(profile.id, banHours, banReason.trim()));
+                      if (ok) { setBanReason(""); setLocalBanUntil(expiresAt.toISOString()); }
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-40"
+                  >
+                    {busy === "ban" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
+                    {banHours}h Bann verhängen
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Credits ── */}
+          {perms.canAddCredits && (
+            <div className="rounded-xl border border-amber-900/30 bg-amber-950/20 p-3 space-y-2">
+              <p className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                <Coins className="h-3.5 w-3.5" />
+                Credits anpassen
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={creditAmount}
+                  onChange={(e) => setCreditAmount(Number(e.target.value))}
+                  className="w-24 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-amber-400/50"
+                  placeholder="±Credits"
+                />
+                <input
+                  type="text"
+                  placeholder="Grund"
+                  value={creditReason}
+                  maxLength={200}
+                  onChange={(e) => setCreditReason(e.target.value)}
+                  className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-amber-400/50"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={!!busy || creditAmount === 0 || !creditReason.trim()}
+                onClick={async () => {
+                  const ok = await doAction("credits", () => modAddCredits(profile.id, creditAmount, creditReason.trim()));
+                  if (ok) { setCreditAmount(0); setCreditReason(""); }
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-40"
+              >
+                {busy === "credits" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Coins className="h-3.5 w-3.5" />}
+                {creditAmount > 0 ? `+${creditAmount}` : creditAmount} Credits
+              </button>
+            </div>
+          )}
+
+          {/* ── Action feedback ── */}
+          {msg && (
+            <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${msg.ok ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-red-500/30 bg-red-500/10 text-red-300"}`}>
+              {msg.ok ? <Check className="h-3.5 w-3.5 shrink-0" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+              {msg.text}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -299,6 +510,14 @@ function ModalContent({ userId, onClose }: ProfileModalProps) {
                   )}
                 </div>
 
+                {/* Prio Badges */}
+                {profile.prioBadges && profile.prioBadges.length > 0 && (
+                  <div className="w-full">
+                    <p className="mb-1.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">Prio-Badges</p>
+                    <PrioBadgeRow badgeKeys={profile.prioBadges} size="sm" max={2} />
+                  </div>
+                )}
+
                 {/* Badges */}
                 {profile.badges.length > 0 && (
                   <div className="w-full">
@@ -401,6 +620,11 @@ function ModalContent({ userId, onClose }: ProfileModalProps) {
                       })}
                     </div>
                   </div>
+                )}
+
+                {/* Moderation panel (mods/admins only) */}
+                {profile.viewerIsElevated && (
+                  <ModPanel profile={profile} />
                 )}
 
                 {/* Currency label */}

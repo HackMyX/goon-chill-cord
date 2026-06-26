@@ -12,8 +12,7 @@ import {
 import { TopBar } from "@/components/layout/top-bar";
 import { Leaderboard, type LeaderboardEntry, type StreakEntry } from "@/components/dashboard/leaderboard";
 import { GameLeaderboards } from "@/components/dashboard/game-leaderboards";
-import type { SnakeLeaderboardEntry } from "@/lib/actions/snake";
-import type { MineLeaderboardEntry } from "@/lib/actions/mine";
+import type { GameLeaderboardSection } from "@/lib/actions/homepage-leaderboards";
 import { subscribeToPresence } from "@/lib/presence-client";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
@@ -176,11 +175,7 @@ interface DashboardShellProps {
   userCount?: number;
   homepageConfig?: HomepageConfig;
   chatSidebarConfig?: HomepageChatConfig;
-  snakeX1?: SnakeLeaderboardEntry[];
-  snakeX2?: SnakeLeaderboardEntry[];
-  snakeGrind?: SnakeLeaderboardEntry[];
-  snakeFarm?: SnakeLeaderboardEntry[];
-  mineLeaderboard?: MineLeaderboardEntry[];
+  gameLeaderboards?: GameLeaderboardSection[];
 }
 
 export function DashboardShell({
@@ -196,11 +191,7 @@ export function DashboardShell({
   userCount = 0,
   homepageConfig,
   chatSidebarConfig,
-  snakeX1 = [],
-  snakeX2 = [],
-  snakeGrind = [],
-  snakeFarm = [],
-  mineLeaderboard = [],
+  gameLeaderboards = [],
 }: DashboardShellProps) {
   const cfg = homepageConfig ?? DEFAULT_HOMEPAGE_CONFIG;
   const [credits, setCredits] = useState(initialCredits);
@@ -523,19 +514,17 @@ export function DashboardShell({
         )}
 
         {/* ── GAME LEADERBOARDS ──────────────────────────────────────── */}
-        <div className="mx-auto max-w-6xl px-4">
-          <div className="flex items-center gap-3 py-2">
-            <div className="flex-1 h-px bg-gradient-to-l from-white/10 to-transparent" />
-            <div className="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent" />
-          </div>
-        </div>
-        <GameLeaderboards
-          snakeX1={snakeX1}
-          snakeX2={snakeX2}
-          snakeGrind={snakeGrind}
-          snakeFarm={snakeFarm}
-          mine={mineLeaderboard}
-        />
+        {gameLeaderboards.length > 0 && (
+          <>
+            <div className="mx-auto max-w-6xl px-4">
+              <div className="flex items-center gap-3 py-2">
+                <div className="flex-1 h-px bg-gradient-to-l from-white/10 to-transparent" />
+                <div className="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent" />
+              </div>
+            </div>
+            <GameLeaderboards sections={gameLeaderboards} />
+          </>
+        )}
       </main>
     </div>
   );

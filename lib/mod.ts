@@ -23,6 +23,8 @@ export interface ModPermissions {
   canRewardTickets: boolean;
   maxRewardPerTicket: number; // 0 = kein Limit
   canPauseTickets: boolean;
+  // v3 — Admin-KI access
+  canUseAdminAi: boolean; // Zugriff auf Admin-KI-Tools (standard: false für Mods)
 }
 
 export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
@@ -42,6 +44,7 @@ export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
   canRewardTickets: false,
   maxRewardPerTicket: 0,
   canPauseTickets: false,
+  canUseAdminAi: false,
 };
 
 export const ADMIN_MOD_PERMISSIONS: ModPermissions = {
@@ -61,6 +64,7 @@ export const ADMIN_MOD_PERMISSIONS: ModPermissions = {
   canRewardTickets: true,
   maxRewardPerTicket: 0,
   canPauseTickets: true,
+  canUseAdminAi: true,
 };
 
 export interface ChatConfig {

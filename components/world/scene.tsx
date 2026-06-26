@@ -52,6 +52,7 @@ interface SceneProps {
   isModerator?: boolean;
   nameStyleKey?: string | null;
   verified?: boolean;
+  prioBadges?: string[];
 }
 
 /** Dual border rings + inner halo — keeps the world edge from reading as a
@@ -147,6 +148,7 @@ export function Scene({
   isModerator = false,
   nameStyleKey = null,
   verified = false,
+  prioBadges = [],
 }: SceneProps) {
   // Equipped items never change mid-World-session (re-equipping requires
   // the Garderobe, a separate page) — armor/shield are seeded once here
@@ -238,6 +240,7 @@ export function Scene({
         isModerator={isModerator}
         nameStyleKey={nameStyleKey}
         verified={verified}
+        prioBadges={prioBadges}
       />
 
       <RemotePlayers selfUserId={userId} registryRef={remotePlayerRegistryRef} maxHp={characterConfig.playerMaxHp} />

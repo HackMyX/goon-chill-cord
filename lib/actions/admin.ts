@@ -232,9 +232,28 @@ export async function updateUserRole(
   if (!user) return { success: false, error: "Kein Zugriff." };
 
   const admin = createAdminClient();
-  const { error } = await admin.from("profiles").update({ role }).eq("id", targetUserId);
 
+  // Fetch previous role so we know if the role actually changed
+  const { data: prevProfile } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", targetUserId)
+    .single();
+  const prevRole = prevProfile?.role as string | null;
+
+  const { error } = await admin.from("profiles").update({ role }).eq("id", targetUserId);
   if (error) return { success: false, error: "Update fehlgeschlagen." };
+
+  // Permission-Sync: when assigning moderator role, copy current group defaults
+  // into their individual override so admin sees all checkboxes and can fine-tune.
+  // When removing moderator role, wipe the override so no stale perms linger.
+  if (role === "moderator" && prevRole !== "moderator") {
+    const { syncPermissionsOnModRoleAssign } = await import("@/lib/actions/mod");
+    void syncPermissionsOnModRoleAssign(targetUserId);
+  } else if (role !== "moderator" && prevRole === "moderator") {
+    const { clearModPermissionsOverride } = await import("@/lib/actions/mod");
+    void clearModPermissionsOverride(targetUserId);
+  }
 
   await logAdminAction(user.id, "admin_set_role", { targetUserId, role });
   await notifyUser({

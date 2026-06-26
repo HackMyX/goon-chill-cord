@@ -23,9 +23,11 @@ export interface PublicProfile {
   level: number;
   xp: number;
   viewerIsElevated: boolean;
+  tempBannedUntil: string | null;
   equippedByCategory: Record<string, { id: string; name: string; rarity: Rarity }>;
   rarityCounts: Record<Rarity, number>;
   badges: UserBadge[];
+  prioBadges: string[];
 }
 
 export interface GetPublicProfileResult {
@@ -59,7 +61,7 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
     admin.from("profiles").select("role").eq("id", user.id).single(),
     admin
       .from("profiles")
-      .select("id, username, role, credits, streak_days, cases_opened, created_at, gender, verified, active_name_style_key, warning_strikes, level, xp")
+      .select("id, username, role, credits, streak_days, cases_opened, created_at, gender, verified, active_name_style_key, warning_strikes, level, xp, prio_badges, temp_banned_until")
       .eq("id", targetUserId)
       .single(),
     admin
@@ -150,9 +152,11 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
       level: Number((profile as unknown as Record<string, unknown>).level ?? 1),
       xp: Number((profile as unknown as Record<string, unknown>).xp ?? 0),
       viewerIsElevated,
+      tempBannedUntil: ((profile as unknown as Record<string, unknown>).temp_banned_until as string | null) ?? null,
       equippedByCategory,
       rarityCounts,
       badges,
+      prioBadges: (profile.prio_badges as string[] | null) ?? [],
     },
   };
 }
@@ -171,6 +175,7 @@ export interface MinimalProfile {
   discordAvatarUrl: string | null;
   verified: boolean;
   warningStrikes: number;
+  prioBadges: string[];
 }
 
 export interface GetMinimalProfileResult {
@@ -197,7 +202,7 @@ export async function getMinimalProfile(targetUserId: string): Promise<GetMinima
   const [{ data: viewerProfile }, { data: targetProfile }, { data: authUser }] = await Promise.all([
     admin.from("profiles").select("role").eq("id", user.id).single(),
     admin.from("profiles")
-      .select("id, username, role, credits, streak_days, cases_opened, created_at, verified, active_name_style_key, warning_strikes")
+      .select("id, username, role, credits, streak_days, cases_opened, created_at, verified, active_name_style_key, warning_strikes, prio_badges")
       .eq("id", targetUserId)
       .single(),
     admin.auth.admin.getUserById(targetUserId),
@@ -226,6 +231,7 @@ export async function getMinimalProfile(targetUserId: string): Promise<GetMinima
       discordAvatarUrl,
       verified: Boolean(targetProfile.verified),
       warningStrikes: Number(targetProfile.warning_strikes ?? 0),
+      prioBadges: (targetProfile.prio_badges as string[] | null) ?? [],
     },
   };
 }

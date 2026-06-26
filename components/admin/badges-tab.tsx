@@ -32,6 +32,7 @@ import {
 } from "@/lib/actions/badges";
 import type { BadgeDefinition, UserBadge } from "@/lib/badges";
 import { getBadgeStyle } from "@/lib/badges";
+import { getSiteConfig, updateSiteConfig } from "@/lib/actions/site-config";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -841,6 +842,93 @@ function AlleBadgeTraegerSection({
 // Main export
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// System Settings (Prio-Badge slot count)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SystemSettingsSection() {
+  const [maxSlots, setMaxSlots] = useState<number>(2);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const sound = useSoundManager();
+
+  useEffect(() => {
+    getSiteConfig().then((cfg) => {
+      setMaxSlots(cfg.maxPrioBadges);
+      setLoading(false);
+    });
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    sound.click();
+    // updateSiteConfig requires the full config — fetch, patch, save
+    const current = await getSiteConfig();
+    const res = await updateSiteConfig({ ...current, maxPrioBadges: maxSlots });
+    setSaving(false);
+    if (res.success) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
+      <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-zinc-200">
+        <Zap className="h-4 w-4 text-purple-400" />
+        System-Einstellungen: Prio-Badges
+      </h3>
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-zinc-600">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Lade Einstellungen...
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-zinc-400">
+              Max. Prio-Badge-Slots pro Spieler
+            </label>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => { setMaxSlots(n); setSaved(false); }}
+                  className={`h-9 w-9 rounded-lg border text-sm font-bold transition-colors ${
+                    maxSlots === n
+                      ? "border-purple-500/50 bg-purple-500/20 text-purple-200"
+                      : "border-white/10 bg-white/[0.03] text-zinc-500 hover:border-white/20 hover:text-zinc-300"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-zinc-600">Spieler können genau so viele ihrer Badges als Prio markieren.</p>
+          </div>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={handleSave}
+            className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/15 px-4 py-2 text-sm font-semibold text-purple-300 transition-all hover:bg-purple-500/25 disabled:opacity-50"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : saved ? (
+              <Check className="h-4 w-4 text-emerald-400" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            {saved ? "Gespeichert!" : "Speichern"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BadgesTab({ profiles }: { profiles: ProfileRow[] }) {
   const [definitions, setDefinitions] = useState<BadgeDefinition[]>([]);
   const [loadingDefs, setLoadingDefs] = useState(true);
@@ -858,6 +946,10 @@ export function BadgesTab({ profiles }: { profiles: ProfileRow[] }) {
 
   return (
     <div className="space-y-8">
+      <SystemSettingsSection />
+
+      <div className="border-t border-white/5" />
+
       {loadingDefs ? (
         <div className="flex items-center justify-center gap-2 py-12 text-sm text-zinc-600">
           <Loader2 className="h-4 w-4 animate-spin" />

@@ -21,6 +21,7 @@ import { XpGainToast } from "@/components/layout/xp-gain-toast";
 import { PatchnotePopupLoader } from "@/components/layout/patchnote-popup-loader";
 import { GlobalBroadcast } from "@/components/global/global-broadcast";
 import { GenderGate } from "@/components/auth/gender-gate";
+import { MusicPlayer } from "@/components/global/music-player";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -90,6 +91,7 @@ export default async function RootLayout({
         <GlobalBroadcast />
         <GenderGate />
         <SupportButton />
+        <MusicPlayer />
         <PatchnotePopupLoader />
       </body>
     </html>

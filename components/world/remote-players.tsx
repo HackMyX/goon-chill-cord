@@ -9,6 +9,7 @@ import { angleDelta } from "@/components/world/player";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { getPublicLoadout, type RemoteLoadout } from "@/lib/actions/world";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { WorldPrioBadgeRow } from "@/components/ui/prio-badge-row";
 import {
   subscribeToWorldRoster,
   subscribeToWorldTransforms,
@@ -161,6 +162,13 @@ function RemotePlayerAvatar({
   // in the pvpDamage listener, auto-cleared 200 ms later.
   const [hurtFlash, setHurtFlash] = useState(false);
   const hurtFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirror shieldHp as a ref so the pvpDamage listener can read the
+  // current value without being listed as a dependency (the listener is
+  // registered once on mount via subscribeToWorldPvpDamage and must not
+  // be torn down / re-subscribed on every HP tick).
+  const shieldHpRef = useRef(0);
+  const [shieldFlash, setShieldFlash] = useState(false);
+  const shieldFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fineConfig = useFineConfig();
   const fineConfigRef = useRef(fineConfig);
   useEffect(() => { fineConfigRef.current = fineConfig; }, [fineConfig]);
@@ -202,10 +210,16 @@ function RemotePlayerAvatar({
         const id = ++pvpBloodBurstSeq;
         setBloodBursts((curr) => [...curr, { id, amount: payload.amount }]);
         setTimeout(() => setBloodBursts((curr) => curr.filter((b) => b.id !== id)), BLOOD_BURST_LIFETIME_MS);
-        // Flash the HP bar white briefly for hit feedback.
+        // Flash HP bar white briefly for hit feedback.
         if (hurtFlashTimer.current) clearTimeout(hurtFlashTimer.current);
         setHurtFlash(true);
         hurtFlashTimer.current = setTimeout(() => setHurtFlash(false), 200);
+        // Flash shield bar if shield was up when the hit landed.
+        if (shieldHpRef.current > 0) {
+          if (shieldFlashTimer.current) clearTimeout(shieldFlashTimer.current);
+          setShieldFlash(true);
+          shieldFlashTimer.current = setTimeout(() => setShieldFlash(false), 260);
+        }
       }
       if (payload.attackerId === userId) {
         // This avatar just landed a PvP hit — play the arm swing so observers
@@ -250,7 +264,9 @@ function RemotePlayerAvatar({
       sprintingRef.current = payload.sprinting;
       animStateRef.current = payload.animState ?? 'idle';
       setDisplayHp(Math.max(0, Math.round(payload.hp)));
-      setDisplayShieldHp(Math.max(0, Math.round(payload.shieldHp ?? 0)));
+      const newShieldHp = Math.max(0, Math.round(payload.shieldHp ?? 0));
+      shieldHpRef.current = newShieldHp;
+      setDisplayShieldHp(newShieldHp);
       setDisplayShieldMaxHp(Math.max(0, Math.round(payload.shieldMaxHp ?? 0)));
       setIsDead(payload.hp <= 0);
     });
@@ -359,7 +375,7 @@ function RemotePlayerAvatar({
         </group>
       ))}
 
-      {/* ── Minimal game-style nametag ── */}
+      {/* ── MMO-style nametag ── */}
       <Html
         position={[0, fineConfig.nametagHeightOffset, 0]}
         center
@@ -371,27 +387,34 @@ function RemotePlayerAvatar({
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "3px",
-          opacity: isDead ? 0.2 : 1,
-          transition: "opacity 0.5s ease",
+          gap: "2px",
+          opacity: isDead ? 0.18 : 1,
+          filter: isDead ? "grayscale(0.7)" : "none",
+          transition: "opacity 0.55s ease, filter 0.55s ease",
           pointerEvents: "none",
           userSelect: "none",
         }}>
+
+          {/* Prio badges — above name, MMO convention */}
+          {loadout.prioBadges && loadout.prioBadges.length > 0 && (
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: "1px" }}>
+              <WorldPrioBadgeRow badgeKeys={loadout.prioBadges} max={2} />
+            </div>
+          )}
 
           {/* Name pill */}
           <div style={{
             display: "flex",
             alignItems: "center",
             gap: "4px",
-            padding: "2px 7px 2px 6px",
-            background: "rgba(0,0,0,0.52)",
-            backdropFilter: "blur(4px)",
+            padding: "2px 8px 2px 6px",
+            background: "rgba(0,0,0,0.62)",
+            backdropFilter: "blur(6px)",
             borderRadius: "10px",
             border: pillBorder,
             boxShadow: pillShadow,
             whiteSpace: "nowrap",
           }}>
-            {/* Role indicator dot */}
             {roleColor && (
               <span style={{
                 display: "inline-block",
@@ -403,7 +426,6 @@ function RemotePlayerAvatar({
                 flexShrink: 0,
               }} />
             )}
-            {/* Styled username */}
             <div style={{ fontSize: "11px", fontWeight: 800, lineHeight: 1 }}>
               <StyledUsername
                 name={loadout.username}
@@ -412,56 +434,76 @@ function RemotePlayerAvatar({
                 staticMode={true}
               />
             </div>
-            {/* Online dot */}
             <span style={{
               display: "inline-block",
               width: "4px",
               height: "4px",
               borderRadius: "50%",
               background: "#4ade80",
-              boxShadow: "0 0 4px rgba(74,222,128,0.85)",
+              boxShadow: "0 0 5px rgba(74,222,128,0.9)",
               flexShrink: 0,
             }} />
           </div>
 
-          {/* HP bar — no text, just a slim coloured fill */}
+          {/* HP bar — MMO-style with track border */}
           <div style={{
-            width: "72px",
-            height: "3px",
-            borderRadius: "2px",
-            background: "rgba(0,0,0,0.48)",
-            overflow: "hidden",
+            width: "84px",
+            padding: "2px",
+            borderRadius: "5px",
+            background: "rgba(0,0,0,0.58)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            boxSizing: "border-box",
           }}>
             <div style={{
-              width: isDead ? "0%" : `${hpPct}%`,
-              height: "100%",
-              // Brief white flash on hit, then back to health-colour gradient
-              background: hurtFlash
-                ? "rgba(255,255,255,0.95)"
-                : `linear-gradient(90deg, ${hpColor}99, ${hpColor})`,
-              borderRadius: "2px",
-              transition: hurtFlash ? "none" : "width 0.15s ease, background 0.35s ease",
-              boxShadow: hurtFlash ? "0 0 6px #fff9" : `0 0 4px ${hpColor}88`,
-            }} />
-          </div>
-
-          {/* Shield bar — shown only when a shield is equipped */}
-          {hasShield && (
-            <div style={{
-              width: "72px",
-              height: "2px",
-              borderRadius: "1px",
-              background: "rgba(0,0,0,0.4)",
+              height: "5px",
+              borderRadius: "3px",
+              background: "rgba(0,0,0,0.5)",
               overflow: "hidden",
             }}>
               <div style={{
-                width: shieldBroken ? "0%" : `${shieldPct}%`,
+                width: isDead ? "0%" : `${hpPct}%`,
                 height: "100%",
-                background: "linear-gradient(90deg, rgba(96,165,250,0.75), rgba(147,197,253,0.9))",
-                borderRadius: "1px",
-                transition: "width 0.15s ease",
-                boxShadow: "0 0 3px rgba(96,165,250,0.55)",
+                background: hurtFlash
+                  ? "rgba(255,255,255,0.97)"
+                  : `linear-gradient(90deg, ${hpColor}aa, ${hpColor})`,
+                borderRadius: "3px",
+                transition: hurtFlash ? "none" : "width 0.18s ease, background 0.4s ease",
+                boxShadow: hurtFlash ? "0 0 8px #fffc" : `0 0 5px ${hpColor}88`,
               }} />
+            </div>
+          </div>
+
+          {/* Shield bar — distinct visual language from HP bar */}
+          {hasShield && (
+            <div style={{
+              width: "84px",
+              padding: "2px",
+              borderRadius: "5px",
+              background: "rgba(0,5,20,0.6)",
+              border: shieldFlash
+                ? "1px solid rgba(147,197,253,0.75)"
+                : "1px solid rgba(96,165,250,0.22)",
+              boxSizing: "border-box",
+              boxShadow: shieldFlash ? "0 0 10px rgba(96,165,250,0.65)" : "none",
+              transition: "border-color 0.12s ease, box-shadow 0.12s ease",
+            }}>
+              <div style={{
+                height: "4px",
+                borderRadius: "3px",
+                background: "rgba(0,20,60,0.55)",
+                overflow: "hidden",
+              }}>
+                <div style={{
+                  width: shieldBroken ? "0%" : `${shieldPct}%`,
+                  height: "100%",
+                  background: shieldFlash
+                    ? "rgba(255,255,255,0.97)"
+                    : "linear-gradient(90deg, rgba(96,165,250,0.72), rgba(186,230,253,0.92))",
+                  borderRadius: "3px",
+                  transition: shieldFlash ? "none" : "width 0.18s ease",
+                  boxShadow: shieldFlash ? "0 0 8px #fffc" : "0 0 6px rgba(96,165,250,0.7)",
+                }} />
+              </div>
             </div>
           )}
 

@@ -89,6 +89,10 @@ const REQUIRED_TABLES = [
   "mine_config",
   // Backup system (used by backup.ts — was missing from full-db-sync.cjs)
   "backups",
+  // Game leaderboard config singleton (run scripts/add-game-leaderboard-config.cjs)
+  "game_leaderboard_config",
+  // Music config singleton (run scripts/add-music-config.cjs)
+  "music_config",
 ] as const;
 
 /** Tables that are optional (future features, not yet fully live). WARNUNG if missing. */
@@ -117,6 +121,8 @@ const SINGLETON_CONFIGS: Array<{ id: string; table: string; name: string; catego
   { id: "cfg_homepage_chat", table: "homepage_chat_config", name: "homepage_chat_config (default)", category: "Homepage Chat Sidebar" },
   { id: "cfg_preview",     table: "preview_config",       name: "preview_config (default)",       category: "Preview-Engine" },
   { id: "cfg_fine",        table: "fine_config",          name: "fine_config (default)",          category: "Feintuning" },
+  { id: "cfg_game_lb",    table: "game_leaderboard_config", name: "game_leaderboard_config (default)", category: "Spielebestenlisten" },
+  { id: "cfg_music",      table: "music_config",            name: "music_config (default)",           category: "Musik-System" },
 ];
 
 /**
@@ -130,6 +136,7 @@ const COLUMN_CHECKS: Array<{
   // Mod permissions — live update extension (2026-06-25)
   { id: "col_mod_maxreward",      category: "Mod-Berechtigungen", table: "mod_permissions",    col: "max_reward_per_ticket",   detail: "ALTER TABLE mod_permissions ADD COLUMN max_reward_per_ticket integer DEFAULT 0;" },
   { id: "col_mod_pausetickets",   category: "Mod-Berechtigungen", table: "mod_permissions",    col: "can_pause_tickets",       detail: "ALTER TABLE mod_permissions ADD COLUMN IF NOT EXISTS can_pause_tickets boolean NOT NULL DEFAULT false;" },
+  { id: "col_mod_canuseadminai",  category: "Mod-Berechtigungen", table: "mod_permissions",    col: "can_use_admin_ai",        detail: "node scripts/add-can-use-admin-ai.cjs" },
   // Profiles — DON upgrade & verified (2026-06-25)
   { id: "col_profiles_donupgrade",category: "DON-System",         table: "profiles",            col: "don_upgrade_tier",        detail: "ALTER TABLE profiles ADD COLUMN don_upgrade_tier integer NOT NULL DEFAULT 0;" },
   { id: "col_profiles_verified",  category: "Battle Pass",        table: "profiles",            col: "verified",                detail: "ALTER TABLE profiles ADD COLUMN verified boolean NOT NULL DEFAULT false;" },
@@ -268,6 +275,8 @@ const COLUMN_CHECKS: Array<{
   { id: "col_bp_visual_config",      category: "Battle Pass", table: "battle_passes",       col: "visual_config",          detail: "node scripts/add-bp-visual-config.cjs" },
   { id: "col_bpt_reward_item_type",   category: "Battle Pass", table: "battle_pass_tiers",   col: "reward_item_type",       detail: "node scripts/add-bp-tier-reward-item-type.cjs" },
   { id: "col_bpt_bp_xp_required",    category: "Battle Pass", table: "battle_pass_tiers",   col: "bp_xp_required",         detail: "node scripts/add-bp-quests.cjs" },
+  { id: "col_profiles_prio_badges",  category: "Prio-Badges", table: "profiles",             col: "prio_badges",            detail: "node scripts/add-prio-badges.cjs" },
+  { id: "col_siteconfig_max_prio",   category: "Prio-Badges", table: "site_config",          col: "max_prio_badges",        detail: "node scripts/add-prio-badges.cjs" },
   { id: "col_ubp_bp_xp",             category: "Battle Pass", table: "user_battle_passes",  col: "bp_xp",                  detail: "node scripts/add-bp-quests.cjs" },
   // Fine-Config — all columns (node scripts/add-fine-config.cjs)
   { id: "col_fine_nametag_dist",     category: "Feintuning",  table: "fine_config", col: "nametag_distance_factor",     detail: "node scripts/add-fine-config.cjs" },

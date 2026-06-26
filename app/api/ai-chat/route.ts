@@ -37,12 +37,22 @@ function allowRequest(userId: string): boolean {
 
 type GroqTool = Groq.Chat.Completions.ChatCompletionTool;
 
+// ── get_detailed_stats tool — shared across all context levels ───────────────
+const GET_DETAILED_STATS_TOOL: GroqTool = {
+  type: "function",
+  function: {
+    name: "get_detailed_stats",
+    description: "Detaillierte Live-Statistiken der gesamten Plattform aus der Datenbank abrufen. Nutze das IMMER wenn nach konkreten Zahlen, Mengen oder Details gefragt wird: Wie viele Items/Fähigkeiten/Name-Styles gibt es? Welche Seltenheiten? Aktive Battle Passes? Aktive Umfragen? Polls? Laufende Trades/Auktionen? Spieler online? Sei NIEMALS ungenau — ruf dieses Tool auf.",
+    parameters: { type: "object", properties: {} },
+  },
+};
+
 const USER_TOOLS: GroqTool[] = [
   {
     type: "function",
     function: {
       name: "get_my_profile",
-      description: "Vollständiges Profil des anfragenden Spielers abrufen: Credits, Streak-Tage, Inventar-Größe, Rolle, Einstellungen. Nutze das IMMER bei Fragen nach dem eigenen Profil, Credits, Streak oder Inventar.",
+      description: "Vollständiges Profil des anfragenden Spielers abrufen: Credits, Streak-Tage, Inventar-Größe, Rolle, Level, XP, Einstellungen. Nutze das IMMER bei Fragen nach dem eigenen Profil, Credits, Streak, Level oder Inventar.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -50,10 +60,11 @@ const USER_TOOLS: GroqTool[] = [
     type: "function",
     function: {
       name: "get_platform_info",
-      description: "Aktuelle Plattform-Statistiken abrufen: Spieleranzahl, Items im Umlauf (sammelbar), aktive Cases, Shop-Angebote, laufende Auktionen. Nutze das IMMER bei Fragen nach Plattform-Zahlen oder 'Wie viele Items gibt es?'.",
+      description: "Schnelle Plattform-Übersicht: Spieleranzahl, Items im Umlauf, aktive Cases, Shop-Angebote, laufende Auktionen. Für detailliertere Zahlen nutze get_detailed_stats.",
       parameters: { type: "object", properties: {} },
     },
   },
+  GET_DETAILED_STATS_TOOL,
   {
     type: "function",
     function: {
@@ -303,7 +314,7 @@ async function executeFunction(
         const [{ data: profile }, { count: invCount }] = await Promise.all([
           adminDb
             .from("profiles")
-            .select("username, credits, streak_days, role, accepts_trades, profile_visible, created_at, temp_banned_until")
+            .select("username, credits, streak_days, role, accepts_trades, profile_visible, created_at, temp_banned_until, level, xp")
             .eq("id", me.id)
             .single(),
           adminDb
@@ -317,6 +328,8 @@ async function executeFunction(
           username: profile.username,
           credits: profile.credits,
           streak_days: profile.streak_days,
+          level: profile.level ?? 1,
+          xp: profile.xp ?? 0,
           role: profile.role,
           accepts_trades: profile.accepts_trades,
           profile_visible: profile.profile_visible,
@@ -376,6 +389,139 @@ async function executeFunction(
             rank: i + 1,
             username: p.username,
             streak_days: p.streak_days,
+          })),
+        };
+      }
+      case "get_detailed_stats": {
+        const adminDb = createAdminClient();
+        const today = new Date().toISOString().slice(0, 10);
+
+        const [
+          totalPlayers, totalInventory,
+          itemDefs, abilities, nameStyles,
+          battlePasses, surveys, polls,
+          activeTrades, activeAuctions,
+          shopToday, caseGroups,
+          topLevel, recentEvents,
+        ] = await Promise.allSettled([
+          adminDb.from("profiles").select("*", { count: "exact", head: true }),
+          adminDb.from("inventory").select("*", { count: "exact", head: true }),
+          adminDb.from("items").select("id, name, type, rarity, damage, armor").limit(500),
+          adminDb.from("ability_definitions").select("key, label, description, rarity, category").eq("enabled", true).limit(100),
+          adminDb.from("name_styles").select("key, label, animation_type, rarity").limit(200),
+          adminDb.from("battle_passes").select("id, title, is_active, start_date, end_date, show_on_dashboard").eq("is_active", true),
+          adminDb.from("surveys").select("id, title, status").eq("status", "active"),
+          adminDb.from("polls").select("id, question, status").eq("status", "active").limit(20),
+          adminDb.from("trades").select("*", { count: "exact", head: true }).eq("status", "pending"),
+          adminDb.from("auctions").select("*", { count: "exact", head: true }).eq("status", "active"),
+          adminDb.from("shop_listings").select("*", { count: "exact", head: true }).eq("shop_date", today),
+          adminDb.from("case_groups").select("id, title, item_types").eq("enabled", true).limit(20),
+          adminDb.from("profiles").select("username, level, xp").order("level", { ascending: false }).order("xp", { ascending: false }).limit(10),
+          adminDb.from("xp_events").select("action, xp_awarded, created_at").order("created_at", { ascending: false }).limit(20),
+        ]);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const getRows = (r: PromiseSettledResult<any>): any[] =>
+          r.status === "fulfilled" ? (r.value?.data ?? []) : [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const getCount = (r: PromiseSettledResult<any>): number =>
+          r.status === "fulfilled" ? (r.value?.count ?? 0) : 0;
+
+        const itemData = getRows(itemDefs);
+        const abilityData = getRows(abilities);
+        const styleData = getRows(nameStyles);
+        const bpData = getRows(battlePasses);
+        const surveyData = getRows(surveys);
+        const pollData = getRows(polls);
+        const caseData = getRows(caseGroups);
+
+        // Group items by type and rarity
+        const byType: Record<string, number> = {};
+        const byRarity: Record<string, number> = {};
+        for (const item of itemData as Array<{ type: string; rarity: string }>) {
+          byType[item.type] = (byType[item.type] ?? 0) + 1;
+          byRarity[item.rarity] = (byRarity[item.rarity] ?? 0) + 1;
+        }
+
+        // Group abilities by rarity/category
+        const abByRarity: Record<string, number> = {};
+        const abByCategory: Record<string, number> = {};
+        for (const a of abilityData as Array<{ rarity: string; category: string }>) {
+          abByRarity[a.rarity] = (abByRarity[a.rarity] ?? 0) + 1;
+          abByCategory[a.category] = (abByCategory[a.category] ?? 0) + 1;
+        }
+
+        // Group name styles by rarity
+        const nsByRarity: Record<string, number> = {};
+        for (const s of styleData as Array<{ rarity: string }>) {
+          nsByRarity[s.rarity] = (nsByRarity[s.rarity] ?? 0) + 1;
+        }
+
+        return {
+          timestamp: new Date().toISOString(),
+          players: {
+            total_registered: getCount(totalPlayers),
+          },
+          items: {
+            total_definitions: itemData.length,
+            by_type: byType,
+            by_rarity: byRarity,
+            note: itemData.length === 500 ? "Zeige ersten 500 Items (vollständige Zahl evtl. höher)" : undefined,
+          },
+          inventory: {
+            total_items_in_circulation: getCount(totalInventory),
+          },
+          abilities: {
+            total: abilityData.length,
+            by_rarity: abByRarity,
+            by_category: abByCategory,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            list: (abilityData as any[]).map((a) => `${a.label} (${a.rarity}, ${a.category})`),
+          },
+          name_styles: {
+            total: styleData.length,
+            by_rarity: nsByRarity,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            list: (styleData as any[]).map((s) => `${s.label} (${s.rarity}, Anim: ${s.animation_type})`),
+          },
+          battle_passes: {
+            active_count: bpData.length,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            active_passes: (bpData as any[]).map((b) => ({
+              title: b.title,
+              start: b.start_date,
+              end: b.end_date,
+              on_dashboard: b.show_on_dashboard,
+            })),
+          },
+          shop: {
+            offers_today: getCount(shopToday),
+          },
+          cases: {
+            active_groups: caseData.length,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            groups: (caseData as any[]).map((c) => c.title),
+          },
+          surveys: {
+            active_count: surveyData.length,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            titles: (surveyData as any[]).map((s) => s.title),
+          },
+          polls: {
+            active_count: pollData.length,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            questions: (pollData as any[]).map((p) => p.question),
+          },
+          economy: {
+            active_trades: getCount(activeTrades),
+            active_auctions: getCount(activeAuctions),
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          top_players_by_level: getRows(topLevel).map((p: any, i: number) => ({
+            rank: i + 1,
+            username: p.username,
+            level: p.level,
+            xp: p.xp,
           })),
         };
       }
@@ -722,10 +868,32 @@ export async function POST(req: NextRequest) {
     const { message, history = [], context: rawContext } = body;
     if (!message?.trim()) return NextResponse.json({ error: "Keine Nachricht." }, { status: 400 });
 
-    // Enforce role-based context: users can't escalate to admin/mod via the request body
+    // ── Context resolution with canUseAdminAi permission gate ─────────────────
+    // Golden rule: admins always get admin context. Mods requesting admin context
+    // must have canUseAdminAi enabled in their effective permissions.
     let context: "user" | "mod" | "admin" = "user";
-    if (rawContext === "admin" && isAdmin(profile)) context = "admin";
-    else if ((rawContext === "mod" || rawContext === "admin") && isModerator(profile)) context = "mod";
+
+    if (rawContext === "admin" && isAdmin(profile)) {
+      context = "admin";
+    } else if (isModerator(profile)) {
+      if (rawContext === "admin") {
+        // Mod requesting admin context — check canUseAdminAi
+        const adminDb = createAdminClient();
+        const [{ data: globalRow }, { data: userRow }] = await Promise.all([
+          adminDb.from("mod_permissions").select("can_use_admin_ai").eq("id", "default").single(),
+          adminDb.from("profiles").select("mod_permissions_override").eq("id", user.id).single(),
+        ]);
+        const globalVal = (globalRow?.can_use_admin_ai as boolean | null) ?? false;
+        const overrideObj = userRow?.mod_permissions_override as Record<string, unknown> | null;
+        const effectiveCanUseAdminAi =
+          overrideObj && "canUseAdminAi" in overrideObj
+            ? (overrideObj.canUseAdminAi as boolean)
+            : globalVal;
+        context = effectiveCanUseAdminAi ? "admin" : "mod";
+      } else {
+        context = "mod";
+      }
+    }
 
     const systemPrompt =
       context === "admin" ? ADMIN_SYSTEM_PROMPT :
