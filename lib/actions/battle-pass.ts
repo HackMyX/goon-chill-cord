@@ -469,25 +469,40 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
       rewardMsg = `+${amount.toLocaleString("de-DE")} Credits`;
     }
   } else if (rewardType === "item") {
+    // Specific item reward — MUST reliably land in the inventory. Any failure
+    // returns BEFORE the claim is recorded (below), so the tier stays claimable
+    // and the player never loses the reward.
     const itemId = t.reward_item_id as string | null;
-    if (itemId) {
-      const { data: item } = await admin.from("items").select("name, rarity").eq("id", itemId).maybeSingle();
-      const count = Math.max(1, quantity);
-      for (let i = 0; i < count; i++) {
-        await admin.from("inventory").insert({ user_id: user.id, item_id: itemId, equipped: false });
-      }
-      rewardMsg = item ? `${item.name} (${item.rarity})${count > 1 ? ` ×${count}` : ""}` : "Item erhalten";
+    if (!itemId) {
+      return { success: false, error: "Diese Belohnung ist fehlerhaft konfiguriert (kein Item hinterlegt). Bitte Admin informieren — der Tier wurde NICHT als abgeholt markiert." };
     }
+    const { data: item } = await admin.from("items").select("name, rarity").eq("id", itemId).maybeSingle();
+    if (!item) {
+      return { success: false, error: "Das hinterlegte Item existiert nicht mehr. Bitte Admin informieren — der Tier wurde NICHT abgeholt." };
+    }
+    const count = Math.max(1, quantity);
+    const invRows = Array.from({ length: count }, () => ({ user_id: user.id, item_id: itemId, equipped: false }));
+    const { error: invErr } = await admin.from("inventory").insert(invRows);
+    if (invErr) {
+      void logDebugEvent({ level: "error", scope: "battlepass:claim", message: "BP Item-Grant fehlgeschlagen", detail: invErr.message, context: { userId: user.id, tierId, itemId } });
+      return { success: false, error: "Das Item konnte nicht ins Inventar gelegt werden. Bitte erneut versuchen — der Tier wurde NICHT abgeholt." };
+    }
+    rewardMsg = `${item.name} (${item.rarity})${count > 1 ? ` ×${count}` : ""}`;
   } else if (rewardType === "random_item") {
     const rarity = t.reward_item_rarity as Rarity | null;
     let query = admin.from("items").select("id, name, rarity").eq("type", "cosmetic");
     if (rarity) query = query.eq("rarity", rarity);
     const { data: items } = await query;
-    if (items && items.length > 0) {
-      const picked = items[Math.floor(Math.random() * items.length)];
-      await admin.from("inventory").insert({ user_id: user.id, item_id: picked.id, equipped: false });
-      rewardMsg = `Zufällig: ${picked.name} (${picked.rarity})`;
+    if (!items || items.length === 0) {
+      return { success: false, error: "Kein passendes Item für diese Belohnung gefunden. Bitte Admin informieren — der Tier wurde NICHT abgeholt." };
     }
+    const picked = items[Math.floor(Math.random() * items.length)];
+    const { error: invErr } = await admin.from("inventory").insert({ user_id: user.id, item_id: picked.id, equipped: false });
+    if (invErr) {
+      void logDebugEvent({ level: "error", scope: "battlepass:claim", message: "BP Random-Item-Grant fehlgeschlagen", detail: invErr.message, context: { userId: user.id, tierId, itemId: picked.id } });
+      return { success: false, error: "Das Item konnte nicht ins Inventar gelegt werden. Bitte erneut versuchen — der Tier wurde NICHT abgeholt." };
+    }
+    rewardMsg = `Zufällig: ${picked.name} (${picked.rarity})`;
   } else if (rewardType === "badge") {
     const badgeText = (t.reward_badge_text as string | null) ?? (t.reward_badge_key as string | null) ?? "";
     if (badgeText) {
@@ -506,35 +521,45 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
     }
   } else if (rewardType === "name_style") {
     const styleKey = t.reward_name_style_key as string | null;
-    if (styleKey) {
-      const { data: alreadyOwned } = await admin
-        .from("user_name_styles")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("style_key", styleKey)
-        .maybeSingle();
-      if (!alreadyOwned) {
-        const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
-        await ensureStyleInDb(styleKey, admin);
-        await admin.from("user_name_styles").insert({
-          user_id: user.id,
-          style_key: styleKey,
-          source: "won",
-        });
-      }
-      rewardMsg = `Name-Style: ${styleKey}`;
+    if (!styleKey) {
+      return { success: false, error: "Diese Belohnung ist fehlerhaft konfiguriert (kein Name-Style hinterlegt). Bitte Admin informieren — der Tier wurde NICHT abgeholt." };
     }
+    const { data: alreadyOwned } = await admin
+      .from("user_name_styles")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("style_key", styleKey)
+      .maybeSingle();
+    if (!alreadyOwned) {
+      const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
+      await ensureStyleInDb(styleKey, admin);
+      const { error: nsErr } = await admin.from("user_name_styles").insert({
+        user_id: user.id,
+        style_key: styleKey,
+        source: "won",
+      });
+      if (nsErr) {
+        void logDebugEvent({ level: "error", scope: "battlepass:claim", message: "BP Name-Style-Grant fehlgeschlagen", detail: nsErr.message, context: { userId: user.id, tierId, styleKey } });
+        return { success: false, error: "Der Name-Style konnte nicht vergeben werden. Bitte erneut versuchen — der Tier wurde NICHT abgeholt." };
+      }
+    }
+    rewardMsg = `Name-Style: ${styleKey}`;
   } else if (rewardType === "ability") {
     const abilityKey = (t.reward_ability_key as string | null);
-    if (abilityKey) {
-      await admin.from("user_abilities").insert({
-        user_id: user.id,
-        ability_key: abilityKey,
-        source: "bp_tier",
-        source_detail: `Battle Pass Tier ${tierNum}`,
-      });
-      rewardMsg = `Fähigkeit erhalten: ${abilityKey}`;
+    if (!abilityKey) {
+      return { success: false, error: "Diese Belohnung ist fehlerhaft konfiguriert (keine Fähigkeit hinterlegt). Bitte Admin informieren — der Tier wurde NICHT abgeholt." };
     }
+    const { error: abErr } = await admin.from("user_abilities").insert({
+      user_id: user.id,
+      ability_key: abilityKey,
+      source: "bp_tier",
+      source_detail: `Battle Pass Tier ${tierNum}`,
+    });
+    if (abErr) {
+      void logDebugEvent({ level: "error", scope: "battlepass:claim", message: "BP Ability-Grant fehlgeschlagen", detail: abErr.message, context: { userId: user.id, tierId, abilityKey } });
+      return { success: false, error: "Die Fähigkeit konnte nicht vergeben werden. Bitte erneut versuchen — der Tier wurde NICHT abgeholt." };
+    }
+    rewardMsg = `Fähigkeit erhalten: ${abilityKey}`;
   }
 
   // Award XP for tier claim — fire-and-forget
