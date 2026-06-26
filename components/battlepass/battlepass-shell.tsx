@@ -10,7 +10,8 @@ import {
   Target, Wand2, Gem, Flame,
 } from "lucide-react";
 import { BP_THEMES, DEFAULT_BP_VISUAL_CONFIG, type BattlePass, type BattlePassTier, type UserBpStatus, type BpQuestWithProgress, type BpVisualConfig, type BpLayoutMode } from "@/lib/battle-pass";
-import { purchaseBattlePass, purchaseEliteBattlePass, claimBpTier } from "@/lib/actions/battle-pass";
+import { purchaseBattlePass, purchaseEliteBattlePass, claimBpTier, getActiveBattlePass } from "@/lib/actions/battle-pass";
+import { createClient } from "@/lib/supabase/client";
 import { getBpQuestsWithProgress } from "@/lib/actions/bp-quests";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -1780,8 +1781,11 @@ interface BattlePassShellProps {
   userStatus: UserBpStatus | null;
 }
 
-export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassShellProps) {
+export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }: BattlePassShellProps) {
   const router = useRouter();
+  // Pass is held in state so admin edits (broadcast on "bp-live") apply live.
+  const [pass, setPass] = useState(initialPass);
+  useEffect(() => { setPass(initialPass); }, [initialPass]);
   const theme = BP_THEMES[pass.theme] ?? BP_THEMES.default;
   const accent = pass.accentColor || theme.accent;
   const glow = theme.glow.replace(/[\d.]+\)$/, "0.5)");
@@ -1798,6 +1802,25 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
   const [purchaseAnim, setPurchaseAnim] = useState(false);
 
   const shellRef = useRef<HTMLDivElement>(null);
+
+  // Live updates: admin BP changes broadcast on "bp-live" → re-fetch the whole
+  // active pass + this user's status without a reload (AGENTS §3).
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("bp-live")
+      .on("broadcast", { event: "bp_changed" }, () => {
+        getActiveBattlePass()
+          .then((view) => {
+            if (!view) return;
+            setPass(view.pass);
+            if (view.userStatus) setUserStatus(view.userStatus);
+          })
+          .catch(() => { /* keep current on error */ });
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, []);
 
   const progressDays = userStatus?.progressDays ?? 0;
   const hasPremium = userStatus?.hasPremium ?? false;

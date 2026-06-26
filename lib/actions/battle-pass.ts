@@ -118,6 +118,18 @@ async function enrichItemRewards(
   }
 }
 
+/** Live-broadcast to all clients viewing the Battle Pass (no reload) — AGENTS §3.
+ * The battlepass-shell subscribes to "bp-live" and re-fetches getActiveBattlePass
+ * so admin tier/reward/visual changes appear instantly for everyone. */
+async function broadcastBpChange() {
+  try {
+    const admin = createAdminClient();
+    const ch = admin.channel("bp-live");
+    await ch.send({ type: "broadcast", event: "bp_changed", payload: { updatedAt: new Date().toISOString() } });
+    await admin.removeChannel(ch);
+  } catch { /* best-effort */ }
+}
+
 // ── user-facing ─────────────────────────────────────────────────────────────
 
 export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
@@ -879,6 +891,7 @@ export async function adminCreateBattlePass(
     return { success: false, error: error?.message ? `DB-Fehler: ${error.message}` : "Erstellen fehlgeschlagen." };
   }
   void logActivity("admin:bp:create", `Battle Pass erstellt: ${input.name}`, { passId: data.id, name: input.name, tierCount: input.tierCount });
+  await broadcastBpChange();
   revalidatePath("/admin");
   return { success: true, id: data.id as string };
 }
@@ -934,6 +947,7 @@ export async function adminUpdateBattlePass(
     return { success: false, error: "Speichern fehlgeschlagen." };
   }
   void logActivity("admin:bp:update", `Battle Pass gespeichert: ${input.name}`, { passId: id, name: input.name, theme: input.theme, visualConfig: input.visualConfig });
+  await broadcastBpChange();
   revalidatePath("/admin");
   revalidatePath("/battlepass");
   return { success: true };
@@ -946,6 +960,7 @@ export async function adminDeleteBattlePass(id: string): Promise<{ success: bool
   const admin = createAdminClient();
   const { error } = await admin.from("battle_passes").delete().eq("id", id);
   if (error) return { success: false, error: "Löschen fehlgeschlagen." };
+  await broadcastBpChange();
   revalidatePath("/admin");
   return { success: true };
 }
@@ -961,6 +976,7 @@ export async function adminSetPassActive(id: string, active: boolean): Promise<{
     .eq("id", id);
 
   if (error) return { success: false, error: "Fehler beim Aktivieren." };
+  await broadcastBpChange();
   revalidatePath("/admin");
   revalidatePath("/battlepass");
   return { success: true };
@@ -1024,6 +1040,7 @@ export async function adminUpsertBpTier(
     }, { onConflict: "pass_id,tier_number" });
 
   if (error) return { success: false, error: "Tier speichern fehlgeschlagen." };
+  await broadcastBpChange();
   revalidatePath("/admin");
   revalidatePath("/battlepass");
   return { success: true };
@@ -1190,6 +1207,7 @@ export async function adminAutoFillBpTiers(
     context: { passId, tierCount, config },
   });
 
+  await broadcastBpChange();
   revalidatePath("/admin");
   revalidatePath("/battlepass");
   return { success: true, count: rows.length };
