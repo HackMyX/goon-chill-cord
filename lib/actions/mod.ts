@@ -14,6 +14,7 @@ import {
   type ModTicket,
   type TicketMessage,
   type ModeratorWithPermissions,
+  type EscalationTarget,
 } from "@/lib/mod";
 
 // ---------------------------------------------------------------------------
@@ -255,7 +256,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, created_at, updated_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending, escalated_to_admin")
+    .select("id, user_id, subject, description, status, category, priority, created_at, updated_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending, escalated_to_admin, escalated_to_user_id")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -265,31 +266,54 @@ export async function getModTickets(): Promise<ModTicket[]> {
     new Set([
       ...data.map((t) => t.user_id),
       ...data.map((t) => t.closed_by).filter((id): id is string => !!id),
+      ...data.map((t) => (t as Record<string, unknown>).escalated_to_user_id as string | null).filter((id): id is string => !!id),
     ])
   );
   const { data: profiles } = await admin.from("profiles").select("id, username, active_name_style_key").in("id", allIds);
   const byId = new Map((profiles ?? []).map((p) => [p.id, p as { username: string | null; active_name_style_key: string | null }]));
 
-  return data.map((t) => ({
-    id: t.id,
-    userId: t.user_id,
-    username: byId.get(t.user_id)?.username ?? "?",
-    nameStyleKey: byId.get(t.user_id)?.active_name_style_key ?? undefined,
-    subject: t.subject ?? "(kein Betreff)",
-    message: t.description ?? "",
-    status: t.status ?? "open",
-    category: t.category ?? "other",
-    priority: t.priority ?? "normal",
-    createdAt: t.created_at,
-    updatedAt: (t as Record<string, unknown>).updated_at as string ?? t.created_at,
-    closedAt: t.closed_at,
-    closedByUsername: t.closed_by ? (byId.get(t.closed_by)?.username ?? null) : null,
-    attachmentUrl: (t as Record<string, unknown>).attachment_url as string | null ?? null,
-    rewardCredits: (t as Record<string, unknown>).reward_credits as number | null ?? null,
-    rewardNote: (t as Record<string, unknown>).reward_note as string | null ?? null,
-    rewardGrantedAt: (t as Record<string, unknown>).reward_granted_at as string | null ?? null,
-    rewardPending: ((t as Record<string, unknown>).reward_pending as boolean) ?? false,
-    escalatedToAdmin: ((t as Record<string, unknown>).escalated_to_admin as boolean) ?? false,
+  return data.map((t) => {
+    const escalatedToUserId = (t as Record<string, unknown>).escalated_to_user_id as string | null ?? null;
+    return {
+      id: t.id,
+      userId: t.user_id,
+      username: byId.get(t.user_id)?.username ?? "?",
+      nameStyleKey: byId.get(t.user_id)?.active_name_style_key ?? undefined,
+      subject: t.subject ?? "(kein Betreff)",
+      message: t.description ?? "",
+      status: t.status ?? "open",
+      category: t.category ?? "other",
+      priority: t.priority ?? "normal",
+      createdAt: t.created_at,
+      updatedAt: (t as Record<string, unknown>).updated_at as string ?? t.created_at,
+      closedAt: t.closed_at,
+      closedByUsername: t.closed_by ? (byId.get(t.closed_by)?.username ?? null) : null,
+      attachmentUrl: (t as Record<string, unknown>).attachment_url as string | null ?? null,
+      rewardCredits: (t as Record<string, unknown>).reward_credits as number | null ?? null,
+      rewardNote: (t as Record<string, unknown>).reward_note as string | null ?? null,
+      rewardGrantedAt: (t as Record<string, unknown>).reward_granted_at as string | null ?? null,
+      rewardPending: ((t as Record<string, unknown>).reward_pending as boolean) ?? false,
+      escalatedToAdmin: ((t as Record<string, unknown>).escalated_to_admin as boolean) ?? false,
+      escalatedToUserId,
+      escalatedToUsername: escalatedToUserId ? (byId.get(escalatedToUserId)?.username ?? null) : null,
+    };
+  });
+}
+
+/** Lists all moderators and admins for the escalation picker. Requires mod auth (not admin-only). */
+export async function getEscalationTargets(): Promise<EscalationTarget[]> {
+  await requireMod();
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("profiles")
+    .select("id, username, role")
+    .in("role", ["moderator", "admin"])
+    .order("username", { ascending: true });
+  if (!data || data.length === 0) return [];
+  return data.map((p) => ({
+    id: p.id,
+    username: (p.username as string) ?? "?",
+    role: (p.role as "moderator" | "admin"),
   }));
 }
 
@@ -911,7 +935,10 @@ async function syncTicketRewardSummary(
   }).eq("id", ticketId);
 }
 
-export async function modEscalateTicket(ticketId: string): Promise<{ success: boolean; error?: string }> {
+export async function modEscalateTicket(
+  ticketId: string,
+  targetUserId?: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const { user } = await requireMod();
     const admin = createAdminClient();
@@ -922,14 +949,43 @@ export async function modEscalateTicket(ticketId: string): Promise<{ success: bo
     if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
     if ((ticket as Record<string, unknown>).escalated_to_admin) return { success: false, error: "Bereits weitergeleitet." };
 
-    const { error } = await admin.from("tickets").update({ escalated_to_admin: true, updated_at: new Date().toISOString() }).eq("id", ticketId);
+    const updatePayload: Record<string, unknown> = {
+      escalated_to_admin: true,
+      updated_at: new Date().toISOString(),
+    };
+    if (targetUserId) updatePayload.escalated_to_user_id = targetUserId;
+
+    const { error } = await admin.from("tickets").update(updatePayload).eq("id", ticketId);
     if (error) return { success: false, error: error.message };
 
+    // Resolve target username for notification message
+    let targetUsername: string | null = null;
+    if (targetUserId) {
+      const { data: tgt } = await admin.from("profiles").select("username").eq("id", targetUserId).single();
+      targetUsername = (tgt as Record<string, unknown>)?.username as string ?? null;
+    }
+
+    const subject = (ticket as Record<string, unknown>).subject as string;
+    const link = `/mod?tab=tickets&open=${ticketId}`;
+
+    // Personal notification to target user (if specified)
+    if (targetUserId) {
+      await notifyUser({
+        userId: targetUserId,
+        type: "ticket_new",
+        title: "⬆ Ticket an dich weitergeleitet",
+        message: `${modUsername} hat Ticket „${subject}" an dich weitergeleitet.`,
+        link,
+      });
+    }
+
+    // General staff notification
+    const targetNote = targetUsername ? ` an ${targetUsername}` : " an Staff";
     await notifyStaff({
       type: "ticket_new",
-      title: "⬆ Ticket an Admin weitergeleitet",
-      message: `${modUsername} hat Ticket „${(ticket as Record<string, unknown>).subject}" an Admins weitergeleitet.`,
-      link: `/admin?tab=tickets&open=${ticketId}`,
+      title: "⬆ Ticket weitergeleitet",
+      message: `${modUsername} hat Ticket „${subject}"${targetNote} weitergeleitet.`,
+      link,
     });
 
     return { success: true };

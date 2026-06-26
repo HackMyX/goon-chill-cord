@@ -171,6 +171,8 @@ const COLUMN_CHECKS: Array<{
   { id: "col_tickets_reward_pending", category: "Tickets",        table: "tickets",             col: "reward_pending",          detail: "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS reward_pending boolean NOT NULL DEFAULT false;" },
   // Tickets — escalate to admin (2026-06-25)
   { id: "col_tickets_escalated",  category: "Tickets",            table: "tickets",             col: "escalated_to_admin",      detail: "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS escalated_to_admin boolean NOT NULL DEFAULT false;" },
+  // Tickets — targeted escalation to specific staff member (2026-06-26)
+  { id: "col_tickets_escalated_to_user", category: "Tickets",    table: "tickets",             col: "escalated_to_user_id",    detail: "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS escalated_to_user_id uuid REFERENCES profiles(id) ON DELETE SET NULL;" },
   // Battle Pass v2 — theme & visibility (2026-06-25)
   { id: "col_bp_theme",           category: "Battle Pass",        table: "battle_passes",       col: "theme",                   detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS theme text NOT NULL DEFAULT 'default';" },
   { id: "col_bp_accentcolor",     category: "Battle Pass",        table: "battle_passes",       col: "accent_color",            detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS accent_color text NOT NULL DEFAULT '#7c3aed';" },

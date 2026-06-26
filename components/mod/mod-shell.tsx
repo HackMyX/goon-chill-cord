@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { GlobalChatPanel } from "@/components/global/global-chat-panel";
+import { ModConfigEditor } from "@/components/admin/mod-config-editor";
+import { ModUserPermissionsEditor } from "@/components/admin/mod-user-permissions-editor";
 import { createClient } from "@/lib/supabase/client";
 import { StyledUsername } from "@/components/ui/styled-username";
 import Link from "next/link";
@@ -23,10 +25,11 @@ import {
   modRemoveWarning, getModUserHistory, getTicketMessages, modMarkInProgress, modReplyToTicket,
   modDeleteTicket, modSetTicketPriority, modUpdateTicketStatus, modGrantTicketReward,
   modRemoveTicketReward, modEscalateTicket, modPauseTicket, getMyEffectivePermissions,
+  getEscalationTargets,
 } from "@/lib/actions/mod";
 import { addInternalNote, getInternalNotes, getTicketRewards, deleteTicketsBulk, deleteTicketsByDateRange, type InternalNote, type TicketReward } from "@/lib/actions/tickets";
 import { ModTicketDetailModal } from "@/components/mod/mod-ticket-detail-modal";
-import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage } from "@/lib/mod";
+import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage, EscalationTarget } from "@/lib/mod";
 import { ADMIN_MOD_PERMISSIONS } from "@/lib/mod";
 
 // ---------------------------------------------------------------------------
@@ -747,6 +750,10 @@ function TicketItem({ t, perms, onRefresh, defaultOpen, isSelected, onToggleSele
   const alreadyRewarded = !!t.rewardGrantedAt;
   const rewardIsPending = !alreadyRewarded && t.rewardPending;
   const [escalating, setEscalating] = useState(false);
+  const [showEscalateMenu, setShowEscalateMenu] = useState(false);
+  const [escalateTargets, setEscalateTargets] = useState<EscalationTarget[]>([]);
+  const [loadingTargets, setLoadingTargets] = useState(false);
+  const [selectedTarget, setSelectedTarget] = useState<string>("");
   const [modalOpen, setModalOpen] = useState(false);
   const sound = useSoundManager();
   const itemRef = useRef<HTMLDivElement>(null);
@@ -1304,21 +1311,70 @@ function TicketItem({ t, perms, onRefresh, defaultOpen, isSelected, onToggleSele
                 </button>
               )))}
               {perms.canCloseTickets && !t.escalatedToAdmin && isActionable && (
-                <button
-                  onClick={async () => {
-                    sound.click();
-                    setEscalating(true);
-                    const res = await modEscalateTicket(t.id);
-                    setEscalating(false);
-                    if (res.success) { showFlash("An Admin weitergeleitet.", true); onRefresh(); }
-                    else showFlash(res.error ?? "Fehler.", false);
-                  }}
-                  disabled={pending || escalating}
-                  className="flex items-center gap-1.5 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-bold text-orange-300 transition-colors hover:bg-orange-500/20 disabled:opacity-50"
-                >
-                  {escalating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
-                  An Admin weiterleiten
-                </button>
+                !showEscalateMenu ? (
+                  <button
+                    onClick={async () => {
+                      sound.click();
+                      setShowEscalateMenu(true);
+                      if (escalateTargets.length === 0) {
+                        setLoadingTargets(true);
+                        const targets = await getEscalationTargets();
+                        setEscalateTargets(targets);
+                        setLoadingTargets(false);
+                      }
+                    }}
+                    disabled={pending}
+                    className="flex items-center gap-1.5 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-bold text-orange-300 transition-colors hover:bg-orange-500/20 disabled:opacity-50"
+                  >
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                    Weiterleiten…
+                  </button>
+                ) : (
+                  <div className="w-full rounded-xl border border-orange-500/30 bg-orange-500/8 p-3 space-y-2">
+                    <p className="text-[10px] font-bold text-orange-300 flex items-center gap-1">
+                      <ArrowUpRight className="h-3 w-3" /> Weiterleiten an:
+                    </p>
+                    {loadingTargets ? (
+                      <span className="flex items-center gap-1.5 text-[11px] text-zinc-500"><Loader2 className="h-3 w-3 animate-spin" />Lade…</span>
+                    ) : (
+                      <select
+                        value={selectedTarget}
+                        onChange={(e) => setSelectedTarget(e.target.value)}
+                        className="w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-orange-400/60"
+                      >
+                        <option value="">Alle Admins / Staff</option>
+                        {escalateTargets.map((tgt) => (
+                          <option key={tgt.id} value={tgt.id}>
+                            {tgt.role === "admin" ? "👑" : "🛡"} {tgt.username}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          setEscalating(true);
+                          const res = await modEscalateTicket(t.id, selectedTarget || undefined);
+                          setEscalating(false);
+                          setShowEscalateMenu(false);
+                          if (res.success) { showFlash("Weitergeleitet.", true); onRefresh(); }
+                          else showFlash(res.error ?? "Fehler.", false);
+                        }}
+                        disabled={escalating}
+                        className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-orange-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-orange-500 disabled:opacity-50"
+                      >
+                        {escalating ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpRight className="h-3 w-3" />}
+                        Senden
+                      </button>
+                      <button
+                        onClick={() => setShowEscalateMenu(false)}
+                        className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] text-zinc-400 hover:text-zinc-200"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                )
               )}
               {perms.canRewardTickets && !alreadyRewarded && !rewardIsPending && (
                 <button
@@ -2117,7 +2173,7 @@ function ActionLog({ actions }: { actions: ModActionRow[] }) {
 // Main Shell
 // ---------------------------------------------------------------------------
 
-type ModTab = "overview" | "users" | "tickets" | "actions" | "chat" | "ki";
+type ModTab = "overview" | "users" | "tickets" | "actions" | "chat" | "ki" | "moderators";
 
 interface ModShellProps {
   modUsername: string;
@@ -2147,7 +2203,7 @@ function ModShellInner({
 
   const [activeTab, setActiveTab] = useState<ModTab>(() => {
     const q = searchParams.get("tab");
-    return (q === "tickets" || q === "users" || q === "actions" || q === "chat" || q === "ki") ? q : "overview";
+    return (q === "tickets" || q === "users" || q === "actions" || q === "chat" || q === "ki" || q === "moderators") ? q : "overview";
   });
   const [deepOpenTicketId, setDeepOpenTicketId] = useState<string | null>(
     () => searchParams.get("open")
@@ -2186,7 +2242,7 @@ function ModShellInner({
 
   useEffect(() => {
     const q = searchParams.get("tab");
-    if (q === "tickets" || q === "users" || q === "actions" || q === "chat" || q === "ki") setActiveTab(q);
+    if (q === "tickets" || q === "users" || q === "actions" || q === "chat" || q === "ki" || q === "moderators") setActiveTab(q);
     const open = searchParams.get("open");
     if (open) setDeepOpenTicketId(open);
   }, [searchParams]);
@@ -2194,14 +2250,15 @@ function ModShellInner({
   const openTicketsCount = tickets.filter((t) => t.status === "open" || t.status === "in_progress").length;
 
   const tabs: { id: ModTab; label: string; Icon: typeof Shield; badge?: number; show: boolean }[] = [
-    { id: "overview", label: "Übersicht",     Icon: LayoutDashboard, show: true },
-    { id: "users",    label: "Nutzer",         Icon: Users,           badge: users.length,
+    { id: "overview",    label: "Übersicht",    Icon: LayoutDashboard, show: true },
+    { id: "users",       label: "Nutzer",        Icon: Users,           badge: users.length,
       show: permissions.canViewUserDetails || permissions.canWarnUsers || permissions.canTempBanUsers },
-    { id: "tickets",  label: "Tickets",        Icon: Ticket,          badge: openTicketsCount,
+    { id: "tickets",     label: "Tickets",       Icon: Ticket,          badge: openTicketsCount,
       show: permissions.canViewTickets },
-    { id: "actions",  label: "Aktionen",       Icon: History,         show: true },
-    { id: "chat",     label: "Chat",           Icon: MessageSquare,   show: true },
-    { id: "ki",       label: "KI-Assistent",   Icon: Sparkles,        show: true },
+    { id: "moderators",  label: "Moderatoren",   Icon: Shield,          show: isAdminUser },
+    { id: "actions",     label: "Aktionen",      Icon: History,         show: true },
+    { id: "chat",        label: "Chat",          Icon: MessageSquare,   show: true },
+    { id: "ki",          label: "KI-Assistent",  Icon: Sparkles,        show: true },
   ];
 
   function refresh() {
@@ -2303,6 +2360,21 @@ function ModShellInner({
             tickets={tickets} perms={permissions} onRefresh={refresh}
             openTicketId={deepOpenTicketId} onTicketOpened={() => setDeepOpenTicketId(null)}
           />
+        )}
+        {activeTab === "moderators" && isAdminUser && (
+          <div className="flex flex-col gap-6">
+            <ModConfigEditor permissions={rawPerms} />
+            <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
+              <h3 className="mb-1 flex items-center gap-2 text-base font-bold text-zinc-100">
+                <Shield className="h-5 w-5 text-purple-400" />
+                Individuelle Mod-Berechtigungen
+              </h3>
+              <p className="mb-4 text-xs text-zinc-500">
+                Überschreibe die globalen Einstellungen pro Moderator. Ohne Override gelten die globalen Rechte oben.
+              </p>
+              <ModUserPermissionsEditor globalPerms={rawPerms} />
+            </div>
+          </div>
         )}
         {activeTab === "actions" && (
           <div className="flex flex-col gap-4">

@@ -135,6 +135,14 @@ export interface ModTicket {
   rewardGrantedAt: string | null;
   rewardPending: boolean;
   escalatedToAdmin: boolean;
+  escalatedToUserId: string | null;
+  escalatedToUsername: string | null;
+}
+
+export interface EscalationTarget {
+  id: string;
+  username: string;
+  role: "moderator" | "admin";
 }
 
 export interface TicketMessage {

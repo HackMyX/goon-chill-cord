@@ -16,12 +16,9 @@ import { PetConfigEditor } from "@/components/admin/pet-config-editor";
 import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
 import { GamesTab } from "@/components/admin/games-tab";
 import { SiteConfigEditor } from "@/components/admin/site-config-editor";
-import { TicketsTab } from "@/components/admin/tickets-tab";
 import { DebugLogTab } from "@/components/admin/debug-log-tab";
 import { BackupTab } from "@/components/admin/backup-tab";
 import { SecurityTab } from "@/components/admin/security-tab";
-import { ModConfigEditor } from "@/components/admin/mod-config-editor";
-import { ModUserPermissionsEditor } from "@/components/admin/mod-user-permissions-editor";
 import { ChatConfigEditor } from "@/components/admin/chat-config-editor";
 import { PatchNotesEditor } from "@/components/admin/patchnotes-editor";
 import { SurveysTab } from "@/components/admin/surveys-tab";
@@ -165,7 +162,7 @@ interface AdminShellProps {
   fineConfig: FineConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "tickets" | "moderators" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "sounds" | "preview_config" | "fine_config";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "sounds" | "preview_config" | "fine_config";
 
 const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string }[] = [
   { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
@@ -191,8 +188,6 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Startseite Konfiguration", tab: "branding", keywords: ["branding", "logo", "startseite", "homepage", "karten", "topbar"], description: "Site-Konfiguration und Homepage-Design" },
   { label: "Patchnotes", tab: "patchnotes", keywords: ["patch", "notes", "update", "popup", "changelog"], description: "Patchnotes und Update-Popups" },
   { label: "Umfragen", tab: "surveys", keywords: ["umfrage", "survey", "frage", "antwort", "abstimmung"], description: "Umfragen erstellen und auswerten" },
-  { label: "Tickets", tab: "tickets", keywords: ["ticket", "support", "bug", "anfrage", "status"], description: "Support-Tickets verwalten" },
-  { label: "Moderatoren", tab: "moderators", keywords: ["mod", "moderator", "berechtigung", "ban", "warn", "pause"], description: "Moderatoren-Berechtigungen" },
   { label: "Nutzer-Verwaltung", tab: "users", keywords: ["user", "nutzer", "profil", "credits", "rolle", "ban"], description: "Nutzer bearbeiten, Credits, Rollen" },
   { label: "Sicherheit", tab: "security", keywords: ["sicherheit", "login", "ip", "duplicate", "ban"], description: "Login-Logs und IP-Duplikate" },
   { label: "Backup", tab: "backup", keywords: ["backup", "export", "sicherung", "daten"], description: "Backups erstellen und verwalten" },
@@ -221,7 +216,6 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "items",          label: "Items",                icon: Package },
   { id: "ki",             label: "KI-Assistent",         icon: Sparkles },
   { id: "level_xp",       label: "Level & XP",           icon: TrendingUp },
-  { id: "moderators",     label: "Moderatoren",          icon: Shield },
   { id: "monsters",       label: "Monster",              icon: Skull },
   { id: "namestyles",     label: "Name-Styles",          icon: Wand2 },
   { id: "patchnotes",     label: "Patch Notes",          icon: FileText },
@@ -231,7 +225,6 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "security",       label: "Sicherheit",           icon: ShieldAlert },
   { id: "sounds",         label: "Sound Manager",        icon: Volume2 },
   { id: "homepage_chat",  label: "Startseite Chat",      icon: MessageSquare },
-  { id: "tickets",        label: "Tickets",              icon: MessageCircle },
   { id: "surveys",        label: "Umfragen",             icon: BarChart3 },
   { id: "users",          label: "User-Management",      icon: Users },
   { id: "cleanup",        label: "Verlaufs-Bereinigung", icon: Trash2 },
@@ -256,7 +249,7 @@ export function AdminShell({
   characterConfig,
   worldSpawnConfig,
   siteConfig,
-  modPermissions,
+  modPermissions: _modPermissions,
   chatConfig,
   patchNotes,
   donConfig,
@@ -275,7 +268,6 @@ export function AdminShell({
     const qTab = searchParams.get("tab");
     return (qTab && TABS.some((t) => t.id === qTab) ? qTab : "economy") as Tab;
   });
-  const [openTicketId, setOpenTicketId] = useState<string | null>(() => searchParams.get("open"));
   const [items, setItems] = useState(initialItems);
   const [credits, setCredits] = useState(initialCredits);
   const [profiles, setProfiles] = useState(initialProfiles);
@@ -556,29 +548,6 @@ export function AdminShell({
           />
         )}
 
-
-        {tab === "tickets" && (
-          <TicketsTab
-            openTicketId={openTicketId}
-            onTicketOpened={() => setOpenTicketId(null)}
-          />
-        )}
-
-        {tab === "moderators" && (
-          <div className="flex flex-col gap-6">
-            <ModConfigEditor permissions={modPermissions} />
-            <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
-              <h3 className="mb-1 flex items-center gap-2 text-base font-bold text-zinc-100">
-                <Shield className="h-5 w-5 text-purple-400" />
-                Individuelle Mod-Berechtigungen
-              </h3>
-              <p className="mb-4 text-xs text-zinc-500">
-                Überschreibe die globalen Einstellungen pro Moderator. Ohne Override gelten die globalen Rechte oben.
-              </p>
-              <ModUserPermissionsEditor globalPerms={modPermissions} />
-            </div>
-          </div>
-        )}
 
         {tab === "chat" && <ChatConfigEditor initialConfig={chatConfig} />}
 

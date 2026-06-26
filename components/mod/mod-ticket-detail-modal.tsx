@@ -13,13 +13,13 @@ import {
   getTicketMessages, modReplyToTicket, modUpdateTicketStatus,
   modSetTicketPriority, modDeleteTicket, modGrantTicketReward,
   modRemoveTicketReward, modPauseTicket, modEscalateTicket,
-  modCloseTicket,
+  modCloseTicket, getEscalationTargets,
 } from "@/lib/actions/mod";
 import {
   addInternalNote, getInternalNotes, getTicketRewards,
   type InternalNote, type TicketReward,
 } from "@/lib/actions/tickets";
-import type { ModTicket, ModPermissions, TicketMessage } from "@/lib/mod";
+import type { ModTicket, ModPermissions, TicketMessage, EscalationTarget } from "@/lib/mod";
 import { createClient } from "@/lib/supabase/client";
 import { useSoundManager } from "@/lib/sound-manager";
 
@@ -194,6 +194,11 @@ export function ModTicketDetailModal({ ticket, perms, onClose, onUpdated }: ModT
   const [closeReason, setCloseReason] = useState("");
   const [showCloseForm, setShowCloseForm] = useState(false);
 
+  const [showEscalateMenu, setShowEscalateMenu] = useState(false);
+  const [escalateTargets, setEscalateTargets] = useState<EscalationTarget[]>([]);
+  const [loadingTargets, setLoadingTargets] = useState(false);
+  const [selectedTarget, setSelectedTarget] = useState<string>("");
+
   const [showNotes, setShowNotes] = useState(false);
   const [showRewards, setShowRewards] = useState(false);
   const [newNote, setNewNote] = useState("");
@@ -331,11 +336,23 @@ export function ModTicketDetailModal({ ticket, perms, onClose, onUpdated }: ModT
     onUpdated();
   }
 
+  async function openEscalateMenu() {
+    sound.click();
+    setShowEscalateMenu(true);
+    if (escalateTargets.length === 0) {
+      setLoadingTargets(true);
+      const targets = await getEscalationTargets();
+      setEscalateTargets(targets);
+      setLoadingTargets(false);
+    }
+  }
+
   async function handleEscalate() {
     setEscalating(true);
     sound.click();
-    await modEscalateTicket(ticket.id);
+    await modEscalateTicket(ticket.id, selectedTarget || undefined);
     setEscalating(false);
+    setShowEscalateMenu(false);
     onUpdated();
     onClose();
   }
@@ -821,17 +838,86 @@ export function ModTicketDetailModal({ ticket, perms, onClose, onUpdated }: ModT
                 </div>
               )}
 
-              {/* Escalate */}
+              {/* Escalate — with target picker */}
               {perms.canCloseTickets && !ticket.escalatedToAdmin && isActionable && (
                 <div className="border-b border-white/[0.06] px-3 py-3">
-                  <button
-                    onClick={handleEscalate}
-                    disabled={escalating}
-                    className="flex w-full items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-bold text-orange-300 transition-colors hover:bg-orange-500/20 disabled:opacity-50"
-                  >
-                    {escalating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
-                    An Admin eskalieren
-                  </button>
+                  {!showEscalateMenu ? (
+                    <button
+                      onClick={openEscalateMenu}
+                      className="flex w-full items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs font-bold text-orange-300 transition-colors hover:bg-orange-500/20"
+                    >
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                      Weiterleiten an…
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-2 rounded-lg border border-orange-500/30 bg-orange-500/8 p-3">
+                      <p className="text-[10px] font-bold text-orange-300 flex items-center gap-1.5">
+                        <ArrowUpRight className="h-3 w-3" />
+                        Ticket weiterleiten an:
+                      </p>
+                      {loadingTargets ? (
+                        <div className="flex items-center gap-2 text-[11px] text-zinc-500 py-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Lade Mitarbeiter…
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1 max-h-36 overflow-y-auto">
+                          <button
+                            onClick={() => setSelectedTarget("")}
+                            className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors text-left ${
+                              selectedTarget === ""
+                                ? "bg-orange-500/20 text-orange-200 border border-orange-500/40"
+                                : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200 border border-transparent"
+                            }`}
+                          >
+                            <span className="rounded-full bg-zinc-700 px-1.5 py-0.5 text-[9px] font-bold text-zinc-400">Allgemein</span>
+                            Alle Admins / Staff
+                          </button>
+                          {escalateTargets.map((t) => (
+                            <button
+                              key={t.id}
+                              onClick={() => setSelectedTarget(t.id)}
+                              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors text-left ${
+                                selectedTarget === t.id
+                                  ? "bg-orange-500/20 text-orange-200 border border-orange-500/40"
+                                  : "text-zinc-300 hover:bg-white/5 border border-transparent"
+                              }`}
+                            >
+                              <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+                                t.role === "admin"
+                                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                  : "bg-sky-500/20 text-sky-300 border border-sky-500/30"
+                              }`}>
+                                {t.role === "admin" ? "Admin" : "Mod"}
+                              </span>
+                              {t.username}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2 pt-1 border-t border-white/[0.06]">
+                        <button
+                          onClick={handleEscalate}
+                          disabled={escalating}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-orange-500 disabled:opacity-50 transition-colors"
+                        >
+                          {escalating ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpRight className="h-3 w-3" />}
+                          Weiterleiten
+                        </button>
+                        <button
+                          onClick={() => setShowEscalateMenu(false)}
+                          className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
+                        >
+                          Abbrechen
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {ticket.escalatedToUsername && (
+                    <p className="mt-1.5 text-[10px] text-orange-400/70">
+                      Weitergeleitet an: <strong>{ticket.escalatedToUsername}</strong>
+                    </p>
+                  )}
                 </div>
               )}
 

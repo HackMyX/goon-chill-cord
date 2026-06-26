@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
+  Eye,
+  EyeOff,
   Loader2,
   MessageSquare,
   Send,
@@ -527,27 +529,33 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
   const blurCls = getBlurClass(config.blurIntensity);
   const isLeft = config.sidebarPosition !== "right";
 
-  // ── MOBILE: floating button + bottom sheet ────────────────────────────────
+  // ── MOBILE: persistent eye toggle + bottom sheet ──────────────────────────
   if (isMobile) {
     return (
       <>
-        {/* Floating chat button */}
-        {!isOpen && (
-          <button
-            onClick={toggleOpen}
-            className="fixed bottom-6 left-4 z-40 flex items-center justify-center h-12 w-12 rounded-full bg-black/60 border border-white/10 backdrop-blur-md shadow-lg hover:bg-black/80 transition-colors"
-            aria-label="Chat öffnen"
-          >
-            <MessageSquare className="h-5 w-5 text-purple-400" />
-            {newMsgCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-purple-600 text-[9px] font-bold text-white">
-                {newMsgCount > 9 ? "9+" : newMsgCount}
-              </span>
-            )}
-          </button>
-        )}
+        {/* Persistent eye toggle — always visible, floats above bottom sheet */}
+        <button
+          onClick={toggleOpen}
+          className={`fixed bottom-6 right-4 z-50 flex items-center justify-center h-12 w-12 rounded-full border backdrop-blur-md shadow-xl transition-all active:scale-95 ${
+            isOpen
+              ? "bg-purple-600/90 border-purple-400/60 shadow-[0_0_24px_rgba(147,51,234,0.6)] hover:bg-purple-500/90"
+              : "bg-black/70 border-white/15 hover:border-purple-400/50 hover:bg-purple-600/30 hover:shadow-[0_0_16px_rgba(147,51,234,0.4)]"
+          }`}
+          aria-label={isOpen ? "Chat schließen" : "Chat öffnen"}
+        >
+          {isOpen ? (
+            <EyeOff className="h-5 w-5 text-purple-100" />
+          ) : (
+            <Eye className="h-5 w-5 text-purple-400" />
+          )}
+          {!isOpen && newMsgCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-purple-600 text-[9px] font-bold text-white shadow-[0_0_8px_rgba(147,51,234,0.7)]">
+              {newMsgCount > 9 ? "9+" : newMsgCount}
+            </span>
+          )}
+        </button>
 
-        {/* Mobile overlay */}
+        {/* Mobile chat bottom sheet */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
@@ -593,64 +601,86 @@ export function HomepageChatSidebar({ config }: HomepageChatSidebarProps) {
     <motion.div
       animate={{ width: isOpen ? expandedW : COLLAPSED_W }}
       transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-      className={`fixed top-0 bottom-0 z-40 flex flex-col border-white/10 overflow-hidden ${
+      className={`fixed top-0 bottom-0 z-40 border-white/10 ${
         isLeft ? "left-0 border-r" : "right-0 border-l"
       } ${blurCls}`}
       style={{
         background: `linear-gradient(to bottom, rgba(0,0,0,${(config.bgOpacity + 10) / 100}), rgba(0,0,0,${config.bgOpacity / 100}))`,
       }}
     >
-      {/* Toggle strip (always visible) */}
+      {/* Inner content — has overflow-hidden to clip messages/panel */}
+      <div className="absolute inset-0 overflow-hidden flex flex-col">
+        {/* Collapsed strip content */}
+        {!isOpen && (
+          <div className="flex flex-1 flex-col items-center pt-6 pb-6 gap-3">
+            <div className="relative">
+              <MessageSquare
+                className="h-5 w-5 text-purple-400 shrink-0"
+                style={{
+                  filter: newMsgCount > 0
+                    ? "drop-shadow(0 0 8px rgba(147,51,234,0.9))"
+                    : "drop-shadow(0 0 4px rgba(147,51,234,0.5))",
+                }}
+              />
+              {newMsgCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-purple-600 text-[8px] font-bold text-white shadow-[0_0_8px_rgba(147,51,234,0.7)]">
+                  {newMsgCount > 9 ? "9+" : newMsgCount}
+                </span>
+              )}
+            </div>
+            <div className="mt-4">
+              <span
+                className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600"
+                style={{ writingMode: "vertical-rl" }}
+              >
+                Chat
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Expanded panel */}
+        {isOpen && (
+          <ChatPanel
+            messages={messages}
+            loading={loading}
+            input={input}
+            setInput={setInput}
+            sending={sending}
+            onCooldown={onCooldown}
+            error={error}
+            config={config}
+            isAuthed={isAuthed}
+            ownUsername={ownUsername}
+            animateNewIds={animateNewIds}
+            bottomRef={bottomRef}
+            onSend={handleSend}
+          />
+        )}
+      </div>
+
+      {/* Toggle tab — extends outside sidebar (parent has no overflow-hidden) */}
       <button
         onClick={toggleOpen}
-        className={`absolute top-1/2 -translate-y-1/2 z-10 flex h-10 w-5 items-center justify-center rounded bg-black/40 border border-white/10 hover:bg-black/60 transition-colors ${
-          isLeft ? "-right-2.5" : "-left-2.5"
-        }`}
+        className={`absolute top-1/2 -translate-y-1/2 z-20 flex flex-col items-center justify-center h-16 w-6 transition-all group border bg-gradient-to-b from-purple-600/20 via-purple-500/12 to-purple-600/20 hover:from-purple-600/40 hover:via-purple-500/25 hover:to-purple-600/40 hover:border-purple-400/50 hover:shadow-[0_0_20px_rgba(147,51,234,0.5)] ${
+          isLeft
+            ? "right-0 translate-x-full rounded-r-xl border-l-0 border-purple-500/25 shadow-[3px_0_14px_rgba(147,51,234,0.2)]"
+            : "left-0 -translate-x-full rounded-l-xl border-r-0 border-purple-500/25 shadow-[-3px_0_14px_rgba(147,51,234,0.2)]"
+        } ${newMsgCount > 0 && !isOpen ? "border-purple-400/50 !shadow-[3px_0_18px_rgba(147,51,234,0.5)]" : ""}`}
         aria-label={isOpen ? "Chat schließen" : "Chat öffnen"}
       >
         {isLeft ? (
           isOpen ? (
-            <ChevronLeft className="h-3 w-3 text-zinc-400" />
+            <ChevronLeft className="h-4 w-4 text-purple-300 group-hover:text-purple-100 transition-colors" />
           ) : (
-            <ChevronRight className="h-3 w-3 text-zinc-400" />
+            <ChevronRight className="h-4 w-4 text-purple-300 group-hover:text-purple-100 transition-colors" />
           )
         ) : isOpen ? (
-          <ChevronRight className="h-3 w-3 text-zinc-400" />
+          <ChevronRight className="h-4 w-4 text-purple-300 group-hover:text-purple-100 transition-colors" />
         ) : (
-          <ChevronLeft className="h-3 w-3 text-zinc-400" />
+          <ChevronLeft className="h-4 w-4 text-purple-300 group-hover:text-purple-100 transition-colors" />
         )}
       </button>
-
-      {/* Collapsed strip content */}
-      {!isOpen && (
-        <div className="flex flex-col items-center gap-2 pt-6">
-          <MessageSquare className="h-5 w-5 text-purple-400 shrink-0" />
-          {newMsgCount > 0 && (
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-600 text-[9px] font-bold text-white">
-              {newMsgCount > 9 ? "9+" : newMsgCount}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Expanded panel */}
-      {isOpen && (
-        <ChatPanel
-          messages={messages}
-          loading={loading}
-          input={input}
-          setInput={setInput}
-          sending={sending}
-          onCooldown={onCooldown}
-          error={error}
-          config={config}
-          isAuthed={isAuthed}
-          ownUsername={ownUsername}
-          animateNewIds={animateNewIds}
-          bottomRef={bottomRef}
-          onSend={handleSend}
-        />
-      )}
     </motion.div>
   );
 }
