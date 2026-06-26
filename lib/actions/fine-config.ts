@@ -82,6 +82,15 @@ export async function updateFineConfig(
     void logDebugEvent({ level: "error", scope: "admin:fine-config", message: "Feintuning-Config Speichern fehlgeschlagen", detail: error.message, context: { userId: user.id } });
     return { error: error.message };
   }
+
+  // Live-broadcast to all connected clients (no reload) — AGENTS §3.
+  // FineConfigProvider re-fetches and re-applies the tuning values.
+  try {
+    const ch = admin.channel("fine-config-live");
+    await ch.send({ type: "broadcast", event: "fine_config_changed", payload: { updatedAt: new Date().toISOString() } });
+    await admin.removeChannel(ch);
+  } catch { /* broadcast is best-effort */ }
+
   void logActivity("admin:fine-config", `Feintuning-Config gespeichert (${Object.keys(partial).length} Felder)`, { userId: user.id, fields: Object.keys(partial) });
   return { ok: true };
 }
