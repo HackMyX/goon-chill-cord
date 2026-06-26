@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { createSession, pingSession } from "@/lib/actions/session";
 import { motion, AnimatePresence } from "framer-motion";
 import { Smartphone, Monitor, RefreshCw, LogOut } from "lucide-react";
+import { setSessionStatus } from "@/lib/session-status";
 
 const LS_KEY = "goon_session_token_v1";
 const PING_INTERVAL_MS = 25_000; // 25 seconds
@@ -20,7 +21,11 @@ const BC_CLAIM_TIMEOUT_MS = 350;
 type GuardStatus = "idle" | "active" | "blocked" | "kicked" | "taking_over";
 
 export function SessionGuard() {
-  const [status, setStatus] = useState<GuardStatus>("idle");
+  const [status, setStatusLocal] = useState<GuardStatus>("idle");
+  const setStatus = useCallback((s: GuardStatus) => {
+    setStatusLocal(s);
+    setSessionStatus(s);
+  }, []);
   const tokenRef = useRef<string | null>(null);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bcRef = useRef<BroadcastChannel | null>(null);
