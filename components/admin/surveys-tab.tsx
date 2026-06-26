@@ -106,7 +106,7 @@ function ResultsPanel({ surveyId }: { surveyId: string }) {
                 </div>
               )}
 
-              {(r.type === "single" || r.type === "multiple") && (
+              {(r.type === "single" || r.type === "multiple" || r.type === "poll") && (
                 <div className="flex flex-col gap-1 pl-2">
                   {(r.options ?? []).map((opt, i) => {
                     const count = r.optionCounts?.[i] ?? 0;
@@ -124,6 +124,42 @@ function ResultsPanel({ surveyId }: { surveyId: string }) {
                   })}
                 </div>
               )}
+
+              {r.type === "yes_no" && (
+                <div className="flex gap-3 pl-2">
+                  <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5">
+                    <span className="text-sm">👍</span>
+                    <span className="text-sm font-bold text-emerald-300">{r.yesCount ?? 0}</span>
+                    <span className="text-[10px] text-zinc-500">{r.totalAnswers > 0 ? Math.round(((r.yesCount ?? 0) / r.totalAnswers) * 100) : 0}%</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5">
+                    <span className="text-sm">👎</span>
+                    <span className="text-sm font-bold text-red-300">{r.noCount ?? 0}</span>
+                    <span className="text-[10px] text-zinc-500">{r.totalAnswers > 0 ? Math.round(((r.noCount ?? 0) / r.totalAnswers) * 100) : 0}%</span>
+                  </div>
+                </div>
+              )}
+
+              {(r.type === "scale" || r.type === "number") && (
+                <div className="pl-2 flex items-center gap-4">
+                  <div className="text-center">
+                    <p className="text-xs text-zinc-500">Durchschnitt</p>
+                    <p className="text-base font-bold text-purple-300">{r.scaleAverage?.toFixed(1) ?? r.numberAverage?.toFixed(1) ?? "–"}</p>
+                  </div>
+                  {r.numberMin !== undefined && r.numberMax !== undefined && (
+                    <>
+                      <div className="text-center">
+                        <p className="text-xs text-zinc-500">Min</p>
+                        <p className="text-sm font-bold text-zinc-300">{r.numberMin}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-zinc-500">Max</p>
+                        <p className="text-sm font-bold text-zinc-300">{r.numberMax}</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -139,9 +175,17 @@ interface QuestionFormValues {
   type: QuestionType;
   options: string[];
   required: boolean;
+  hintText: string;
+  imageUrl: string;
+  scaleMin: number;
+  scaleMax: number;
+  maxLength: number;
 }
 
-const DEFAULT_QF: QuestionFormValues = { question: "", type: "single", options: ["", ""], required: true };
+const DEFAULT_QF: QuestionFormValues = {
+  question: "", type: "single", options: ["", ""], required: true,
+  hintText: "", imageUrl: "", scaleMin: 1, scaleMax: 10, maxLength: 2000,
+};
 
 function QuestionEditor({
   surveyId,
@@ -161,32 +205,36 @@ function QuestionEditor({
 
   function openEdit(q: SurveyQuestion) {
     setEditing(q.id);
-    setForm({ question: q.question, type: q.type, options: q.options ?? ["", ""], required: q.required });
+    setForm({
+      question: q.question, type: q.type, options: q.options ?? ["", ""], required: q.required,
+      hintText: q.hintText ?? "", imageUrl: q.imageUrl ?? "",
+      scaleMin: q.scaleMin ?? 1, scaleMax: q.scaleMax ?? 10, maxLength: q.maxLength ?? 2000,
+    });
   }
 
   async function handleSave() {
     if (!form.question.trim()) { flash("Frage ist Pflichtfeld."); return; }
-    if ((form.type === "single" || form.type === "multiple") && form.options.filter((o) => o.trim()).length < 2) {
+    const needsOpts = form.type === "single" || form.type === "multiple" || form.type === "poll" || form.type === "yes_no";
+    if ((form.type === "single" || form.type === "multiple" || form.type === "poll") && form.options.filter((o) => o.trim()).length < 2) {
       flash("Mindestens 2 Antwortoptionen erforderlich."); return;
     }
     setSaving(true);
     sound.click();
     const cleanOptions = form.options.filter((o) => o.trim());
+    const shared = {
+      question: form.question, type: form.type, required: form.required,
+      options: needsOpts && form.type !== "yes_no" ? (cleanOptions.length > 0 ? cleanOptions : undefined) : undefined,
+      hintText: form.hintText || undefined,
+      imageUrl: form.imageUrl || undefined,
+      scaleMin: form.scaleMin,
+      scaleMax: form.scaleMax,
+      maxLength: form.maxLength,
+    };
     if (editing === "new") {
-      const res = await createSurveyQuestion(surveyId, {
-        question: form.question,
-        type: form.type,
-        options: cleanOptions.length > 0 ? cleanOptions : undefined,
-        required: form.required,
-        sortOrder: questions.length,
-      });
+      const res = await createSurveyQuestion(surveyId, { ...shared, sortOrder: questions.length });
       if (!res.success) { sound.error(); flash(res.error ?? "Fehler."); } else { sound.save(); onRefresh(); setEditing(null); }
     } else if (editing) {
-      const res = await updateSurveyQuestion(editing, {
-        question: form.question, type: form.type,
-        options: cleanOptions.length > 0 ? cleanOptions : null,
-        required: form.required,
-      });
+      const res = await updateSurveyQuestion(editing, { ...shared, options: shared.options ?? null });
       if (!res.success) { sound.error(); flash(res.error ?? "Fehler."); } else { sound.save(); onRefresh(); setEditing(null); }
     }
     setSaving(false);
@@ -209,7 +257,7 @@ function QuestionEditor({
     onRefresh();
   }
 
-  const needsOptions = form.type === "single" || form.type === "multiple";
+  const needsOptions = form.type === "single" || form.type === "multiple" || form.type === "poll";
 
   return (
     <div className="mt-4 flex flex-col gap-2">
@@ -288,7 +336,8 @@ function QuestionForm({ form, setForm, needsOptions, saving, onSave, onCancel }:
   onSave: () => void;
   onCancel: () => void;
 }) {
-  const sound = useSoundManager();
+  const isScale = form.type === "scale";
+  const isText = form.type === "text";
   return (
     <div className="rounded-xl border border-purple-500/20 bg-[#0d0c1a] p-3 flex flex-col gap-2">
       <input
@@ -296,6 +345,18 @@ function QuestionForm({ form, setForm, needsOptions, saving, onSave, onCancel }:
         onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
         placeholder="Frage…"
         className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+      />
+      <input
+        value={form.hintText}
+        onChange={(e) => setForm((f) => ({ ...f, hintText: e.target.value }))}
+        placeholder="Hinweistext / Untertitel (optional)…"
+        className="w-full rounded-lg border border-white/8 bg-black/30 px-3 py-1 text-xs text-zinc-300 outline-none focus:border-purple-400/40"
+      />
+      <input
+        value={form.imageUrl}
+        onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
+        placeholder="Bild-URL (optional)…"
+        className="w-full rounded-lg border border-white/8 bg-black/30 px-3 py-1 text-xs text-zinc-300 outline-none focus:border-purple-400/40"
       />
       <div className="flex flex-wrap items-center gap-2">
         <select
@@ -312,6 +373,29 @@ function QuestionForm({ form, setForm, needsOptions, saving, onSave, onCancel }:
           <span className="text-xs text-zinc-400">Pflichtfeld</span>
         </label>
       </div>
+
+      {isScale && (
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5">
+            <span className="text-xs text-zinc-500">Min</span>
+            <input type="number" value={form.scaleMin} onChange={(e) => setForm((f) => ({ ...f, scaleMin: Number(e.target.value) }))}
+              className="w-16 rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-200 outline-none" />
+          </label>
+          <label className="flex items-center gap-1.5">
+            <span className="text-xs text-zinc-500">Max</span>
+            <input type="number" value={form.scaleMax} onChange={(e) => setForm((f) => ({ ...f, scaleMax: Number(e.target.value) }))}
+              className="w-16 rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-200 outline-none" />
+          </label>
+        </div>
+      )}
+
+      {isText && (
+        <label className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">Max. Zeichen</span>
+          <input type="number" min={50} max={10000} value={form.maxLength} onChange={(e) => setForm((f) => ({ ...f, maxLength: Number(e.target.value) }))}
+            className="w-20 rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-200 outline-none" />
+        </label>
+      )}
 
       {needsOptions && (
         <div className="flex flex-col gap-1">
@@ -372,6 +456,8 @@ function SurveyRow({ survey, onRefresh }: { survey: Survey; onRefresh: () => voi
     title: survey.title,
     description: survey.description ?? "",
     allowAnonymous: survey.allowAnonymous,
+    imageUrl: survey.imageUrl ?? "",
+    showResultsAfterSubmit: survey.showResultsAfterSubmit ?? true,
     startAt: survey.startAt ? survey.startAt.slice(0, 16) : "",
     endAt: survey.endAt ? survey.endAt.slice(0, 16) : "",
   });
@@ -411,6 +497,8 @@ function SurveyRow({ survey, onRefresh }: { survey: Survey; onRefresh: () => voi
         title: metaForm.title,
         description: metaForm.description || null,
         allowAnonymous: metaForm.allowAnonymous,
+        imageUrl: metaForm.imageUrl || null,
+        showResultsAfterSubmit: metaForm.showResultsAfterSubmit,
         startAt: metaForm.startAt ? new Date(metaForm.startAt).toISOString() : null,
         endAt: metaForm.endAt ? new Date(metaForm.endAt).toISOString() : null,
       });
@@ -531,10 +619,22 @@ function SurveyRow({ survey, onRefresh }: { survey: Survey; onRefresh: () => voi
                     className="rounded-lg border border-white/10 bg-black/40 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60" />
                 </label>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={metaForm.allowAnonymous} onChange={(e) => setMetaForm((f) => ({ ...f, allowAnonymous: e.target.checked }))} className="accent-purple-500" />
-                <span className="text-xs text-zinc-300">Anonyme Teilnahme erlauben</span>
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] font-semibold text-zinc-400">Banner-Bild URL (optional)</span>
+                <input value={metaForm.imageUrl} onChange={(e) => setMetaForm((f) => ({ ...f, imageUrl: e.target.value }))}
+                  placeholder="https://…"
+                  className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60" />
               </label>
+              <div className="flex flex-col gap-1.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={metaForm.allowAnonymous} onChange={(e) => setMetaForm((f) => ({ ...f, allowAnonymous: e.target.checked }))} className="accent-purple-500" />
+                  <span className="text-xs text-zinc-300">Anonyme Teilnahme erlauben</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={metaForm.showResultsAfterSubmit} onChange={(e) => setMetaForm((f) => ({ ...f, showResultsAfterSubmit: e.target.checked }))} className="accent-purple-500" />
+                  <span className="text-xs text-zinc-300">Ergebnisse nach Teilnahme anzeigen</span>
+                </label>
+              </div>
               <div className="flex items-center gap-2 pt-1">
                 <button onClick={handleMetaSave} disabled={pending}
                   className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-60">
@@ -572,6 +672,8 @@ function CreateSurveyForm({ onCreated }: { onCreated: () => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [allowAnonymous, setAllowAnonymous] = useState(false);
+  const [showResultsAfterSubmit, setShowResultsAfterSubmit] = useState(true);
+  const [imageUrl, setImageUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
@@ -580,9 +682,9 @@ function CreateSurveyForm({ onCreated }: { onCreated: () => void }) {
     if (!title.trim()) { setError("Titel ist Pflichtfeld."); return; }
     setSaving(true);
     sound.click();
-    const res = await createSurvey({ title, description: description || undefined, allowAnonymous });
+    const res = await createSurvey({ title, description: description || undefined, allowAnonymous, imageUrl: imageUrl || undefined, showResultsAfterSubmit });
     setSaving(false);
-    if (res.success) { sound.save(); onCreated(); setTitle(""); setDescription(""); setAllowAnonymous(false); }
+    if (res.success) { sound.save(); onCreated(); setTitle(""); setDescription(""); setAllowAnonymous(false); setImageUrl(""); setShowResultsAfterSubmit(true); }
     else { sound.error(); setError(res.error ?? "Fehler."); }
   }
 
@@ -603,10 +705,22 @@ function CreateSurveyForm({ onCreated }: { onCreated: () => void }) {
         placeholder="Beschreibung (optional)"
         className="resize-none rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
       />
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" checked={allowAnonymous} onChange={(e) => setAllowAnonymous(e.target.checked)} className="accent-purple-500" />
-        <span className="text-xs text-zinc-300">Anonyme Teilnahme erlauben</span>
-      </label>
+      <input
+        value={imageUrl}
+        onChange={(e) => setImageUrl(e.target.value)}
+        placeholder="Banner-Bild URL (optional)"
+        className="rounded-lg border border-white/8 bg-black/30 px-3 py-1.5 text-xs text-zinc-300 outline-none focus:border-purple-400/40"
+      />
+      <div className="flex flex-col gap-1.5">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={allowAnonymous} onChange={(e) => setAllowAnonymous(e.target.checked)} className="accent-purple-500" />
+          <span className="text-xs text-zinc-300">Anonyme Teilnahme erlauben</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={showResultsAfterSubmit} onChange={(e) => setShowResultsAfterSubmit(e.target.checked)} className="accent-purple-500" />
+          <span className="text-xs text-zinc-300">Ergebnisse nach Teilnahme anzeigen</span>
+        </label>
+      </div>
       <div className="flex items-center gap-2">
         <button onClick={handleCreate} disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-60">

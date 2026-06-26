@@ -29,6 +29,8 @@ function rowToSurvey(r: Record<string, unknown>): Survey {
     startAt: r.start_at as string | null,
     endAt: r.end_at as string | null,
     allowAnonymous: (r.allow_anonymous as boolean) ?? false,
+    imageUrl: (r.image_url as string | null) ?? null,
+    showResultsAfterSubmit: (r.show_results_after_submit as boolean) ?? true,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
     responseCount: (r.response_count as number) ?? undefined,
@@ -44,6 +46,11 @@ function rowToQuestion(r: Record<string, unknown>): SurveyQuestion {
     options: r.options as string[] | null,
     required: (r.required as boolean) ?? true,
     sortOrder: (r.sort_order as number) ?? 0,
+    hintText: (r.hint_text as string | null) ?? null,
+    imageUrl: (r.image_url as string | null) ?? null,
+    scaleMin: (r.scale_min as number) ?? 1,
+    scaleMax: (r.scale_max as number) ?? 10,
+    maxLength: (r.max_length as number) ?? 2000,
   };
 }
 
@@ -140,6 +147,8 @@ export async function createSurvey(input: {
   title: string;
   description?: string;
   allowAnonymous?: boolean;
+  imageUrl?: string;
+  showResultsAfterSubmit?: boolean;
 }): Promise<{ success: boolean; error?: string; id?: string }> {
   const user = await requireAdmin();
   if (!user) return { success: false, error: "Kein Zugriff." };
@@ -151,12 +160,15 @@ export async function createSurvey(input: {
         title: input.title.trim(),
         description: input.description?.trim() || null,
         allow_anonymous: input.allowAnonymous ?? false,
+        image_url: input.imageUrl?.trim() || null,
+        show_results_after_submit: input.showResultsAfterSubmit ?? true,
         status: "draft",
       })
       .select("id")
       .single();
     if (error) return { success: false, error: error.message };
     revalidatePath("/admin");
+    revalidatePath("/surveys");
     return { success: true, id: data.id };
   } catch (e) { return { success: false, error: String(e) }; }
 }
@@ -170,6 +182,8 @@ export async function updateSurvey(
     startAt?: string | null;
     endAt?: string | null;
     allowAnonymous?: boolean;
+    imageUrl?: string | null;
+    showResultsAfterSubmit?: boolean;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const user = await requireAdmin();
@@ -182,10 +196,13 @@ export async function updateSurvey(
   if ("startAt" in input) patch.start_at = input.startAt ?? null;
   if ("endAt" in input) patch.end_at = input.endAt ?? null;
   if (input.allowAnonymous !== undefined) patch.allow_anonymous = input.allowAnonymous;
+  if ("imageUrl" in input) patch.image_url = input.imageUrl?.trim() || null;
+  if (input.showResultsAfterSubmit !== undefined) patch.show_results_after_submit = input.showResultsAfterSubmit;
   try {
     const { error } = await admin.from("surveys").update(patch).eq("id", id);
     if (error) return { success: false, error: error.message };
     revalidatePath("/admin");
+    revalidatePath("/surveys");
     return { success: true };
   } catch (e) { return { success: false, error: String(e) }; }
 }
@@ -204,7 +221,10 @@ export async function deleteSurvey(id: string): Promise<{ success: boolean; erro
 
 export async function createSurveyQuestion(
   surveyId: string,
-  input: { question: string; type: QuestionType; options?: string[]; required?: boolean; sortOrder?: number }
+  input: {
+    question: string; type: QuestionType; options?: string[]; required?: boolean; sortOrder?: number;
+    hintText?: string; imageUrl?: string; scaleMin?: number; scaleMax?: number; maxLength?: number;
+  }
 ): Promise<{ success: boolean; error?: string; id?: string }> {
   const user = await requireAdmin();
   if (!user) return { success: false, error: "Kein Zugriff." };
@@ -219,6 +239,11 @@ export async function createSurveyQuestion(
         options: input.options && input.options.length > 0 ? input.options : null,
         required: input.required ?? true,
         sort_order: input.sortOrder ?? 0,
+        hint_text: input.hintText?.trim() || null,
+        image_url: input.imageUrl?.trim() || null,
+        scale_min: input.scaleMin ?? 1,
+        scale_max: input.scaleMax ?? 10,
+        max_length: input.maxLength ?? 2000,
       })
       .select("id")
       .single();
@@ -229,7 +254,10 @@ export async function createSurveyQuestion(
 
 export async function updateSurveyQuestion(
   id: string,
-  input: { question?: string; type?: QuestionType; options?: string[] | null; required?: boolean; sortOrder?: number }
+  input: {
+    question?: string; type?: QuestionType; options?: string[] | null; required?: boolean; sortOrder?: number;
+    hintText?: string | null; imageUrl?: string | null; scaleMin?: number; scaleMax?: number; maxLength?: number;
+  }
 ): Promise<{ success: boolean; error?: string }> {
   const user = await requireAdmin();
   if (!user) return { success: false, error: "Kein Zugriff." };
@@ -240,6 +268,11 @@ export async function updateSurveyQuestion(
   if ("options" in input) patch.options = input.options && input.options.length > 0 ? input.options : null;
   if (input.required !== undefined) patch.required = input.required;
   if (input.sortOrder !== undefined) patch.sort_order = input.sortOrder;
+  if ("hintText" in input) patch.hint_text = input.hintText?.trim() || null;
+  if ("imageUrl" in input) patch.image_url = input.imageUrl?.trim() || null;
+  if (input.scaleMin !== undefined) patch.scale_min = input.scaleMin;
+  if (input.scaleMax !== undefined) patch.scale_max = input.scaleMax;
+  if (input.maxLength !== undefined) patch.max_length = input.maxLength;
   try {
     const { error } = await admin.from("survey_questions").update(patch).eq("id", id);
     if (error) return { success: false, error: error.message };
@@ -315,6 +348,7 @@ export async function submitSurveyResponse(
       answer_text: a.answerText ?? null,
       answer_options: a.answerOptions ?? null,
       answer_rating: a.answerRating ?? null,
+      answer_number: a.answerNumber ?? null,
     }));
 
     const { error: ansErr } = await admin.from("survey_answers").insert(answerRows);
@@ -329,8 +363,53 @@ export async function submitSurveyResponse(
   } catch (e) { return { success: false, error: String(e) }; }
 }
 
-// ── Results for admin ──────────────────────────────────────────────────────
+// ── Shared results aggregation ────────────────────────────────────────────
+function aggregateResults(questions: SurveyQuestion[], answers: Record<string, unknown>[]): SurveyResultsEntry[] {
+  return questions.map((q) => {
+    const qAnswers = answers.filter((a) => a.question_id === q.id);
+    const entry: SurveyResultsEntry = {
+      questionId: q.id, question: q.question, type: q.type, options: q.options, totalAnswers: qAnswers.length,
+    };
+    if (q.type === "text") {
+      entry.textAnswers = qAnswers.map((a) => a.answer_text as string).filter(Boolean);
+    } else if (q.type === "rating") {
+      const ratings = qAnswers.map((a) => a.answer_rating as number).filter((r) => r >= 1 && r <= 5);
+      entry.ratingAverage = ratings.length
+        ? Math.round((ratings.reduce((s, r) => s + r, 0) / ratings.length) * 10) / 10 : 0;
+      entry.ratingCounts = [1, 2, 3, 4, 5].map((v) => ratings.filter((r) => r === v).length);
+    } else if (q.type === "yes_no") {
+      const opts = qAnswers.map((a) => a.answer_options as number[] | null).filter(Boolean) as number[][];
+      entry.yesCount = opts.filter((o) => o.includes(0)).length;
+      entry.noCount = opts.filter((o) => o.includes(1)).length;
+      entry.optionCounts = [entry.yesCount, entry.noCount];
+      const total = entry.yesCount + entry.noCount;
+      entry.optionPercents = total > 0
+        ? [Math.round(entry.yesCount / total * 100), Math.round(entry.noCount / total * 100)] : [0, 0];
+    } else if (q.type === "scale" || q.type === "number") {
+      const nums = qAnswers.map((a) => a.answer_number as number).filter((n) => typeof n === "number");
+      const avg = nums.length ? nums.reduce((s, n) => s + n, 0) / nums.length : 0;
+      entry.scaleAverage = Math.round(avg * 10) / 10;
+      entry.numberAverage = entry.scaleAverage;
+      entry.numberMin = nums.length ? Math.min(...nums) : 0;
+      entry.numberMax = nums.length ? Math.max(...nums) : 0;
+    } else {
+      // single, multiple, poll
+      const optCount = q.options?.length ?? 0;
+      const counts = Array.from({ length: optCount }, () => 0);
+      for (const a of qAnswers) {
+        const selected = a.answer_options as number[] | null;
+        if (!selected) continue;
+        for (const idx of selected) { if (idx >= 0 && idx < optCount) counts[idx]++; }
+      }
+      entry.optionCounts = counts;
+      const total = counts.reduce((s, c) => s + c, 0);
+      entry.optionPercents = counts.map((c) => total > 0 ? Math.round(c / total * 100) : 0);
+    }
+    return entry;
+  });
+}
 
+// ── Results for admin ──────────────────────────────────────────────────────
 export async function getSurveyResults(surveyId: string): Promise<SurveyResultsEntry[]> {
   const user = await requireAdmin();
   if (!user) return [];
@@ -341,44 +420,28 @@ export async function getSurveyResults(surveyId: string): Promise<SurveyResultsE
       admin.from("survey_answers").select("*").eq("survey_id", surveyId),
     ]);
     const questions = (questionsRes.data ?? []).map(rowToQuestion);
-    const answers = answersRes.data ?? [];
-
-    return questions.map((q) => {
-      const qAnswers = answers.filter((a: Record<string, unknown>) => a.question_id === q.id);
-      const entry: SurveyResultsEntry = {
-        questionId: q.id,
-        question: q.question,
-        type: q.type,
-        options: q.options,
-        totalAnswers: qAnswers.length,
-      };
-
-      if (q.type === "text") {
-        entry.textAnswers = qAnswers
-          .map((a: Record<string, unknown>) => a.answer_text as string)
-          .filter(Boolean);
-      } else if (q.type === "rating") {
-        const ratings = qAnswers
-          .map((a: Record<string, unknown>) => a.answer_rating as number)
-          .filter((r) => r >= 1 && r <= 5);
-        entry.ratingAverage = ratings.length
-          ? Math.round((ratings.reduce((s, r) => s + r, 0) / ratings.length) * 10) / 10
-          : 0;
-        entry.ratingCounts = [1, 2, 3, 4, 5].map((v) => ratings.filter((r) => r === v).length);
-      } else {
-        const optCount = q.options?.length ?? 0;
-        const counts = Array.from({ length: optCount }, () => 0);
-        for (const a of qAnswers) {
-          const selected = (a as Record<string, unknown>).answer_options as number[] | null;
-          if (!selected) continue;
-          for (const idx of selected) {
-            if (idx >= 0 && idx < optCount) counts[idx]++;
-          }
-        }
-        entry.optionCounts = counts;
-      }
-
-      return entry;
-    });
+    const answers = (answersRes.data ?? []) as Record<string, unknown>[];
+    return aggregateResults(questions, answers);
   } catch { return []; }
+}
+
+// ── Results for users (shown after submission when showResultsAfterSubmit=true) ──
+export async function getSurveyResultsPublic(surveyId: string): Promise<SurveyResultsEntry[] | null> {
+  const admin = createAdminClient();
+  try {
+    const { data: survey } = await admin
+      .from("surveys")
+      .select("status, show_results_after_submit")
+      .eq("id", surveyId)
+      .single();
+    if (!survey || (!survey.show_results_after_submit)) return null;
+    if (survey.status !== "active" && survey.status !== "closed") return null;
+    const [questionsRes, answersRes] = await Promise.all([
+      admin.from("survey_questions").select("*").eq("survey_id", surveyId).order("sort_order"),
+      admin.from("survey_answers").select("*").eq("survey_id", surveyId),
+    ]);
+    const questions = (questionsRes.data ?? []).map(rowToQuestion);
+    const answers = (answersRes.data ?? []) as Record<string, unknown>[];
+    return aggregateResults(questions, answers);
+  } catch { return null; }
 }

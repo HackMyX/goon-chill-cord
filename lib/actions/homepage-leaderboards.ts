@@ -183,8 +183,9 @@ async function fetchWorldEntries(limit: number): Promise<UnifiedGameEntry[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("profiles")
-    .select("id, username, credits, level, active_name_style_key, prio_badges, avatar_url")
-    .order("credits", { ascending: false })
+    .select("id, username, world_best_streak, level, active_name_style_key, prio_badges, avatar_url")
+    .order("world_best_streak", { ascending: false })
+    .gt("world_best_streak", 0)
     .limit(limit);
 
   if (error || !data) return [];
@@ -192,7 +193,7 @@ async function fetchWorldEntries(limit: number): Promise<UnifiedGameEntry[]> {
   return (data as unknown as {
     id: string;
     username: string;
-    credits: number;
+    world_best_streak: number;
     level: number;
     active_name_style_key: string | null;
     prio_badges: string[] | null;
@@ -204,7 +205,7 @@ async function fetchWorldEntries(limit: number): Promise<UnifiedGameEntry[]> {
     nameStyleKey: row.active_name_style_key ?? undefined,
     avatarUrl: row.avatar_url ?? undefined,
     prioBadges: row.prio_badges ?? [],
-    primaryValue: row.credits ?? 0,
+    primaryValue: row.world_best_streak ?? 0,
     secondaryLabel: `Level ${row.level ?? 1}`,
   }));
 }

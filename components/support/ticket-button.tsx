@@ -310,8 +310,7 @@ function SupportButtonInner() {
   }
 
   function handleOpen() {
-    const isMobile = typeof window !== "undefined" && window.innerWidth < 1280;
-    setTab(isMobile ? "chat" : "support");
+    setTab("support");
     setOpen(true);
     setView("list");
     setUnseenBadge(null);

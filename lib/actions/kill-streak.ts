@@ -178,7 +178,7 @@ export async function registerStreakKill(monsterTypeId: string): Promise<Registe
 
   const { data: profile } = await admin
     .from("profiles")
-    .select("pending_streak_cr, streak_kill_count")
+    .select("pending_streak_cr, streak_kill_count, world_best_streak")
     .eq("id", user.id)
     .single();
   if (!profile) return { success: false, error: "Profil konnte nicht geladen werden." };
@@ -190,9 +190,10 @@ export async function registerStreakKill(monsterTypeId: string): Promise<Registe
   const newStreakKillCount = killsSoFar + 1;
   const newPendingStreakCr = (profile.pending_streak_cr ?? 0) + reward;
 
+  const bestStreak = Math.max(profile.world_best_streak ?? 0, newStreakKillCount);
   const { error } = await admin
     .from("profiles")
-    .update({ pending_streak_cr: newPendingStreakCr, streak_kill_count: newStreakKillCount })
+    .update({ pending_streak_cr: newPendingStreakCr, streak_kill_count: newStreakKillCount, world_best_streak: bestStreak })
     .eq("id", user.id);
   if (error) return { success: false, error: "Konnte Belohnung nicht gutschreiben." };
 

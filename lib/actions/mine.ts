@@ -361,12 +361,13 @@ export async function getMineLeaderboard(limit = 20): Promise<MineLeaderboardEnt
   }));
 }
 
-export async function getWorldLeaderboard(limit = 20): Promise<{ rank: number; userId: string; username: string; nameStyleKey?: string; credits: number }[]> {
+export async function getWorldLeaderboard(limit = 20): Promise<{ rank: number; userId: string; username: string; nameStyleKey?: string; bestStreak: number }[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("profiles")
-    .select("id, username, credits, active_name_style_key")
-    .order("credits", { ascending: false })
+    .select("id, username, world_best_streak, active_name_style_key")
+    .order("world_best_streak", { ascending: false })
+    .gt("world_best_streak", 0)
     .limit(limit);
 
   if (error || !data) return [];
@@ -375,6 +376,6 @@ export async function getWorldLeaderboard(limit = 20): Promise<{ rank: number; u
     userId: row.id,
     username: row.username,
     nameStyleKey: (row.active_name_style_key as string | null) ?? undefined,
-    credits: row.credits,
+    bestStreak: (row.world_best_streak as number) ?? 0,
   }));
 }

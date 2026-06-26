@@ -304,6 +304,19 @@ const COLUMN_CHECKS: Array<{
   { id: "col_fine_chat_maxlen",      category: "Feintuning",  table: "fine_config", col: "chat_max_message_length",     detail: "node scripts/add-fine-config.cjs" },
   { id: "col_fine_chat_poll",        category: "Feintuning",  table: "fine_config", col: "chat_poll_interval_ms",       detail: "node scripts/add-fine-config.cjs" },
   { id: "col_fine_community_badges", category: "Feintuning",  table: "fine_config", col: "community_max_badges_shown",  detail: "node scripts/add-fine-config.cjs" },
+  // Farmwelt best-streak leaderboard (2026-06-26)
+  { id: "col_profiles_world_best_streak", category: "World", table: "profiles", col: "world_best_streak", detail: "node scripts/add-survey-upgrade-world-streak.cjs" },
+  // Survey upgrade — new columns (2026-06-26)
+  { id: "col_surveys_image_url",        category: "Umfragen", table: "surveys",          col: "image_url",                  detail: "node scripts/add-survey-upgrade-world-streak.cjs" },
+  { id: "col_surveys_show_results",     category: "Umfragen", table: "surveys",          col: "show_results_after_submit",  detail: "node scripts/add-survey-upgrade-world-streak.cjs" },
+  { id: "col_surveyq_hint_text",        category: "Umfragen", table: "survey_questions", col: "hint_text",                  detail: "node scripts/add-survey-upgrade-world-streak.cjs" },
+  { id: "col_surveyq_image_url",        category: "Umfragen", table: "survey_questions", col: "image_url",                  detail: "node scripts/add-survey-upgrade-world-streak.cjs" },
+  { id: "col_surveyq_scale_min",        category: "Umfragen", table: "survey_questions", col: "scale_min",                  detail: "node scripts/add-survey-upgrade-world-streak.cjs" },
+  { id: "col_surveyq_scale_max",        category: "Umfragen", table: "survey_questions", col: "scale_max",                  detail: "node scripts/add-survey-upgrade-world-streak.cjs" },
+  { id: "col_surveyq_max_length",       category: "Umfragen", table: "survey_questions", col: "max_length",                 detail: "node scripts/add-survey-upgrade-world-streak.cjs" },
+  { id: "col_surveya_answer_number",    category: "Umfragen", table: "survey_answers",   col: "answer_number",              detail: "node scripts/add-survey-upgrade-world-streak.cjs" },
+  // user_sessions — last_ping for heartbeat (2026-06-26)
+  { id: "col_sess_last_ping",           category: "Sessions", table: "user_sessions",    col: "last_ping",                  detail: "node scripts/add-session-in-world.cjs" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

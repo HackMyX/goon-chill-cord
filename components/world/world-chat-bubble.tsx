@@ -44,8 +44,16 @@ export function WorldChatBubble({ username }: { username: string }) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sound = useSoundManager();
+
+  useEffect(() => {
+    function check() { setIsMobile(window.innerWidth < 768 || ("ontouchstart" in window)); }
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   // Resize state
   const [width, setWidth] = useState(DEFAULT_W);
@@ -160,19 +168,15 @@ export function WorldChatBubble({ username }: { username: string }) {
 
   const panelW = open ? width : "auto";
 
+  // On mobile: position top-right to avoid overlap with game controls (joystick bottom-left, action buttons bottom-right)
+  const mobileStyle: React.CSSProperties = isMobile
+    ? { position: "absolute", top: "70px", right: "12px", zIndex: 50, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px" }
+    : { position: "absolute", bottom: "80px", right: "16px", zIndex: 50, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px" };
+
   return (
     <div
       className="pointer-events-auto"
-      style={{
-        position: "absolute",
-        bottom: "80px",
-        right: "16px",
-        zIndex: 50,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        gap: "8px",
-      }}
+      style={mobileStyle}
     >
       {open && (
         <div

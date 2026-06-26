@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Crown, Trophy, Coins, RotateCcw } from "lucide-react";
+import { Crown, Trophy, Flame, RotateCcw } from "lucide-react";
 import { getWorldLeaderboard } from "@/lib/actions/mine";
 import { StyledUsername } from "@/components/ui/styled-username";
 
@@ -10,7 +10,7 @@ interface LeaderboardEntry {
   userId: string;
   username: string;
   nameStyleKey?: string;
-  credits: number;
+  bestStreak: number;
 }
 
 interface WorldLeaderboardProps {
@@ -38,7 +38,7 @@ export function WorldLeaderboard({ userId, username }: WorldLeaderboardProps) {
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Crown className="h-5 w-5 text-amber-400" />
+          <Flame className="h-5 w-5 text-orange-400" />
           <h2 className="text-base font-bold text-zinc-100">Bestenliste — Farmwelt</h2>
         </div>
         <button
@@ -50,15 +50,15 @@ export function WorldLeaderboard({ userId, username }: WorldLeaderboardProps) {
       </div>
 
       <p className="mb-4 text-xs text-zinc-600">
-        Rangliste nach angesammelten Credits (Kills, Quests, Mine etc.)
+        Rangliste nach bester Kill-Streak (höchste Anzahl aufeinanderfolgender Kills in einer Session)
       </p>
 
       {loading ? (
         <div className="flex items-center justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
         </div>
       ) : entries.length === 0 ? (
-        <div className="py-8 text-center text-sm text-zinc-600">Keine Daten</div>
+        <div className="py-8 text-center text-sm text-zinc-600">Noch keine Kill-Streaks — sei der Erste!</div>
       ) : (
         <div className="flex flex-col gap-0.5">
           {entries.map((entry) => {
@@ -69,7 +69,7 @@ export function WorldLeaderboard({ userId, username }: WorldLeaderboardProps) {
                 key={entry.userId}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${
                   isSelf
-                    ? "bg-purple-500/15 ring-1 ring-inset ring-purple-500/25"
+                    ? "bg-orange-500/15 ring-1 ring-inset ring-orange-500/25"
                     : top3
                     ? "bg-white/[0.03]"
                     : "hover:bg-white/[0.02]"
@@ -84,26 +84,23 @@ export function WorldLeaderboard({ userId, username }: WorldLeaderboardProps) {
                 </div>
 
                 {/* Name */}
-                <span className={`flex-1 truncate text-sm ${isSelf ? "font-extrabold text-purple-200" : "font-medium text-zinc-300"}`}>
+                <span className={`flex-1 truncate text-sm ${isSelf ? "font-extrabold text-orange-200" : "font-medium text-zinc-300"}`}>
                   {isSelf
-                    ? <><StyledUsername name={entry.username} styleKey={entry.nameStyleKey} userId={entry.userId} size="md" /> <span className="text-purple-400">(Du)</span></>
+                    ? <><StyledUsername name={entry.username} styleKey={entry.nameStyleKey} userId={entry.userId} size="md" /> <span className="text-orange-400">(Du)</span></>
                     : <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} userId={entry.userId} size="md" />}
                 </span>
 
-                {/* Credits */}
+                {/* Best streak */}
                 <div className="flex items-center gap-1 text-sm">
-                  <Coins className={`h-3.5 w-3.5 ${top3 ? "text-amber-400" : "text-zinc-600"}`} />
+                  <Flame className={`h-3.5 w-3.5 ${top3 ? "text-orange-400" : "text-zinc-600"}`} />
                   <span className={`font-bold tabular-nums ${
                     entry.rank === 1 ? "text-amber-400" :
-                    entry.rank <= 3 ? "text-amber-500/80" :
-                    isSelf ? "text-purple-300" : "text-zinc-300"
+                    entry.rank <= 3 ? "text-orange-400/80" :
+                    isSelf ? "text-orange-300" : "text-zinc-300"
                   }`}>
-                    {entry.credits >= 1000000
-                      ? `${(entry.credits / 1000000).toFixed(1)}M`
-                      : entry.credits >= 1000
-                      ? `${(entry.credits / 1000).toFixed(1)}k`
-                      : entry.credits.toLocaleString("de-DE")}
+                    {entry.bestStreak}
                   </span>
+                  <span className="text-[10px] text-zinc-600">kills</span>
                 </div>
               </div>
             );
@@ -119,7 +116,7 @@ export function WorldLeaderboard({ userId, username }: WorldLeaderboardProps) {
       )}
       {!loading && myRank === 0 && entries.length > 0 && (
         <div className="mt-4 border-t border-white/[0.06] pt-3 text-center text-xs text-zinc-600">
-          Du bist noch nicht in der Bestenliste
+          Du bist noch nicht in der Bestenliste — erreiche deine erste Kill-Streak!
         </div>
       )}
     </div>
