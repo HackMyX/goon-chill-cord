@@ -7,9 +7,11 @@ import { useSoundManager } from "@/lib/sound-manager";
 import {
   getHomepageChatConfig,
   adminUpdateHomepageChatConfig,
+} from "@/lib/actions/homepage-chat-config";
+import {
   DEFAULT_HOMEPAGE_CHAT_CONFIG,
   type HomepageChatConfig,
-} from "@/lib/actions/homepage-chat-config";
+} from "@/lib/homepage-chat-config-types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers

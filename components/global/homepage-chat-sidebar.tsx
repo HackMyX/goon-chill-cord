@@ -19,7 +19,7 @@ import {
 } from "@/lib/actions/global-chat";
 import { getBadgeStyle } from "@/lib/badges";
 import { StyledUsername } from "@/components/ui/styled-username";
-import type { HomepageChatConfig } from "@/lib/actions/homepage-chat-config";
+import type { HomepageChatConfig } from "@/lib/homepage-chat-config-types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants

@@ -14,6 +14,7 @@ import { purchaseBattlePass, purchaseEliteBattlePass, claimBpTier } from "@/lib/
 import { getBpQuestsWithProgress } from "@/lib/actions/bp-quests";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { useSoundManager } from "@/lib/sound-manager";
+import { ItemStandaloneCanvas, type ItemForPreview } from "@/components/shop/shop-character-view";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -118,42 +119,93 @@ function RewardPreviewCard({ tier, accent, glow }: { tier: BattlePassTier; accen
 
   if (tier.rewardType === "item" || tier.rewardType === "random_item") {
     const isRandom = tier.rewardType === "random_item";
+    // Build a preview item when we have the required data (non-random items with name+type)
+    const previewItem: ItemForPreview | null =
+      !isRandom && tier.rewardItemName && tier.rewardItemType
+        ? {
+            id: tier.rewardItemId ?? tier.id,
+            name: tier.rewardItemName,
+            rarity: tier.rewardItemRarity ?? "normal",
+            type: tier.rewardItemType,
+          }
+        : null;
+
     return (
-      <div className="flex flex-col items-center gap-3">
-        <motion.div
-          className="relative flex h-24 w-24 items-center justify-center rounded-2xl border-2"
-          style={{
-            borderColor: rarityColor,
-            background: `radial-gradient(circle at 50% 30%, ${rarityColor}20 0%, transparent 70%)`,
-            boxShadow: `0 0 40px ${rarityGlow}, inset 0 0 20px ${rarityColor}10`,
-          }}
-          animate={{ boxShadow: [`0 0 30px ${rarityGlow}`, `0 0 60px ${rarityGlow}`, `0 0 30px ${rarityGlow}`] }}
-          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-        >
-          {isRandom ? (
-            <motion.span
-              className="text-4xl"
-              animate={{ rotateY: [0, 180, 360] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            >
-              🎲
-            </motion.span>
-          ) : (
-            <span className="text-4xl">{tier.icon ?? "🎁"}</span>
-          )}
-          {/* Corner rarity gem */}
-          <div
-            className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full border border-black/50"
-            style={{ background: rarityColor, boxShadow: `0 0 8px ${rarityColor}` }}
-          />
-        </motion.div>
+      <div className="flex w-full flex-col items-center gap-3">
+        {previewItem ? (
+          // 3D isolated item preview — shows just the item, no character
+          <motion.div
+            className="relative w-full overflow-hidden rounded-2xl border-2"
+            style={{
+              borderColor: rarityColor,
+              boxShadow: `0 0 40px ${rarityGlow}, inset 0 0 20px ${rarityColor}10`,
+              height: 180,
+              maxWidth: 220,
+            }}
+            animate={{
+              boxShadow: [
+                `0 0 30px ${rarityGlow}`,
+                `0 0 60px ${rarityGlow}`,
+                `0 0 30px ${rarityGlow}`,
+              ],
+            }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+          >
+            {/* Ambient background glow behind the canvas */}
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background: `radial-gradient(circle at 50% 60%, ${rarityColor}20 0%, transparent 70%)`,
+              }}
+            />
+            <ItemStandaloneCanvas item={previewItem} height={180} />
+            {/* Corner rarity gem */}
+            <div
+              className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full border border-black/50 z-10"
+              style={{ background: rarityColor, boxShadow: `0 0 8px ${rarityColor}` }}
+            />
+          </motion.div>
+        ) : (
+          // Fallback: animated emoji box (random items or missing item data)
+          <motion.div
+            className="relative flex h-24 w-24 items-center justify-center rounded-2xl border-2"
+            style={{
+              borderColor: rarityColor,
+              background: `radial-gradient(circle at 50% 30%, ${rarityColor}20 0%, transparent 70%)`,
+              boxShadow: `0 0 40px ${rarityGlow}, inset 0 0 20px ${rarityColor}10`,
+            }}
+            animate={{ boxShadow: [`0 0 30px ${rarityGlow}`, `0 0 60px ${rarityGlow}`, `0 0 30px ${rarityGlow}`] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+          >
+            {isRandom ? (
+              <motion.span
+                className="text-4xl"
+                animate={{ rotateY: [0, 180, 360] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              >
+                🎲
+              </motion.span>
+            ) : (
+              <span className="text-4xl">{tier.icon ?? "🎁"}</span>
+            )}
+            <div
+              className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full border border-black/50"
+              style={{ background: rarityColor, boxShadow: `0 0 8px ${rarityColor}` }}
+            />
+          </motion.div>
+        )}
+
         <div className="text-center">
           <p className="text-sm font-black text-white">
-            {isRandom ? `Zufällig${tier.rewardItemRarity ? ` · ${tier.rewardItemRarity}` : ""}` : (tier.rewardItemName ?? tier.name)}
+            {isRandom
+              ? `Zufällig${tier.rewardItemRarity ? ` · ${tier.rewardItemRarity}` : ""}`
+              : (tier.rewardItemName ?? tier.name)}
           </p>
           {tier.rewardItemRarity && (
-            <span className="mt-1 inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest"
-              style={{ background: `${rarityColor}20`, color: rarityColor, border: `1px solid ${rarityColor}40` }}>
+            <span
+              className="mt-1 inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest"
+              style={{ background: `${rarityColor}20`, color: rarityColor, border: `1px solid ${rarityColor}40` }}
+            >
               {tier.rewardItemRarity}
             </span>
           )}

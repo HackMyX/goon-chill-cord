@@ -26,8 +26,10 @@ import { getActiveBattlePass } from "@/lib/actions/battle-pass";
 import type { ActiveBpView } from "@/lib/battle-pass";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { HomepageChatSidebar } from "@/components/global/homepage-chat-sidebar";
-import type { HomepageChatConfig } from "@/lib/actions/homepage-chat-config";
-import { DEFAULT_HOMEPAGE_CHAT_CONFIG } from "@/lib/actions/homepage-chat-config";
+import {
+  DEFAULT_HOMEPAGE_CHAT_CONFIG,
+  type HomepageChatConfig,
+} from "@/lib/homepage-chat-config-types";
 
 // Animated number that counts up when the value changes
 function AnimatedNumber({ value, className }: { value: number; className?: string }) {
