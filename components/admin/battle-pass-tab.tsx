@@ -23,11 +23,12 @@ import {
   adminAssignQuestToPass, adminUpdateBpQuest, adminDeleteBpQuest,
   adminAutoGenerateQuests, adminGetQuestStats, adminResetQuestProgress,
 } from "@/lib/actions/bp-quests";
-import { BP_THEMES, DEFAULT_AUTOFILL_CONFIG, type BpAutoFillConfig } from "@/lib/battle-pass";
+import { BP_THEMES, DEFAULT_AUTOFILL_CONFIG, DEFAULT_BP_VISUAL_CONFIG } from "@/lib/battle-pass";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
 import type {
   BattlePass, BattlePassTier, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize,
   BpQuestDefinition, BpQuest, QuestDifficulty, QuestFrequency, QuestType, BpProgressionType,
+  BpAutoFillConfig, BpVisualConfig,
 } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
 
@@ -122,7 +123,7 @@ function ItemPickerModal({
   onSelect,
   onClose,
 }: {
-  onSelect: (id: string, name: string, rarity: Rarity) => void;
+  onSelect: (id: string, name: string, rarity: Rarity, type: string) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -186,7 +187,7 @@ function ItemPickerModal({
             return (
               <button
                 key={item.id}
-                onClick={() => { onSelect(item.id, item.name, item.rarity); onClose(); }}
+                onClick={() => { onSelect(item.id, item.name, item.rarity, item.type); onClose(); }}
                 className="flex w-full items-center gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-left hover:bg-white/[0.05] hover:border-white/10 transition-colors"
               >
                 <Package className={`h-4 w-4 shrink-0 ${style.text}`} />
@@ -606,6 +607,7 @@ function TierEditorModal({
   const [rewardCredits, setRewardCredits] = useState(existing?.rewardCredits ?? 100);
   const [rewardItemId, setRewardItemId] = useState<string | null>(existing?.rewardItemId ?? null);
   const [rewardItemName, setRewardItemName] = useState<string>("");
+  const [rewardItemType, setRewardItemType] = useState<string | null>(existing?.rewardItemType ?? null);
   const [rewardItemRarity, setRewardItemRarity] = useState<Rarity | null>(existing?.rewardItemRarity ?? null);
   const [rewardBadgeKey, setRewardBadgeKey] = useState(existing?.rewardBadgeKey ?? "");
   const [rewardBadgeText, setRewardBadgeText] = useState(existing?.rewardBadgeText ?? "");
@@ -634,6 +636,7 @@ function TierEditorModal({
       rewardType,
       rewardCredits: rewardType === "credits" ? rewardCredits : null,
       rewardItemId: rewardType === "item" ? rewardItemId : null,
+      rewardItemType: rewardType === "item" ? rewardItemType : null,
       rewardBadgeKey: rewardBadgeKey || null,
       rewardBadgeText: rewardType === "badge" ? (rewardBadgeText || null) : null,
       rewardItemRarity: rewardType === "random_item" ? rewardItemRarity : null,
@@ -905,7 +908,7 @@ function TierEditorModal({
 
       {showItemPicker && (
         <ItemPickerModal
-          onSelect={(id, name, _rarity) => { setRewardItemId(id); setRewardItemName(name); }}
+          onSelect={(id, name, _rarity, type) => { setRewardItemId(id); setRewardItemName(name); setRewardItemType(type); }}
           onClose={() => setShowItemPicker(false)}
         />
       )}
@@ -1382,8 +1385,19 @@ function PassEditor({
   const [progressionType, setProgressionType] = useState<BpProgressionType>(pass.progressionType ?? "days");
   const [bpXpPerTier, setBpXpPerTier] = useState(pass.bpXpPerTier ?? 1000);
   const [bpXpCapPerDay, setBpXpCapPerDay] = useState(pass.bpXpCapPerDay ?? 0);
+  const [visualConfig, setVisualConfig] = useState<BpVisualConfig>({ ...DEFAULT_BP_VISUAL_CONFIG, ...(pass.visualConfig ?? {}) });
   const sound = useSoundManager();
   const router = useRouter();
+
+  function setVC<K extends keyof BpVisualConfig>(key: K, value: BpVisualConfig[K]) {
+    setVisualConfig((prev) => ({ ...prev, [key]: value }));
+  }
+  function setRarityOverride(rarity: string, color: string) {
+    setVisualConfig((prev) => ({
+      ...prev,
+      rarityColorOverrides: { ...prev.rarityColorOverrides, [rarity]: color || undefined },
+    }));
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -1419,6 +1433,7 @@ function PassEditor({
       progressionType,
       bpXpPerTier,
       bpXpCapPerDay,
+      visualConfig,
     };
     const res = await adminUpdateBattlePass(pass.id, input);
     setSaving(false);
@@ -1560,6 +1575,114 @@ function PassEditor({
             Spieler schalten Tiers durch BP-XP frei (verdient durch Aufgaben). {bpXpPerTier.toLocaleString("de-DE")} XP = 1 Tier. Gesamt für alle {tierCount} Tiers: {(bpXpPerTier * tierCount).toLocaleString("de-DE")} XP.
           </p>
         )}
+      </div>
+
+      {/* ── Visual-Einstellungen (Gott-Modus) ───────────────────────────────── */}
+      <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/[0.04] p-4 space-y-4">
+        <p className="text-xs font-black text-fuchsia-300 flex items-center gap-1.5">
+          <Sparkles className="h-3.5 w-3.5" />Visual-Einstellungen — Gott-Modus
+        </p>
+
+        {/* Toggles */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {([
+            { key: "showTileAnimations" as const, label: "Tile-Animationen", desc: "Pulsieren / Shimmer auf Tiles" },
+            { key: "showParticleField" as const, label: "Partikel-Feld", desc: "Schwebende Partikel im Hero" },
+          ] as { key: "showTileAnimations" | "showParticleField"; label: string; desc: string }[]).map(({ key, label, desc }) => (
+            <button
+              key={key}
+              onClick={() => setVC(key, !visualConfig[key])}
+              className={`flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                visualConfig[key]
+                  ? "border-fuchsia-400/50 bg-fuchsia-500/15 text-fuchsia-200"
+                  : "border-white/10 text-zinc-500 hover:border-white/20"
+              }`}
+            >
+              <span className="flex items-center gap-1.5 text-xs font-black">
+                {visualConfig[key] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3 opacity-40" />}
+                {label}
+              </span>
+              <span className="text-[10px] opacity-60">{desc}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Tile Scale */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-zinc-400">Tile-Skalierung</label>
+            <span className="text-xs font-black tabular-nums" style={{ color: "#e879f9" }}>{visualConfig.tileScale.toFixed(2)}×</span>
+          </div>
+          <input
+            type="range" min={0.7} max={1.3} step={0.05}
+            value={visualConfig.tileScale}
+            onChange={(e) => setVC("tileScale", Number(e.target.value))}
+            className="w-full accent-fuchsia-400"
+          />
+          <p className="text-[10px] text-zinc-600">Skaliert alle Tile-Mini-Previews. 1.0 = Standard, 1.2 = größer.</p>
+        </div>
+
+        {/* Glow sliders */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-400">Milestone-Glow</label>
+              <span className="text-xs font-black tabular-nums text-amber-300">{Math.round(visualConfig.milestoneGlowIntensity * 100)}%</span>
+            </div>
+            <input
+              type="range" min={0} max={1} step={0.05}
+              value={visualConfig.milestoneGlowIntensity}
+              onChange={(e) => setVC("milestoneGlowIntensity", Number(e.target.value))}
+              className="w-full accent-amber-400"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-400">Track-Glow</label>
+              <span className="text-xs font-black tabular-nums text-purple-300">{Math.round(visualConfig.trackGlowIntensity * 100)}%</span>
+            </div>
+            <input
+              type="range" min={0} max={1} step={0.05}
+              value={visualConfig.trackGlowIntensity}
+              onChange={(e) => setVC("trackGlowIntensity", Number(e.target.value))}
+              className="w-full accent-purple-400"
+            />
+          </div>
+        </div>
+
+        {/* Rarity color overrides */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-zinc-400">Rarity-Farb-Overrides (leer = Standard)</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {(["normal", "selten", "mythisch", "ultra"] as const).map((rarity) => {
+              const defaults: Record<string, string> = { normal: "#94a3b8", selten: "#a78bfa", mythisch: "#f59e0b", ultra: "#e879f9" };
+              const current = visualConfig.rarityColorOverrides?.[rarity] ?? defaults[rarity];
+              const hasOverride = !!(visualConfig.rarityColorOverrides?.[rarity]);
+              return (
+                <div key={rarity} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold capitalize" style={{ color: current }}>{rarity}</span>
+                    {hasOverride && (
+                      <button onClick={() => setRarityOverride(rarity, "")} className="text-[9px] text-zinc-600 hover:text-zinc-400">reset</button>
+                    )}
+                  </div>
+                  <input
+                    type="color"
+                    value={current}
+                    onChange={(e) => setRarityOverride(rarity, e.target.value)}
+                    className="h-8 w-full cursor-pointer rounded-lg border border-white/10 bg-black/30 p-0.5"
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-zinc-600">Überschreibt die Rarity-Farben auf den Tiles dieses Passes. Nur visuelle Änderung, keine Spielmechanik.</p>
+        </div>
+
+        {/* Live preview hint */}
+        <div className="rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/5 px-3 py-2 text-[10px] text-fuchsia-300/60">
+          💡 Alle Visual-Änderungen werden sofort nach dem Speichern auf der Battlepass-Seite sichtbar.
+        </div>
       </div>
 
       {/* Banner image */}

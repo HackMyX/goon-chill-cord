@@ -1,6 +1,31 @@
 import type { Rarity } from "@/lib/cases";
 
 export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_boost" | "name_style" | "ability";
+
+// ── Visual config (per-pass) ──────────────────────────────────────────────────
+
+export interface BpVisualConfig {
+  tileScale: number;
+  showTileAnimations: boolean;
+  showParticleField: boolean;
+  milestoneGlowIntensity: number;
+  trackGlowIntensity: number;
+  rarityColorOverrides: {
+    normal?: string;
+    selten?: string;
+    mythisch?: string;
+    ultra?: string;
+  };
+}
+
+export const DEFAULT_BP_VISUAL_CONFIG: BpVisualConfig = {
+  tileScale: 1.0,
+  showTileAnimations: true,
+  showParticleField: true,
+  milestoneGlowIntensity: 0.6,
+  trackGlowIntensity: 0.5,
+  rarityColorOverrides: {},
+};
 export type BpProgressionType = "days" | "xp";
 export type QuestDifficulty = "easy" | "medium" | "hard" | "legendary";
 export type QuestFrequency = "daily" | "weekly" | "seasonal" | "once";
@@ -114,6 +139,7 @@ export interface BattlePass {
   progressionType: BpProgressionType;
   bpXpPerTier: number;
   bpXpCapPerDay: number;
+  visualConfig: BpVisualConfig;
 }
 
 export interface UserBpStatus {

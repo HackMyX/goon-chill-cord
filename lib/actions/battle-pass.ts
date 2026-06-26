@@ -6,7 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
-import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize, BpAutoFillConfig } from "@/lib/battle-pass";
+import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize, BpAutoFillConfig, BpVisualConfig } from "@/lib/battle-pass";
+import { DEFAULT_BP_VISUAL_CONFIG } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
     progressionType: ((r.progression_type as string | null) ?? "days") as "days" | "xp",
     bpXpPerTier: (r.bp_xp_per_tier as number | null) ?? 1000,
     bpXpCapPerDay: (r.bp_xp_cap_per_day as number | null) ?? 0,
+    visualConfig: { ...DEFAULT_BP_VISUAL_CONFIG, ...((r.visual_config as Partial<BpVisualConfig> | null) ?? {}) },
   };
 }
 
@@ -743,6 +745,7 @@ export interface AdminPassInput {
   progressionType?: "days" | "xp";
   bpXpPerTier?: number;
   bpXpCapPerDay?: number;
+  visualConfig?: BpVisualConfig;
 }
 
 export async function adminCreateBattlePass(
@@ -783,6 +786,7 @@ export async function adminCreateBattlePass(
       show_countdown: input.showCountdown ?? true,
       pass_icon: input.passIcon?.trim() || "🏆",
       incompatible_with: input.incompatibleWith ?? [],
+      visual_config: input.visualConfig ?? DEFAULT_BP_VISUAL_CONFIG,
     })
     .select("id")
     .single();
@@ -791,6 +795,7 @@ export async function adminCreateBattlePass(
     void logDebugEvent({ scope: "adminCreateBattlePass", message: "Battlepass-Erstellung fehlgeschlagen", level: "error", detail: error?.message, context: { code: error?.code } });
     return { success: false, error: error?.message ? `DB-Fehler: ${error.message}` : "Erstellen fehlgeschlagen." };
   }
+  void logActivity("admin:bp:create", `Battle Pass erstellt: ${input.name}`, { passId: data.id, name: input.name, tierCount: input.tierCount });
   revalidatePath("/admin");
   return { success: true, id: data.id as string };
 }
@@ -836,11 +841,16 @@ export async function adminUpdateBattlePass(
       progression_type: input.progressionType ?? "days",
       bp_xp_per_tier: input.bpXpPerTier ?? 1000,
       bp_xp_cap_per_day: input.bpXpCapPerDay ?? 0,
+      visual_config: input.visualConfig ?? DEFAULT_BP_VISUAL_CONFIG,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
 
-  if (error) return { success: false, error: "Speichern fehlgeschlagen." };
+  if (error) {
+    void logDebugEvent({ scope: "adminUpdateBattlePass", message: "Battle Pass Update fehlgeschlagen", level: "error", detail: error.message, context: { passId: id } });
+    return { success: false, error: "Speichern fehlgeschlagen." };
+  }
+  void logActivity("admin:bp:update", `Battle Pass gespeichert: ${input.name}`, { passId: id, name: input.name, theme: input.theme, visualConfig: input.visualConfig });
   revalidatePath("/admin");
   revalidatePath("/battlepass");
   return { success: true };
@@ -881,6 +891,7 @@ export interface AdminTierInput {
   rewardType: BpRewardType;
   rewardCredits: number | null;
   rewardItemId: string | null;
+  rewardItemType: string | null;
   rewardBadgeKey: string | null;
   rewardBadgeText: string | null;
   rewardItemRarity: Rarity | null;
@@ -911,6 +922,7 @@ export async function adminUpsertBpTier(
       reward_type: input.rewardType,
       reward_credits: input.rewardType === "credits" ? (input.rewardCredits ?? 100) : null,
       reward_item_id: (input.rewardType === "item") ? input.rewardItemId : null,
+      reward_item_type: (input.rewardType === "item") ? (input.rewardItemType ?? null) : null,
       reward_badge_key: input.rewardBadgeKey,
       reward_badge_text: (input.rewardType === "badge") ? (input.rewardBadgeText ?? "") : null,
       reward_item_rarity: (input.rewardType === "random_item") ? input.rewardItemRarity : null,

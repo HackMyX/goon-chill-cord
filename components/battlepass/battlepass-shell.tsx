@@ -7,9 +7,9 @@ import {
   Crown, Eye, Zap, Lock, CheckCircle2, Star, Calendar, Award, Layers, Gift,
   Sparkles, ChevronLeft, ChevronRight, Clock, Coins, TrendingUp, Shield,
   Package, Palette, Trophy, ChevronDown, ChevronUp,
-  Target,
+  Target, Wand2, Gem, Flame,
 } from "lucide-react";
-import { BP_THEMES, type BattlePass, type BattlePassTier, type UserBpStatus, type BpQuestWithProgress } from "@/lib/battle-pass";
+import { BP_THEMES, DEFAULT_BP_VISUAL_CONFIG, type BattlePass, type BattlePassTier, type UserBpStatus, type BpQuestWithProgress, type BpVisualConfig } from "@/lib/battle-pass";
 import { purchaseBattlePass, purchaseEliteBattlePass, claimBpTier } from "@/lib/actions/battle-pass";
 import { getBpQuestsWithProgress } from "@/lib/actions/bp-quests";
 import { StyledUsername } from "@/components/ui/styled-username";
@@ -121,6 +121,242 @@ const ACTION_ICONS: Record<string, string> = {
   plinko_spin: "🎲", case_open: "📦", daily_login: "📅", login_streak: "🔥",
   world_playtime: "🌍", auction_bid: "🔨", credits_earn: "💰",
 };
+
+// ── Item type → icon shape (CSS-based, no WebGL — tiles are dense) ────────────
+
+const ITEM_TYPE_ICONS: Record<string, React.ReactNode> = {
+  hat:             <div className="flex h-7 w-9 flex-col items-center"><div className="h-3 w-9 rounded-t-full bg-current" /><div className="mt-0.5 h-1.5 w-11 rounded-full bg-current opacity-60" /></div>,
+  face:            <div className="h-8 w-8 rounded-full border-[3px] border-current flex items-center justify-center"><div className="h-2.5 w-2.5 rounded-full bg-current" /></div>,
+  hair:            <div className="flex h-8 w-8 flex-col items-center gap-0.5"><div className="h-4 w-8 rounded-t-full bg-current" /><div className="flex gap-0.5"><div className="h-4 w-1.5 rounded-b-full bg-current" /><div className="h-3 w-1.5 rounded-b-full bg-current opacity-70" /><div className="h-4 w-1.5 rounded-b-full bg-current opacity-50" /></div></div>,
+  weapon_cosmetic: <Wand2 className="h-7 w-7" />,
+  weapon:          <Wand2 className="h-7 w-7" />,
+  jacket:          <div className="flex h-8 w-9 flex-col items-center"><div className="flex w-full gap-0.5"><div className="h-3 w-3 rounded-tl-lg bg-current" /><div className="h-5 w-3 flex-1 bg-current" /><div className="h-3 w-3 rounded-tr-lg bg-current" /></div><div className="h-4 w-full bg-current rounded-b-md" /></div>,
+  pants:           <div className="flex h-8 w-8 gap-0.5 items-start justify-center"><div className="h-6 w-3 rounded-b-full bg-current" /><div className="h-6 w-3 rounded-b-full bg-current" /></div>,
+  shoes:           <div className="flex gap-1 items-end"><div className="h-3 w-5 rounded-tl-full rounded-br-md bg-current" /><div className="h-3 w-5 rounded-tr-full rounded-bl-md bg-current opacity-80" /></div>,
+  shield_cosmetic: <Shield className="h-7 w-7" />,
+  ring:            <div className="h-7 w-7 rounded-full border-[3px] border-current" />,
+  amulet:          <Gem className="h-6 w-6" />,
+  pet:             <div className="flex h-8 w-8 flex-col items-center"><div className="h-5 w-5 rounded-full bg-current mx-auto" /><div className="h-2 w-7 rounded-full bg-current opacity-60 mt-0.5" /></div>,
+  aura:            <div className="relative h-8 w-8 rounded-full border-2 border-current"><div className="absolute inset-1.5 rounded-full border border-current opacity-50" /></div>,
+  trail:           <div className="flex flex-col gap-0.5 items-center"><div className="h-1.5 w-8 rounded-full bg-current" /><div className="h-1.5 w-6 rounded-full bg-current opacity-70" /><div className="h-1.5 w-4 rounded-full bg-current opacity-40" /></div>,
+};
+
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  hat: "Hat", face: "Face", hair: "Hair", weapon_cosmetic: "Waffe", weapon: "Waffe",
+  jacket: "Jacke", pants: "Hose", shoes: "Schuhe", shield_cosmetic: "Schild",
+  ring: "Ring", amulet: "Amulett", pet: "Pet", aura: "Aura", trail: "Spur",
+};
+
+function TileMiniPreview({
+  tier, trackColor, locked, animated, scale,
+}: {
+  tier: BattlePassTier;
+  trackColor: string;
+  locked: boolean;
+  animated: boolean;
+  scale: number;
+}) {
+  const rarity = tier.rewardItemRarity ?? "normal";
+  const rarityColor = RARITY_COLORS[rarity] ?? "#94a3b8";
+  const rarityGlow = RARITY_GLOWS[rarity] ?? "rgba(148,163,184,0.25)";
+  const isUltra = rarity === "ultra";
+  const isMythisch = rarity === "mythisch";
+
+  const baseStyle: React.CSSProperties = {
+    transform: `scale(${scale})`,
+    filter: locked ? "grayscale(1) brightness(0.3)" : undefined,
+    transition: "filter 0.2s",
+  };
+
+  // ── Credits ──────────────────────────────────────────────────────────────────
+  if (tier.rewardType === "credits") {
+    const amount = (tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1);
+    return (
+      <div className="flex flex-col items-center gap-1" style={baseStyle}>
+        <div className="relative flex items-center justify-center" style={{ width: 44, height: 44 }}>
+          {[0, 1, 2].map((i) => (
+            <motion.div
+              key={i}
+              className="absolute rounded-full"
+              style={{
+                width: 32 + i * 4, height: 32 + i * 4,
+                background: `radial-gradient(circle at 35% 35%, #fde68a, #f59e0b, #92400e)`,
+                boxShadow: `0 0 ${6 + i * 5}px rgba(245,158,11,${0.4 + i * 0.15})`,
+                bottom: i * 2, zIndex: 3 - i,
+              }}
+              animate={animated ? { y: [0, -2, 0] } : {}}
+              transition={{ duration: 2 + i * 0.4, repeat: Infinity, delay: i * 0.25, ease: "easeInOut" }}
+            />
+          ))}
+          <span className="relative z-10 text-base">💰</span>
+        </div>
+        <p className="text-[10px] font-black tabular-nums text-amber-300 leading-none">
+          {amount >= 1000 ? `${(amount / 1000).toFixed(amount % 1000 === 0 ? 0 : 1)}k` : amount} CR
+        </p>
+      </div>
+    );
+  }
+
+  // ── Item / Random Item ────────────────────────────────────────────────────────
+  if (tier.rewardType === "item" || tier.rewardType === "random_item") {
+    const isRandom = tier.rewardType === "random_item";
+    const typeIcon = tier.rewardItemType ? ITEM_TYPE_ICONS[tier.rewardItemType] : null;
+    const typeLabel = tier.rewardItemType ? ITEM_TYPE_LABELS[tier.rewardItemType] : null;
+
+    return (
+      <div className="flex flex-col items-center gap-1" style={baseStyle}>
+        <motion.div
+          className="relative flex h-10 w-10 items-center justify-center rounded-xl border-2 overflow-hidden"
+          style={{
+            borderColor: rarityColor,
+            background: `radial-gradient(circle at 40% 30%, ${rarityColor}25 0%, ${rarityColor}08 100%)`,
+            boxShadow: locked ? "none" : `0 0 ${isMythisch || isUltra ? 18 : 10}px ${rarityGlow}`,
+            color: rarityColor,
+          }}
+          animate={animated && !locked && (isMythisch || isUltra) ? {
+            boxShadow: [`0 0 10px ${rarityGlow}`, `0 0 24px ${rarityGlow}`, `0 0 10px ${rarityGlow}`],
+          } : {}}
+          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          {/* Rainbow shimmer for ultra */}
+          {isUltra && animated && !locked && (
+            <motion.div
+              className="pointer-events-none absolute inset-0 rounded-xl"
+              animate={{ opacity: [0, 0.5, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+              style={{ background: "linear-gradient(135deg, #e879f920, #818cf820, #06b6d420, #34d39920)" }}
+            />
+          )}
+          {isRandom ? (
+            <motion.div
+              animate={animated ? { rotateY: [0, 180, 360] } : {}}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              className="text-xl"
+            >
+              🎲
+            </motion.div>
+          ) : typeIcon ? (
+            <div className="flex items-center justify-center" style={{ color: rarityColor }}>
+              {typeIcon}
+            </div>
+          ) : (
+            <Package className="h-5 w-5" style={{ color: rarityColor }} />
+          )}
+          {/* Top-right rarity gem */}
+          {!locked && (
+            <div
+              className="absolute -top-1 -right-1 h-3 w-3 rounded-full border border-black/40 z-10"
+              style={{ background: isUltra ? "linear-gradient(135deg,#e879f9,#818cf8)" : rarityColor, boxShadow: `0 0 5px ${rarityColor}` }}
+            />
+          )}
+        </motion.div>
+        <p className="text-[9px] font-black text-center leading-tight max-w-[52px] truncate" style={{ color: locked ? "rgba(255,255,255,0.2)" : rarityColor }}>
+          {isRandom ? (typeLabel ?? "Item") : (typeLabel ?? tier.rewardItemType ?? "Item")}
+        </p>
+      </div>
+    );
+  }
+
+  // ── Badge ─────────────────────────────────────────────────────────────────────
+  if (tier.rewardType === "badge") {
+    return (
+      <div className="flex flex-col items-center gap-1" style={baseStyle}>
+        <motion.div
+          className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-amber-400/60"
+          style={{ background: "radial-gradient(circle, rgba(245,158,11,0.2) 0%, transparent 70%)" }}
+          animate={animated && !locked ? { boxShadow: ["0 0 8px rgba(245,158,11,0.3)", "0 0 22px rgba(245,158,11,0.6)", "0 0 8px rgba(245,158,11,0.3)"] } : {}}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Trophy className="h-5 w-5 text-amber-400" />
+        </motion.div>
+        {tier.rewardBadgeText && (
+          <p className="text-[9px] font-black text-amber-300 text-center leading-tight max-w-[52px] truncate">
+            {tier.rewardBadgeText}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // ── XP Boost ──────────────────────────────────────────────────────────────────
+  if (tier.rewardType === "xp_boost") {
+    const days = tier.rewardXpBoost ?? 1;
+    return (
+      <div className="flex flex-col items-center gap-1" style={baseStyle}>
+        <motion.div
+          className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-sky-400/60"
+          style={{ background: "radial-gradient(circle, rgba(56,189,248,0.18) 0%, transparent 70%)" }}
+          animate={animated && !locked ? { boxShadow: ["0 0 8px rgba(56,189,248,0.3)", "0 0 22px rgba(56,189,248,0.7)", "0 0 8px rgba(56,189,248,0.3)"] } : {}}
+          transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Zap className="h-5 w-5 text-sky-400" />
+        </motion.div>
+        <p className="text-[10px] font-black text-sky-300">+{days}d</p>
+      </div>
+    );
+  }
+
+  // ── Name Style ────────────────────────────────────────────────────────────────
+  if (tier.rewardType === "name_style") {
+    return (
+      <div className="flex flex-col items-center gap-1" style={baseStyle}>
+        <motion.div
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20"
+          style={{ background: `radial-gradient(circle, ${trackColor}25 0%, transparent 70%)` }}
+          animate={animated && !locked ? { boxShadow: [`0 0 8px ${trackColor}40`, `0 0 20px ${trackColor}70`, `0 0 8px ${trackColor}40`] } : {}}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Palette className="h-5 w-5" style={{ color: trackColor }} />
+        </motion.div>
+        <p className="text-[9px] font-black leading-tight max-w-[52px] truncate text-center" style={{ color: trackColor }}>
+          Style
+        </p>
+      </div>
+    );
+  }
+
+  // ── Ability ───────────────────────────────────────────────────────────────────
+  if (tier.rewardType === "ability") {
+    return (
+      <div className="flex flex-col items-center gap-1" style={baseStyle}>
+        <motion.div
+          className="relative flex h-10 w-10 items-center justify-center rounded-xl border-2 border-purple-500/60"
+          style={{ background: "radial-gradient(circle, rgba(168,85,247,0.2) 0%, transparent 70%)" }}
+          animate={animated && !locked ? { boxShadow: ["0 0 8px rgba(168,85,247,0.3)", "0 0 24px rgba(168,85,247,0.7)", "0 0 8px rgba(168,85,247,0.3)"] } : {}}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Zap className="h-5 w-5 text-purple-400" />
+          {animated && !locked && (
+            <motion.div
+              className="absolute inset-0 rounded-xl border-2 border-purple-400/30"
+              animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            />
+          )}
+        </motion.div>
+        <p className="text-[9px] font-black text-purple-300 text-center leading-tight max-w-[52px] truncate">
+          {tier.rewardAbilityName ?? "Fähigkeit"}
+        </p>
+      </div>
+    );
+  }
+
+  // ── Generic fallback (animated glowing gem) ───────────────────────────────────
+  return (
+    <div className="flex flex-col items-center gap-1" style={baseStyle}>
+      <motion.div
+        className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20"
+        style={{ background: `radial-gradient(circle, ${trackColor}20 0%, transparent 70%)` }}
+        animate={animated && !locked ? { boxShadow: [`0 0 8px ${trackColor}30`, `0 0 20px ${trackColor}60`, `0 0 8px ${trackColor}30`] } : {}}
+        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+      >
+        <Gem className="h-5 w-5" style={{ color: trackColor }} />
+      </motion.div>
+    </div>
+  );
+}
+
+// ── Visual reward preview ─────────────────────────────────────────────────────
 
 function RewardPreviewCard({ tier, accent, glow }: { tier: BattlePassTier; accent: string; glow: string }) {
   const rarity = tier.rewardItemRarity ?? "normal";
@@ -671,6 +907,7 @@ function ParticleField({ accent, count = 40 }: { accent: string; count?: number 
 
 function TrackTileCard({
   tier, state, accent, glow, trackColor, onClaim, claiming, isSelected, onClick,
+  visualConfig,
 }: {
   tier: BattlePassTier;
   state: TierState;
@@ -681,11 +918,17 @@ function TrackTileCard({
   claiming: boolean;
   isSelected: boolean;
   onClick: () => void;
+  visualConfig: BpVisualConfig;
 }) {
   const isClaimed = state === "claimed";
   const isAvailable = state === "available";
   const isLocked = state === "locked";
   const isMilestone = tier.highlightTier;
+  const tileScale = visualConfig.tileScale ?? 1.0;
+  const showAnimations = visualConfig.showTileAnimations ?? true;
+  const rarity = tier.rewardItemRarity ?? "normal";
+  const rarityOverride = visualConfig.rarityColorOverrides?.[rarity];
+  const effectiveTrackColor = rarityOverride ?? trackColor;
 
   return (
     <motion.div
@@ -774,14 +1017,16 @@ function TrackTileCard({
           {tier.tierNumber}
         </div>
 
-        {/* Icon */}
-        <motion.span
-          className={`text-4xl leading-none select-none ${isLocked ? "grayscale opacity-20" : ""} ${isMilestone ? "text-5xl" : ""}`}
-          animate={isAvailable ? { scale: [1, 1.1, 1] } : {}}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-        >
-          {rewardIcon(tier)}
-        </motion.span>
+        {/* Rich visual preview — replaces generic emoji */}
+        <div className="flex items-center justify-center" style={{ minHeight: isMilestone ? 56 : 44 }}>
+          <TileMiniPreview
+            tier={tier}
+            trackColor={effectiveTrackColor}
+            locked={isLocked}
+            animated={showAnimations && isAvailable}
+            scale={tileScale}
+          />
+        </div>
 
         {/* Name */}
         <div>
@@ -824,7 +1069,7 @@ function TrackTileCard({
 
 function HorizontalTrack({
   tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor,
-  onClaim, claimingId,
+  onClaim, claimingId, visualConfig,
 }: {
   tiers: BattlePassTier[];
   label: string;
@@ -837,6 +1082,7 @@ function HorizontalTrack({
   trackColor: string;
   onClaim: (id: string) => void;
   claimingId: string | null;
+  visualConfig: BpVisualConfig;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
@@ -924,6 +1170,7 @@ function HorizontalTrack({
                 claiming={claimingId === tier.id}
                 isSelected={selectedTier === tier.id}
                 onClick={() => setSelectedTier((prev) => (prev === tier.id ? null : tier.id))}
+                visualConfig={visualConfig}
               />
             );
           })}
@@ -1120,6 +1367,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
   const progressDays = userStatus?.progressDays ?? 0;
   const hasPremium = userStatus?.hasPremium ?? false;
   const hasElite = userStatus?.hasElite ?? false;
+  const visualConfig: BpVisualConfig = { ...DEFAULT_BP_VISUAL_CONFIG, ...(pass.visualConfig ?? {}) };
 
   const freeTiers = pass.tiers.filter((t) => !t.isPremium && !t.isElite);
   const premiumTiers = pass.tiers.filter((t) => t.isPremium && !t.isElite);
@@ -1247,8 +1495,8 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
           transition={{ duration: 7, repeat: Infinity, delay: 1 }}
         />
 
-        {/* Particles */}
-        <ParticleField accent={accent} count={35} />
+        {/* Particles — admin-configurable */}
+        {visualConfig.showParticleField && <ParticleField accent={accent} count={35} />}
 
         {/* Banner image — cinematic full bleed */}
         {pass.bannerImageUrl && (
@@ -1453,6 +1701,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                   trackColor="rgba(148,163,184,0.8)"
                   onClaim={handleClaim}
                   claimingId={claimingId}
+                  visualConfig={visualConfig}
                 />
               </motion.div>
             )}
@@ -1490,6 +1739,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                   trackColor="#f59e0b"
                   onClaim={handleClaim}
                   claimingId={claimingId}
+                  visualConfig={visualConfig}
                 />
               </motion.div>
             )}
@@ -1527,6 +1777,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                   trackColor="#a78bfa"
                   onClaim={handleClaim}
                   claimingId={claimingId}
+                  visualConfig={visualConfig}
                 />
               </motion.div>
             )}

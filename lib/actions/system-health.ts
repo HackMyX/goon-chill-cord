@@ -265,6 +265,8 @@ const COLUMN_CHECKS: Array<{
   { id: "col_bp_progression_type",   category: "Battle Pass", table: "battle_passes",       col: "progression_type",       detail: "node scripts/add-bp-quests.cjs" },
   { id: "col_bp_xp_per_tier",        category: "Battle Pass", table: "battle_passes",       col: "bp_xp_per_tier",         detail: "node scripts/add-bp-quests.cjs" },
   { id: "col_bp_xp_cap_per_day",     category: "Battle Pass", table: "battle_passes",       col: "bp_xp_cap_per_day",      detail: "node scripts/add-bp-quests.cjs" },
+  { id: "col_bp_visual_config",      category: "Battle Pass", table: "battle_passes",       col: "visual_config",          detail: "node scripts/add-bp-visual-config.cjs" },
+  { id: "col_bpt_reward_item_type",   category: "Battle Pass", table: "battle_pass_tiers",   col: "reward_item_type",       detail: "node scripts/add-bp-tier-reward-item-type.cjs" },
   { id: "col_bpt_bp_xp_required",    category: "Battle Pass", table: "battle_pass_tiers",   col: "bp_xp_required",         detail: "node scripts/add-bp-quests.cjs" },
   { id: "col_ubp_bp_xp",             category: "Battle Pass", table: "user_battle_passes",  col: "bp_xp",                  detail: "node scripts/add-bp-quests.cjs" },
   // Fine-Config — all columns (node scripts/add-fine-config.cjs)
