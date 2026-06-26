@@ -14,7 +14,10 @@ import { purchaseBattlePass, purchaseEliteBattlePass, claimBpTier } from "@/lib/
 import { getBpQuestsWithProgress } from "@/lib/actions/bp-quests";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { useSoundManager } from "@/lib/sound-manager";
-import { ItemStandaloneCanvas, type ItemForPreview } from "@/components/shop/shop-character-view";
+import { Canvas } from "@react-three/fiber";
+import { View } from "@react-three/drei";
+import { ItemStandaloneCanvas, ItemIsolatedPreview, type ItemForPreview } from "@/components/shop/shop-character-view";
+import { BpRewardView3D } from "@/components/battlepass/bp-reward-3d";
 import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
 import { getBadgeStyle } from "@/lib/badges";
 
@@ -925,7 +928,7 @@ function ParticleField({ accent, count = 40 }: { accent: string; count?: number 
 
 function TrackTileCard({
   tier, state, accent, glow, trackColor, onClaim, claiming, isSelected, onClick,
-  visualConfig, onDirectPreview, fillWidth,
+  visualConfig, onDirectPreview, fillWidth, viewIndex,
 }: {
   tier: BattlePassTier;
   state: TierState;
@@ -939,6 +942,7 @@ function TrackTileCard({
   visualConfig: BpVisualConfig;
   onDirectPreview?: (subject: PreviewSubject) => void;
   fillWidth?: boolean;
+  viewIndex: number;
 }) {
   const isClaimed = state === "claimed";
   const isAvailable = state === "available";
@@ -1055,8 +1059,8 @@ function TrackTileCard({
             </p>
           )}
           <p className="text-[9px] text-white/40 mt-0.5">{tooltipTrack} · Tier {tier.tierNumber}</p>
-          {hasDirectPreview && (
-            <p className="text-[9px] text-purple-300 mt-1">🔍 Klicken für 3D-Vorschau</p>
+          {displayMode === "3d" && (
+            <p className="text-[9px] text-purple-300 mt-1">✦ 3D Live-Vorschau</p>
           )}
         </div>
       </div>
@@ -1168,21 +1172,61 @@ function TrackTileCard({
           </div>
         </div>
 
-        {/* Rich preview — no overflow constraint here, scale/offset free */}
-        <div
-          className="flex items-center justify-center flex-1 min-h-0"
-          style={{ height: previewH }}
-        >
-          <TileMiniPreview
-            tier={tier}
-            trackColor={effectiveTrackColor}
-            locked={isLocked}
-            animated={showAnimations && isAvailable}
-            scale={tileScale}
-            offsetX={visualConfig.tileOffsetX ?? 0}
-            offsetY={visualConfig.tileOffsetY ?? 0}
-          />
-        </div>
+        {/* Preview area — 3D View or CSS fallback */}
+        {(() => {
+          const use3D = displayMode === "3d" || displayMode === "auto";
+          const hasItemFor3D = tier.rewardType === "item" && !!tier.rewardItemName && !!tier.rewardItemType;
+          // All non-item reward types have a 3D geometry in BpRewardView3D
+          const hasRewardFor3D = tier.rewardType !== "item";
+
+          if (use3D && (hasItemFor3D || hasRewardFor3D)) {
+            return (
+              <div
+                className="relative flex-1 min-h-0 w-full"
+                style={{ height: previewH, minHeight: previewH }}
+              >
+                {hasItemFor3D ? (
+                  <ItemIsolatedPreview
+                    item={{
+                      id: tier.rewardItemId ?? tier.id,
+                      name: tier.rewardItemName!,
+                      rarity: tier.rewardItemRarity ?? "normal",
+                      type: tier.rewardItemType!,
+                    }}
+                    viewIndex={viewIndex}
+                    visible={!isLocked}
+                  />
+                ) : (
+                  <BpRewardView3D
+                    rewardType={tier.rewardType}
+                    rarity={tier.rewardItemRarity ?? "normal"}
+                    creditsAmount={(tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1)}
+                    viewIndex={viewIndex}
+                    visible={!isLocked}
+                    lightColor={effectiveTrackColor}
+                  />
+                )}
+              </div>
+            );
+          }
+
+          return (
+            <div
+              className="flex items-center justify-center flex-1 min-h-0"
+              style={{ height: previewH }}
+            >
+              <TileMiniPreview
+                tier={tier}
+                trackColor={effectiveTrackColor}
+                locked={isLocked}
+                animated={showAnimations && isAvailable}
+                scale={tileScale}
+                offsetX={visualConfig.tileOffsetX ?? 0}
+                offsetY={visualConfig.tileOffsetY ?? 0}
+              />
+            </div>
+          );
+        })()}
 
         {/* Name + reward label */}
         <div className="w-full">
@@ -1266,11 +1310,13 @@ interface TrackProps {
   onClaim: (id: string) => void;
   claimingId: string | null;
   visualConfig: BpVisualConfig;
+  /** View index offset so each track's tiles get unique indices in the shared Canvas. */
+  viewIndexOffset?: number;
 }
 
 function HorizontalTrack({
   tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor,
-  onClaim, claimingId, visualConfig,
+  onClaim, claimingId, visualConfig, viewIndexOffset = 0,
 }: TrackProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
@@ -1345,7 +1391,7 @@ function HorizontalTrack({
           className="flex overflow-x-auto pb-3 pt-3"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none", gap: visualConfig.containerGap ?? 8 }}
         >
-          {tiers.map((tier) => {
+          {tiers.map((tier, idx) => {
             const state = getTierState(tier, userStatus, progressDays);
             return (
               <TrackTileCard
@@ -1361,6 +1407,7 @@ function HorizontalTrack({
                 onClick={() => setSelectedTier((prev) => (prev === tier.id ? null : tier.id))}
                 visualConfig={visualConfig}
                 onDirectPreview={setFullPreviewSubject}
+                viewIndex={viewIndexOffset + idx}
               />
             );
           })}
@@ -1480,7 +1527,7 @@ function HorizontalTrack({
 
 // ── Grid track layout ─────────────────────────────────────────────────────────
 
-function GridTrack({ tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor, onClaim, claimingId, visualConfig }: TrackProps) {
+function GridTrack({ tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor, onClaim, claimingId, visualConfig, viewIndexOffset = 100 }: TrackProps) {
   const [fullPreviewSubject, setFullPreviewSubject] = useState<PreviewSubject | null>(null);
 
   return (
@@ -1492,7 +1539,7 @@ function GridTrack({ tiers, label, labelColor, trackIcon, userStatus, progressDa
         <span className="text-[10px] text-white/30">{tiers.length} Tiers</span>
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 pt-3">
-        {tiers.map((tier) => {
+        {tiers.map((tier, idx) => {
           const state = getTierState(tier, userStatus, progressDays);
           return (
             <TrackTileCard
@@ -1509,6 +1556,7 @@ function GridTrack({ tiers, label, labelColor, trackIcon, userStatus, progressDa
               visualConfig={{ ...visualConfig, normalTileWidth: 120, normalTileHeight: 180, milestoneTileWidth: 120, milestoneTileHeight: 180 }}
               onDirectPreview={setFullPreviewSubject}
               fillWidth
+              viewIndex={viewIndexOffset + idx}
             />
           );
         })}
@@ -1640,7 +1688,7 @@ function ListTierRow({
   );
 }
 
-function ListTrack({ tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor, onClaim, claimingId, visualConfig }: TrackProps) {
+function ListTrack({ tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor, onClaim, claimingId, visualConfig, viewIndexOffset: _vio }: TrackProps) {
   const [fullPreviewSubject, setFullPreviewSubject] = useState<PreviewSubject | null>(null);
 
   return (
@@ -1749,6 +1797,8 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
   const [buyError, setBuyError] = useState<string | null>(null);
   const [purchaseAnim, setPurchaseAnim] = useState(false);
 
+  const shellRef = useRef<HTMLDivElement>(null);
+
   const progressDays = userStatus?.progressDays ?? 0;
   const hasPremium = userStatus?.hasPremium ?? false;
   const hasElite = userStatus?.hasElite ?? false;
@@ -1844,7 +1894,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
   ) : null;
 
   return (
-    <div className="flex flex-1 flex-col min-h-0 relative">
+    <div ref={shellRef} className="flex flex-1 flex-col min-h-0 relative">
       {CoinBurst}
 
       {/* ══ HERO ══════════════════════════════════════════════════════════ */}
@@ -2076,18 +2126,21 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 trackIcon: <Gift className="h-4 w-4" />, accent,
                 glow: "rgba(148,163,184,0.45)", trackColor: "rgba(148,163,184,0.8)",
                 userStatus, progressDays, onClaim: handleClaim, claimingId, visualConfig,
+                viewIndexOffset: 0,
               };
               const premiumTrackProps = {
                 label: "Premium Track", labelColor: "#f59e0bcc",
                 trackIcon: <Crown className="h-4 w-4" />, accent,
                 glow: "rgba(245,158,11,0.55)", trackColor: "#f59e0b",
                 userStatus, progressDays, onClaim: handleClaim, claimingId, visualConfig,
+                viewIndexOffset: 100,
               };
               const eliteTrackProps = {
                 label: "Elite Track", labelColor: "#a78bfa",
                 trackIcon: <Sparkles className="h-4 w-4" />, accent,
                 glow: "rgba(167,139,250,0.55)", trackColor: "#a78bfa",
                 userStatus, progressDays, onClaim: handleClaim, claimingId, visualConfig,
+                viewIndexOffset: 200,
               };
 
               return (
@@ -2405,6 +2458,23 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ══ Shared WebGL Canvas for 3D tile previews ═════════════════════ */}
+      <Canvas
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+        gl={{ antialias: true, alpha: true }}
+        dpr={[1, 2]}
+      >
+        <View.Port />
+      </Canvas>
     </div>
   );
 }
