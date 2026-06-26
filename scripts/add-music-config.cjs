@@ -3,24 +3,27 @@
 require('dotenv').config({ path: '.env.local' });
 const { Client } = require('pg');
 
+// NOTE: tracks use the built-in Web Audio synthesizer (lib/music-synth.ts) via
+// "synth://" URLs — no audio files required. Earlier this seed pointed at
+// /music/*.mp3 files that never existed, which 404'd and broke the whole player.
 const DEFAULT_CONFIG = {
-  enabled: false,
+  enabled: true,
   defaultVolume: 0.12,
   fadeInMs: 1200,
   fadeOutMs: 500,
   tracks: [
-    { id: "arc_neon_rush",   name: "Neon Rush",       artist: "Royalty Free", vibe: "arcade",    url: "/music/arcade-neon-rush.mp3" },
-    { id: "arc_pixel_chase", name: "Pixel Chase",     artist: "Royalty Free", vibe: "arcade",    url: "/music/arcade-pixel-chase.mp3" },
-    { id: "arc_8bit_fever",  name: "8-Bit Fever",     artist: "Royalty Free", vibe: "arcade",    url: "/music/arcade-8bit-fever.mp3" },
-    { id: "arc_hyper_drive", name: "Hyper Drive",     artist: "Royalty Free", vibe: "arcade",    url: "/music/arcade-hyper-drive.mp3" },
-    { id: "chl_midnight",    name: "Midnight Lounge", artist: "Royalty Free", vibe: "chill",     url: "/music/chill-midnight-lounge.mp3" },
-    { id: "chl_purple_rain", name: "Purple Rain",     artist: "Royalty Free", vibe: "chill",     url: "/music/chill-purple-rain.mp3" },
-    { id: "chl_crystal",     name: "Crystal Clear",   artist: "Royalty Free", vibe: "chill",     url: "/music/chill-crystal-clear.mp3" },
-    { id: "chl_lofi_sat",    name: "Lo-Fi Saturday",  artist: "Royalty Free", vibe: "chill",     url: "/music/chill-lofi-saturday.mp3" },
-    { id: "adv_into_wild",   name: "Into the Wild",   artist: "Royalty Free", vibe: "adventure", url: "/music/adventure-into-wild.mp3" },
-    { id: "adv_ruins",       name: "Ancient Ruins",   artist: "Royalty Free", vibe: "adventure", url: "/music/adventure-ancient-ruins.mp3" },
-    { id: "adv_mystic",      name: "Mystic Forest",   artist: "Royalty Free", vibe: "adventure", url: "/music/adventure-mystic-forest.mp3" },
-    { id: "adv_journey",     name: "Endless Journey", artist: "Royalty Free", vibe: "adventure", url: "/music/adventure-endless-journey.mp3" },
+    { id: "arc_neon_rush",   name: "Neon Rush",       artist: "Synth", vibe: "arcade",    url: "synth://arcade/1" },
+    { id: "arc_pixel_chase", name: "Pixel Chase",     artist: "Synth", vibe: "arcade",    url: "synth://arcade/2" },
+    { id: "arc_8bit_fever",  name: "8-Bit Fever",     artist: "Synth", vibe: "arcade",    url: "synth://arcade/3" },
+    { id: "arc_hyper_drive", name: "Hyper Drive",     artist: "Synth", vibe: "arcade",    url: "synth://arcade/4" },
+    { id: "chl_midnight",    name: "Midnight Lounge", artist: "Synth", vibe: "chill",     url: "synth://chill/1" },
+    { id: "chl_purple_rain", name: "Purple Rain",     artist: "Synth", vibe: "chill",     url: "synth://chill/2" },
+    { id: "chl_crystal",     name: "Crystal Clear",   artist: "Synth", vibe: "chill",     url: "synth://chill/3" },
+    { id: "chl_lofi_sat",    name: "Lo-Fi Saturday",  artist: "Synth", vibe: "chill",     url: "synth://chill/4" },
+    { id: "adv_into_wild",   name: "Into the Wild",   artist: "Synth", vibe: "adventure", url: "synth://adventure/1" },
+    { id: "adv_ruins",       name: "Ancient Ruins",   artist: "Synth", vibe: "adventure", url: "synth://adventure/2" },
+    { id: "adv_mystic",      name: "Mystic Forest",   artist: "Synth", vibe: "adventure", url: "synth://adventure/3" },
+    { id: "adv_journey",     name: "Endless Journey", artist: "Synth", vibe: "adventure", url: "synth://adventure/4" },
   ],
   pageAssignments: {
     homepage:  "chl_midnight",
