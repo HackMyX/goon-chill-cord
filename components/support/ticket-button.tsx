@@ -263,6 +263,22 @@ function SupportButtonInner() {
     return result;
   }, []);
 
+  // Mobile nav drawer fires this event to open the panel directly
+  useEffect(() => {
+    function handleOpenEvent() {
+      if (!visible) return;
+      setOpen(true);
+      setView("list");
+      setUnseenBadge(null);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("support:lastSeen", new Date().toISOString());
+      }
+      loadTickets();
+    }
+    window.addEventListener("openSupportPanel", handleOpenEvent);
+    return () => window.removeEventListener("openSupportPanel", handleOpenEvent);
+  }, [visible, loadTickets]);
+
   useEffect(() => {
     if (!pendingOpenTicketId || !visible) return;
     const ticketId = pendingOpenTicketId;
@@ -434,7 +450,7 @@ function SupportButtonInner() {
   return (
     <>
       {!open && (
-        <div className="fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6">
+        <div className="fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6 hidden xl:block">
           <div className="flex flex-col items-center gap-2">
             <div className="pointer-events-none flex flex-col items-center gap-1 whitespace-nowrap">
               <span className="rounded-xl bg-purple-600 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-white shadow-[0_0_14px_rgba(147,51,234,0.75),0_2px_8px_rgba(0,0,0,0.4)]">

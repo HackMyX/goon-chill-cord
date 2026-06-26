@@ -23,6 +23,7 @@ import {
   BarChart2,
   LogOut,
   Disc3,
+  MessageCircle,
 } from "lucide-react";
 import { GamesMenu } from "@/components/layout/games-menu";
 import { LogoutButton } from "@/components/auth/logout-button";
@@ -167,6 +168,23 @@ export function MobileNavDrawer({
           {(isAdmin || isModerator) && (
             <NavItem icon={Shield} label="Mod-Panel" href="/mod" onClose={onClose} colorClass="text-sky-300" />
           )}
+
+          {/* Support section */}
+          <div className="px-2 pt-3 pb-1">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Support</span>
+          </div>
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => {
+              sound.click();
+              onClose();
+              window.dispatchEvent(new CustomEvent("openSupportPanel"));
+            }}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-purple-300 transition-colors hover:bg-white/5"
+          >
+            <MessageCircle className="h-5 w-5 shrink-0" />
+            <span className="flex-1 text-left text-sm font-medium">Hilfe &amp; Chat</span>
+          </button>
         </nav>
 
         {/* Logout at the bottom */}
