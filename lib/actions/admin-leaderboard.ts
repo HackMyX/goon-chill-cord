@@ -439,3 +439,103 @@ export async function adminRestoreMineSnapshot(
     return { success: false, error: String(e) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Plinko — reads from plinko_plays (no dedicated score table; best win per user)
+// ---------------------------------------------------------------------------
+
+export interface AdminPlinkoRow {
+  userId: string;
+  username: string;
+  bestWinCr: number;
+  totalWinsCr: number;
+  totalSpent: number;
+  gamesPlayed: number;
+  bestMultiplier: number;
+}
+
+export async function adminGetPlinkoLeaderboard(): Promise<AdminPlinkoRow[]> {
+  try {
+    const { admin } = await requireAdmin();
+    const { data, error } = await admin
+      .from("plinko_plays")
+      .select("user_id, payout_cr, ball_cost, result_multiplier, profiles(username)")
+      .order("payout_cr", { ascending: false })
+      .limit(2000);
+
+    if (error || !data) return [];
+
+    // Aggregate per user
+    const map = new Map<string, AdminPlinkoRow>();
+    for (const row of data as unknown as {
+      user_id: string;
+      payout_cr: number;
+      ball_cost: number;
+      result_multiplier: number;
+      profiles: { username: string } | null;
+    }[]) {
+      const existing = map.get(row.user_id);
+      if (existing) {
+        existing.gamesPlayed++;
+        existing.totalSpent += row.ball_cost ?? 0;
+        existing.totalWinsCr += row.payout_cr ?? 0;
+        if ((row.payout_cr ?? 0) > existing.bestWinCr) existing.bestWinCr = row.payout_cr;
+        if ((row.result_multiplier ?? 0) > existing.bestMultiplier) existing.bestMultiplier = row.result_multiplier;
+      } else {
+        map.set(row.user_id, {
+          userId: row.user_id,
+          username: row.profiles?.username ?? "Unbekannt",
+          bestWinCr: row.payout_cr ?? 0,
+          totalWinsCr: row.payout_cr ?? 0,
+          totalSpent: row.ball_cost ?? 0,
+          gamesPlayed: 1,
+          bestMultiplier: row.result_multiplier ?? 0,
+        });
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => b.bestWinCr - a.bestWinCr).slice(0, 100);
+  } catch { return []; }
+}
+
+export async function adminDeletePlinkoHistory(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { admin } = await requireAdmin();
+    const { error } = await admin.from("plinko_plays").delete().eq("user_id", userId);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DON — aggregated from profiles credits (DON is a pure credits-transfer game)
+// ---------------------------------------------------------------------------
+
+export interface AdminDonRow {
+  userId: string;
+  username: string;
+  credits: number;
+  role: string;
+}
+
+export async function adminGetDonLeaderboard(): Promise<AdminDonRow[]> {
+  try {
+    const { admin } = await requireAdmin();
+    const { data, error } = await admin
+      .from("profiles")
+      .select("id, username, credits, role")
+      .order("credits", { ascending: false })
+      .limit(100);
+
+    if (error || !data) return [];
+
+    return (data as { id: string; username: string; credits: number; role: string }[]).map((r) => ({
+      userId: r.id,
+      username: r.username,
+      credits: r.credits,
+      role: r.role,
+    }));
+  } catch { return []; }
+}

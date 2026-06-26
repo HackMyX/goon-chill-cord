@@ -19,7 +19,6 @@ import {
   Copy, Check, ExternalLink, Calendar, AlertTriangle, ChevronDown,
   Ban, Ticket, Swords, ShieldAlert,
 } from "lucide-react";
-import { StyledUsername } from "@/components/ui/styled-username";
 import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 import { getMinimalProfile, type MinimalProfile } from "@/lib/actions/community";
 import { getPopupModSummary, type PopupModSummary } from "@/lib/actions/mod";
@@ -230,13 +229,11 @@ function PopupCard({
             </div>
           </div>
 
-          {/* ── Name ────────────────────────────────────────────────────────── */}
+          {/* ── Name — plain only in the small popup ────────────────────────── */}
           <div className="flex items-center gap-1.5 px-4 pb-1">
-            <StyledUsername
-              name={profile.username}
-              styleKey={profile.nameStyleKey}
-              size="lg"
-            />
+            <span className="text-base font-black text-white leading-tight truncate">
+              {profile.username}
+            </span>
             {profile.role === "admin" && (
               <ShieldCheck className="h-4 w-4 shrink-0 text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]" />
             )}

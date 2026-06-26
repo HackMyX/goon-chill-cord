@@ -104,6 +104,53 @@ export async function invalidateAllSessions(userId: string): Promise<void> {
     .is("invalidated_at", null);
 }
 
+const STALE_WORLD_SESSION_MS = 5 * 60 * 1000; // 5 min without ping = stale world session
+
+/**
+ * Server-side gate: Can the user enter the world right now?
+ * Returns { allowed: true } if no other active session is flagged as in_world.
+ * Returns { allowed: false, blockedSince } if another session is actively in the world.
+ */
+export async function checkCanEnterWorld(
+  userId: string,
+  myToken: string
+): Promise<{ allowed: boolean; blockedSince?: string }> {
+  const admin = createAdminClient();
+  const stalecut = new Date(Date.now() - STALE_WORLD_SESSION_MS).toISOString();
+
+  // Find any other non-invalidated session for this user that is in_world AND was active recently
+  const { data: conflict } = await admin
+    .from("user_sessions")
+    .select("id, session_token, in_world_since")
+    .eq("user_id", userId)
+    .is("invalidated_at", null)
+    .eq("in_world", true)
+    .neq("session_token", myToken)
+    .gte("last_ping", stalecut)
+    .limit(1)
+    .maybeSingle();
+
+  if (conflict) return { allowed: false, blockedSince: conflict.in_world_since ?? undefined };
+  return { allowed: true };
+}
+
+/**
+ * Mark the session as actively inside the world (called when world-shell mounts).
+ */
+export async function setSessionInWorld(token: string, inWorld: boolean): Promise<void> {
+  if (!token || token.length < 10) return;
+  const admin = createAdminClient();
+  await admin
+    .from("user_sessions")
+    .update({
+      in_world: inWorld,
+      in_world_since: inWorld ? new Date().toISOString() : null,
+      last_ping: new Date().toISOString(),
+    })
+    .eq("session_token", token)
+    .is("invalidated_at", null);
+}
+
 /**
  * List non-invalidated sessions for a user (admin info panel).
  */

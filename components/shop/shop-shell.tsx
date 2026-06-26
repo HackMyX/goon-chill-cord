@@ -996,6 +996,22 @@ export function ShopShell({
         }}
         gl={{ alpha: true, antialias: true }}
         eventSource={shopRootRef as React.RefObject<HTMLElement>}
+        onCreated={({ gl, scene }) => {
+          const renderer = gl;
+          const rootScene = scene;
+          return () => {
+            rootScene.traverse((obj) => {
+              const mesh = obj as import("three").Mesh;
+              mesh.geometry?.dispose();
+              if (Array.isArray(mesh.material)) {
+                mesh.material.forEach((m) => m.dispose());
+              } else {
+                (mesh.material as import("three").Material | undefined)?.dispose();
+              }
+            });
+            renderer.dispose();
+          };
+        }}
       >
         <View.Port />
       </Canvas>

@@ -22,6 +22,8 @@ import {
   forfeitStreakOnDeath,
 } from "@/lib/actions/kill-streak";
 import { joinWorldRoom } from "@/lib/world-realtime";
+import { getSessionStatus, onSessionStatusChange } from "@/lib/session-status";
+import { checkCanEnterWorld, setSessionInWorld } from "@/lib/actions/session";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { PetTypeConfig } from "@/lib/pets";
 import type { KillStreakConfig } from "@/lib/kill-streak";
@@ -165,6 +167,10 @@ export function WorldShell({
   const [pendingStreakCr, setPendingStreakCr] = useState(0);
   const [streakKillCount, setStreakKillCount] = useState(0);
   const [respawnSignal, setRespawnSignal] = useState(0);
+  // null = still checking, true = allowed, false = blocked by another session
+  const [worldAllowed, setWorldAllowed] = useState<boolean | null>(null);
+  const [worldBlockReason, setWorldBlockReason] = useState<"same-browser" | "cross-device" | null>(null);
+  const sessionTokenRef = useRef<string | null>(null);
   const [deathStats, setDeathStats] = useState<{ forfeitedCr: number; forfeitedKillCount: number } | null>(null);
   // Seconds left in the "leaving the World" countdown, or null while no
   // disconnect is pending (this alone is the single source of truth for
@@ -524,10 +530,106 @@ export function WorldShell({
     enterWorld();
   }, []);
 
-  // Joins the shared World room's presence roster for the lifetime of this
-  // page — leaving /world (navigation or unmount) untracks, which is what
-  // makes this player's avatar disappear from every other open tab.
-  useEffect(() => joinWorldRoom(userId), [userId]);
+  // ── Multi-Tab / Cross-Device Session Enforcement ─────────────────────────
+  // Two layers of protection:
+  // 1. Client-side (same browser): Read SessionGuard status from the module
+  //    singleton. If "blocked", the overlay is already showing — don't join.
+  //    Wait up to 500ms for the async BroadcastChannel claim to resolve.
+  // 2. Server-side (cross-browser): checkCanEnterWorld() queries user_sessions
+  //    for any other active session that has in_world=true. If found, block.
+  useEffect(() => {
+    let cancelled = false;
+    let worldUntrack: (() => void) | null = null;
+
+    const LS_KEY = "goon_session_token_v1";
+    sessionTokenRef.current = localStorage.getItem(LS_KEY);
+
+    const enterIfAllowed = async (guardStatus: string) => {
+      if (cancelled) return;
+      if (guardStatus === "blocked") {
+        setWorldAllowed(false);
+        setWorldBlockReason("same-browser");
+        return;
+      }
+      if (guardStatus === "kicked") {
+        setWorldAllowed(false);
+        setWorldBlockReason("cross-device");
+        return;
+      }
+
+      // Server-side cross-browser check
+      try {
+        const result = await checkCanEnterWorld(userId, sessionTokenRef.current ?? "");
+        if (cancelled) return;
+        if (!result.allowed) {
+          setWorldAllowed(false);
+          setWorldBlockReason("cross-device");
+          return;
+        }
+      } catch {
+        // Server unreachable — optimistically allow (fail-open to avoid locking out users)
+      }
+      if (cancelled) return;
+
+      setWorldAllowed(true);
+      // Mark this session as in-world on the server
+      if (sessionTokenRef.current) {
+        setSessionInWorld(sessionTokenRef.current, true).catch(() => {});
+      }
+      // Join the realtime world room
+      worldUntrack = joinWorldRoom(userId);
+    };
+
+    const currentStatus = getSessionStatus();
+    if (currentStatus !== "idle" && currentStatus !== "taking_over") {
+      // Status is already settled
+      enterIfAllowed(currentStatus);
+    } else {
+      // Wait for SessionGuard to finish its 350ms BroadcastChannel claim
+      const timer = setTimeout(() => {
+        if (!cancelled) enterIfAllowed(getSessionStatus());
+      }, 450);
+      // Also subscribe in case it resolves before the timer
+      const unsub = onSessionStatusChange((s) => {
+        if (s !== "idle" && s !== "taking_over") {
+          clearTimeout(timer);
+          enterIfAllowed(s);
+          unsub();
+        }
+      });
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
+        unsub();
+        if (sessionTokenRef.current) {
+          setSessionInWorld(sessionTokenRef.current, false).catch(() => {});
+        }
+        worldUntrack?.();
+      };
+    }
+
+    return () => {
+      cancelled = true;
+      if (sessionTokenRef.current) {
+        setSessionInWorld(sessionTokenRef.current, false).catch(() => {});
+      }
+      worldUntrack?.();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  // Kick from world if session gets invalidated while inside
+  useEffect(() => {
+    return onSessionStatusChange((s) => {
+      if ((s === "kicked" || s === "blocked") && worldAllowed) {
+        setWorldAllowed(false);
+        setWorldBlockReason(s === "blocked" ? "same-browser" : "cross-device");
+        if (sessionTokenRef.current) {
+          setSessionInWorld(sessionTokenRef.current, false).catch(() => {});
+        }
+      }
+    });
+  }, [worldAllowed]);
 
   // The whole reason the canvas previously rendered tiny: this component
   // was nested inside several `flex flex-1` ancestors with no `min-h-0`
@@ -555,6 +657,55 @@ export function WorldShell({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // ── Blocked: another session is already in-world ─────────────────────────
+  if (worldAllowed === false) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
+        <div className="mx-4 w-full max-w-sm rounded-2xl border border-red-500/20 bg-zinc-900/95 p-8 text-center shadow-2xl">
+          <div className="mb-5 flex justify-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-red-500/15 ring-1 ring-red-500/30">
+              <ShieldHalf className="h-7 w-7 text-red-400" />
+            </div>
+          </div>
+          <h2 className="mb-2 text-lg font-black text-white">Farmwelt bereits aktiv</h2>
+          <p className="mb-6 text-sm leading-relaxed text-white/50">
+            {worldBlockReason === "same-browser"
+              ? "Dein Account ist in diesem Browser bereits in einem anderen Tab in der Farmwelt. Schließe den anderen Tab zuerst."
+              : "Dein Account ist bereits in der Farmwelt aktiv — auf einem anderen Gerät oder Browser. Verlasse dort zuerst die Welt."}
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-sm font-black text-white hover:bg-violet-500 transition-colors"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Erneut versuchen
+            </button>
+            <Link
+              href="/"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-sm font-semibold text-white/50 hover:bg-white/5 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Zurück zur Startseite
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Still checking session gate ───────────────────────────────────────────
+  if (worldAllowed === null) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-4 text-white/40">
+          <RotateCcw className="h-8 w-8 animate-spin" />
+          <span className="text-sm">Sitzung wird geprüft…</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={isMobile && !showPortraitGate ? "fixed inset-0 z-40 bg-black" : "flex h-dvh flex-col"}>
@@ -863,8 +1014,23 @@ export function WorldShell({
           dpr={[1, 2]}
           camera={{ position: [0, 2.6, 6], fov: 55 }}
           className="absolute inset-0"
-          onCreated={({ gl, size }) => {
+          onCreated={({ gl, size, scene }) => {
             debugLog("World", "canvas created", { size, pixelRatio: gl.getPixelRatio() });
+            // Cleanup WebGL context on unmount to prevent context leaks on mobile
+            const renderer = gl;
+            const rootScene = scene;
+            return () => {
+              rootScene.traverse((obj) => {
+                const mesh = obj as THREE.Mesh;
+                mesh.geometry?.dispose();
+                if (Array.isArray(mesh.material)) {
+                  mesh.material.forEach((m) => m.dispose());
+                } else {
+                  (mesh.material as THREE.Material | undefined)?.dispose();
+                }
+              });
+              renderer.dispose();
+            };
           }}
         >
           <Suspense fallback={null}>

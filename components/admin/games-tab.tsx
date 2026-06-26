@@ -20,6 +20,8 @@ import { MineConfigEditor } from "@/components/admin/mine-config-editor";
 import { SnakeLeaderboardEditor } from "@/components/admin/snake-leaderboard-editor";
 import { MineLeaderboardEditor } from "@/components/admin/mine-leaderboard-editor";
 import { PlinkoConfigEditor } from "@/components/admin/plinko-config-editor";
+import { PlinkoLeaderboardEditor } from "@/components/admin/plinko-leaderboard-editor";
+import { DonLeaderboardEditor } from "@/components/admin/don-leaderboard-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import type { ProfileRow } from "@/components/admin/admin-shell";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
@@ -271,8 +273,11 @@ export function GamesTab({
             )}
 
             {isOpen && game.id === "don" && (
-              <div className="border-t border-white/10 px-5 py-5">
+              <div className="flex flex-col gap-6 border-t border-white/10 px-5 py-5">
                 <DonConfigEditor config={donConfig} />
+                <div className="border-t border-white/8 pt-4">
+                  <DonLeaderboardEditor />
+                </div>
               </div>
             )}
 
@@ -295,8 +300,11 @@ export function GamesTab({
             )}
 
             {isOpen && game.id === "plinko" && (
-              <div className="border-t border-white/10 px-5 py-5">
+              <div className="flex flex-col gap-6 border-t border-white/10 px-5 py-5">
                 <PlinkoConfigEditor config={plinkoConfig} />
+                <div className="border-t border-white/8 pt-4">
+                  <PlinkoLeaderboardEditor />
+                </div>
               </div>
             )}
 

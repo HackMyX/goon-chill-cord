@@ -285,6 +285,8 @@ const COLUMN_CHECKS: Array<{
   { id: "col_bpt_display_mode",      category: "Battle Pass", table: "battle_pass_tiers",   col: "display_mode",           detail: "node scripts/add-bp-display-modes.cjs" },
   { id: "col_bpt_show_tier_name",    category: "Battle Pass", table: "battle_pass_tiers",   col: "show_tier_name",         detail: "node scripts/add-bp-display-modes.cjs" },
   { id: "col_bpt_show_tier_desc",    category: "Battle Pass", table: "battle_pass_tiers",   col: "show_tier_description",  detail: "node scripts/add-bp-display-modes.cjs" },
+  { id: "col_sess_in_world",         category: "Sessions",    table: "user_sessions",        col: "in_world",               detail: "node scripts/add-session-in-world.cjs" },
+  { id: "col_sess_in_world_since",   category: "Sessions",    table: "user_sessions",        col: "in_world_since",         detail: "node scripts/add-session-in-world.cjs" },
   { id: "col_profiles_prio_badges",  category: "Prio-Badges", table: "profiles",             col: "prio_badges",            detail: "node scripts/add-prio-badges.cjs" },
   { id: "col_siteconfig_max_prio",   category: "Prio-Badges", table: "site_config",          col: "max_prio_badges",        detail: "node scripts/add-prio-badges.cjs" },
   { id: "col_ubp_bp_xp",             category: "Battle Pass", table: "user_battle_passes",  col: "bp_xp",                  detail: "node scripts/add-bp-quests.cjs" },
