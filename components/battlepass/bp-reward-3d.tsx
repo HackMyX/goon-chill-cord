@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef } from "react";
+import { Suspense, useRef, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { View, PerspectiveCamera, ContactShadows } from "@react-three/drei";
@@ -20,46 +20,80 @@ function BpLights({ color = "#7c3aed" }: { color?: string }) {
 
 // ── Spinning disc / coin ──────────────────────────────────────────────────────
 
+// 5-point star shape, built once — embossed on the coin face.
+function useStarShape(outer = 0.24, inner = 0.11, spikes = 5) {
+  return useMemo(() => {
+    const s = new THREE.Shape();
+    for (let i = 0; i < spikes * 2; i++) {
+      const r = i % 2 === 0 ? outer : inner;
+      const a = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r;
+      if (i === 0) s.moveTo(x, y); else s.lineTo(x, y);
+    }
+    s.closePath();
+    return s;
+  }, [outer, inner, spikes]);
+}
+
 function SpinningCoin({ amount = 0 }: { amount?: number }) {
   const ref = useRef<THREE.Group>(null);
+  const star = useStarShape();
+  // Gentle tilt-wobble that NEVER turns fully edge-on (which made the old thin
+  // disc read as a cross/sword). The face stays toward the camera — premium look.
   useFrame(({ clock }) => {
     if (!ref.current) return;
-    ref.current.rotation.y = clock.elapsedTime * 1.4;
-    ref.current.position.y = Math.sin(clock.elapsedTime * 1.2) * 0.08;
+    const t = clock.elapsedTime;
+    ref.current.rotation.y = Math.sin(t * 0.9) * 0.55;
+    ref.current.rotation.z = Math.cos(t * 0.65) * 0.07;
+    ref.current.position.y = Math.sin(t * 1.2) * 0.06;
   });
-  const color = new THREE.Color("#f59e0b");
-  const emissive = new THREE.Color("#d97706");
-  return (
-    <group ref={ref}>
-      {/* Main coin */}
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.5, 0.5, 0.1, 32]} />
-        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.6} metalness={0.9} roughness={0.1} />
-      </mesh>
-      {/* Inner ring */}
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.35, 0.04, 12, 32]} />
-        <meshStandardMaterial color="#fef3c7" emissive="#fbbf24" emissiveIntensity={0.5} metalness={1} roughness={0.05} />
-      </mesh>
-      {/* Stacked coins below */}
-      {amount > 500 && (
-        <>
-          <mesh position={[0, -0.14, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.48, 0.48, 0.09, 32]} />
-            <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.4} metalness={0.9} roughness={0.12} />
-          </mesh>
-          <mesh position={[0, -0.27, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.46, 0.46, 0.09, 32]} />
-            <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.25} metalness={0.9} roughness={0.14} />
-          </mesh>
-        </>
-      )}
-      {amount >= 2000 && (
-        <mesh position={[0, -0.40, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.44, 0.44, 0.09, 32]} />
-          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.15} metalness={0.9} roughness={0.16} />
+
+  const gold = "#fbbf24";
+  const goldDeep = "#b45309";
+  const goldEmissive = "#f59e0b";
+  const rim = "#fffbeb";
+
+  // A single thick, premium coin facing the camera (face in the XY plane, so the
+  // cylinder is rotated to stand upright with its round face toward Z).
+  function Coin({ y = 0, r = 0.62, h = 0.16, dim = 1, withFace = true }: { y?: number; r?: number; h?: number; dim?: number; withFace?: boolean }) {
+    return (
+      <group position={[0, y, 0]}>
+        {/* Body */}
+        <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[r, r, h, 48]} />
+          <meshStandardMaterial color={gold} emissive={goldEmissive} emissiveIntensity={0.3 * dim} metalness={1} roughness={0.18} />
         </mesh>
-      )}
+        {/* Edge bevel ring */}
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[r, h * 0.5, 10, 48]} />
+          <meshStandardMaterial color={goldDeep} emissive={goldEmissive} emissiveIntensity={0.2 * dim} metalness={1} roughness={0.28} />
+        </mesh>
+        {withFace && (
+          <>
+            {/* Raised rim on the face */}
+            <mesh position={[0, 0, h * 0.5 + 0.001]}>
+              <torusGeometry args={[r * 0.82, 0.045, 14, 48]} />
+              <meshStandardMaterial color={rim} emissive="#fcd34d" emissiveIntensity={0.55} metalness={1} roughness={0.07} />
+            </mesh>
+            {/* Embossed star */}
+            <mesh position={[0, 0, h * 0.5 + 0.001]}>
+              <extrudeGeometry args={[star, { depth: 0.04, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2 }]} />
+              <meshStandardMaterial color={rim} emissive="#fde68a" emissiveIntensity={0.7} metalness={1} roughness={0.1} />
+            </mesh>
+          </>
+        )}
+      </group>
+    );
+  }
+
+  return (
+    <group ref={ref} rotation={[0.16, 0, 0]}>
+      <Coin y={0} />
+      {/* Stacked coins below for bigger amounts — chunky, no embossing */}
+      {amount > 500 && <Coin y={-0.2} r={0.58} h={0.14} dim={0.7} withFace={false} />}
+      {amount >= 2000 && <Coin y={-0.37} r={0.55} h={0.14} dim={0.5} withFace={false} />}
+      {amount >= 5000 && <Coin y={-0.53} r={0.52} h={0.14} dim={0.35} withFace={false} />}
     </group>
   );
 }

@@ -83,6 +83,41 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
   };
 }
 
+/**
+ * Fills name/type/rarity for "item" reward tiers from the real items table,
+ * using reward_item_id as the source of truth. Without this the 3D tile preview
+ * has no item to render (the denormalized reward_item_name column was never
+ * migrated), so specific-item rewards fell back to a flat placeholder icon.
+ * One batched query for all item rewards across the given tiers.
+ */
+async function enrichItemRewards(
+  admin: ReturnType<typeof createAdminClient>,
+  tiers: BattlePassTier[],
+): Promise<void> {
+  const ids = Array.from(new Set(
+    tiers
+      .filter((t) => t.rewardType === "item" && t.rewardItemId)
+      .map((t) => t.rewardItemId as string),
+  ));
+  if (ids.length === 0) return;
+
+  const { data: items } = await admin
+    .from("items")
+    .select("id, name, type, rarity")
+    .in("id", ids);
+  if (!items) return;
+
+  const byId = new Map(items.map((it) => [it.id as string, it]));
+  for (const t of tiers) {
+    if (t.rewardType !== "item" || !t.rewardItemId) continue;
+    const it = byId.get(t.rewardItemId);
+    if (!it) continue;
+    t.rewardItemName = (it.name as string | null) ?? t.rewardItemName;
+    t.rewardItemType = (it.type as string | null) ?? t.rewardItemType;
+    t.rewardItemRarity = ((it.rarity as Rarity | null) ?? t.rewardItemRarity) ?? null;
+  }
+}
+
 // ── user-facing ─────────────────────────────────────────────────────────────
 
 export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
@@ -104,6 +139,7 @@ export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
     .order("tier_number", { ascending: true });
 
   const tiers = (tierRows ?? []).map((r) => rowToTier(r as Record<string, unknown>));
+  await enrichItemRewards(admin, tiers);
   const pass = rowToPass(passRow as Record<string, unknown>, tiers);
 
   const supabase = await createClient();
@@ -182,6 +218,9 @@ export async function getActiveBattlePasses(): Promise<ActiveBpView[]> {
         .map((t) => rowToTier(t as Record<string, unknown>))
     );
   }
+
+  // Enrich item rewards across all passes (one batched query, patches by ref).
+  await enrichItemRewards(admin, Array.from(tiersByPass.values()).flat());
 
   const passes = passRows.map((p) =>
     rowToPass(p as Record<string, unknown>, tiersByPass.get(p.id as string) ?? [])
@@ -504,10 +543,24 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
     }
     rewardMsg = `Zufällig: ${picked.name} (${picked.rarity})`;
   } else if (rewardType === "badge") {
-    const badgeText = (t.reward_badge_text as string | null) ?? (t.reward_badge_key as string | null) ?? "";
-    if (badgeText) {
-      rewardMsg = `Badge: ${badgeText}`;
+    // Previously this branch ONLY set a display string and never granted the
+    // badge — claiming a badge tier gave the player nothing. Now it actually
+    // inserts into user_badges (idempotent), and fails the claim on error so
+    // the tier stays claimable.
+    const badgeKey = t.reward_badge_key as string | null;
+    const badgeText = (t.reward_badge_text as string | null) ?? badgeKey ?? "";
+    if (!badgeKey) {
+      return { success: false, error: "Diese Belohnung ist fehlerhaft konfiguriert (kein Badge hinterlegt). Bitte Admin informieren — der Tier wurde NICHT abgeholt." };
     }
+    const { error: badgeErr } = await admin.from("user_badges").upsert(
+      { user_id: user.id, badge_key: badgeKey },
+      { onConflict: "user_id,badge_key", ignoreDuplicates: true },
+    );
+    if (badgeErr) {
+      void logDebugEvent({ level: "error", scope: "battlepass:claim", message: "BP Badge-Grant fehlgeschlagen", detail: badgeErr.message, context: { userId: user.id, tierId, badgeKey } });
+      return { success: false, error: "Das Badge konnte nicht vergeben werden. Bitte erneut versuchen — der Tier wurde NICHT abgeholt." };
+    }
+    rewardMsg = `Badge: ${badgeText}`;
   } else if (rewardType === "xp_boost") {
     const days = (t.reward_xp_boost as number | null) ?? 1;
     if (days > 0 && ubp) {
