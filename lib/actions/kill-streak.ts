@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getMonsterTypes } from "@/lib/actions/monsters";
@@ -98,6 +99,7 @@ export async function updateKillStreakConfig(input: UpdateKillStreakConfigInput)
     return { success: false, error: "Speichern fehlgeschlagen — ist die Kill-Streak-Migration eingespielt?" };
   }
 
+  await broadcastLive("killstreak-live");
   revalidatePath("/admin");
   revalidatePath("/world");
   return { success: true };

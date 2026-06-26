@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { DEFAULT_WORLD_SESSION_CONFIG, type WorldSessionConfig } from "@/lib/world-session-config";
 
 interface WorldConfigRow {
@@ -68,6 +69,7 @@ export async function updateWorldSessionConfig(input: WorldSessionConfig): Promi
     return { success: false, error: "Speichern fehlgeschlagen — ist die world_config-Migration eingespielt?" };
   }
 
+  await broadcastLive("world-session-live");
   revalidatePath("/admin");
   revalidatePath("/world");
   return { success: true };

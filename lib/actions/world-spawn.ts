@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { DEFAULT_WORLD_SPAWN_CONFIG, type WorldSpawnConfig } from "@/lib/world-spawn-config";
 
 interface WorldSpawnRow {
@@ -103,6 +104,7 @@ export async function updateWorldSpawnConfig(input: WorldSpawnConfig): Promise<W
     return { success: false, error: "Speichern fehlgeschlagen — sind die Spawn-Spalten in world_config migriert?" };
   }
 
+  await broadcastLive("world-spawn-live");
   revalidatePath("/admin");
   revalidatePath("/world");
   return { success: true };

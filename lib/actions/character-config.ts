@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { broadcastLive } from "@/lib/realtime-broadcast";
 import { DEFAULT_CHARACTER_CONFIG, type CharacterConfig } from "@/lib/character-config";
 
 interface CharacterConfigRow {
@@ -134,6 +135,7 @@ export async function updateCharacterConfig(input: CharacterConfig): Promise<Cha
     return { success: false, error: "Speichern fehlgeschlagen — ist die character_config-Migration eingespielt?" };
   }
 
+  await broadcastLive("character-live");
   revalidatePath("/admin");
   revalidatePath("/world");
   return { success: true };

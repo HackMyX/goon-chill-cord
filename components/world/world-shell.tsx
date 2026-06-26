@@ -32,6 +32,11 @@ import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { useLiveConfig } from "@/lib/use-live-config";
+import { getWorldSpawnConfig } from "@/lib/actions/world-spawn";
+import { getWorldSessionConfig } from "@/lib/actions/world-session";
+import { getCharacterConfig } from "@/lib/actions/character-config";
+import { getKillStreakConfig } from "@/lib/actions/kill-streak";
 import { WorldSettingsPanel } from "@/components/world/world-settings-panel";
 import { loadWorldSettings, saveWorldSettings, type WorldSettings } from "@/lib/world-settings";
 import { setActiveKeybinds } from "@/components/world/use-keyboard-controls";
@@ -123,17 +128,29 @@ export function WorldShell({
   username,
   monsterTypes,
   petTypes,
-  killStreakConfig,
-  disconnectCountdownSec = 10,
-  pvpEnabled = true,
-  characterConfig,
-  spawnConfig,
+  killStreakConfig: initialKillStreakConfig,
+  disconnectCountdownSec: initialDisconnectCountdownSec = 10,
+  pvpEnabled: initialPvpEnabled = true,
+  characterConfig: initialCharacterConfig,
+  spawnConfig: initialSpawnConfig,
   isAdmin = false,
   isModerator = false,
   nameStyleKey = null,
   verified = false,
   prioBadges = [],
 }: WorldShellProps) {
+  // Live config (admin tweaks while players are in the world — no reload).
+  // Player stats (hp/stamina) are seeded once below and intentionally stay
+  // session-stable; combat params / spawn rules read these on each use.
+  const [spawnConfig, setSpawnConfig] = useState(initialSpawnConfig);
+  const [killStreakConfig, setKillStreakConfig] = useState(initialKillStreakConfig);
+  const [characterConfig, setCharacterConfig] = useState(initialCharacterConfig);
+  const [pvpEnabled, setPvpEnabled] = useState(initialPvpEnabled);
+  const [disconnectCountdownSec, setDisconnectCountdownSec] = useState(initialDisconnectCountdownSec);
+  useLiveConfig("world-spawn-live", getWorldSpawnConfig, setSpawnConfig);
+  useLiveConfig("killstreak-live", getKillStreakConfig, setKillStreakConfig);
+  useLiveConfig("character-live", getCharacterConfig, setCharacterConfig);
+  useLiveConfig("world-session-live", getWorldSessionConfig, (c) => { setPvpEnabled(c.pvpEnabled); setDisconnectCountdownSec(c.disconnectCountdownSec); });
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
     if (typeof row.credits === "number") setCredits(row.credits);
