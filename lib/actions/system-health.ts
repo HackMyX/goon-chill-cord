@@ -93,6 +93,8 @@ const REQUIRED_TABLES = [
   "game_leaderboard_config",
   // Music config singleton (run scripts/add-music-config.cjs)
   "music_config",
+  // Single-session enforcement (run scripts/add-user-sessions.cjs)
+  "user_sessions",
 ] as const;
 
 /** Tables that are optional (future features, not yet fully live). WARNUNG if missing. */

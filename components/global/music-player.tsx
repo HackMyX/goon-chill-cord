@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Music, VolumeX, Volume1, Volume2 } from "lucide-react";
 import { getMusicConfig } from "@/lib/actions/music";
+import { MusicSynth } from "@/lib/music-synth";
 import type { MusicConfig, MusicPageKey } from "@/lib/music-config";
 
 const LS_VOL   = "gn_music_vol";
@@ -32,9 +33,17 @@ function getPageKey(pathname: string): MusicPageKey {
 
 export function MusicPlayer() {
   const pathname   = usePathname();
-  const audioRef   = useRef<HTMLAudioElement | null>(null);
-  const fadeRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── File-based audio (non-synth:// tracks) ─────────────────────────────────
+  const audioRef       = useRef<HTMLAudioElement | null>(null);
+  const fadeRef        = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Synth tracks ────────────────────────────────────────────────────────────
+  const synthRef       = useRef<MusicSynth | null>(null);
+
+  // ── Shared state ────────────────────────────────────────────────────────────
   const activeUrlRef   = useRef<string | null>(null);
+  const activeIsSynth  = useRef(false);
   const interactedRef  = useRef(false);
   const pendingUrlRef  = useRef<string | null>(null);
 
@@ -52,12 +61,14 @@ export function MusicPlayer() {
   const configRef = useRef(config);
   configRef.current = config;
 
-  // ── Create audio element once on mount ──────────────────────────────────────
+  // ── Create audio element + synth instance once on mount ─────────────────────
   useEffect(() => {
     const audio = new Audio();
     audio.loop    = true;
     audio.preload = "auto";
     audioRef.current = audio;
+
+    synthRef.current = new MusicSynth();
 
     const savedVol   = localStorage.getItem(LS_VOL);
     const savedMuted = localStorage.getItem(LS_MUTED);
@@ -76,6 +87,8 @@ export function MusicPlayer() {
       audio.pause();
       audio.src = "";
       audioRef.current = null;
+      synthRef.current?.stop();
+      synthRef.current = null;
     };
   }, []);
 
@@ -84,7 +97,7 @@ export function MusicPlayer() {
     getMusicConfig().then(setConfig);
   }, []);
 
-  // ── Fade helpers ─────────────────────────────────────────────────────────────
+  // ── File-based fade helpers ──────────────────────────────────────────────────
   const clearFade = useCallback(() => {
     if (fadeRef.current) { clearInterval(fadeRef.current); fadeRef.current = null; }
   }, []);
@@ -121,28 +134,80 @@ export function MusicPlayer() {
 
   // ── Core: load & play a track URL ─────────────────────────────────────────
   const loadAndPlay = useCallback((url: string) => {
-    const audio = audioRef.current;
     const cfg   = configRef.current;
-    if (!audio || !cfg) return;
+    if (!cfg) return;
 
-    if (activeUrlRef.current === url && !audio.paused) return;
+    if (activeUrlRef.current === url) {
+      const alreadyPlaying = activeIsSynth.current
+        ? synthRef.current?.playing
+        : audioRef.current && !audioRef.current.paused;
+      if (alreadyPlaying) return;
+    }
 
+    const isSynth = url.startsWith("synth://");
     activeUrlRef.current = url;
-    audio.src = url;
-    audio.currentTime = 0;
-    audio.volume = 0;
-    audio.play()
-      .then(() => {
-        fadeIn(audio, mutedRef.current ? 0 : volumeRef.current, cfg.fadeInMs);
+    activeIsSynth.current = isSynth;
+
+    if (isSynth) {
+      // Stop file-based audio if it was playing
+      const audio = audioRef.current;
+      if (audio && !audio.paused) { clearFade(); audio.pause(); audio.src = ""; }
+
+      const targetVol = mutedRef.current ? 0 : volumeRef.current;
+      synthRef.current?.start(url, targetVol).then(() => {
         setIsPlaying(true);
-      })
-      .catch(() => {
+      }).catch(() => {
+        // AudioContext suspended (iOS) — will resume on next user gesture
         pendingUrlRef.current = url;
         activeUrlRef.current = null;
       });
-  }, [fadeIn]);
+    } else {
+      // Stop synth if it was playing
+      synthRef.current?.stop();
 
-  // ── Decide track for current pathname ──────────────────────────────────────
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      audio.src = url;
+      audio.currentTime = 0;
+      audio.volume = 0;
+      audio.play()
+        .then(() => {
+          fadeIn(audio, mutedRef.current ? 0 : volumeRef.current, cfg.fadeInMs);
+          setIsPlaying(true);
+        })
+        .catch(() => {
+          pendingUrlRef.current = url;
+          activeUrlRef.current = null;
+        });
+    }
+  }, [clearFade, fadeIn]);
+
+  // ── Stop current playback (synth or file) with fade ───────────────────────
+  const stopCurrent = useCallback((durationMs: number, onDone: () => void) => {
+    if (activeIsSynth.current) {
+      synthRef.current?.fadeOut(durationMs).then(() => {
+        setIsPlaying(false);
+        setTrackName(null);
+        activeUrlRef.current = null;
+        onDone();
+      });
+    } else {
+      const audio = audioRef.current;
+      if (audio && !audio.paused) {
+        fadeOut(audio, durationMs, () => {
+          setIsPlaying(false);
+          setTrackName(null);
+          activeUrlRef.current = null;
+          onDone();
+        });
+      } else {
+        onDone();
+      }
+    }
+  }, [fadeOut]);
+
+  // ── Decide track for current pathname ─────────────────────────────────────
   const applyRoute = useCallback((pn: string) => {
     const cfg = configRef.current;
     if (!cfg?.enabled) return;
@@ -150,36 +215,35 @@ export function MusicPlayer() {
     const pageKey = getPageKey(pn);
     const trackId = cfg.pageAssignments[pageKey] ?? null;
     const track   = trackId ? cfg.tracks.find((t) => t.id === trackId) : null;
-    const audio   = audioRef.current;
 
     if (!track) {
-      if (audio && !audio.paused) {
-        fadeOut(audio, cfg.fadeOutMs, () => {
-          setIsPlaying(false);
-          setTrackName(null);
-          activeUrlRef.current = null;
-        });
-      }
+      stopCurrent(cfg.fadeOutMs, () => {});
       return;
     }
 
     setTrackName(track.name);
 
-    if (!audio) return;
-    if (activeUrlRef.current === track.url && !audio.paused) return;
+    if (activeUrlRef.current === track.url) {
+      const stillPlaying = activeIsSynth.current
+        ? synthRef.current?.playing
+        : audioRef.current && !audioRef.current.paused;
+      if (stillPlaying) return;
+    }
 
-    if (!audio.paused && activeUrlRef.current !== track.url) {
-      fadeOut(audio, cfg.fadeOutMs, () => loadAndPlay(track.url));
+    if (activeUrlRef.current && activeUrlRef.current !== track.url) {
+      stopCurrent(cfg.fadeOutMs, () => loadAndPlay(track.url));
     } else {
       loadAndPlay(track.url);
     }
-  }, [fadeOut, loadAndPlay]);
+  }, [stopCurrent, loadAndPlay]);
 
-  // ── First user interaction — start music ─────────────────────────────────
+  // ── First user interaction — start music / resume iOS AudioContext ─────────
   useEffect(() => {
     const handler = () => {
       if (interactedRef.current) return;
       interactedRef.current = true;
+      // Resume synth context for iOS
+      synthRef.current?.resume();
       if (pendingUrlRef.current) {
         loadAndPlay(pendingUrlRef.current);
         pendingUrlRef.current = null;
@@ -215,9 +279,13 @@ export function MusicPlayer() {
 
   // ── Volume / mute live sync ────────────────────────────────────────────────
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || audio.paused) return;
-    audio.volume = muted ? 0 : volume;
+    const effectiveVol = muted ? 0 : volume;
+    if (activeIsSynth.current) {
+      synthRef.current?.setVolume(effectiveVol);
+    } else {
+      const audio = audioRef.current;
+      if (audio && !audio.paused) audio.volume = effectiveVol;
+    }
   }, [volume, muted]);
 
   const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -239,16 +307,19 @@ export function MusicPlayer() {
       const next = !prev;
       mutedRef.current = next;
       localStorage.setItem(LS_MUTED, String(next));
-      const audio = audioRef.current;
-      if (audio && !audio.paused) audio.volume = next ? 0 : volumeRef.current;
+      const effectiveVol = next ? 0 : volumeRef.current;
+      if (activeIsSynth.current) {
+        synthRef.current?.setVolume(effectiveVol);
+      } else {
+        const audio = audioRef.current;
+        if (audio && !audio.paused) audio.volume = effectiveVol;
+      }
       return next;
     });
   }, []);
 
   if (!config?.enabled) return null;
-  // showPlayerUI=false → music plays silently, no widget at all
   if (!config.showPlayerUI) return null;
-  // userCanControl=false → no widget shown to user
   if (!config.userCanControl) return null;
 
   const maxVol = config.maxUserVolume ?? 1;
@@ -260,7 +331,7 @@ export function MusicPlayer() {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Music icon — decorative */}
+      {/* Music icon */}
       <Music className={`h-3.5 w-3.5 shrink-0 ${isPlaying ? "text-purple-400 animate-pulse" : "text-zinc-600"}`} />
 
       {/* Mute toggle */}

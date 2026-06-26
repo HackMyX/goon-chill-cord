@@ -22,6 +22,7 @@ import { PatchnotePopupLoader } from "@/components/layout/patchnote-popup-loader
 import { GlobalBroadcast } from "@/components/global/global-broadcast";
 import { GenderGate } from "@/components/auth/gender-gate";
 import { MusicPlayer } from "@/components/global/music-player";
+import { SessionGuard } from "@/components/layout/session-guard";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -92,6 +93,7 @@ export default async function RootLayout({
         <GenderGate />
         <SupportButton />
         <MusicPlayer />
+        <SessionGuard />
         <PatchnotePopupLoader />
       </body>
     </html>
