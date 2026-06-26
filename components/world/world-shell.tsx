@@ -23,7 +23,7 @@ import {
 } from "@/lib/actions/kill-streak";
 import { joinWorldRoom } from "@/lib/world-realtime";
 import { getSessionStatus, onSessionStatusChange } from "@/lib/session-status";
-import { checkCanEnterWorld, setSessionInWorld } from "@/lib/actions/session";
+import { checkCanEnterWorld, setSessionInWorld, forceEnterWorld } from "@/lib/actions/session";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { PetTypeConfig } from "@/lib/pets";
 import type { KillStreakConfig } from "@/lib/kill-streak";
@@ -170,6 +170,7 @@ export function WorldShell({
   // null = still checking, true = allowed, false = blocked by another session
   const [worldAllowed, setWorldAllowed] = useState<boolean | null>(null);
   const [worldBlockReason, setWorldBlockReason] = useState<"same-browser" | "cross-device" | null>(null);
+  const [isForceEntering, setIsForceEntering] = useState(false);
   const sessionTokenRef = useRef<string | null>(null);
   const [deathStats, setDeathStats] = useState<{ forfeitedCr: number; forfeitedKillCount: number } | null>(null);
   // Seconds left in the "leaving the World" countdown, or null while no
@@ -531,21 +532,26 @@ export function WorldShell({
   }, []);
 
   // ── Multi-Tab / Cross-Device Session Enforcement ─────────────────────────
-  // Two layers of protection:
-  // 1. Client-side (same browser): Read SessionGuard status from the module
-  //    singleton. If "blocked", the overlay is already showing — don't join.
-  //    Wait up to 500ms for the async BroadcastChannel claim to resolve.
-  // 2. Server-side (cross-browser): checkCanEnterWorld() queries user_sessions
-  //    for any other active session that has in_world=true. If found, block.
   useEffect(() => {
     let cancelled = false;
     let worldUntrack: (() => void) | null = null;
+    let entered = false;
 
     const LS_KEY = "goon_session_token_v1";
     sessionTokenRef.current = localStorage.getItem(LS_KEY);
 
+    const doEnter = () => {
+      if (entered || cancelled) return;
+      entered = true;
+      setWorldAllowed(true);
+      if (sessionTokenRef.current) {
+        setSessionInWorld(sessionTokenRef.current, true).catch(() => {});
+      }
+      worldUntrack = joinWorldRoom(userId);
+    };
+
     const enterIfAllowed = async (guardStatus: string) => {
-      if (cancelled) return;
+      if (entered || cancelled) return;
       if (guardStatus === "blocked") {
         setWorldAllowed(false);
         setWorldBlockReason("same-browser");
@@ -557,7 +563,6 @@ export function WorldShell({
         return;
       }
 
-      // Server-side cross-browser check
       try {
         const result = await checkCanEnterWorld(userId, sessionTokenRef.current ?? "");
         if (cancelled) return;
@@ -567,36 +572,41 @@ export function WorldShell({
           return;
         }
       } catch {
-        // Server unreachable — optimistically allow (fail-open to avoid locking out users)
+        // Server unreachable — optimistically allow
       }
       if (cancelled) return;
-
-      setWorldAllowed(true);
-      // Mark this session as in-world on the server
-      if (sessionTokenRef.current) {
-        setSessionInWorld(sessionTokenRef.current, true).catch(() => {});
-      }
-      // Join the realtime world room
-      worldUntrack = joinWorldRoom(userId);
+      doEnter();
     };
 
+    // Settle SessionGuard: wait up to 500ms for BroadcastChannel claim
     const currentStatus = getSessionStatus();
-    if (currentStatus !== "idle" && currentStatus !== "taking_over") {
-      // Status is already settled
+    if (currentStatus === "blocked" || currentStatus === "kicked") {
+      // Already decided — no need to wait
       enterIfAllowed(currentStatus);
     } else {
-      // Wait for SessionGuard to finish its 350ms BroadcastChannel claim
-      const timer = setTimeout(() => {
-        if (!cancelled) enterIfAllowed(getSessionStatus());
-      }, 450);
-      // Also subscribe in case it resolves before the timer
+      let resolved = false;
       const unsub = onSessionStatusChange((s) => {
-        if (s !== "idle" && s !== "taking_over") {
+        if (resolved) return;
+        if (s === "active") {
+          resolved = true;
           clearTimeout(timer);
-          enterIfAllowed(s);
           unsub();
+          enterIfAllowed(s);
+        } else if (s === "blocked" || s === "kicked") {
+          resolved = true;
+          clearTimeout(timer);
+          unsub();
+          enterIfAllowed(s);
         }
       });
+      // Fallback: if SessionGuard doesn't fire within 600ms, proceed with current status
+      const timer = setTimeout(() => {
+        if (!resolved && !cancelled) {
+          resolved = true;
+          unsub();
+          enterIfAllowed(getSessionStatus());
+        }
+      }, 600);
       return () => {
         cancelled = true;
         clearTimeout(timer);
@@ -617,6 +627,17 @@ export function WorldShell({
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  // ── World heartbeat — keeps in_world=true fresh every 45 s ────────────────
+  useEffect(() => {
+    if (!worldAllowed) return;
+    const token = sessionTokenRef.current;
+    if (!token) return;
+    const id = setInterval(() => {
+      setSessionInWorld(token, true).catch(() => {});
+    }, 45_000);
+    return () => clearInterval(id);
+  }, [worldAllowed]);
 
   // Kick from world if session gets invalidated while inside
   useEffect(() => {
@@ -660,6 +681,23 @@ export function WorldShell({
 
   // ── Blocked: another session is already in-world ─────────────────────────
   if (worldAllowed === false) {
+    const handleForceEnter = async () => {
+      setIsForceEntering(true);
+      try {
+        const res = await forceEnterWorld(userId, sessionTokenRef.current ?? "");
+        if (res.allowed) {
+          setWorldBlockReason(null);
+          setWorldAllowed(true);
+          if (sessionTokenRef.current) {
+            setSessionInWorld(sessionTokenRef.current, true).catch(() => {});
+          }
+          joinWorldRoom(userId);
+        }
+      } catch {
+        setIsForceEntering(false);
+      }
+    };
+
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
         <div className="mx-4 w-full max-w-sm rounded-2xl border border-red-500/20 bg-zinc-900/95 p-8 text-center shadow-2xl">
@@ -672,9 +710,23 @@ export function WorldShell({
           <p className="mb-6 text-sm leading-relaxed text-white/50">
             {worldBlockReason === "same-browser"
               ? "Dein Account ist in diesem Browser bereits in einem anderen Tab in der Farmwelt. Schließe den anderen Tab zuerst."
-              : "Dein Account ist bereits in der Farmwelt aktiv — auf einem anderen Gerät oder Browser. Verlasse dort zuerst die Welt."}
+              : "Dein Account ist auf einem anderen Gerät/Browser noch in der Farmwelt. Wenn das Gerät nicht mehr erreichbar ist, kannst du die Sitzung hier übernehmen."}
           </p>
           <div className="flex flex-col gap-3">
+            {worldBlockReason !== "same-browser" && (
+              <button
+                onClick={handleForceEnter}
+                disabled={isForceEntering}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 py-3 text-sm font-black text-white hover:bg-amber-500 transition-colors disabled:opacity-50"
+              >
+                {isForceEntering ? (
+                  <RotateCcw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4" />
+                )}
+                {isForceEntering ? "Übernehme…" : "Sitzung übernehmen"}
+              </button>
+            )}
             <button
               onClick={() => window.location.reload()}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-sm font-black text-white hover:bg-violet-500 transition-colors"

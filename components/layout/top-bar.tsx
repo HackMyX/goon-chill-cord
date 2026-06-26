@@ -28,6 +28,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { createClient } from "@/lib/supabase/client";
 import { DEFAULT_TOPBAR_RIGHT_SLOTS } from "@/lib/site-config";
 import { LevelBadge } from "@/components/ui/level-badge";
+import { LevelMenuTrigger } from "@/components/ui/level-menu-modal";
 import { DailyQuestsTrigger } from "@/components/daily-quests/daily-quests-panel";
 
 interface TopBarProps {
@@ -278,9 +279,11 @@ export function TopBar({
         </motion.div>
 
         {liveLevel > 0 && (
-          <Link href="/account" onMouseEnter={sound.hover} onClick={sound.click} className="hidden sm:block [@media(max-height:600px)]:hidden">
-            <LevelBadge level={liveLevel} size="xs" />
-          </Link>
+          <LevelMenuTrigger level={liveLevel}>
+            <div onMouseEnter={sound.hover} className="hidden sm:block [@media(max-height:600px)]:hidden cursor-pointer">
+              <LevelBadge level={liveLevel} size="xs" />
+            </div>
+          </LevelMenuTrigger>
         )}
 
         {isAdmin && (

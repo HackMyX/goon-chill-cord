@@ -200,10 +200,23 @@ function TrackRow({
             <input
               type="text"
               value={track.url}
-              placeholder="/music/mein-track.mp3  oder  https://cdn.example.com/track.mp3"
+              placeholder="synth://arcade/1  ·  /music/track.mp3  ·  https://cdn.example.com/track.mp3"
               onChange={(e) => onChange({ ...track, url: e.target.value })}
-              className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60 placeholder-zinc-600"
+              className={`rounded-lg border bg-black/40 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-purple-400/60 placeholder-zinc-600 ${
+                !track.url ? "border-red-500/50" : "border-white/10"
+              }`}
             />
+            {!track.url && (
+              <p className="text-[10px] text-red-400">⚠ Leere URL — dieser Track wird nicht abgespielt.</p>
+            )}
+            {track.url && !track.url.startsWith("synth://") && !track.url.startsWith("/") && !track.url.startsWith("http") && (
+              <p className="text-[10px] text-amber-400">⚠ Unbekanntes URL-Format. Nutze <code>synth://</code>, <code>/music/…</code> oder eine direkte HTTPS-Audio-URL.</p>
+            )}
+            <p className="text-[10px] text-zinc-600">
+              <strong className="text-zinc-500">synth://</strong> = eingebauter Synthesizer (keine Dateien nötig) ·
+              <strong className="text-zinc-500"> /music/…</strong> = Datei in public/music/ ·
+              <strong className="text-zinc-500"> https://…</strong> = direkte Audio-URL (CORS erforderlich). YouTube/Spotify-Links funktionieren nicht.
+            </p>
           </div>
         </div>
       )}

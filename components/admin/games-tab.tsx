@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Box, Joystick, Pickaxe, Trophy, Coins, Dices, CircleDot,
   Loader2, Save, Check, LayoutList, ChevronUp, ChevronDown, Eye, EyeOff,
+  ShieldOff, CheckCircle2, AlertTriangle,
 } from "lucide-react";
+import { adminResetAllWorldSessions } from "@/lib/actions/session";
 import {
   getGameLeaderboardConfig,
   updateGameLeaderboardConfig,
@@ -58,6 +60,56 @@ interface GamesTabProps {
   snakeConfig: SnakeConfig;
   mineConfig: MineConfig;
   plinkoConfig: PlinkoConfig;
+}
+
+// ── Emergency: reset all in-world sessions ────────────────────────────────────
+
+function WorldSessionResetButton() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  async function handleReset() {
+    if (!confirm("Alle aktiven Farmwelt-Sitzungen in der DB zurücksetzen? Spieler werden nicht sofort rausgeworfen, können aber sofort neu beitreten.")) return;
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await adminResetAllWorldSessions();
+      setResult({ ok: true, msg: `${res.count} Sitzung(en) zurückgesetzt.` });
+    } catch (e) {
+      setResult({ ok: false, msg: e instanceof Error ? e.message : "Fehler" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-red-500/20 bg-red-500/[0.04] p-4">
+      <div className="flex items-center gap-2.5">
+        <ShieldOff className="h-5 w-5 text-red-400" />
+        <div>
+          <p className="text-sm font-bold text-zinc-100">Notfall: Farmwelt-Sitzungen zurücksetzen</p>
+          <p className="text-[11px] text-zinc-500 mt-0.5">
+            Setzt alle <code>in_world=true</code> Flags in der DB zurück. Nutzen wenn Spieler durch Ghost-Sessions ausgesperrt sind.
+          </p>
+        </div>
+      </div>
+      {result && (
+        <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${result.ok ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-red-500/30 bg-red-500/10 text-red-300"}`}>
+          {result.ok ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+          {result.msg}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={handleReset}
+        disabled={loading}
+        className="flex items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-bold text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-40"
+      >
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
+        {loading ? "Zurücksetzen…" : "Alle World-Sitzungen zurücksetzen"}
+      </button>
+    </div>
+  );
 }
 
 // ── Homepage leaderboard config section ──────────────────────────────────────
@@ -310,6 +362,7 @@ export function GamesTab({
 
             {isOpen && game.id === "world" && (
               <div className="flex flex-col gap-3 border-t border-white/10 px-5 py-5">
+                <WorldSessionResetButton />
                 <WorldSessionConfigEditor config={worldSessionConfig} />
                 <CharacterConfigEditor config={characterConfig} />
                 <WorldSpawnConfigEditor config={worldSpawnConfig} />

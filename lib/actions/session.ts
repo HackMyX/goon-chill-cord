@@ -104,7 +104,9 @@ export async function invalidateAllSessions(userId: string): Promise<void> {
     .is("invalidated_at", null);
 }
 
-const STALE_WORLD_SESSION_MS = 5 * 60 * 1000; // 5 min without ping = stale world session
+// Sessions inactive for > 90 s are considered ghost sessions (stale).
+// The world heartbeat pings every 45 s, so two missed pings = stale.
+const STALE_WORLD_SESSION_MS = 90 * 1000;
 
 /**
  * Server-side gate: Can the user enter the world right now?
@@ -118,14 +120,13 @@ export async function checkCanEnterWorld(
   const admin = createAdminClient();
   const stalecut = new Date(Date.now() - STALE_WORLD_SESSION_MS).toISOString();
 
-  // Find any other non-invalidated session for this user that is in_world AND was active recently
   const { data: conflict } = await admin
     .from("user_sessions")
     .select("id, session_token, in_world_since")
     .eq("user_id", userId)
     .is("invalidated_at", null)
     .eq("in_world", true)
-    .neq("session_token", myToken)
+    .neq("session_token", myToken || "__no_token__")
     .gte("last_ping", stalecut)
     .limit(1)
     .maybeSingle();
@@ -135,7 +136,41 @@ export async function checkCanEnterWorld(
 }
 
 /**
+ * Force-clear all in_world flags for a user then let them in.
+ * Used when a user knows their old session is a ghost and wants to override it.
+ */
+export async function forceEnterWorld(
+  userId: string,
+  myToken: string
+): Promise<{ allowed: boolean }> {
+  if (!userId) return { allowed: false };
+  const admin = createAdminClient();
+  // Clear in_world on all sessions for this user (including stale ghosts)
+  await admin
+    .from("user_sessions")
+    .update({ in_world: false, in_world_since: null })
+    .eq("user_id", userId)
+    .is("invalidated_at", null)
+    .eq("in_world", true);
+
+  // Now mark this session as in_world
+  if (myToken && myToken.length >= 10) {
+    await admin
+      .from("user_sessions")
+      .update({
+        in_world: true,
+        in_world_since: new Date().toISOString(),
+        last_ping: new Date().toISOString(),
+      })
+      .eq("session_token", myToken)
+      .is("invalidated_at", null);
+  }
+  return { allowed: true };
+}
+
+/**
  * Mark the session as actively inside the world (called when world-shell mounts).
+ * Also serves as the heartbeat — called every 45 s to keep the session fresh.
  */
 export async function setSessionInWorld(token: string, inWorld: boolean): Promise<void> {
   if (!token || token.length < 10) return;
@@ -149,6 +184,22 @@ export async function setSessionInWorld(token: string, inWorld: boolean): Promis
     })
     .eq("session_token", token)
     .is("invalidated_at", null);
+}
+
+/**
+ * Admin: Reset all in_world flags across all users.
+ * Emergency unlock for stuck ghost sessions.
+ */
+export async function adminResetAllWorldSessions(): Promise<{ count: number }> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("user_sessions")
+    .update({ in_world: false, in_world_since: null })
+    .eq("in_world", true)
+    .is("invalidated_at", null)
+    .select("id");
+  if (error) throw new Error(error.message);
+  return { count: data?.length ?? 0 };
 }
 
 /**

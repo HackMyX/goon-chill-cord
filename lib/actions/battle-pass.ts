@@ -1063,6 +1063,9 @@ export async function adminAutoFillBpTiers(
 
     const name = isMilestone ? `Meilenstein ${tierNumber}` : `Tier ${tierNumber}`;
 
+    const tierDisplayMode =
+      (config.milestoneAlways3D && isMilestone) ? "3d" : (config.defaultDisplayMode ?? "3d");
+
     rows.push({
       pass_id: passId,
       tier_number: tierNumber,
@@ -1080,6 +1083,9 @@ export async function adminAutoFillBpTiers(
       highlight_tier: isMilestone,
       description: null,
       icon,
+      display_mode: tierDisplayMode,
+      show_tier_name: true,
+      show_tier_description: true,
     });
   }
 

@@ -136,6 +136,9 @@ export function MusicPlayer() {
   const loadAndPlay = useCallback((url: string) => {
     const cfg   = configRef.current;
     if (!cfg) return;
+    // Guard against empty or obviously invalid URLs — these would cause the
+    // browser to request the current page as audio (→ 500/HTML response).
+    if (!url || url.trim() === "") return;
 
     if (activeUrlRef.current === url) {
       const alreadyPlaying = activeIsSynth.current
@@ -149,7 +152,6 @@ export function MusicPlayer() {
     activeIsSynth.current = isSynth;
 
     if (isSynth) {
-      // Stop file-based audio if it was playing
       const audio = audioRef.current;
       if (audio && !audio.paused) { clearFade(); audio.pause(); audio.src = ""; }
 
@@ -157,16 +159,25 @@ export function MusicPlayer() {
       synthRef.current?.start(url, targetVol).then(() => {
         setIsPlaying(true);
       }).catch(() => {
-        // AudioContext suspended (iOS) — will resume on next user gesture
         pendingUrlRef.current = url;
         activeUrlRef.current = null;
       });
     } else {
-      // Stop synth if it was playing
       synthRef.current?.stop();
 
       const audio = audioRef.current;
       if (!audio) return;
+
+      // Only accept direct audio file URLs (no HTML-page URLs, no YouTube etc.)
+      const isDirectAudio = (
+        url.startsWith("/") ||
+        url.startsWith("http://") ||
+        url.startsWith("https://")
+      );
+      if (!isDirectAudio) {
+        activeUrlRef.current = null;
+        return;
+      }
 
       audio.src = url;
       audio.currentTime = 0;

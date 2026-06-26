@@ -450,6 +450,42 @@ function AutoFillModal({
               <TrendingUp className="h-3.5 w-3.5" />
               Credit-Progression
             </button>
+            <button
+              onClick={() => setField("milestoneAlways3D", !config.milestoneAlways3D)}
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                config.milestoneAlways3D
+                  ? "border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-200"
+                  : "border-white/10 text-zinc-400 hover:border-white/30"
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Meilenstein immer 3D
+            </button>
+          </div>
+
+          {/* Default display mode */}
+          <div>
+            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Standard Vorschau-Modus</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {([
+                { val: "3d" as BpTileDisplayMode, label: "3D Live", icon: "🔄" },
+                { val: "auto" as BpTileDisplayMode, label: "Auto", icon: "⚙️" },
+                { val: "icon" as BpTileDisplayMode, label: "Nur Icon", icon: "🖼️" },
+              ]).map(({ val, label, icon }) => (
+                <button
+                  key={val}
+                  onClick={() => setField("defaultDisplayMode", val)}
+                  className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-center text-xs font-semibold transition-colors ${
+                    config.defaultDisplayMode === val
+                      ? "border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-200"
+                      : "border-white/10 text-zinc-400 hover:border-white/25"
+                  }`}
+                >
+                  <span className="text-base">{icon}</span>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Result */}

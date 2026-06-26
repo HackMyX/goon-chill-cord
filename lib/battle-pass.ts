@@ -230,6 +230,10 @@ export interface BpAutoFillConfig {
   eliteRatio: number;
   rarityProgression: boolean;
   creditProgression: boolean;
+  /** Default visual display mode applied to every generated tier. */
+  defaultDisplayMode: BpTileDisplayMode;
+  /** Whether milestone tiers (every N) get 3D display mode regardless of defaultDisplayMode. */
+  milestoneAlways3D: boolean;
 }
 
 export const DEFAULT_AUTOFILL_CONFIG: BpAutoFillConfig = {
@@ -244,4 +248,6 @@ export const DEFAULT_AUTOFILL_CONFIG: BpAutoFillConfig = {
   eliteRatio: 30,
   rarityProgression: true,
   creditProgression: true,
+  defaultDisplayMode: "3d",
+  milestoneAlways3D: true,
 };
