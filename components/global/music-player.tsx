@@ -10,13 +10,23 @@ const LS_VOL   = "gn_music_vol";
 const LS_MUTED = "gn_music_muted";
 
 function getPageKey(pathname: string): MusicPageKey {
-  if (pathname.startsWith("/snake"))     return "snake";
-  if (pathname.startsWith("/don"))       return "don";
-  if (pathname.startsWith("/world"))     return "world";
-  if (pathname.startsWith("/cases"))     return "cases";
-  if (pathname.startsWith("/shop"))      return "shop";
-  if (pathname.startsWith("/community")) return "community";
-  if (pathname.startsWith("/dashboard")) return "dashboard";
+  if (pathname.startsWith("/snake"))      return "snake";
+  if (pathname.startsWith("/don"))        return "don";
+  if (pathname.startsWith("/world"))      return "world";
+  if (pathname.startsWith("/cases"))      return "cases";
+  if (pathname.startsWith("/shop"))       return "shop";
+  if (pathname.startsWith("/community"))  return "community";
+  if (pathname.startsWith("/dashboard"))  return "dashboard";
+  if (pathname.startsWith("/plinko"))     return "plinko";
+  if (pathname.startsWith("/battlepass")) return "battlepass";
+  if (pathname.startsWith("/garderobe"))  return "garderobe";
+  if (pathname.startsWith("/auctions"))   return "auctions";
+  if (pathname.startsWith("/trading"))    return "trading";
+  if (pathname.startsWith("/surveys"))    return "surveys";
+  if (pathname.startsWith("/account"))    return "account";
+  if (pathname.startsWith("/mine"))       return "mine";
+  if (pathname.startsWith("/mod"))        return "mod";
+  if (pathname.startsWith("/admin"))      return "admin";
   return "homepage";
 }
 
@@ -26,14 +36,14 @@ export function MusicPlayer() {
   const fadeRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeUrlRef   = useRef<string | null>(null);
   const interactedRef  = useRef(false);
-  const pendingUrlRef  = useRef<string | null>(null); // track waiting for first interaction
+  const pendingUrlRef  = useRef<string | null>(null);
 
-  const [config, setConfig]     = useState<MusicConfig | null>(null);
-  const [volume, setVolume]     = useState(0.12);
-  const [muted, setMuted]       = useState(false);
+  const [config, setConfig]       = useState<MusicConfig | null>(null);
+  const [volume, setVolume]       = useState(0.12);
+  const [muted, setMuted]         = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [trackName, setTrackName] = useState<string | null>(null);
-  const [hovered, setHovered]   = useState(false);
+  const [hovered, setHovered]     = useState(false);
 
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
@@ -45,11 +55,10 @@ export function MusicPlayer() {
   // ── Create audio element once on mount ──────────────────────────────────────
   useEffect(() => {
     const audio = new Audio();
-    audio.loop     = true;
-    audio.preload  = "auto";
+    audio.loop    = true;
+    audio.preload = "auto";
     audioRef.current = audio;
 
-    // Restore user prefs from localStorage
     const savedVol   = localStorage.getItem(LS_VOL);
     const savedMuted = localStorage.getItem(LS_MUTED);
     if (savedVol !== null) {
@@ -83,8 +92,8 @@ export function MusicPlayer() {
   const fadeIn = useCallback((audio: HTMLAudioElement, targetVol: number, durationMs: number) => {
     clearFade();
     audio.volume = 0;
-    const steps  = Math.max(1, Math.round(durationMs / 50));
-    const step   = targetVol / steps;
+    const steps = Math.max(1, Math.round(durationMs / 50));
+    const step  = targetVol / steps;
     let v = 0;
     fadeRef.current = setInterval(() => {
       v = Math.min(v + step, targetVol);
@@ -116,7 +125,7 @@ export function MusicPlayer() {
     const cfg   = configRef.current;
     if (!audio || !cfg) return;
 
-    if (activeUrlRef.current === url && !audio.paused) return; // already playing this track
+    if (activeUrlRef.current === url && !audio.paused) return;
 
     activeUrlRef.current = url;
     audio.src = url;
@@ -128,7 +137,6 @@ export function MusicPlayer() {
         setIsPlaying(true);
       })
       .catch(() => {
-        // Autoplay blocked — keep pendingUrlRef so first-interaction handler retries
         pendingUrlRef.current = url;
         activeUrlRef.current = null;
       });
@@ -145,7 +153,6 @@ export function MusicPlayer() {
     const audio   = audioRef.current;
 
     if (!track) {
-      // No music for this page — fade out
       if (audio && !audio.paused) {
         fadeOut(audio, cfg.fadeOutMs, () => {
           setIsPlaying(false);
@@ -159,10 +166,9 @@ export function MusicPlayer() {
     setTrackName(track.name);
 
     if (!audio) return;
-    if (activeUrlRef.current === track.url && !audio.paused) return; // same track
+    if (activeUrlRef.current === track.url && !audio.paused) return;
 
     if (!audio.paused && activeUrlRef.current !== track.url) {
-      // Different track — crossfade
       fadeOut(audio, cfg.fadeOutMs, () => loadAndPlay(track.url));
     } else {
       loadAndPlay(track.url);
@@ -174,8 +180,6 @@ export function MusicPlayer() {
     const handler = () => {
       if (interactedRef.current) return;
       interactedRef.current = true;
-
-      // If a track was blocked by autoplay policy, retry it now
       if (pendingUrlRef.current) {
         loadAndPlay(pendingUrlRef.current);
         pendingUrlRef.current = null;
@@ -197,7 +201,7 @@ export function MusicPlayer() {
   // ── Route changes ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!config?.enabled) return;
-    if (!interactedRef.current) return; // not yet unlocked
+    if (!interactedRef.current) return;
     applyRoute(pathname);
   }, [pathname, config, applyRoute]);
 
@@ -206,7 +210,6 @@ export function MusicPlayer() {
     if (!config?.enabled) return;
     if (!interactedRef.current) return;
     applyRoute(pathname);
-  // Only fire when config first arrives (not on every pathname change — applyRoute effect handles that)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
 
@@ -218,7 +221,9 @@ export function MusicPlayer() {
   }, [volume, muted]);
 
   const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = parseFloat(e.target.value);
+    const cfg = configRef.current;
+    const max = cfg?.maxUserVolume ?? 1;
+    const v = Math.min(parseFloat(e.target.value), max);
     setVolume(v);
     volumeRef.current = v;
     localStorage.setItem(LS_VOL, String(v));
@@ -240,9 +245,13 @@ export function MusicPlayer() {
     });
   }, []);
 
-  // Don't render the player at all if music is globally disabled
   if (!config?.enabled) return null;
+  // showPlayerUI=false → music plays silently, no widget at all
+  if (!config.showPlayerUI) return null;
+  // userCanControl=false → no widget shown to user
+  if (!config.userCanControl) return null;
 
+  const maxVol = config.maxUserVolume ?? 1;
   const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.4 ? Volume1 : Volume2;
 
   return (
@@ -251,33 +260,37 @@ export function MusicPlayer() {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Music icon — decorative, always visible */}
+      {/* Music icon — decorative */}
       <Music className={`h-3.5 w-3.5 shrink-0 ${isPlaying ? "text-purple-400 animate-pulse" : "text-zinc-600"}`} />
 
       {/* Mute toggle */}
-      <button
-        type="button"
-        onClick={handleToggleMute}
-        className={`shrink-0 transition-colors ${muted ? "text-zinc-600 hover:text-zinc-400" : "text-zinc-300 hover:text-white"}`}
-        aria-label={muted ? "Stummschaltung aufheben" : "Musik stummschalten"}
-        title={muted ? "Stummschaltung aufheben" : "Stummschalten"}
-      >
-        <VolumeIcon className="h-3.5 w-3.5" />
-      </button>
+      {config.userCanMute && (
+        <button
+          type="button"
+          onClick={handleToggleMute}
+          className={`shrink-0 transition-colors ${muted ? "text-zinc-600 hover:text-zinc-400" : "text-zinc-300 hover:text-white"}`}
+          aria-label={muted ? "Stummschaltung aufheben" : "Musik stummschalten"}
+          title={muted ? "Stummschaltung aufheben" : "Stummschalten"}
+        >
+          <VolumeIcon className="h-3.5 w-3.5" />
+        </button>
+      )}
 
       {/* Volume slider */}
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={muted ? 0 : volume}
-        onChange={handleVolumeChange}
-        className="w-18 h-1 cursor-pointer accent-purple-400"
-        style={{ width: 72 }}
-        aria-label="Musiklautstärke"
-        title={`Lautstärke: ${Math.round((muted ? 0 : volume) * 100)}%`}
-      />
+      {config.userCanAdjustVolume && (
+        <input
+          type="range"
+          min={0}
+          max={maxVol}
+          step={0.01}
+          value={muted ? 0 : volume}
+          onChange={handleVolumeChange}
+          className="h-1 cursor-pointer accent-purple-400"
+          style={{ width: 72 }}
+          aria-label="Musiklautstärke"
+          title={`Lautstärke: ${Math.round((muted ? 0 : volume) * 100)}%`}
+        />
+      )}
 
       {/* Volume % */}
       <span className="w-6 text-right text-[10px] font-bold text-zinc-500 tabular-nums">
