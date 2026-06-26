@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Shield, Save, Loader2, Info, Trophy, Bot } from "lucide-react";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 function fmt(n: number) { return new Intl.NumberFormat("de-DE").format(n); }
 import { useSoundManager } from "@/lib/sound-manager";
@@ -74,6 +75,7 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
         <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
           <Shield className="h-5 w-5 text-sky-400" />
           Moderator-Berechtigungen
+          <AdminTooltip text="Diese Einstellungen gelten für ALLE Moderatoren gleichzeitig (globale Standard-Berechtigungen). Einzelne Mods können abweichende Berechtigungen über 'Nutzer-Management → Berechtigungen anpassen' erhalten. Admins haben immer vollen Zugriff, unabhängig von diesen Einstellungen." />
         </h3>
 
         <div className="flex flex-col gap-2">
@@ -129,6 +131,7 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
 
         <h3 className="mt-5 mb-3 flex items-center gap-2 text-sm font-bold text-zinc-300">
           Erweiterte Ticket-Berechtigungen
+          <AdminTooltip text="Erweiterte Aktionen rund um das Support-Ticket-System. Jede Berechtigung kann separat vergeben werden, um die Verantwortung aufzuteilen." />
         </h3>
         <div className="flex flex-col gap-2">
           <Toggle
@@ -169,6 +172,7 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
               <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
                 <Trophy className="h-3.5 w-3.5" />
                 Max. Belohnung pro Ticket (Credits, 0 = kein Limit)
+                <AdminTooltip text="Maximale Credits, die ein Moderator für ein einzelnes Ticket als Belohnung vergeben kann. 0 = kein Limit (Mods können beliebig viele Credits vergeben). Empfehlung: setze hier einen realistischen Wert um zu verhindern, dass Mods versehentlich oder absichtlich exzessive Belohnungen vergeben." />
               </span>
               <div className="flex items-center gap-2">
                 <input
@@ -189,6 +193,7 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
 
         <h3 className="mt-5 mb-3 flex items-center gap-2 text-sm font-bold text-zinc-300">
           Chat-Berechtigungen
+          <AdminTooltip text="Berechtigungen für Moderationsaktionen im globalen Chat. Chat-Leeren ist eine mächtige Funktion — vergib sie mit Bedacht." />
         </h3>
         <div className="flex flex-col gap-2">
           <Toggle

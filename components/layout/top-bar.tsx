@@ -28,6 +28,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { createClient } from "@/lib/supabase/client";
 import { DEFAULT_TOPBAR_RIGHT_SLOTS } from "@/lib/site-config";
 import { LevelBadge } from "@/components/ui/level-badge";
+import { DailyQuestsTrigger } from "@/components/daily-quests/daily-quests-panel";
 
 interface TopBarProps {
   credits: number;
@@ -181,6 +182,12 @@ export function TopBar({
             showLabel={topbarShowLabels}
             className="hidden xl:flex"
           />
+        );
+      case "quests":
+        return (
+          <div key="quests" className="hidden xl:flex">
+            <DailyQuestsTrigger userId={resolvedUserId ?? undefined} />
+          </div>
         );
       case "wardrobe":
         return (

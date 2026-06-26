@@ -8,6 +8,7 @@ import {
 import { useSoundManager } from "@/lib/sound-manager";
 import { updateChatConfig } from "@/lib/actions/global-chat";
 import type { ChatConfig } from "@/lib/mod";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 interface Props {
   initialConfig: ChatConfig;
@@ -92,6 +93,7 @@ export function ChatConfigEditor({ initialConfig }: Props) {
         <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
           <MessageSquare className="h-5 w-5 text-purple-400" />
           Allgemein
+          <AdminTooltip text="Grundlegende Chat-Einstellungen. Der globale Chat ist für alle eingeloggten Nutzer sichtbar. Admins und Mods können unabhängig von diesen Einstellungen immer schreiben und moderieren." />
         </h3>
         <div className="flex flex-col gap-2">
           <Toggle
@@ -114,12 +116,14 @@ export function ChatConfigEditor({ initialConfig }: Props) {
         <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
           <Clock className="h-5 w-5 text-sky-400" />
           Rate Limits
+          <AdminTooltip text="Schutzmechanismen gegen Spam und Flooding. Alle Limits gelten pro Nutzer. Admins und Mods sind davon ausgenommen." />
         </h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-zinc-400 flex items-center gap-1">
+            <span className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
               <Clock className="h-3 w-3" />
               Nachrichten-Cooldown (Sekunden)
+              <AdminTooltip text="Mindestwartezeit in Sekunden zwischen zwei Nachrichten desselben Nutzers. 0 = kein Cooldown. Empfehlung: 2–5 Sekunden. Verhindert Spam-Fluten und ist serverseitig erzwungen." />
             </span>
             <input
               type="number"
@@ -132,9 +136,10 @@ export function ChatConfigEditor({ initialConfig }: Props) {
             <p className="text-[10px] text-zinc-600">Minimale Wartezeit zwischen zwei Nachrichten</p>
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-zinc-400 flex items-center gap-1">
+            <span className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
               <Hash className="h-3 w-3" />
               Maximale Nachrichtenlänge (Zeichen)
+              <AdminTooltip text="Maximale Zeichenanzahl pro Nachricht. Nachrichten die länger sind werden am Zeichenlimit abgeschnitten, bevor sie gespeichert werden. Min: 50, Max: 2000. Empfehlung: 300–500 für angenehme Lesbarkeit." />
             </span>
             <input
               type="number"
@@ -154,6 +159,7 @@ export function ChatConfigEditor({ initialConfig }: Props) {
         <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
           <Zap className="h-5 w-5 text-amber-400" />
           Automatische Moderation
+          <AdminTooltip text="Automatische Inhaltsfilterung, die ohne manuelle Eingriffe im Hintergrund läuft. Ergänzt die manuelle Wortliste um KI-gestützte Muster-Erkennung." />
         </h3>
         <div className="flex flex-col gap-3">
           <Toggle
@@ -179,6 +185,7 @@ export function ChatConfigEditor({ initialConfig }: Props) {
         <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
           <AlertTriangle className="h-5 w-5 text-red-400" />
           Verbotene Wörter
+          <AdminTooltip text="Benutzerdefinierte Liste gesperrter Wörter und Phrasen. Jede Nachricht wird auf exakte Substring-Übereinstimmung geprüft (Groß/Kleinschreibung wird ignoriert). Nachrichten mit einem verbotenen Wort werden serverseitig blockiert und dem Nutzer zurückgegeben." />
           <span className="ml-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-normal text-zinc-500">
             {config.bannedWords.length}
           </span>

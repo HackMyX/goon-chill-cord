@@ -309,6 +309,11 @@ export async function claimDailyReward(): Promise<ClaimResult> {
     void incrementBpQuestProgress(user.id, "daily_login", 1);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementDailyQuestProgress } = await import("@/lib/actions/daily-quests");
+    void incrementDailyQuestProgress("daily_login", 1);
+  } catch { /* non-fatal */ }
+
   revalidatePath("/");
   revalidatePath("/account");
 

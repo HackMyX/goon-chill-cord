@@ -16,11 +16,14 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Loader2, ShieldCheck, BadgeCheck, Flame, Crown, Shield,
-  Copy, Check, ExternalLink, Calendar, AlertTriangle,
+  Copy, Check, ExternalLink, Calendar, AlertTriangle, ChevronDown,
+  Ban, Ticket, Swords, ShieldAlert,
 } from "lucide-react";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 import { getMinimalProfile, type MinimalProfile } from "@/lib/actions/community";
+import { getPopupModSummary, type PopupModSummary } from "@/lib/actions/mod";
+import { subscribeToPresence } from "@/lib/presence-client";
 
 // ── Context ─────────────────────────────────────────────────────────────────────
 
@@ -62,7 +65,7 @@ const ROLE_ICON: Record<string, typeof Crown> = {
 };
 
 const POPUP_W = 320;
-const POPUP_H = 390;
+const POPUP_H = 480;
 
 function calcPosition(anchor: DOMRect | null): CSSProperties {
   if (!anchor) {
@@ -85,6 +88,16 @@ function calcPosition(anchor: DOMRect | null): CSSProperties {
 
 // ── Popup card content ───────────────────────────────────────────────────────────
 
+const ACTION_LABEL: Record<string, string> = {
+  warn: "Verwarnung",
+  temp_ban: "Temp-Ban",
+  ban: "Ban",
+  unban: "Entsperrt",
+  credits_add: "Credits ±",
+  chat_clear: "Chat geleert",
+  note_add: "Notiz",
+};
+
 function PopupCard({
   userId,
   onClose,
@@ -96,6 +109,10 @@ function PopupCard({
   const [isElevated, setIsElevated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
+  const [modOpen, setModOpen] = useState(false);
+  const [modDetails, setModDetails] = useState<PopupModSummary | null>(null);
+  const [modLoading, setModLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -110,6 +127,24 @@ function PopupCard({
     });
     return () => { active = false; };
   }, [userId]);
+
+  // Subscribe to realtime presence to determine if user is online
+  useEffect(() => {
+    const unsubscribe = subscribeToPresence((onlineIds) => {
+      setIsOnline(onlineIds.has(userId));
+    });
+    return unsubscribe;
+  }, [userId]);
+
+  // Lazy-load mod details when section is expanded
+  useEffect(() => {
+    if (!modOpen || modDetails !== null || modLoading) return;
+    setModLoading(true);
+    getPopupModSummary(userId)
+      .then((data) => setModDetails(data))
+      .catch(() => setModDetails({ recentActions: [], openTicketCount: 0 }))
+      .finally(() => setModLoading(false));
+  }, [modOpen, modDetails, modLoading, userId]);
 
   const handleCopyId = () => {
     if (!profile) return;
@@ -173,7 +208,14 @@ function PopupCard({
                   {profile.username.charAt(0).toUpperCase()}
                 </div>
               )}
-              <span className="absolute bottom-0.5 right-0.5 h-3 w-3 rounded-full border-[2px] border-[#09090f] bg-emerald-500 shadow" />
+              <span
+                title={isOnline ? "Online" : "Offline"}
+                className={`absolute bottom-0.5 right-0.5 h-3 w-3 rounded-full border-[2px] border-[#09090f] transition-colors ${
+                  isOnline
+                    ? "bg-emerald-500 shadow-[0_0_6px_rgba(52,211,153,0.7)]"
+                    : "bg-zinc-600"
+                }`}
+              />
             </div>
 
             {/* Role badge */}
@@ -228,26 +270,126 @@ function PopupCard({
             {new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(new Date(profile.memberSince))}
           </div>
 
-          {/* ── Warning strikes — elevated only ───────────────────────────── */}
-          {isElevated && profile.warningStrikes > 0 && (
-            <div className="mx-4 mb-2 flex items-center gap-1.5 rounded-lg border border-red-800/40 bg-red-950/30 px-3 py-1.5 text-[10px] text-red-400">
-              <AlertTriangle className="h-3 w-3 shrink-0" />
-              {profile.warningStrikes} Verwarnung{profile.warningStrikes !== 1 ? "en" : ""}
-            </div>
-          )}
-
-          {/* ── Internal ID — admin/mod only ──────────────────────────────── */}
+          {/* ── Mod-Interface — elevated only ─────────────────────────────── */}
           {isElevated && (
-            <div className="mx-4 mb-3 flex items-center gap-1.5 rounded-lg border border-amber-900/30 bg-amber-950/20 px-2.5 py-1.5">
-              <span className="mr-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-700">ID</span>
-              <span className="flex-1 truncate font-mono text-[9px] text-amber-600/80">{profile.id}</span>
+            <div className="mx-4 mb-2">
+              {/* Collapsible header */}
               <button
-                onClick={handleCopyId}
-                className="shrink-0 rounded p-0.5 text-amber-700/70 transition-colors hover:text-amber-400"
-                title="ID kopieren"
+                onClick={() => setModOpen((o) => !o)}
+                className="flex w-full items-center gap-1.5 rounded-lg border border-violet-900/40 bg-violet-950/20 px-3 py-1.5 text-[10px] font-bold text-violet-400 transition-colors hover:bg-violet-950/35"
+                title="Mod-Details anzeigen/verbergen"
               >
-                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                <ShieldAlert className="h-3 w-3 shrink-0" />
+                <span className="flex-1 text-left">Mod-Interface</span>
+                {/* Quick badges: warnings + ban */}
+                {profile.warningStrikes > 0 && (
+                  <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-400">
+                    {profile.warningStrikes}×⚠
+                  </span>
+                )}
+                {profile.tempBannedUntil && new Date(profile.tempBannedUntil) > new Date() && (
+                  <span className="rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[9px] font-bold text-orange-400">
+                    Gebannt
+                  </span>
+                )}
+                <ChevronDown
+                  className={`h-3 w-3 shrink-0 transition-transform ${modOpen ? "rotate-180" : ""}`}
+                />
               </button>
+
+              {/* Expanded mod details */}
+              <AnimatePresence>
+                {modOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-1 space-y-1.5 rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+                      {/* Internal ID */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-amber-700">ID</span>
+                        <span className="flex-1 truncate font-mono text-[9px] text-amber-600/80">{profile.id}</span>
+                        <button
+                          onClick={handleCopyId}
+                          className="shrink-0 rounded p-0.5 text-amber-700/70 transition-colors hover:text-amber-400"
+                          title="ID kopieren"
+                        >
+                          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                      </div>
+
+                      {/* Stat row: warnings, tickets, ban */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex flex-1 items-center gap-1 rounded-lg bg-white/[0.03] px-2 py-1.5">
+                          <AlertTriangle className="h-2.5 w-2.5 text-red-400 shrink-0" />
+                          <span className="text-[9px] text-zinc-500">Verwarnungen</span>
+                          <span className="ml-auto text-[10px] font-bold text-red-400">{profile.warningStrikes}</span>
+                        </div>
+                        <div className="flex flex-1 items-center gap-1 rounded-lg bg-white/[0.03] px-2 py-1.5">
+                          <Ticket className="h-2.5 w-2.5 text-sky-400 shrink-0" />
+                          <span className="text-[9px] text-zinc-500">Tickets</span>
+                          <span className="ml-auto text-[10px] font-bold text-sky-400">
+                            {modLoading ? "…" : (modDetails?.openTicketCount ?? "—")}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Ban status */}
+                      {profile.tempBannedUntil ? (
+                        <div className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] ${
+                          new Date(profile.tempBannedUntil) > new Date()
+                            ? "border border-orange-800/40 bg-orange-950/30 text-orange-400"
+                            : "border border-zinc-800/40 bg-zinc-900/20 text-zinc-500"
+                        }`}>
+                          <Ban className="h-3 w-3 shrink-0" />
+                          {new Date(profile.tempBannedUntil) > new Date()
+                            ? `Gebannt bis ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(profile.tempBannedUntil))}`
+                            : `Temp-Ban abgelaufen (${new Intl.DateTimeFormat("de-DE", { dateStyle: "short" }).format(new Date(profile.tempBannedUntil))})`
+                          }
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-900/20 bg-emerald-950/10 px-2.5 py-1.5 text-[10px] text-emerald-600">
+                          <Shield className="h-3 w-3 shrink-0" />
+                          Kein aktiver Ban
+                        </div>
+                      )}
+
+                      {/* Recent mod actions */}
+                      {modLoading ? (
+                        <div className="flex items-center justify-center gap-1.5 py-2 text-[10px] text-zinc-600">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Lade Aktionen…
+                        </div>
+                      ) : modDetails && modDetails.recentActions.length > 0 ? (
+                        <div className="space-y-1">
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-600">Letzte Aktionen</p>
+                          {modDetails.recentActions.map((a) => (
+                            <div key={a.id} className="flex items-start gap-1.5 rounded-lg bg-white/[0.02] px-2 py-1">
+                              <Swords className="mt-0.5 h-2.5 w-2.5 shrink-0 text-zinc-600" />
+                              <div className="min-w-0 flex-1">
+                                <span className="text-[9px] font-semibold text-zinc-400">
+                                  {ACTION_LABEL[a.actionType] ?? a.actionType}
+                                </span>
+                                {a.reason && (
+                                  <span className="ml-1 text-[9px] text-zinc-600 truncate">— {a.reason}</span>
+                                )}
+                              </div>
+                              <span className="shrink-0 text-[8px] text-zinc-700 tabular-nums">
+                                {new Intl.DateTimeFormat("de-DE", { dateStyle: "short" }).format(new Date(a.createdAt))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (modDetails && modDetails.recentActions.length === 0) ? (
+                        <p className="text-center text-[9px] text-zinc-700 py-1">Keine Mod-Aktionen vorhanden</p>
+                      ) : null}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 

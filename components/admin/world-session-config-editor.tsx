@@ -6,6 +6,7 @@ import { updateWorldSessionConfig } from "@/lib/actions/world-session";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 /**
  * Admin config for the 3D World's session-level settings (lib/world-
@@ -42,12 +43,16 @@ export function WorldSessionConfigEditor({ config }: { config: WorldSessionConfi
         <div className="flex items-center gap-2">
           <Timer className="h-5 w-5 text-cyan-400" />
           <span className="text-base font-bold text-zinc-100">Session-Einstellungen</span>
+          <AdminTooltip text="Globale Schalter für die 3D-Farmwelt. Steuert, ob die Welt erreichbar ist und ob PvP zwischen Spielern aktiv ist. Der Disconnect-Timer bestimmt die Schutzdauer beim sauberen Verlassen der Welt." />
         </div>
       }
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold text-zinc-400">Disconnect-Timer (Sekunden)</span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+            Disconnect-Timer (Sekunden)
+            <AdminTooltip text="Nachdem ein Spieler auf 'Disconnect' klickt, läuft dieser Timer. Überlebt der Spieler die gesamte Zeit, wird seine Kill-Streak gespeichert. Stirbt er vorher, geht die Streak verloren. Verhindert 'Safe-Disconnect' kurz vor dem Tod. Empfehlung: 5–15 Sekunden." />
+          </span>
           <input
             type="number"
             min={1}
@@ -69,6 +74,7 @@ export function WorldSessionConfigEditor({ config }: { config: WorldSessionConfi
           <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
             <Power className="h-3.5 w-3.5" />
             World aktiviert
+            <AdminTooltip text="Master-Schalter für die 3D-Farmwelt. Wenn deaktiviert, werden reguläre Spieler beim Versuch /world zu öffnen auf die Startseite umgeleitet. Admins können die Welt trotzdem betreten (z.B. für Wartungsarbeiten)." />
           </span>
           <button
             type="button"
@@ -95,6 +101,7 @@ export function WorldSessionConfigEditor({ config }: { config: WorldSessionConfi
           <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
             <Swords className="h-3.5 w-3.5" />
             PvP aktiviert
+            <AdminTooltip text="Wenn deaktiviert, können Spieler sich gegenseitig nicht mehr beschädigen — Angriffe gegen andere Spieler treffen serverseitig nie (auch wenn clientseitig eine Animation abgespielt wird). Monster-Kämpfe sind unabhängig davon immer aktiv." />
           </span>
           <button
             type="button"

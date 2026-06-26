@@ -405,6 +405,12 @@ export async function submitSnakeScore(
     if (score > 0) void incrementBpQuestProgress(user.id, "snake_score", score);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementDailyQuestProgress } = await import("@/lib/actions/daily-quests");
+    void incrementDailyQuestProgress("snake_game", 1);
+    if (score > 0) void incrementDailyQuestProgress("snake_score", score);
+  } catch { /* non-fatal */ }
+
   revalidatePath("/snake");
   return {
     success: true,

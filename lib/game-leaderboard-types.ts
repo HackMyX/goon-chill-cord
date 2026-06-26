@@ -1,5 +1,6 @@
 export type GameLeaderboardListId =
-  | "snake_x1" | "snake_x2" | "snake_grind" | "snake_farm" | "mine";
+  | "snake_x1" | "snake_x2" | "snake_grind" | "snake_farm"
+  | "mine" | "plinko" | "world" | "cases" | "xp";
 
 export interface GameLeaderboardItem {
   id: GameLeaderboardListId;
@@ -31,4 +32,8 @@ export const DEFAULT_GAME_LEADERBOARD_CONFIG: GameLeaderboardItem[] = [
   { id: "snake_grind", label: "Snake Grind",       enabled: false, limit: 10, sort: 2 },
   { id: "snake_farm",  label: "Snake Endless",     enabled: false, limit: 10, sort: 3 },
   { id: "mine",        label: "Mine",              enabled: true,  limit: 10, sort: 4 },
+  { id: "plinko",      label: "Plinko",            enabled: true,  limit: 10, sort: 5 },
+  { id: "world",       label: "Farmwelt",          enabled: true,  limit: 10, sort: 6 },
+  { id: "cases",       label: "Cases",             enabled: false, limit: 10, sort: 7 },
+  { id: "xp",          label: "Level & XP",        enabled: false, limit: 10, sort: 8 },
 ];

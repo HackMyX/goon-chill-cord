@@ -54,7 +54,9 @@ async function tryDropNameStyle(
 
     const picked = eligible[Math.floor(Math.random() * eligible.length)];
 
-    // 5. Grant the style
+    // 5. Grant the style (ensure FK target exists first)
+    const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
+    await ensureStyleInDb(picked.key);
     const { error } = await supabase.from("user_name_styles").insert({
       user_id: userId,
       style_key: picked.key,
@@ -270,6 +272,11 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
   try {
     const { incrementBpQuestProgress } = await import("@/lib/actions/bp-quests");
     void incrementBpQuestProgress(user.id, "case_open", 1);
+  } catch { /* non-fatal */ }
+
+  try {
+    const { incrementDailyQuestProgress } = await import("@/lib/actions/daily-quests");
+    void incrementDailyQuestProgress("case_open", 1);
   } catch { /* non-fatal */ }
 
   // ── Name style bonus drop ─────────────────────────────────────────────────

@@ -170,6 +170,11 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
     void incrementBpQuestProgress(user.id, "pvp_hit", 1);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementDailyQuestProgress } = await import("@/lib/actions/daily-quests");
+    void incrementDailyQuestProgress("pvp_hit", 1);
+  } catch { /* non-fatal */ }
+
   // Broadcast is now done client-side via broadcastPvpDamage (world-realtime.ts)
   // using the same httpSend path as every other game event — the REST broadcast
   // endpoint (lib/realtime-server.ts) was silently dropping these messages.

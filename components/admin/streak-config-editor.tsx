@@ -6,6 +6,7 @@ import { updateStreakConfig } from "@/lib/actions/streak";
 import { computeStreakReward, type StreakConfig } from "@/lib/streak";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 const NUMBER_FIELDS: {
   key: keyof StreakConfig;
@@ -69,6 +70,7 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
           <h3 className="flex items-center gap-2 text-base font-bold text-zinc-100">
             <Flame className="h-5 w-5 text-orange-400" />
             Daily-Streak-Konfiguration
+            <AdminTooltip text="Konfiguriert das tägliche Einlog-Belohnungssystem. Nutzer erhalten täglich Credits, die mit jedem weiteren Tag (Streak) wachsen. Wird hier deaktiviert, können Nutzer keinen Tagesbonus mehr einlösen." />
           </h3>
           <button
             onMouseEnter={sound.hover}
@@ -84,7 +86,10 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {NUMBER_FIELDS.map((field) => (
             <label key={field.key as string} className="flex flex-col gap-1">
-              <span className="text-xs font-semibold text-zinc-400">{field.label}</span>
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+                {field.label}
+                <AdminTooltip text={field.hint} />
+              </span>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -100,12 +105,14 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
                   </span>
                 )}
               </div>
-              <span className="text-[11px] text-zinc-600">{field.hint}</span>
             </label>
           ))}
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-zinc-400">Verhalten bei verpasstem Tag</span>
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+              Verhalten bei verpasstem Tag
+              <AdminTooltip text="Was passiert, wenn ein Nutzer den täglichen Bonus nach Ablauf der Gnadenfrist nicht geclaimt hat. 'Zurücksetzen' setzt den Streak auf 1; 'Einfrieren' behält den Streak-Stand." />
+            </span>
             <select
               value={form.resetOnMiss ? "reset" : "freeze"}
               onChange={(e) => setField("resetOnMiss", e.target.value === "reset")}
@@ -114,7 +121,6 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
               <option value="reset" className="bg-[#0f0e18]">Streak zurücksetzen auf 1</option>
               <option value="freeze" className="bg-[#0f0e18]">Streak einfrieren (nicht zurücksetzen)</option>
             </select>
-            <span className="text-[11px] text-zinc-600">Außerhalb der Gnadenfrist</span>
           </label>
         </div>
 
@@ -137,35 +143,42 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
         <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
           <Eye className="h-5 w-5 text-purple-400" />
           Anzeige-Einstellungen (TopBar)
+          <AdminTooltip text="Steuert, welche Elemente im mittleren Bereich der oberen Navigationsleiste (TopBar) permanent angezeigt werden. Der 'Abholen'-Button für den Tagesbonus erscheint unabhängig davon immer, wenn eine Belohnung verfügbar ist." />
         </h3>
         <p className="mb-4 text-[11px] text-zinc-500">
           Steuert, was im mittleren Bereich der TopBar dauerhaft sichtbar ist. Die Claim-Schaltfläche erscheint immer, wenn eine Belohnung verfügbar ist.
         </p>
         <div className="flex flex-wrap gap-3">
-          <button
-            onMouseEnter={sound.hover}
-            onClick={() => setField("showCountdown", !form.showCountdown)}
-            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-colors ${
-              form.showCountdown
-                ? "border-purple-400/40 bg-purple-500/15 text-purple-200"
-                : "border-white/10 bg-white/[0.03] text-zinc-500 hover:border-white/20"
-            }`}
-          >
-            {form.showCountdown ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-            Countdown-Uhr (HH:MM:SS)
-          </button>
-          <button
-            onMouseEnter={sound.hover}
-            onClick={() => setField("showStreakCounter", !form.showStreakCounter)}
-            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-colors ${
-              form.showStreakCounter
-                ? "border-orange-400/40 bg-orange-500/15 text-orange-200"
-                : "border-white/10 bg-white/[0.03] text-zinc-500 hover:border-white/20"
-            }`}
-          >
-            {form.showStreakCounter ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-            Streak-Anzeige (🔥 X Tage)
-          </button>
+          <div className="group/tip relative flex items-center gap-2">
+            <button
+              onMouseEnter={sound.hover}
+              onClick={() => setField("showCountdown", !form.showCountdown)}
+              className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-colors ${
+                form.showCountdown
+                  ? "border-purple-400/40 bg-purple-500/15 text-purple-200"
+                  : "border-white/10 bg-white/[0.03] text-zinc-500 hover:border-white/20"
+              }`}
+            >
+              {form.showCountdown ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+              Countdown-Uhr (HH:MM:SS)
+            </button>
+            <AdminTooltip text="Zeigt in der TopBar einen Countdown bis zum nächsten verfügbaren Tagesbonus (Stunden:Minuten:Sekunden). Hilfreich für Nutzer, die genau wissen wollen, wann sie wieder einloggen müssen." />
+          </div>
+          <div className="group/tip relative flex items-center gap-2">
+            <button
+              onMouseEnter={sound.hover}
+              onClick={() => setField("showStreakCounter", !form.showStreakCounter)}
+              className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-colors ${
+                form.showStreakCounter
+                  ? "border-orange-400/40 bg-orange-500/15 text-orange-200"
+                  : "border-white/10 bg-white/[0.03] text-zinc-500 hover:border-white/20"
+              }`}
+            >
+              {form.showStreakCounter ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+              Streak-Anzeige (🔥 X Tage)
+            </button>
+            <AdminTooltip text="Zeigt in der TopBar die aktuelle Streak-Anzahl des Nutzers mit Flammen-Icon (z.B. '🔥 7 Tage'). Motiviert Nutzer dazu, täglich einzuloggen." />
+          </div>
         </div>
         <div className="mt-4 flex items-center gap-3">
           <button
@@ -187,6 +200,7 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
           <h3 className="flex items-center gap-2 text-base font-bold text-zinc-100">
             <Zap className="h-5 w-5 text-amber-400" />
             Sonder-Event
+            <AdminTooltip text="Ein zeitlich begrenztes Event, das alle täglichen Streak-Belohnungen mit einem Extra-Multiplikator versieht (z.B. doppelte Credits). Das Event ist unabhängig vom Wochenend-Bonus und stapelt sich mit ihm." />
           </h3>
           <button
             onMouseEnter={sound.hover}
@@ -206,7 +220,10 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-zinc-400">Event-Multiplikator</span>
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+              Event-Multiplikator
+              <AdminTooltip text="Faktor, mit dem alle Streak-Belohnungen während des Events multipliziert werden. 2.0 = doppelte Credits, 3.0 = dreifache Credits. Wirkt zusätzlich zum Wochenend-Bonus (beide stapeln sich)." />
+            </span>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -218,11 +235,13 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
               />
               <span className="flex-shrink-0 text-xs text-zinc-500">x</span>
             </div>
-            <span className="text-[11px] text-zinc-600">z.B. 2.0 für doppelte Credits</span>
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-zinc-400">Event-Label</span>
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+              Event-Label
+              <AdminTooltip text="Der Name oder die Beschreibung des Events, der im Streak-Popup und -Banner angezeigt wird. Kann Emojis enthalten (z.B. '🎉 Doppel-Credit-Wochenende'). Maximal ~40 Zeichen empfohlen." />
+            </span>
             <input
               type="text"
               value={form.specialEventLabel}
@@ -230,7 +249,6 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
               placeholder="z.B. Doppelte Credits 🎉"
               className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60"
             />
-            <span className="text-[11px] text-zinc-600">Wird im Streak-Banner angezeigt</span>
           </label>
         </div>
 

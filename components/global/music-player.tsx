@@ -320,10 +320,29 @@ export function MusicPlayer() {
 
   if (!config?.enabled) return null;
   if (!config.showPlayerUI) return null;
-  if (!config.userCanControl) return null;
 
+  const canControl = config.userCanControl;
   const maxVol = config.maxUserVolume ?? 1;
   const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.4 ? Volume1 : Volume2;
+
+  // Dictator mode: show a minimal "now playing" indicator without any controls
+  if (!canControl) {
+    if (!isPlaying) return null; // nothing to show if not playing
+    return (
+      <div
+        className="fixed bottom-4 left-4 z-[45] flex items-center gap-2 rounded-full border border-white/8 bg-black/50 px-3 py-1.5 shadow-lg backdrop-blur-md"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <Music className="h-3 w-3 shrink-0 text-purple-400 animate-pulse" />
+        {hovered && trackName && (
+          <span className="max-w-[120px] truncate text-[10px] text-zinc-500">
+            {trackName}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div

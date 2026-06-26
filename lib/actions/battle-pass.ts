@@ -511,6 +511,8 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
         .eq("style_key", styleKey)
         .maybeSingle();
       if (!alreadyOwned) {
+        const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
+        await ensureStyleInDb(styleKey, admin);
         await admin.from("user_name_styles").insert({
           user_id: user.id,
           style_key: styleKey,

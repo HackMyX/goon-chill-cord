@@ -6,6 +6,7 @@ import type { SoundConfig, SoundEventKey } from "@/lib/sound-config";
 import { SOUND_EVENT_META, AVAILABLE_SOUND_FILES } from "@/lib/sound-config";
 import { getSoundConfig, updateSoundConfig } from "@/lib/actions/sound-config";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 interface SoundConfigEditorProps {
   initialConfig: SoundConfig;
@@ -73,7 +74,10 @@ export function SoundConfigEditor({ initialConfig }: SoundConfigEditorProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Volume2 className="h-5 w-5 text-cyan-400" />
-          <h2 className="text-base font-bold text-zinc-100">Sound Manager</h2>
+          <h2 className="flex items-center gap-1.5 text-base font-bold text-zinc-100">
+            Sound Manager
+            <AdminTooltip text="Konfiguriert alle UI- und Spielgeräusche. Für jedes Ereignis (Event) kannst du: die Sounddatei wählen (aus /public/sounds/), die Lautstärke einstellen (0–1) und den Sound komplett deaktivieren. Test-Button spielt den Sound sofort ab. Änderungen gelten nach dem Speichern." />
+          </h2>
         </div>
         <div className="flex gap-2">
           <button

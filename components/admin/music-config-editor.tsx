@@ -13,7 +13,9 @@ import {
   DEFAULT_MUSIC_CONFIG, PAGE_LABELS, PAGE_ROUTES, VIBE_LABELS,
   type MusicConfig, type MusicTrack, type MusicPageKey, type MusicVibe,
 } from "@/lib/music-config";
+import { MusicSynth } from "@/lib/music-synth";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 // ── Vibe colors ────────────────────────────────────────────────────────────────
 
@@ -215,10 +217,12 @@ function SectionHeader({
   icon: Icon,
   title,
   subtitle,
+  tip,
 }: {
   icon: React.FC<{ className?: string }>;
   title: string;
   subtitle?: string;
+  tip?: string;
 }) {
   return (
     <div className="flex items-center gap-2.5 mb-4">
@@ -226,7 +230,10 @@ function SectionHeader({
         <Icon className="h-3.5 w-3.5 text-purple-400" />
       </div>
       <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">{title}</p>
+        <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-zinc-400">
+          {title}
+          {tip && <AdminTooltip text={tip} />}
+        </p>
         {subtitle && <p className="text-[10px] text-zinc-600">{subtitle}</p>}
       </div>
     </div>
@@ -247,8 +254,9 @@ export function MusicConfigEditor() {
   const [error, setError]     = useState<string | null>(null);
   const sound = useSoundManager();
 
-  // Preview audio
+  // Preview audio (file-based and synth)
   const previewAudioRef                 = useRef<HTMLAudioElement | null>(null);
+  const previewSynthRef                 = useRef<MusicSynth | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [previewState, setPreviewState] = useState<PreviewState>("idle");
 
@@ -261,13 +269,20 @@ export function MusicConfigEditor() {
 
   // Cleanup preview on unmount
   useEffect(() => {
-    return () => { previewAudioRef.current?.pause(); };
+    return () => {
+      previewAudioRef.current?.pause();
+      void previewSynthRef.current?.stop();
+    };
   }, []);
 
   const stopPreview = useCallback(() => {
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
       previewAudioRef.current = null;
+    }
+    if (previewSynthRef.current) {
+      void previewSynthRef.current.stop();
+      previewSynthRef.current = null;
     }
     setPreviewingId(null);
     setPreviewState("idle");
@@ -278,16 +293,27 @@ export function MusicConfigEditor() {
     stopPreview();
     if (!track.url) return;
 
-    const audio = new Audio(track.url);
-    audio.volume = Math.min(config.defaultVolume * 2, 0.4);
-    previewAudioRef.current = audio;
     setPreviewingId(track.id);
     setPreviewState("loading");
 
-    audio.addEventListener("playing", () => setPreviewState("playing"), { once: true });
-    audio.addEventListener("error",   () => { setPreviewingId(null); setPreviewState("error"); }, { once: true });
-    audio.addEventListener("ended",   () => { setPreviewingId(null); setPreviewState("idle"); },  { once: true });
-    audio.play().catch(() => { setPreviewingId(null); setPreviewState("error"); });
+    if (track.url.startsWith("synth://")) {
+      // Synthesized track — use MusicSynth (Web Audio API)
+      const synth = new MusicSynth();
+      previewSynthRef.current = synth;
+      synth.start(track.url, Math.min(config.defaultVolume * 2, 0.4))
+        .then(() => setPreviewState("playing"))
+        .catch(() => { setPreviewingId(null); setPreviewState("error"); });
+    } else {
+      // File-based track
+      const audio = new Audio(track.url);
+      audio.volume = Math.min(config.defaultVolume * 2, 0.4);
+      previewAudioRef.current = audio;
+
+      audio.addEventListener("playing", () => setPreviewState("playing"), { once: true });
+      audio.addEventListener("error",   () => { setPreviewingId(null); setPreviewState("error"); }, { once: true });
+      audio.addEventListener("ended",   () => { setPreviewingId(null); setPreviewState("idle"); },  { once: true });
+      audio.play().catch(() => { setPreviewingId(null); setPreviewState("error"); });
+    }
   }, [previewingId, stopPreview, config.defaultVolume]);
 
   const handleSave = useCallback(async () => {
@@ -379,7 +405,7 @@ export function MusicConfigEditor() {
 
       {/* ── System-Einstellungen ────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-        <SectionHeader icon={Settings} title="System-Einstellungen" subtitle="Globale Musik-Konfiguration" />
+        <SectionHeader icon={Settings} title="System-Einstellungen" subtitle="Globale Musik-Konfiguration" tip="Haupt-Schalter für das gesamte Hintergrundmusik-System. Wenn deaktiviert, spielt auf keiner Seite Musik. Das Player-Widget verschwindet ebenfalls. Einzelne Seiten können trotzdem leer gelassen werden (keine Musik)." />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <Toggle
@@ -400,7 +426,10 @@ export function MusicConfigEditor() {
         <div className="mt-5 flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <Volume2 className="h-4 w-4 text-zinc-500" />
-            <span className="text-sm text-zinc-300">Standard-Lautstärke</span>
+            <span className="flex items-center gap-1.5 text-sm text-zinc-300">
+              Standard-Lautstärke
+              <AdminTooltip text="Startlautstärke für alle neuen Besucher (0–100%). Nutzer mit gespeicherter Einstellung (localStorage) überschreiben diesen Wert mit ihrem eigenen. Empfehlung: 10–20% — niedriger Wert verhindert, dass Musik beim ersten Besuch erschreckt." />
+            </span>
             <span className="ml-auto text-sm font-bold text-purple-300 tabular-nums">
               {Math.round(config.defaultVolume * 100)}%
             </span>
@@ -419,7 +448,10 @@ export function MusicConfigEditor() {
         <div className="mt-5 grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-zinc-300">Fade-In</span>
+              <span className="flex items-center gap-1.5 text-sm text-zinc-300">
+                Fade-In
+                <AdminTooltip text="Zeit in Sekunden, in der die Musik beim Seitenwechsel sanft eingeblendet wird (0→Ziellautstärke). Zu kurz = abrupter Klang, zu lang = Musik kommt gefühlt gar nicht. Empfehlung: 1,2–2,0 Sekunden." />
+              </span>
               <span className="text-sm font-bold text-purple-300 tabular-nums">{(config.fadeInMs / 1000).toFixed(1)}s</span>
             </div>
             <input
@@ -432,7 +464,10 @@ export function MusicConfigEditor() {
           </div>
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-zinc-300">Fade-Out</span>
+              <span className="flex items-center gap-1.5 text-sm text-zinc-300">
+                Fade-Out
+                <AdminTooltip text="Zeit in Sekunden, in der die Musik beim Verlassen einer Seite ausgeblendet wird (Ziellautstärke→0). Zu kurz = abrupter Stop, zu lang = Musik klebt noch nach. Empfehlung: 0,5–1,0 Sekunden." />
+              </span>
               <span className="text-sm font-bold text-purple-300 tabular-nums">{(config.fadeOutMs / 1000).toFixed(1)}s</span>
             </div>
             <input
@@ -459,7 +494,7 @@ export function MusicConfigEditor() {
 
       {/* ── User-Steuerung ──────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-        <SectionHeader icon={UserCog} title="User-Steuerung" subtitle="Was dürfen normale User einstellen?" />
+        <SectionHeader icon={UserCog} title="User-Steuerung (Diktatur-Modus)" subtitle="Standard: AUS — User haben keine Kontrolle. Musik läuft immer auf Admin-Lautstärke." tip="Steuert, ob Nutzer die Musik selbst beeinflussen dürfen. Standard-Modus: alles AUS — Nutzer sehen weder Widget noch Regler. Die Musik läuft im Hintergrund auf der Admin-Lautstärke. Schalte die Optionen ein, wenn Nutzer Komfort beim Steuern der Musik bekommen sollen." />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <Toggle
@@ -487,7 +522,10 @@ export function MusicConfigEditor() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Volume2 className="h-4 w-4 text-zinc-500" />
-              <span className="text-sm text-zinc-300">Max. User-Lautstärke</span>
+              <span className="flex items-center gap-1.5 text-sm text-zinc-300">
+                Max. User-Lautstärke
+                <AdminTooltip text="Obergrenze: Nutzer können die Lautstärke nicht über diesen Prozentwert hinaus erhöhen. Verhindert, dass Nutzer die Musik sehr laut stellen. Nur wirksam wenn 'Lautstärke anpassen erlauben' aktiv ist. Standard: 100%." />
+              </span>
             </div>
             <span className="text-sm font-bold text-purple-300 tabular-nums">
               {Math.round(config.maxUserVolume * 100)}%
@@ -523,7 +561,7 @@ export function MusicConfigEditor() {
 
       {/* ── Musik pro Seite ─────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-        <SectionHeader icon={Music} title="Musik pro Seite" subtitle="Welcher Track läuft auf welcher Seite?" />
+        <SectionHeader icon={Music} title="Musik pro Seite" subtitle="Welcher Track läuft auf welcher Seite?" tip="Weise jeder Seite einen Track zu. Wenn eine Seite keinen Track hat (— Kein Musik —), wird beim Navigieren dorthin die Musik ausgeblendet. Tracks wechseln mit sanftem Fade-Out/Fade-In. Dieselbe Track-ID auf mehreren Seiten = Musik läuft nahtlos weiter ohne Neustart." />
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {PAGE_ROUTES.map((pageKey) => {
             const Icon = PAGE_ICONS[pageKey];

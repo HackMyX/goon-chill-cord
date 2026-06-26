@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
 import {
   Crown, Eye, Zap, Lock, CheckCircle2, Star, Calendar, Award, Layers, Gift,
   Sparkles, ChevronLeft, ChevronRight, Clock, Coins, TrendingUp, Shield,
@@ -148,13 +148,15 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
 };
 
 function TileMiniPreview({
-  tier, trackColor, locked, animated, scale,
+  tier, trackColor, locked, animated, scale, offsetX = 0, offsetY = 0,
 }: {
   tier: BattlePassTier;
   trackColor: string;
   locked: boolean;
   animated: boolean;
   scale: number;
+  offsetX?: number;
+  offsetY?: number;
 }) {
   const rarity = tier.rewardItemRarity ?? "normal";
   const rarityColor = RARITY_COLORS[rarity] ?? "#94a3b8";
@@ -163,9 +165,10 @@ function TileMiniPreview({
   const isMythisch = rarity === "mythisch";
 
   const baseStyle: React.CSSProperties = {
-    transform: `scale(${scale})`,
+    transform: `scale(${scale}) translate(${offsetX / scale}px, ${offsetY / scale}px)`,
     filter: locked ? "grayscale(1) brightness(0.3)" : undefined,
     transition: "filter 0.2s",
+    transformOrigin: "center",
   };
 
   // ── Credits ──────────────────────────────────────────────────────────────────
@@ -381,8 +384,8 @@ function RewardPreviewCard({ tier, accent, glow }: { tier: BattlePassTier; accen
     const amount = (tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1);
     return (
       <div className="flex flex-col items-center gap-4">
-        <div className="relative flex items-center justify-center">
-          {/* Stacked coin effect */}
+        {/* Explicit 80px height prevents coins from being clipped at the top */}
+        <div className="relative" style={{ width: 80, height: 80 }}>
           {[...Array(3)].map((_, i) => (
             <motion.div
               key={i}
@@ -390,18 +393,19 @@ function RewardPreviewCard({ tier, accent, glow }: { tier: BattlePassTier; accen
               style={{
                 width: 56 + i * 4,
                 height: 56 + i * 4,
-                background: `radial-gradient(circle at 35% 35%, #fde68a, #f59e0b, #78350f)`,
-                boxShadow: `0 0 ${10 + i * 8}px rgba(245,158,11,${0.3 + i * 0.1})`,
                 bottom: i * 3,
+                left: `calc(50% - ${(56 + i * 4) / 2}px)`,
+                background: `radial-gradient(circle at 35% 35%, #fef3c7, #fde68a, #f59e0b, #78350f)`,
+                boxShadow: `0 0 ${10 + i * 10}px rgba(245,158,11,${0.35 + i * 0.12}), inset 0 -2px 4px rgba(0,0,0,0.3)`,
                 zIndex: 3 - i,
               }}
-              animate={{ y: [0, -2, 0] }}
+              animate={{ y: [0, -3, 0] }}
               transition={{ duration: 2 + i * 0.5, repeat: Infinity, delay: i * 0.3, ease: "easeInOut" }}
             />
           ))}
-          <span className="relative z-10 text-2xl">💰</span>
+          <span className="absolute left-1/2 bottom-2.5 -translate-x-1/2 z-10 text-2xl">💰</span>
         </div>
-        <div className="text-center mt-8">
+        <div className="text-center">
           <p className="text-3xl font-black text-amber-300 tabular-nums">{amount.toLocaleString("de-DE")}</p>
           <p className="text-xs text-white/40 font-bold">Credits</p>
         </div>
@@ -943,146 +947,224 @@ function TrackTileCard({
   const rarity = tier.rewardItemRarity ?? "normal";
   const rarityOverride = visualConfig.rarityColorOverrides?.[rarity];
   const effectiveTrackColor = rarityOverride ?? trackColor;
+  const tileW = isMilestone ? (visualConfig.milestoneTileWidth ?? 172) : (visualConfig.normalTileWidth ?? 140);
+  const tileH = isMilestone ? (visualConfig.milestoneTileHeight ?? 284) : (visualConfig.normalTileHeight ?? 228);
+  const glassOpacity = visualConfig.glassmorphismIntensity ?? 0.5;
+  const milestoneGlow = visualConfig.milestoneGlowIntensity ?? 0.6;
+  const previewH = Math.max(72, tileH - 116);
+
+  // 3D tilt effect
+  const cardRef = useRef<HTMLDivElement>(null);
+  const rotX = useMotionValue(0);
+  const rotY = useMotionValue(0);
+  const springRotX = useSpring(rotX, { stiffness: 220, damping: 22 });
+  const springRotY = useSpring(rotY, { stiffness: 220, damping: 22 });
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!(visualConfig.enableTiltEffect ?? true) || !cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    rotX.set(-y * 14);
+    rotY.set(x * 14);
+  };
+  const handleMouseLeave = () => { rotX.set(0); rotY.set(0); };
+
+  // Track type detection for richer visual treatment
+  const isPremiumTier = tier.isPremium && !tier.isElite;
+  const isEliteTier = tier.isElite;
+
+  // Border style — stronger glow for milestone + premium/elite available tiles
+  const borderStyle = isSelected
+    ? {
+        borderColor: effectiveTrackColor,
+        boxShadow: `0 0 0 2px ${effectiveTrackColor}, 0 0 60px ${glow}, inset 0 0 20px ${effectiveTrackColor}12, inset 0 0 0 1px ${effectiveTrackColor}50`,
+      }
+    : isAvailable
+      ? isMilestone
+        ? {
+            borderColor: `${effectiveTrackColor}90`,
+            boxShadow: `0 0 ${Math.round(milestoneGlow * 80)}px ${glow}, 0 8px 40px ${glow}60, inset 0 0 30px ${effectiveTrackColor}12, inset 0 0 0 1px ${effectiveTrackColor}30`,
+          }
+        : (isPremiumTier || isEliteTier)
+          ? {
+              borderColor: `${effectiveTrackColor}80`,
+              boxShadow: `0 6px 40px ${glow}60, 0 0 24px ${glow}30, inset 0 0 16px ${effectiveTrackColor}10, inset 0 0 0 1px ${effectiveTrackColor}25`,
+            }
+          : { borderColor: `${effectiveTrackColor}60`, boxShadow: `0 6px 28px ${glow}40, inset 0 0 0 1px ${effectiveTrackColor}18` }
+      : isClaimed
+        ? { borderColor: "rgba(52,211,153,0.28)", boxShadow: "0 3px 16px rgba(52,211,153,0.10), inset 0 0 0 1px rgba(52,211,153,0.10)" }
+        : { borderColor: "rgba(255,255,255,0.05)", boxShadow: "none" };
+
+  // Richer glass gradient for premium/elite
+  const bgStyle = isAvailable
+    ? isMilestone
+      ? `linear-gradient(170deg, ${effectiveTrackColor}30 0%, ${effectiveTrackColor}10 45%, rgba(0,0,0,0.50) 100%)`
+      : (isPremiumTier || isEliteTier)
+        ? `linear-gradient(170deg, ${effectiveTrackColor}26 0%, ${effectiveTrackColor}0c 50%, rgba(0,0,0,0.55) 100%)`
+        : `linear-gradient(170deg, ${effectiveTrackColor}1c 0%, ${effectiveTrackColor}08 55%, rgba(0,0,0,0.55) 100%)`
+    : isClaimed
+      ? "linear-gradient(170deg, rgba(52,211,153,0.08) 0%, rgba(0,0,0,0.55) 100%)"
+      : "linear-gradient(170deg, rgba(255,255,255,0.025) 0%, rgba(0,0,0,0.65) 100%)";
 
   return (
     <motion.div
+      ref={cardRef}
       onClick={onClick}
-      whileHover={{ y: -5, scale: 1.04 }}
-      whileTap={{ scale: 0.96 }}
-      className={`relative flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl border transition-all duration-200 ${
-        isMilestone ? "w-40 h-64" : "w-32 h-52"
-      }`}
-      style={
-        isAvailable
-          ? {
-              borderColor: `${trackColor}90`,
-              background: `linear-gradient(160deg, ${trackColor}28 0%, ${trackColor}10 60%, transparent 100%)`,
-              boxShadow: isSelected
-                ? `0 0 0 2px ${trackColor}, 0 0 36px ${glow}90`
-                : `0 0 24px ${glow}55`,
-            }
-          : isClaimed
-            ? { borderColor: "rgba(52,211,153,0.35)", background: "rgba(52,211,153,0.05)", boxShadow: "0 0 12px rgba(52,211,153,0.08)" }
-            : { borderColor: "rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.01)" }
-      }
+      whileTap={{ scale: 0.95 }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      style={{
+        rotateX: springRotX,
+        rotateY: springRotY,
+        transformPerspective: 900,
+        width: tileW,
+        height: tileH,
+        flexShrink: 0,
+        ...borderStyle,
+        background: bgStyle,
+        backdropFilter: glassOpacity > 0 ? `blur(${Math.round(glassOpacity * 12)}px)` : undefined,
+        WebkitBackdropFilter: glassOpacity > 0 ? `blur(${Math.round(glassOpacity * 12)}px)` : undefined,
+      }}
+      className="relative cursor-pointer rounded-3xl border transition-colors duration-200"
     >
-      {/* Milestone treatment */}
-      {isMilestone && (
-        <>
-          {/* Thick gradient top bar */}
-          <div
-            className="absolute top-0 inset-x-0 h-2 rounded-t-2xl z-20"
-            style={{ background: `linear-gradient(90deg, transparent, ${trackColor}, #ffffffcc, ${trackColor}, transparent)` }}
-          />
-          <motion.div
-            className="absolute top-0 inset-x-0 h-2 rounded-t-2xl z-20"
-            animate={{ opacity: [0, 0.9, 0] }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-            style={{ background: `linear-gradient(90deg, transparent, #ffffffdd, transparent)` }}
-          />
-          {/* Pulsing border glow */}
-          <motion.div
-            className="pointer-events-none absolute inset-0 rounded-2xl z-10"
-            animate={{
-              boxShadow: [
-                `inset 0 0 0 1px ${trackColor}40`,
-                `inset 0 0 0 2px ${trackColor}aa`,
-                `inset 0 0 0 1px ${trackColor}40`,
-              ],
-            }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          />
-          {/* Milestone label */}
-          <div className="absolute top-3 inset-x-0 flex justify-center z-20">
-            <span
-              className="rounded-full px-2 py-px text-[7px] font-black uppercase tracking-[0.15em]"
-              style={{ background: `${trackColor}20`, color: trackColor, border: `1px solid ${trackColor}50` }}
-            >
-              ★ MILESTONE
-            </span>
-          </div>
-        </>
-      )}
-
-      {/* Shimmer on available */}
-      {isAvailable && (
-        <>
-          <motion.div
-            className="pointer-events-none absolute inset-0 rounded-2xl"
-            animate={{ opacity: [0, 0.7, 0] }}
-            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-            style={{ background: `linear-gradient(135deg, ${trackColor}35, transparent 55%)` }}
-          />
-          {/* Diagonal scan line */}
-          <motion.div
-            className="pointer-events-none absolute left-0 right-0 h-8"
-            animate={{ top: ["-15%", "115%"] }}
-            transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.5 }}
-            style={{ background: `linear-gradient(180deg, transparent, ${trackColor}22, transparent)` }}
-          />
-          {/* Corner spark for non-milestone */}
-          {!isMilestone && (
-            <motion.div
-              className="pointer-events-none absolute top-0 right-0 h-8 w-8 rounded-tr-2xl"
-              animate={{ opacity: [0, 0.5, 0] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-              style={{ background: `radial-gradient(circle at top right, ${trackColor}60, transparent 70%)` }}
+      {/* ── Isolated overflow layer for ALL decorative animations ── */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
+        {/* Milestone top shine bar */}
+        {isMilestone && (
+          <>
+            <div
+              className="absolute top-0 inset-x-0 h-[3px]"
+              style={{ background: `linear-gradient(90deg, transparent, ${effectiveTrackColor}cc, #ffffffaa, ${effectiveTrackColor}cc, transparent)` }}
             />
+            <motion.div
+              className="absolute top-0 inset-x-0 h-[3px]"
+              animate={{ opacity: [0, 1, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+              style={{ background: `linear-gradient(90deg, transparent, #ffffff99, transparent)` }}
+            />
+            {/* Radial crown glow at top */}
+            <motion.div
+              className="absolute -top-6 inset-x-0 h-24"
+              animate={{ opacity: [milestoneGlow * 0.3, milestoneGlow * 0.8, milestoneGlow * 0.3] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+              style={{ background: `radial-gradient(ellipse at 50% 0%, ${effectiveTrackColor}80 0%, transparent 70%)` }}
+            />
+            {/* Bottom inner glow */}
+            <div
+              className="absolute bottom-0 inset-x-0 h-16"
+              style={{ background: `linear-gradient(0deg, ${effectiveTrackColor}10 0%, transparent 100%)` }}
+            />
+          </>
+        )}
+
+        {/* Shimmer on available */}
+        {isAvailable && showAnimations && (
+          <>
+            <motion.div
+              className="absolute inset-0"
+              animate={{ opacity: [0, (isPremiumTier || isEliteTier) ? 0.8 : 0.6, 0] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+              style={{ background: `linear-gradient(135deg, ${effectiveTrackColor}${(isPremiumTier || isEliteTier) ? "38" : "28"}, transparent 55%)` }}
+            />
+            {/* Diagonal scan line */}
+            <motion.div
+              className="absolute left-0 right-0 h-10"
+              animate={{ top: ["-10%", "110%"] }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", repeatDelay: 2 }}
+              style={{ background: `linear-gradient(180deg, transparent, ${effectiveTrackColor}${(isPremiumTier || isEliteTier) ? "38" : "28"}, transparent)` }}
+            />
+            {/* Corner light flare */}
+            <motion.div
+              className="absolute -top-2 -right-2 h-12 w-12"
+              animate={{ opacity: [0, (isPremiumTier || isEliteTier) ? 0.85 : 0.6, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
+              style={{ background: `radial-gradient(circle at top right, ${effectiveTrackColor}80, transparent 65%)` }}
+            />
+            {/* Premium/Elite: radial pulse from center */}
+            {(isPremiumTier || isEliteTier) && (
+              <motion.div
+                className="absolute inset-0 rounded-3xl"
+                animate={{ opacity: [0, 0.35, 0] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 1.2 }}
+                style={{ background: `radial-gradient(ellipse at 50% 40%, ${effectiveTrackColor}50 0%, transparent 65%)` }}
+              />
+            )}
+          </>
+        )}
+
+        {/* Claimed check overlay */}
+        {isClaimed && (
+          <div
+            className="absolute inset-0"
+            style={{ background: "radial-gradient(circle at 50% 45%, rgba(52,211,153,0.08) 0%, transparent 65%)" }}
+          />
+        )}
+
+        {/* Locked frost overlay */}
+        {isLocked && (
+          <div className="absolute inset-0 bg-black/40" />
+        )}
+      </div>
+
+      {/* ── Content (NO overflow restriction — allows scale to breathe) ── */}
+      <div
+        className={`relative z-10 flex h-full flex-col items-center text-center ${isMilestone ? "p-3 pt-9" : "p-3"}`}
+        style={{ justifyContent: "space-between" }}
+      >
+        {/* Tier number + milestone label */}
+        <div className="flex flex-col items-center gap-1.5 w-full">
+          {isMilestone && (
+            <span
+              className="rounded-full px-2.5 py-0.5 text-[7px] font-black uppercase tracking-[0.18em]"
+              style={{ background: `${effectiveTrackColor}22`, color: effectiveTrackColor, border: `1px solid ${effectiveTrackColor}55` }}
+            >
+              ✦ MILESTONE
+            </span>
           )}
-        </>
-      )}
-
-      {/* Claimed overlay */}
-      {isClaimed && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-2xl">
-          <CheckCircle2 className="absolute top-2 right-2 h-4 w-4 text-emerald-400/90" />
-          <div className="absolute inset-0 rounded-2xl" style={{ background: "radial-gradient(circle at 50% 50%, rgba(52,211,153,0.07) 0%, transparent 70%)" }} />
+          <div
+            className={`flex items-center justify-center rounded-full font-black tabular-nums ${isMilestone ? "h-7 w-7 text-[11px]" : "h-5 w-5 text-[9px]"}`}
+            style={
+              isClaimed
+                ? { background: "rgba(52,211,153,0.22)", color: "#34d399", border: "1px solid rgba(52,211,153,0.40)" }
+                : isAvailable
+                  ? { background: `${effectiveTrackColor}28`, color: effectiveTrackColor, border: `1px solid ${effectiveTrackColor}60` }
+                  : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.22)", border: "1px solid rgba(255,255,255,0.08)" }
+            }
+          >
+            {isClaimed ? <CheckCircle2 className={isMilestone ? "h-4 w-4" : "h-3 w-3"} /> : tier.tierNumber}
+          </div>
         </div>
-      )}
 
-      {/* Locked overlay */}
-      {isLocked && (
-        <div className="absolute inset-0 rounded-2xl bg-black/35 backdrop-blur-[1px]">
-          <Lock className="absolute bottom-2 right-2 h-3 w-3 text-white/12" />
-        </div>
-      )}
-
-      <div className={`relative z-10 flex h-full flex-col items-center justify-between text-center ${isMilestone ? "p-3 pt-8" : "p-3"}`}>
-        {/* Tier number */}
+        {/* Rich preview — no overflow constraint here, scale/offset free */}
         <div
-          className={`flex items-center justify-center rounded-full font-black ${isMilestone ? "h-6 w-6 text-[10px]" : "h-5 w-5 text-[9px]"}`}
-          style={
-            isClaimed
-              ? { background: "rgba(52,211,153,0.2)", color: "#34d399", border: "1px solid rgba(52,211,153,0.35)" }
-              : isAvailable
-                ? { background: `${trackColor}25`, color: trackColor, border: `1px solid ${trackColor}55` }
-                : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.07)" }
-          }
+          className="flex items-center justify-center flex-1 min-h-0"
+          style={{ height: previewH }}
         >
-          {tier.tierNumber}
-        </div>
-
-        {/* Rich visual preview — replaces generic emoji */}
-        <div className="flex items-center justify-center" style={{ minHeight: isMilestone ? 84 : 68 }}>
           <TileMiniPreview
             tier={tier}
             trackColor={effectiveTrackColor}
             locked={isLocked}
             animated={showAnimations && isAvailable}
             scale={tileScale}
+            offsetX={visualConfig.tileOffsetX ?? 0}
+            offsetY={visualConfig.tileOffsetY ?? 0}
           />
         </div>
 
-        {/* Name */}
+        {/* Name + reward label */}
         <div className="w-full">
-          <p className={`font-black leading-tight text-white ${isMilestone ? "text-[11px]" : "text-[10px]"} ${isLocked ? "opacity-25" : ""}`}>
+          <p
+            className={`font-black leading-tight text-white ${isMilestone ? "text-[11px]" : "text-[10px]"}`}
+            style={{ opacity: isLocked ? 0.22 : 1 }}
+          >
             {tier.name}
           </p>
           <p
             className={`mt-0.5 font-bold leading-tight truncate ${isMilestone ? "text-[10px]" : "text-[9px]"}`}
             style={
-              isClaimed ? { color: "#34d39985" }
-                : isAvailable ? { color: `${trackColor}cc` }
+              isClaimed ? { color: "#34d39970" }
+                : isAvailable ? { color: `${effectiveTrackColor}cc` }
                   : { color: "rgba(255,255,255,0.18)" }
             }
             title={rewardLabel(tier)}
@@ -1094,22 +1176,29 @@ function TrackTileCard({
         {/* Claim button */}
         {isAvailable && (
           <motion.button
-            whileTap={{ scale: 0.88 }}
+            whileTap={{ scale: 0.87 }}
             disabled={claiming}
             onClick={(e) => { e.stopPropagation(); if (!claiming) onClaim(tier.id); }}
-            className={`w-full rounded-xl font-black text-white transition-all disabled:opacity-50 ${
+            className={`mt-2 w-full rounded-2xl font-black text-white transition-all disabled:opacity-50 relative overflow-hidden ${
               isMilestone ? "py-2.5 text-[11px]" : "py-2 text-[10px]"
             }`}
             style={{
               background: isMilestone
-                ? `linear-gradient(135deg, ${trackColor} 0%, #ffffff28 40%, ${trackColor}cc 100%)`
-                : `linear-gradient(135deg, ${trackColor} 0%, ${trackColor}cc 100%)`,
+                ? `linear-gradient(135deg, ${effectiveTrackColor} 0%, #ffffff22 40%, ${effectiveTrackColor}cc 100%)`
+                : `linear-gradient(135deg, ${effectiveTrackColor} 0%, ${effectiveTrackColor}bb 100%)`,
               boxShadow: isMilestone
-                ? `0 4px 20px ${glow}, 0 0 8px rgba(255,255,255,0.12)`
-                : `0 3px 14px ${glow}`,
+                ? `0 4px 24px ${glow}, 0 0 10px rgba(255,255,255,0.10)`
+                : `0 3px 16px ${glow}`,
             }}
           >
-            {claiming ? "…" : isMilestone ? "✦ Abholen" : "Abholen"}
+            {/* Button shine sweep */}
+            <motion.span
+              className="pointer-events-none absolute inset-y-0 w-10"
+              animate={{ left: ["-20%", "120%"] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", repeatDelay: 2 }}
+              style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)" }}
+            />
+            <span className="relative z-10">{claiming ? "…" : isMilestone ? "✦ Abholen" : "Abholen"}</span>
           </motion.button>
         )}
       </div>
@@ -1168,12 +1257,13 @@ function HorizontalTrack({
     );
     if (firstAvailable > 0 && scrollRef.current) {
       const el = scrollRef.current;
-      const cardW = 128;
+      const cardW = visualConfig.normalTileWidth ?? 140;
+      const gap = visualConfig.containerGap ?? 8;
       setTimeout(() => {
-        el.scrollTo({ left: Math.max(0, firstAvailable * (cardW + 8) - 60), behavior: "smooth" });
+        el.scrollTo({ left: Math.max(0, firstAvailable * (cardW + gap) - 60), behavior: "smooth" });
       }, 600);
     }
-  }, [tiers, userStatus, progressDays]);
+  }, [tiers, userStatus, progressDays, visualConfig.normalTileWidth, visualConfig.containerGap]);
 
   const selectedTierData = selectedTier ? tiers.find((t) => t.id === selectedTier) : null;
   const selectedSubject = selectedTierData ? tierToPreviewSubject(selectedTierData) : null;
@@ -1190,8 +1280,8 @@ function HorizontalTrack({
         <span className="text-[10px] text-white/30">{tiers.length} Tiers</span>
       </div>
 
-      {/* Scrollable row */}
-      <div className="relative">
+      {/* Scrollable row — negative margin compensates for top padding that prevents vertical clip */}
+      <div className="relative -mt-3">
         {/* Left arrow */}
         {canScrollLeft && (
           <button
@@ -1202,11 +1292,11 @@ function HorizontalTrack({
           </button>
         )}
 
-        {/* Scroll container */}
+        {/* Scroll container — pt-3 prevents top-clipping of scaled-up preview items */}
         <div
           ref={scrollRef}
-          className="flex gap-2 overflow-x-auto pb-2"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          className="flex overflow-x-auto pb-3 pt-3"
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none", gap: visualConfig.containerGap ?? 8 }}
         >
           {tiers.map((tier) => {
             const state = getTierState(tier, userStatus, progressDays);
@@ -1739,7 +1829,8 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 }}
-                className="rounded-2xl border border-white/[0.06] bg-white/[0.01] p-5"
+                className="rounded-2xl border border-white/[0.07] bg-white/[0.015] p-5"
+                style={{ boxShadow: "0 0 30px rgba(148,163,184,0.04)" }}
               >
                 <HorizontalTrack
                   tiers={freeTiers}
@@ -1749,7 +1840,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                   userStatus={userStatus}
                   progressDays={progressDays}
                   accent={accent}
-                  glow={glow}
+                  glow="rgba(148,163,184,0.45)"
                   trackColor="rgba(148,163,184,0.8)"
                   onClaim={handleClaim}
                   claimingId={claimingId}
@@ -1765,7 +1856,11 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
                 className="rounded-2xl border p-5"
-                style={{ borderColor: `${accent}20`, background: `${accent}04` }}
+                style={{
+                  borderColor: "rgba(245,158,11,0.25)",
+                  background: "linear-gradient(170deg, rgba(245,158,11,0.06) 0%, rgba(0,0,0,0) 100%)",
+                  boxShadow: "0 0 60px rgba(245,158,11,0.08)",
+                }}
               >
                 {!hasPremium && (
                   <motion.div
@@ -1787,7 +1882,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                   userStatus={userStatus}
                   progressDays={progressDays}
                   accent={accent}
-                  glow={glow}
+                  glow="rgba(245,158,11,0.55)"
                   trackColor="#f59e0b"
                   onClaim={handleClaim}
                   claimingId={claimingId}
@@ -1802,8 +1897,12 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.15 }}
-                className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.03] p-5"
-                style={{ boxShadow: "0 0 40px rgba(167,139,250,0.08)" }}
+                className="rounded-2xl border p-5"
+                style={{
+                  borderColor: "rgba(167,139,250,0.25)",
+                  background: "linear-gradient(170deg, rgba(167,139,250,0.06) 0%, rgba(0,0,0,0) 100%)",
+                  boxShadow: "0 0 60px rgba(167,139,250,0.10)",
+                }}
               >
                 {!hasElite && (
                   <motion.div
@@ -1825,7 +1924,7 @@ export function BattlePassShell({ pass, userStatus: initialStatus }: BattlePassS
                   userStatus={userStatus}
                   progressDays={progressDays}
                   accent={accent}
-                  glow={glow}
+                  glow="rgba(167,139,250,0.55)"
                   trackColor="#a78bfa"
                   onClaim={handleClaim}
                   claimingId={claimingId}

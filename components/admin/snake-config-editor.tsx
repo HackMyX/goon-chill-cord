@@ -10,6 +10,7 @@ import {
   type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig,
 } from "@/lib/snake-config";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Small reusable form controls
@@ -19,8 +20,10 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-zinc-200">{label}</p>
-        {hint && <p className="text-[11px] leading-snug text-zinc-600">{hint}</p>}
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-zinc-200">
+          {label}
+          {hint && <AdminTooltip text={hint} />}
+        </p>
       </div>
       {children}
     </div>

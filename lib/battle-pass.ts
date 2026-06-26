@@ -6,6 +6,15 @@ export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_bo
 
 export interface BpVisualConfig {
   tileScale: number;
+  tileOffsetX: number;
+  tileOffsetY: number;
+  normalTileWidth: number;
+  normalTileHeight: number;
+  milestoneTileWidth: number;
+  milestoneTileHeight: number;
+  enableTiltEffect: boolean;
+  glassmorphismIntensity: number;
+  containerGap: number;
   showTileAnimations: boolean;
   showParticleField: boolean;
   milestoneGlowIntensity: number;
@@ -20,6 +29,15 @@ export interface BpVisualConfig {
 
 export const DEFAULT_BP_VISUAL_CONFIG: BpVisualConfig = {
   tileScale: 1.0,
+  tileOffsetX: 0,
+  tileOffsetY: 0,
+  normalTileWidth: 140,
+  normalTileHeight: 228,
+  milestoneTileWidth: 172,
+  milestoneTileHeight: 284,
+  enableTiltEffect: true,
+  glassmorphismIntensity: 0.5,
+  containerGap: 8,
   showTileAnimations: true,
   showParticleField: true,
   milestoneGlowIntensity: 0.6,

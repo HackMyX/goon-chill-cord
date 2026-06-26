@@ -95,6 +95,10 @@ const REQUIRED_TABLES = [
   "music_config",
   // Single-session enforcement (run scripts/add-user-sessions.cjs)
   "user_sessions",
+  // Persistent KI-chat sessions (run scripts/add-ai-chat-sessions.cjs)
+  "ai_chat_sessions",
+  // Daily Quest System (run scripts/add-daily-quests.cjs)
+  "daily_quest_templates", "daily_quest_config", "user_daily_quests",
 ] as const;
 
 /** Tables that are optional (future features, not yet fully live). WARNUNG if missing. */
@@ -125,6 +129,7 @@ const SINGLETON_CONFIGS: Array<{ id: string; table: string; name: string; catego
   { id: "cfg_fine",        table: "fine_config",          name: "fine_config (default)",          category: "Feintuning" },
   { id: "cfg_game_lb",    table: "game_leaderboard_config", name: "game_leaderboard_config (default)", category: "Spielebestenlisten" },
   { id: "cfg_music",      table: "music_config",            name: "music_config (default)",           category: "Musik-System" },
+  { id: "cfg_daily_quest", table: "daily_quest_config",     name: "daily_quest_config (default)",     category: "Daily Quests" },
 ];
 
 /**

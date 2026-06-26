@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Save, RefreshCw, AlertTriangle, CheckCircle2, TrendingUp, Zap, Star, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 import type { XpConfig, LevelDefinition, XpSourceConfig, LevelReward } from "@/lib/level-system";
 import { getXpConfig, updateXpConfig, adminGrantXp } from "@/lib/actions/level-system";
 
@@ -114,7 +115,10 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-purple-400" />
-          <h2 className="text-base font-bold text-zinc-100">Level & XP System</h2>
+          <h2 className="flex items-center gap-1.5 text-base font-bold text-zinc-100">
+            Level & XP System
+            <AdminTooltip text="Konfiguriert das Level- und Erfahrungspunkte-System. Nutzer sammeln XP durch Aktionen (Mine, Streak, Snake, etc.) und steigen in Levels auf. Jedes Level kann Belohnungen (Credits, Badge, Fähigkeit) vergeben. Änderungen gelten sofort für alle neuen XP-Gewinne." />
+          </h2>
         </div>
         <div className="flex gap-2">
           <button
@@ -149,7 +153,10 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
 
       {/* Slot count */}
       <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
-        <h3 className="mb-3 text-xs font-bold text-zinc-400 uppercase tracking-wider">Fähigkeiten-Slots</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
+          Fähigkeiten-Slots
+          <AdminTooltip text="Anzahl der Fähigkeits-Slots die jeder Spieler gleichzeitig ausgerüstet haben kann. Erhöhe diesen Wert wenn das Spiel komplexer wird — aber beachte: mehr Slots = stärkere Buff-Stapelung, was die Balance beeinflusst. Standard: 1." />
+        </h3>
         <div className="max-w-xs">
           <NumInput
             label="Anzahl Fähigkeiten-Slots pro Spieler"
@@ -165,6 +172,7 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
         <h3 className="mb-4 flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
           <Zap className="h-3.5 w-3.5 text-amber-400" />
           XP-Quellen
+          <AdminTooltip text="Steuert wie viele XP jede Aktivität gibt. Erhöhe Werte für Aktionen die du fördern willst (z.B. täglicher Streak). Werte gelten für alle neuen Ereignisse. Bestehende XP der Nutzer bleiben unverändert. Mine-XP wird per 100 CR vergeben (also kleine Dezimalwerte sind OK)." />
         </h3>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">
           <NumInput label="Mine (XP pro 100 CR)" value={config.sources.mine_collect_per_100cr} onChange={(v) => setSources({ mine_collect_per_100cr: v })} step={0.1} />
@@ -184,6 +192,7 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
         <h3 className="mb-4 flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
           <Star className="h-3.5 w-3.5 text-amber-400" />
           Level-Definitionen ({config.levels.length} Level)
+          <AdminTooltip text="Konfiguriert jedes einzelne Level: benötigte XP, Anzeige-Titel und optionale Belohnungen (Credits, Badge, Name-Style, Fähigkeit). Klicke ein Level auf, um es zu bearbeiten. Tipp: Frühe Level brauchen wenig XP für schnelles Vorankommen, späte Level deutlich mehr für Langzeitmotivation." />
         </h3>
         <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
           {config.levels.map((lvl) => (

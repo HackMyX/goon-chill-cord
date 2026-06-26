@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { KeyRound, CheckCircle2, AlertCircle, RefreshCw, Eye, EyeOff, Sparkles, FlaskConical } from "lucide-react";
 import { getAiConfigStatus, updateAiApiKey } from "@/lib/actions/ai-config";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 type KeySource = "db" | "env" | "none";
 
@@ -104,6 +105,7 @@ export function AiConfigEditor() {
       <div className="mb-4 flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-purple-400" />
         <h3 className="text-sm font-bold text-zinc-200">KI-Konfiguration (Groq)</h3>
+        <AdminTooltip text="Konfiguriert die KI-Assistent-Funktion. Der Assistent nutzt Groq's API (llama-3.3-70b). Ohne gültigen API-Schlüssel ist der KI-Assistent für alle Nutzer deaktiviert. Der DB-Schlüssel hat Vorrang vor der GROQ_API_KEY Umgebungsvariable." />
       </div>
 
       {/* Current key status */}
@@ -134,7 +136,7 @@ export function AiConfigEditor() {
           <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
           <input
             type={showKey ? "text" : "password"}
-            placeholder="Neuen Groq API-Schlüssel eingeben… (gsk_…)"
+            placeholder="Neuen Groq API-Schlüssel eingeben… (gsk_XXXX…)"
             value={inputKey}
             onChange={(e) => setInputKey(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSave()}
@@ -176,10 +178,13 @@ export function AiConfigEditor() {
           {testing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
           Schlüssel testen
         </button>
-        <p className="text-[11px] text-zinc-500">
-          Neuen Schlüssel unter{" "}
-          <span className="font-mono text-zinc-400">console.groq.com/keys</span> generieren.
-          DB-Schlüssel hat Vorrang vor <span className="font-mono text-zinc-400">GROQ_API_KEY</span>.
+        <p className="text-[11px] text-zinc-500 flex items-start gap-1.5">
+          <AdminTooltip text="Der 'Schlüssel testen'-Button sendet eine echte Test-Anfrage an die Groq-API und zeigt die Antwort an. Nur verfügbar wenn ein Schlüssel konfiguriert ist. Kosten: minimal (ein kurzer Prompt)." />
+          <span>
+            Neuen Schlüssel unter{" "}
+            <span className="font-mono text-zinc-400">console.groq.com/keys</span> generieren.
+            DB-Schlüssel hat Vorrang vor <span className="font-mono text-zinc-400">GROQ_API_KEY</span>.
+          </span>
         </p>
       </div>
 

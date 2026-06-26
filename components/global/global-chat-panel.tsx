@@ -328,9 +328,9 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
     : undefined;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-black/[0.18] backdrop-blur-md">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-white/10 px-4 py-2.5 shrink-0">
+      <div className="flex items-center gap-2 border-b border-white/[0.08] bg-white/[0.03] px-4 py-2.5 shrink-0">
         <MessageSquare className="h-3.5 w-3.5 text-purple-400" />
         <span className="text-xs font-bold text-zinc-300">Global Chat</span>
         <span className="ml-auto h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
@@ -440,7 +440,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
       </div>
 
       {/* Input */}
-      <div className="border-t border-white/10 p-2.5 shrink-0">
+      <div className="border-t border-white/[0.08] bg-white/[0.02] p-2.5 shrink-0">
         {error && <p className="mb-1.5 text-[10px] text-red-400">{error}</p>}
         <form onSubmit={handleSend} className="flex gap-2">
           <input
@@ -448,7 +448,7 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
             onChange={(e) => setInput(e.target.value)}
             maxLength={fineConfig.chatMaxMessageLength}
             placeholder="Nachricht an alle…"
-            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-purple-400/60"
+            className="min-w-0 flex-1 rounded-lg border border-white/[0.12] bg-white/[0.06] px-3 py-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-purple-400/60 focus:bg-white/[0.09] transition-colors"
           />
           <button
             type="submit"

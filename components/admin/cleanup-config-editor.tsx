@@ -9,6 +9,7 @@ import {
 } from "@/lib/actions/cleanup-config";
 import type { CleanupRule, CleanupSourceKey } from "@/lib/cleanup-config";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -153,6 +154,7 @@ function CleanupRuleRow({
         <label className="flex items-center gap-1.5 text-[11px] text-zinc-400">
           <Clock className="h-3 w-3 shrink-0 text-zinc-500" />
           Aufbewahren:
+          <AdminTooltip text="Anzahl der Tage, für die Einträge dieser Datenquelle aufbewahrt werden. Alles älter als diese Anzahl an Tagen wird beim nächsten Bereinigungslauf gelöscht. Min: 1 Tag, Max: 3650 Tage (10 Jahre). Empfehlung: 30–90 Tage für Debug-Logs, 365+ Tage für Audit-Logs." />
           <input
             type="number"
             min={1}
@@ -259,7 +261,10 @@ export function CleanupConfigEditor({ rules: initialRules }: { rules: CleanupRul
     <div className="flex flex-col gap-4">
       {/* Section header */}
       <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 mb-0">
-        <h2 className="text-base font-bold text-zinc-100 mb-1">Verlaufs-Bereinigung</h2>
+        <h2 className="flex items-center gap-2 text-base font-bold text-zinc-100 mb-1">
+          Verlaufs-Bereinigung
+          <AdminTooltip text="Automatisches Datenhaltungs-System. Für jede Datenquelle (Debug-Logs, Chat, Mod-Aktionen usw.) kannst du einstellen wie viele Tage die Daten aufbewahrt werden sollen. 'Alle ausführen' startet alle aktiven Regeln gleichzeitig. Achtung: Das Löschen ist unwiderruflich!" />
+        </h2>
         <p className="text-xs text-zinc-500">
           Konfiguriere automatische Lösch-Regeln für alte Protokolldaten. Aktivierte Regeln löschen beim
           "Alle ausführen" Einträge die älter als N Tage sind. "Jetzt ausführen" löscht sofort (unabhängig vom aktiv/deaktiviert Status).

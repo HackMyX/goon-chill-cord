@@ -139,9 +139,9 @@ export const DEFAULT_MUSIC_CONFIG: MusicConfig = {
   fadeInMs:            1200,
   fadeOutMs:           500,
   showPlayerUI:        true,
-  userCanControl:      true,
-  userCanMute:         true,
-  userCanAdjustVolume: true,
+  userCanControl:      false,  // Dictator-Modus: User haben standardmäßig keine Kontrolle
+  userCanMute:         false,
+  userCanAdjustVolume: false,
   maxUserVolume:       1.0,
   tracks:              BUILT_IN_TRACKS,
   pageAssignments: {

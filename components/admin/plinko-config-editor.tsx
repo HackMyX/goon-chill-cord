@@ -8,8 +8,9 @@ import {
 import { updatePlinkoConfig, getPlinkoAdminStats, type PlinkoAdminStats } from "@/lib/actions/plinko";
 import type { PlinkoConfig, PlinkoRiskLevel } from "@/lib/actions/plinko";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
-function Toggle({ value, onChange, label, sub }: { value: boolean; onChange: (v: boolean) => void; label?: string; sub?: string }) {
+function Toggle({ value, onChange, label, sub, tip }: { value: boolean; onChange: (v: boolean) => void; label?: string; sub?: string; tip?: string }) {
   return (
     <button
       type="button"
@@ -19,7 +20,12 @@ function Toggle({ value, onChange, label, sub }: { value: boolean; onChange: (v:
       className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left w-full transition-colors ${value ? "border-emerald-500/30 bg-emerald-500/[0.05]" : "border-white/8 bg-white/[0.02]"}`}
     >
       <div>
-        {label && <p className={`text-sm font-semibold ${value ? "text-zinc-200" : "text-zinc-400"}`}>{label}</p>}
+        {label && (
+          <p className={`flex items-center gap-1.5 text-sm font-semibold ${value ? "text-zinc-200" : "text-zinc-400"}`}>
+            {label}
+            {tip && <AdminTooltip text={tip} />}
+          </p>
+        )}
         {sub && <p className="text-[11px] text-zinc-500">{sub}</p>}
       </div>
       <span className="shrink-0 rounded-full outline-none">
@@ -31,10 +37,13 @@ function Toggle({ value, onChange, label, sub }: { value: boolean; onChange: (v:
   );
 }
 
-function NumInput({ label, value, min, max, step, onChange, sub }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; sub?: string }) {
+function NumInput({ label, value, min, max, step, onChange, sub, tip }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; sub?: string; tip?: string }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[11px] text-zinc-500">{label}</span>
+      <span className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+        {label}
+        {tip && <AdminTooltip text={tip} />}
+      </span>
       <input
         type="number"
         min={min}
@@ -49,14 +58,17 @@ function NumInput({ label, value, min, max, step, onChange, sub }: { label: stri
   );
 }
 
-function SliderInput({ label, value, min, max, step, onChange, format }: {
+function SliderInput({ label, value, min, max, step, onChange, format, tip }: {
   label: string; value: number; min: number; max: number; step: number;
-  onChange: (v: number) => void; format?: (v: number) => string;
+  onChange: (v: number) => void; format?: (v: number) => string; tip?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] text-zinc-500">{label}</span>
+        <span className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+          {label}
+          {tip && <AdminTooltip text={tip} />}
+        </span>
         <span className="text-[11px] font-bold text-zinc-300">{format ? format(value) : value}</span>
       </div>
       <input
@@ -175,6 +187,7 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
         <div className="flex items-center gap-2">
           <Disc3 className="h-5 w-5 text-purple-400" />
           <h2 className="text-base font-bold text-zinc-100">Plinko Konfiguration</h2>
+          <AdminTooltip text="Konfiguriert das Plinko-Minispiel. Spieler lassen Bälle durch ein Stifterfeld fallen und gewinnen Credits basierend auf dem Eimer, in dem der Ball landet. Alle Limits, Multiplikatoren und Anzeigeoptionen sind hier einstellbar." />
         </div>
         <button
           onClick={handleSave}
@@ -203,17 +216,23 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
           onChange={(v) => setForm((f) => ({ ...f, enabled: v }))}
           label="Plinko aktiviert"
           sub="Spieler können Bälle fallen lassen"
+          tip="Master-Schalter für Plinko. Wenn deaktiviert, ist die Plinko-Seite gesperrt und keine Bälle können fallen gelassen werden."
         />
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <NumInput label="Bälle/Stunde" value={form.hourlyBallLimit} min={1} max={1000}
+            tip="Maximale Bälle, die ein Nutzer pro rollendem 60-Minuten-Fenster fallen lassen darf. Verhindert Grinding."
             onChange={(v) => setForm((f) => ({ ...f, hourlyBallLimit: v }))} />
           <NumInput label="Bälle/Tag (0=aus)" value={form.dailyBallLimit} min={0} max={10000}
+            tip="Maximale Bälle pro Kalendertag und Nutzer. 0 = kein Tageslimit (nur Stundenlimit gilt)."
             onChange={(v) => setForm((f) => ({ ...f, dailyBallLimit: v }))} />
           <NumInput label="Anzahl Reihen (4–16)" value={form.rows} min={4} max={16}
+            tip="Anzahl der Stiftreihen im Plinko-Brett. Mehr Reihen = mehr Felder und größere Spielfläche, aber langsamere Simulation. Empfehlung: 12."
             onChange={(v) => setForm((f) => ({ ...f, rows: v }))} />
           <NumInput label="Max Gewinn (CR, 0=∞)" value={form.maxWinCr} min={0} max={10_000_000}
+            tip="Obergrenze für einen einzelnen Gewinn in Credits. Schützt die Economy vor extrem hohen Auszahlungen bei kombinierten hohen Einsätzen und Multiplikatoren. 0 = kein Limit."
             onChange={(v) => setForm((f) => ({ ...f, maxWinCr: v }))} />
           <NumInput label="Big-Win Schwelle (CR)" value={form.bigWinThreshold} min={0} max={10_000_000}
+            tip="Gewinne ab diesem Betrag gelten als 'Big Win' und werden in der Statistik gezählt sowie optional im Chat angekündigt. Empfehlung: 10–50× des Mindest­einsatzes."
             onChange={(v) => setForm((f) => ({ ...f, bigWinThreshold: v }))} />
         </div>
         <div className="mt-3">
@@ -222,6 +241,7 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
             onChange={(v) => setForm((f) => ({ ...f, announceBigWins: v }))}
             label="Big Wins im Chat ankündigen"
             sub={`Automatische Systemnachricht ab ${form.bigWinThreshold.toLocaleString("de-DE")} CR Gewinn`}
+            tip="Wenn aktiviert, erscheint bei einem Gewinn über der Big-Win-Schwelle automatisch eine Systemnachricht im globalen Chat (ähnlich dem Case-Win-Broadcast)."
           />
         </div>
       </div>
@@ -235,9 +255,11 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
         <div className="grid grid-cols-2 gap-3">
           <NumInput label="Mindesteinsatz (CR)" value={form.minBetCr} min={1} max={1_000_000}
             sub="Minimum pro Ball"
+            tip="Kleinster Betrag, den ein Nutzer pro Plinko-Ball einsetzen kann. Verhindert Pennies-Grinding. Empfehlung: 100–1000 CR."
             onChange={(v) => setForm((f) => ({ ...f, minBetCr: v }))} />
           <NumInput label="Maximaleinsatz (CR, 0=∞)" value={form.maxBetCr} min={0} max={10_000_000}
             sub="0 = nur durch Credits begrenzt"
+            tip="Höchstbetrag pro Ball. 0 = unbegrenzt (nur durch den Kontostand des Nutzers limitiert). Setze hier einen Wert, um extreme Hochrisiko-Runden zu verhindern."
             onChange={(v) => setForm((f) => ({ ...f, maxBetCr: v }))} />
         </div>
 

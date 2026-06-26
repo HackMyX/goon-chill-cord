@@ -14,6 +14,7 @@ import {
   ChevronUp,
   Info,
 } from "lucide-react";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 import { type FineConfig, DEFAULT_FINE_CONFIG } from "@/lib/fine-config-types";
 import { updateFineConfig } from "@/lib/actions/fine-config";
 
@@ -46,11 +47,7 @@ function Slider({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <label className="text-xs font-semibold text-zinc-300">{label}</label>
-          {hint && (
-            <span title={hint} className="cursor-help text-zinc-600 hover:text-zinc-400">
-              <Info className="h-3 w-3" />
-            </span>
-          )}
+          {hint && <AdminTooltip text={hint} />}
         </div>
         <div className="flex items-center gap-1.5">
           <input

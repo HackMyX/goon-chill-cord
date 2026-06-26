@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Bot, Send, Loader2, User, RefreshCw, Sparkles } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 import { createClient } from "@/lib/supabase/client";
+import { loadChatSession, saveChatSession, clearChatSession } from "@/lib/actions/ai-chat-session";
 
 interface AiMessage {
   role: "user" | "model";
@@ -28,10 +29,19 @@ export function UserAiChat() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [myAvatar, setMyAvatar] = useState<string | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const sound = useSoundManager();
 
+  // Load persisted history on mount
   useEffect(() => {
+    loadChatSession("user").then((persisted) => {
+      if (persisted.length > 0) {
+        setMessages(persisted.map((m) => ({ role: m.role, text: m.text })));
+      }
+      setLoadingHistory(false);
+    });
+
     const sb = createClient();
     sb.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
@@ -53,6 +63,10 @@ export function UserAiChat() {
     }));
   }
 
+  const persistMessages = useCallback((msgs: AiMessage[]) => {
+    void saveChatSession("user", msgs.map((m) => ({ role: m.role, text: m.text })));
+  }, []);
+
   async function sendMessage(text: string) {
     if (!text.trim() || pending) return;
     setError(null);
@@ -60,7 +74,8 @@ export function UserAiChat() {
     sound.click();
 
     const userMsg: AiMessage = { role: "user", text: text.trim() };
-    setMessages((prev) => [...prev, userMsg]);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setPending(true);
 
     try {
@@ -77,11 +92,10 @@ export function UserAiChat() {
         sound.error();
       } else {
         sound.click();
-        setMessages((prev) => [...prev, {
-          role: "model",
-          text: data.reply ?? "",
-          actions: data.actionLog,
-        }]);
+        const replyMsg: AiMessage = { role: "model", text: data.reply ?? "", actions: data.actionLog };
+        const withReply = [...nextMessages, replyMsg];
+        setMessages(withReply);
+        persistMessages(withReply);
       }
     } catch {
       setError("Verbindungsfehler. Bitte versuche es erneut.");
@@ -90,6 +104,12 @@ export function UserAiChat() {
       setPending(false);
     }
   }
+
+  const handleReset = useCallback(() => {
+    setMessages([]);
+    setError(null);
+    void clearChatSession("user");
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -104,10 +124,15 @@ export function UserAiChat() {
           <Sparkles className="h-3 w-3 text-purple-400" />
         </div>
         <span className="text-xs font-bold text-zinc-300">KI-Assistent</span>
+        {messages.length > 0 && (
+          <span className="ml-1 rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-bold text-purple-400">
+            {messages.length} Nachrichten
+          </span>
+        )}
         <button
-          onClick={() => { setMessages([]); setError(null); }}
+          onClick={handleReset}
           className="ml-auto rounded p-1 text-zinc-500 hover:text-zinc-300"
-          title="Chat zurücksetzen"
+          title="Chat zurücksetzen (löscht auch den gespeicherten Verlauf)"
         >
           <RefreshCw className="h-3 w-3" />
         </button>
@@ -115,7 +140,12 @@ export function UserAiChat() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto chat-scroll px-3 py-3 space-y-3 min-h-0">
-        {messages.length === 0 && (
+        {loadingHistory && (
+          <div className="flex items-center gap-2 py-4 text-xs text-zinc-600">
+            <Loader2 className="h-3 w-3 animate-spin" /> Verlauf wird geladen…
+          </div>
+        )}
+        {!loadingHistory && messages.length === 0 && (
           <div className="flex flex-col gap-3">
             <div className="flex items-start gap-2.5">
               <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-500/20">
@@ -141,7 +171,7 @@ export function UserAiChat() {
           </div>
         )}
 
-        {messages.map((msg, i) => {
+        {!loadingHistory && messages.map((msg, i) => {
           const isUser = msg.role === "user";
           return (
             <div key={i} className={`chat-msg-enter flex items-start gap-2.5 ${isUser ? "flex-row-reverse" : ""}`}>

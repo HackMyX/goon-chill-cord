@@ -1030,6 +1030,39 @@ export async function getModeratorUsers(): Promise<ModeratorWithPermissions[]> {
   });
 }
 
+export interface PopupModSummary {
+  recentActions: { id: string; actionType: string; reason: string | null; createdAt: string }[];
+  openTicketCount: number;
+}
+
+/** Lightweight mod summary for the profile popup — recent actions + open ticket count. */
+export async function getPopupModSummary(userId: string): Promise<PopupModSummary> {
+  await requireMod();
+  const admin = createAdminClient();
+  const [actionsRes, ticketsRes] = await Promise.all([
+    admin
+      .from("mod_actions")
+      .select("id, action_type, reason, created_at")
+      .eq("target_user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    admin
+      .from("tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "open"),
+  ]);
+  return {
+    recentActions: (actionsRes.data ?? []).map((r) => ({
+      id: r.id as string,
+      actionType: r.action_type as string,
+      reason: (r.reason as string | null) ?? null,
+      createdAt: r.created_at as string,
+    })),
+    openTicketCount: ticketsRes.count ?? 0,
+  };
+}
+
 /** Returns the individual permission override stored for a single moderator. */
 export async function getModUserPermissions(
   modUserId: string

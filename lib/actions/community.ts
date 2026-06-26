@@ -175,6 +175,7 @@ export interface MinimalProfile {
   discordAvatarUrl: string | null;
   verified: boolean;
   warningStrikes: number;
+  tempBannedUntil: string | null;
   prioBadges: string[];
 }
 
@@ -202,7 +203,7 @@ export async function getMinimalProfile(targetUserId: string): Promise<GetMinima
   const [{ data: viewerProfile }, { data: targetProfile }, { data: authUser }] = await Promise.all([
     admin.from("profiles").select("role").eq("id", user.id).single(),
     admin.from("profiles")
-      .select("id, username, role, credits, streak_days, cases_opened, created_at, verified, active_name_style_key, warning_strikes, prio_badges")
+      .select("id, username, role, credits, streak_days, cases_opened, created_at, verified, active_name_style_key, warning_strikes, temp_banned_until, prio_badges")
       .eq("id", targetUserId)
       .single(),
     admin.auth.admin.getUserById(targetUserId),
@@ -231,6 +232,7 @@ export async function getMinimalProfile(targetUserId: string): Promise<GetMinima
       discordAvatarUrl,
       verified: Boolean(targetProfile.verified),
       warningStrikes: Number(targetProfile.warning_strikes ?? 0),
+      tempBannedUntil: ((targetProfile as unknown as Record<string, unknown>).temp_banned_until as string | null) ?? null,
       prioBadges: (targetProfile.prio_badges as string[] | null) ?? [],
     },
   };

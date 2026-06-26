@@ -5,6 +5,7 @@ import { RotateCcw, Save, CheckCircle, XCircle, Pickaxe, Plus, Trash2 } from "lu
 import { updateMineConfig } from "@/lib/actions/mine";
 import { DEFAULT_MINE_CONFIG, type MineConfig, type MineLevel } from "@/lib/mine-config";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 interface MineConfigEditorProps {
   config: MineConfig;
@@ -74,9 +75,12 @@ export function MineConfigEditor({ config }: MineConfigEditorProps) {
 
       {/* Enable */}
       <div className="flex items-center justify-between rounded-xl border border-white/8 bg-black/20 px-4 py-3">
-        <div>
-          <p className="text-sm font-bold text-zinc-200">Mine aktiviert</p>
-          <p className="text-xs text-zinc-500">Wenn deaktiviert, können Spieler nicht sammeln oder upgraden</p>
+        <div className="flex items-center gap-2">
+          <div>
+            <p className="text-sm font-bold text-zinc-200">Mine aktiviert</p>
+            <p className="text-xs text-zinc-500">Wenn deaktiviert, können Spieler nicht sammeln oder upgraden</p>
+          </div>
+          <AdminTooltip text="Master-Schalter für das passive Credit-Abbau-System. Wenn deaktiviert, ist die Mine-Seite gesperrt und Spieler können weder Credits einsammeln noch ihre Mine upgraden. Bereits angesammelte Credits bleiben erhalten." />
         </div>
         <button
           onClick={() => setEnabled(!form.enabled)}
@@ -93,13 +97,19 @@ export function MineConfigEditor({ config }: MineConfigEditorProps) {
         </h4>
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-zinc-400">Titel</span>
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+              Titel
+              <AdminTooltip text="Überschrift die im Mine-Bereich auf der Nutzer-Seite angezeigt wird. Maximal 40 Zeichen. Beispiel: '⛏️ Deine Mine'." />
+            </span>
             <input type="text" maxLength={40} value={form.sectionTitle}
               onChange={(e) => setTitle(e.target.value)}
               className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60" />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-zinc-400">Untertitel</span>
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+              Untertitel
+              <AdminTooltip text="Kurze Beschreibung unter dem Titel (max. 80 Zeichen). Erklärt dem Nutzer, was er mit der Mine machen kann." />
+            </span>
             <input type="text" maxLength={80} value={form.sectionSubtitle}
               onChange={(e) => setSubtitle(e.target.value)}
               className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-400/60" />
@@ -119,12 +129,11 @@ export function MineConfigEditor({ config }: MineConfigEditorProps) {
 
         <div className="flex flex-col gap-2">
           {/* Header row */}
-          <div className="grid grid-cols-[40px_1fr_1fr_1fr_1fr_32px] gap-2 px-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+          <div className="grid grid-cols-[40px_1fr_1fr_1fr_32px] gap-2 px-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
             <span>Lvl</span>
-            <span>CR/h</span>
-            <span>Max-Lager (h)</span>
-            <span>Upgrade-Kosten</span>
-            <span></span>
+            <span className="flex items-center gap-1">CR/h <AdminTooltip text="Credits pro Stunde, die diese Mine-Stufe passiv generiert. Nutzer müssen manuell einsammeln; Credits bis zur Lagerkapazität." /></span>
+            <span className="flex items-center gap-1">Max-Lager (h) <AdminTooltip text="Maximale Stunden, die diese Mine-Stufe speichern kann bevor sie voll ist. Voll = keine weiteren Credits werden generiert bis eingesammelt wird." /></span>
+            <span className="flex items-center gap-1">Upgrade-Kosten <AdminTooltip text="Credits die der Nutzer bezahlen muss, um auf die nächste Stufe aufzusteigen. Leer lassen = diese Stufe ist das Maximum (kein weiteres Upgrade möglich)." /></span>
             <span></span>
           </div>
 

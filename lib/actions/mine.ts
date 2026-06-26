@@ -229,6 +229,12 @@ export async function collectMineCredits(): Promise<CollectResult> {
     void incrementBpQuestProgress(user.id, "credits_collected", earned);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementDailyQuestProgress } = await import("@/lib/actions/daily-quests");
+    void incrementDailyQuestProgress("mine_collect", 1);
+    void incrementDailyQuestProgress("credits_collected", earned);
+  } catch { /* non-fatal */ }
+
   if (earned >= 1000) {
     await notifyUser({
       userId: user.id,

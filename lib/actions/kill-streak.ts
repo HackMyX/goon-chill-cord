@@ -218,6 +218,11 @@ export async function registerStreakKill(monsterTypeId: string): Promise<Registe
     void incrementBpQuestProgress(user.id, "monster_kill", 1);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementDailyQuestProgress } = await import("@/lib/actions/daily-quests");
+    void incrementDailyQuestProgress("monster_kill", 1);
+  } catch { /* non-fatal */ }
+
   return { success: true, reward, newStreakKillCount, newPendingStreakCr };
 }
 

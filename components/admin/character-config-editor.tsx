@@ -6,6 +6,7 @@ import { updateCharacterConfig } from "@/lib/actions/character-config";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import type { CharacterConfig } from "@/lib/character-config";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 interface FieldDef {
   key: keyof CharacterConfig;
@@ -145,6 +146,7 @@ export function CharacterConfigEditor({ config }: { config: CharacterConfig }) {
         <div className="flex items-center gap-2">
           <UserCog className="h-5 w-5 text-cyan-300" />
           <span className="text-base font-bold text-zinc-100">Charakter &amp; Kampf — Grundwerte</span>
+          <AdminTooltip text="Alle Basiswerte des Spielercharakters in der 3D-Welt. HP, Ausdauer, Bewegungsgeschwindigkeit, Kampfparameter. Änderungen gelten sofort für neue Spieler-Sessions — bereits aktive Spieler müssen die Welt neu laden." />
         </div>
       }
     >
@@ -155,7 +157,10 @@ export function CharacterConfigEditor({ config }: { config: CharacterConfig }) {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {group.fields.map((field) => (
                 <label key={field.key} className="flex flex-col gap-1">
-                  <span className="text-xs font-semibold text-zinc-400">{field.label}</span>
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+                    {field.label}
+                    <AdminTooltip text={field.hint} />
+                  </span>
                   <input
                     type="number"
                     min={0}
@@ -164,7 +169,6 @@ export function CharacterConfigEditor({ config }: { config: CharacterConfig }) {
                     onChange={(e) => setField(field.key, Number(e.target.value) || 0)}
                     className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
                   />
-                  <span className="text-[11px] text-zinc-600">{field.hint}</span>
                 </label>
               ))}
             </div>

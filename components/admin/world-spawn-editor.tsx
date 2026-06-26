@@ -6,6 +6,7 @@ import { updateWorldSpawnConfig } from "@/lib/actions/world-spawn";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 function NumField({
   label,
@@ -26,7 +27,10 @@ function NumField({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs font-semibold text-zinc-400">{label}</span>
+      <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+        {label}
+        <AdminTooltip text={hint} />
+      </span>
       <input
         type="number"
         min={min}
@@ -36,7 +40,6 @@ function NumField({
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
       />
-      <span className="text-[11px] text-zinc-600">{hint}</span>
     </label>
   );
 }
@@ -72,6 +75,7 @@ export function WorldSpawnConfigEditor({ config }: { config: WorldSpawnConfig })
         <div className="flex items-center gap-2">
           <Skull className="h-5 w-5 text-rose-400" />
           <span className="text-base font-bold text-zinc-100">Monster-Spawn</span>
+          <AdminTooltip text="Steuert, wie und wie viele Monster in der 3D-Welt erscheinen. Diese Einstellungen sind global und gelten für alle laufenden Spieler-Sessions sofort." />
         </div>
       }
     >

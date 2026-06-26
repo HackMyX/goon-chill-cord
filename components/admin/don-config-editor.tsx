@@ -7,6 +7,7 @@ import {
 import { updateDonConfig } from "@/lib/actions/don-config";
 import { DEFAULT_DON_CONFIG, DEFAULT_UPGRADE_TIERS, type DonConfig, type DonUpgradeTier } from "@/lib/don-config";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 interface Props {
   config: DonConfig;
@@ -52,6 +53,7 @@ export function DonConfigEditor({ config }: Props) {
           <h3 className="flex items-center gap-2 text-base font-bold text-zinc-100">
             <Coins className="h-5 w-5 text-amber-400" />
             Double or Nothing — Einstellungen
+            <AdminTooltip text="Konfiguriert das 'Double or Nothing'-Münzwurf-Minispiel vollständig. Nutzer setzen Credits ein und versuchen, ihren Einsatz zu verdoppeln. Alle Limits und Wahrscheinlichkeiten sind hier einstellbar." />
           </h3>
           <p className="mt-0.5 text-[11px] text-zinc-500">
             Konfiguriert das Glücksspiel-Minispiel auf der Startseite vollständig.
@@ -81,6 +83,7 @@ export function DonConfigEditor({ config }: Props) {
           <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
             <Zap className="h-3.5 w-3.5 text-amber-400" />
             Tageslimit (Flips/Tag)
+            <AdminTooltip text="Maximale Anzahl an Münzwürfen, die ein Nutzer pro Kalendertag durchführen darf. Leer lassen = unbegrenzt. Beispiel: 20 = maximal 20 Flips pro Tag und Nutzer. Das Limit wird serverseitig geprüft und kann nicht umgangen werden." />
           </span>
           <input
             type="number"
@@ -102,6 +105,7 @@ export function DonConfigEditor({ config }: Props) {
           <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
             <Timer className="h-3.5 w-3.5 text-cyan-400" />
             Stundenlimit (Flips/Stunde)
+            <AdminTooltip text="Maximale Flips pro rollendem 60-Minuten-Fenster. Verhindert exzessives Spielen in kurzer Zeit. Beispiel: 10 = maximal 10 Flips innerhalb der letzten 60 Minuten. Leer = kein stündliches Limit." />
           </span>
           <input
             type="number"
@@ -123,6 +127,7 @@ export function DonConfigEditor({ config }: Props) {
           <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
             <Timer className="h-3.5 w-3.5 text-sky-400" />
             Cooldown (Sekunden)
+            <AdminTooltip text="Wartezeit in Sekunden zwischen zwei Flips. Verhindert automatisiertes schnelles Klicken. 0 = kein Cooldown (nicht empfohlen). Empfehlung: 3–10 Sekunden. Wird serverseitig erzwungen und kann nicht clientseitig umgangen werden." />
           </span>
           <input
             type="number"
@@ -140,6 +145,7 @@ export function DonConfigEditor({ config }: Props) {
           <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
             <Target className="h-3.5 w-3.5 text-purple-400" />
             Gewinnchance (%)
+            <AdminTooltip text="Wahrscheinlichkeit, mit der ein Nutzer beim Münzwurf gewinnt. 50% = faire Münze. Höhere Werte = mehr Gewinne für Nutzer (kostet die Server-Economy). Niedrigere Werte = mehr Einnahmen für die Economy. Standard: 50%. Änderungen gelten sofort für alle neuen Flips." />
           </span>
           <div className="flex items-center gap-2">
             <input
@@ -166,7 +172,10 @@ export function DonConfigEditor({ config }: Props) {
 
         {/* Min bet */}
         <div className="flex flex-col gap-1 rounded-xl border border-white/8 bg-black/30 p-3">
-          <span className="text-xs font-semibold text-zinc-300">Mindesteinsatz</span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+            Mindesteinsatz
+            <AdminTooltip text="Kleinster Betrag (in Credits), den ein Nutzer beim Münzwurf einsetzen kann. Verhindert, dass Nutzer mit winzigen Beträgen spammen. Empfehlung: mindestens 100 CR." />
+          </span>
           <input
             type="number"
             min={1}
@@ -179,7 +188,10 @@ export function DonConfigEditor({ config }: Props) {
 
         {/* Max bet */}
         <div className="flex flex-col gap-1 rounded-xl border border-white/8 bg-black/30 p-3">
-          <span className="text-xs font-semibold text-zinc-300">Maximaleinsatz (leer = unbegrenzt)</span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+            Maximaleinsatz (leer = unbegrenzt)
+            <AdminTooltip text="Höchstbetrag (in Credits), den ein Nutzer pro Flip einsetzen kann. Begrenzt potenzielle hohe Verluste in der Economy. Leer lassen = nur durch den Kontostand des Nutzers begrenzt." />
+          </span>
           <input
             type="number"
             min={1}
@@ -196,7 +208,10 @@ export function DonConfigEditor({ config }: Props) {
 
         {/* Show remaining spins */}
         <div className="flex flex-col justify-between gap-2 rounded-xl border border-white/8 bg-black/30 p-3">
-          <span className="text-xs font-semibold text-zinc-300">Verbleibende Flips anzeigen</span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+            Verbleibende Flips anzeigen
+            <AdminTooltip text="Wenn aktiviert, sieht der Nutzer einen Fortschrittsbalken und eine Zahl, die zeigt, wie viele Flips er heute noch hat. Erhöht die Transparenz und verhindert Frustration beim Erreichen des Limits." />
+          </span>
           <button
             type="button"
             onClick={() => setForm((f) => ({ ...f, showRemainingSpins: !f.showRemainingSpins }))}
@@ -214,7 +229,10 @@ export function DonConfigEditor({ config }: Props) {
 
         {/* All In */}
         <div className="flex flex-col justify-between gap-2 rounded-xl border border-white/8 bg-black/30 p-3">
-          <span className="text-xs font-semibold text-zinc-300">ALL IN Schnellwahl</span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+            ALL IN Schnellwahl
+            <AdminTooltip text="Wenn aktiviert, erscheint für den Nutzer ein 'ALL IN'-Button, der automatisch den gesamten Kontostand als Einsatz setzt. Ermöglicht dramatische Hochrisiko-Runden, erhöht aber das Risiko von extremen Credit-Verlusten." />
+          </span>
           <button
             type="button"
             onClick={() => setForm((f) => ({ ...f, allowAllIn: !f.allowAllIn }))}
@@ -234,7 +252,10 @@ export function DonConfigEditor({ config }: Props) {
       {/* Texts */}
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold text-zinc-400">Abschnitts-Titel</span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+          Abschnitts-Titel
+          <AdminTooltip text="Der Haupttitel, der über dem DON-Bereich auf der Startseite angezeigt wird (z.B. 'Double or Nothing'). Maximal 60 Zeichen." />
+        </span>
           <input
             type="text"
             maxLength={60}
@@ -244,7 +265,10 @@ export function DonConfigEditor({ config }: Props) {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold text-zinc-400">Abschnitts-Untertitel</span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+          Abschnitts-Untertitel
+          <AdminTooltip text="Kurze Beschreibung oder Slogan unter dem Haupttitel (z.B. 'Verdoppele deine Credits oder verliere alles!'). Maximal 120 Zeichen." />
+        </span>
           <input
             type="text"
             maxLength={120}
@@ -257,7 +281,10 @@ export function DonConfigEditor({ config }: Props) {
 
       {/* Quick amounts */}
       <div className="mt-4">
-        <span className="text-xs font-semibold text-zinc-400">Schnellauswahl-Beträge</span>
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+          Schnellauswahl-Beträge
+          <AdminTooltip text="Vordefinierte Credit-Beträge, die dem Nutzer als Schnellauswahl-Buttons angezeigt werden. Reduziert Tipparbeit für häufig verwendete Einsätze. Werden automatisch aufsteigend sortiert. Nutzer können trotzdem beliebige Beträge eingeben." />
+        </span>
         <div className="mt-2 flex flex-wrap gap-2">
           {form.quickAmounts.map((val) => (
             <div
@@ -301,7 +328,10 @@ export function DonConfigEditor({ config }: Props) {
       {/* Upgrade tiers config */}
       <div className="mt-5 rounded-xl border border-purple-500/20 bg-purple-500/[0.04] p-4">
         <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm font-bold text-zinc-200">Stunden-Upgrades</span>
+          <span className="flex items-center gap-1.5 text-sm font-bold text-zinc-200">
+            Stunden-Upgrades
+            <AdminTooltip text="Optionales Upgrade-System: Nutzer können permanente Upgrades kaufen, die ihr stündliches Flip-Limit erhöhen. Jede Stufe hat einen eigenen Namen, Bonus und Preis. Maximal 4 Stufen empfohlen." />
+          </span>
           <label className="flex items-center gap-2 cursor-pointer">
             <span className="text-xs text-zinc-400">Aktiviert</span>
             <button

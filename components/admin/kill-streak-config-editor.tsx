@@ -7,6 +7,7 @@ import { streakCrMultiplier, streakMobScale, type KillStreakConfig } from "@/lib
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 interface FieldDef {
   key: keyof KillStreakConfig;
@@ -75,13 +76,17 @@ export function KillStreakConfigEditor({ config }: { config: KillStreakConfig })
         <div className="flex items-center gap-2">
           <Flame className="h-5 w-5 text-orange-400" />
           <span className="text-base font-bold text-zinc-100">Kill-Streak-Konfiguration</span>
+          <AdminTooltip text="Das Kill-Streak-System belohnt Spieler, die in der 3D-Welt viele Monster hintereinander töten, mit steigenden Credit-Multiplikatoren. Gleichzeitig skalieren die Monster mit der Streak und werden gefährlicher — eine Risiko/Belohnungs-Balance." />
         </div>
       }
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {fields.map((field) => (
           <label key={field.key} className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-zinc-400">{field.label}</span>
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+              {field.label}
+              <AdminTooltip text={field.hint} />
+            </span>
             <input
               type="number"
               min={0}
@@ -90,7 +95,6 @@ export function KillStreakConfigEditor({ config }: { config: KillStreakConfig })
               onChange={(e) => setField(field.key, Number(e.target.value) || 0)}
               className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
             />
-            <span className="text-[11px] text-zinc-600">{field.hint}</span>
           </label>
         ))}
       </div>

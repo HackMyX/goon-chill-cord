@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import {
   Bot, Send, Loader2, User, RefreshCw, Sparkles, ShieldAlert, Shield,
 } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 import { createClient } from "@/lib/supabase/client";
+import { loadChatSession, saveChatSession, clearChatSession } from "@/lib/actions/ai-chat-session";
 
 interface AiMessage {
   role: "user" | "model";
@@ -47,14 +48,25 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sound = useSoundManager();
 
+  // Load persisted history on mount (context-aware: admin vs mod)
   useEffect(() => {
+    loadChatSession(context).then((persisted) => {
+      if (persisted.length > 0) {
+        setMessages(persisted.map((m) => ({ role: m.role, text: m.text })));
+      }
+    });
+
     const sb = createClient();
     sb.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
       sb.from("profiles").select("avatar_url").eq("id", user.id).single()
         .then(({ data }) => { if (data?.avatar_url) setMyAvatar(data.avatar_url as string); });
     });
-  }, []);
+  }, [context]);
+
+  const persistMessages = useCallback((msgs: AiMessage[]) => {
+    void saveChatSession(context, msgs.map((m) => ({ role: m.role, text: m.text })));
+  }, [context]);
 
   const starters = context === "admin" ? ADMIN_STARTERS : MOD_STARTERS;
 
@@ -78,7 +90,8 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     const userMsg: AiMessage = { role: "user", text: text.trim() };
-    setMessages((prev) => [...prev, userMsg]);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setPending(true);
     scrollToBottom();
 
@@ -96,11 +109,10 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
         sound.error();
       } else {
         sound.click();
-        setMessages((prev) => [...prev, {
-          role: "model",
-          text: data.reply ?? "",
-          actions: data.actionLog,
-        }]);
+        const replyMsg: AiMessage = { role: "model", text: data.reply ?? "", actions: data.actionLog };
+        const withReply = [...nextMessages, replyMsg];
+        setMessages(withReply);
+        persistMessages(withReply);
       }
     } catch {
       setError("Verbindungsfehler. Bitte versuche es erneut.");
@@ -145,7 +157,7 @@ export function AdminAiChat({ context }: AdminAiChatProps) {
           </p>
         </div>
         <button
-          onClick={() => { setMessages([]); setError(null); }}
+          onClick={() => { setMessages([]); setError(null); void clearChatSession(context); }}
           className="ml-auto rounded p-1.5 text-zinc-500 hover:text-zinc-300"
           title="Chat zurücksetzen"
         >

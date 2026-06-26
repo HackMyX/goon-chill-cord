@@ -213,6 +213,8 @@ async function grantLevelRewards(
           { onConflict: "user_id,badge_key", ignoreDuplicates: true }
         );
       } else if (reward.type === "name_style" && reward.nameStyleKey) {
+        const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
+        await ensureStyleInDb(reward.nameStyleKey, admin);
         await admin.from("user_name_styles").upsert(
           { user_id: userId, style_key: reward.nameStyleKey, source: "level_reward" },
           { onConflict: "user_id,style_key", ignoreDuplicates: true }

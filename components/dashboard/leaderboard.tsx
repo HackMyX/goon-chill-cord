@@ -285,9 +285,14 @@ export function Leaderboard({
                     return (
                       <motion.div
                         key={entry.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.08 }}
+                        initial={{ opacity: 0, y: 30, scale: 0.88 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{
+                          delay: idx * 0.12,
+                          type: "spring",
+                          stiffness: 240,
+                          damping: 22,
+                        }}
                         className={`flex flex-col items-center ${isFirst ? "w-32" : "w-28"}`}
                       >
                         {/* Rank icon above avatar */}
@@ -306,7 +311,14 @@ export function Leaderboard({
                         </div>
 
                         {/* Avatar with rank glow ring */}
-                        <div className="relative mb-2">
+                        <motion.div
+                          className="relative mb-2"
+                          whileHover={{ scale: 1.1, transition: { type: "spring", stiffness: 400, damping: 15 } }}
+                          animate={isFirst ? {
+                            scale: [1, 1.04, 1],
+                            transition: { duration: 3, repeat: Infinity, ease: "easeInOut", repeatDelay: 0.5 },
+                          } : undefined}
+                        >
                           {entry.avatarUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -327,7 +339,7 @@ export function Leaderboard({
                           >
                             {idx + 1}
                           </div>
-                        </div>
+                        </motion.div>
 
                         {/* Card */}
                         <div

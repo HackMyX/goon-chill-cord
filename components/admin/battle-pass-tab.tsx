@@ -7,7 +7,7 @@ import {
   Save, X, Check, Star, AlertTriangle, Copy, ExternalLink,
   Gift, Coins, Trophy, Package, Sparkles, TrendingUp, Users,
   ShoppingBag, Crown, Palette, Search, BarChart2, Calendar, Wand2, Pencil,
-  Target, RotateCcw, RefreshCw,
+  Target, RotateCcw, RefreshCw, CheckCircle2, Lock,
 } from "lucide-react";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -1584,31 +1584,45 @@ function PassEditor({
         </p>
 
         {/* Toggles */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {([
-            { key: "showTileAnimations" as const, label: "Tile-Animationen", desc: "Pulsieren / Shimmer auf Tiles" },
-            { key: "showParticleField" as const, label: "Partikel-Feld", desc: "Schwebende Partikel im Hero" },
-          ] as { key: "showTileAnimations" | "showParticleField"; label: string; desc: string }[]).map(({ key, label, desc }) => (
-            <button
-              key={key}
-              onClick={() => setVC(key, !visualConfig[key])}
-              className={`flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                visualConfig[key]
-                  ? "border-fuchsia-400/50 bg-fuchsia-500/15 text-fuchsia-200"
-                  : "border-white/10 text-zinc-500 hover:border-white/20"
-              }`}
-            >
-              <span className="flex items-center gap-1.5 text-xs font-black">
-                {visualConfig[key] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3 opacity-40" />}
-                {label}
-              </span>
-              <span className="text-[10px] opacity-60">{desc}</span>
-            </button>
+            {
+              key: "showTileAnimations" as const,
+              label: "Tile-Animationen",
+              desc: "Pulsieren / Shimmer auf Tiles",
+              tooltip: "Schaltet alle Bewegungsanimationen auf den Tier-Kacheln ein oder aus. Dazu gehören: Shimmer-Effekte auf verfügbaren Kacheln, pulsierende Glow-Ringe, diagonale Scan-Linien und Ecken-Lichtblitze. Deaktivierung verbessert die Performance auf schwächeren Geräten oder ergibt eine ruhigere, cleane Optik.",
+            },
+            {
+              key: "showParticleField" as const,
+              label: "Partikel-Feld",
+              desc: "Schwebende Partikel im Hero-Bereich",
+              tooltip: "Blendet schwebende Lichtpartikel im großen Hero-Banner des Battlepasses ein oder aus. Die Partikel haben die Akzentfarbe des Passes und steigen sanft auf. Schöner visueller Effekt, aber etwas performanceintensiver — bei sehr schwachen Geräten empfiehlt sich die Deaktivierung.",
+            },
+          ] as { key: "showTileAnimations" | "showParticleField"; label: string; desc: string; tooltip: string }[]).map(({ key, label, desc, tooltip }) => (
+            <div key={key} className="group/tip relative">
+              <button
+                onClick={() => setVC(key, !visualConfig[key])}
+                className={`flex w-full flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                  visualConfig[key]
+                    ? "border-fuchsia-400/50 bg-fuchsia-500/15 text-fuchsia-200"
+                    : "border-white/10 text-zinc-500 hover:border-white/20"
+                }`}
+              >
+                <span className="flex items-center gap-1.5 text-xs font-black">
+                  {visualConfig[key] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3 opacity-40" />}
+                  {label}
+                </span>
+                <span className="text-[10px] opacity-60">{desc}</span>
+              </button>
+              <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+                {tooltip}
+              </div>
+            </div>
           ))}
         </div>
 
         {/* Tile Scale */}
-        <div className="space-y-1.5">
+        <div className="group/tip relative space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-semibold text-zinc-400">Tile-Skalierung</label>
             <span className="text-xs font-black tabular-nums" style={{ color: "#e879f9" }}>{visualConfig.tileScale.toFixed(2)}×</span>
@@ -1619,12 +1633,15 @@ function PassEditor({
             onChange={(e) => setVC("tileScale", Number(e.target.value))}
             className="w-full accent-fuchsia-400"
           />
-          <p className="text-[10px] text-zinc-600">Skaliert alle Tile-Mini-Previews. 1.0 = Standard, 1.2 = größer.</p>
+          <p className="text-[10px] text-zinc-600">Skaliert alle Vorschau-Objekte in den Kacheln. 0.70× = kleiner, 1.00× = Standard, 1.30× = größer.</p>
+          <div className="pointer-events-none absolute -top-2 left-0 z-50 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+            Skaliert alle Vorschau-Objekte (Münzstapel, Item-Silhouetten, Icons) innerhalb jeder Kachel gleichmäßig. 1.0 = Standard. Werte über 1.0 lassen Objekte größer und eindrucksvoller erscheinen — achte aber darauf, dass sie nicht aus dem Kachel-Rahmen ragen (Y-Versatz hilft bei Bedarf). Werte unter 1.0 eignen sich für sehr schmale Tiles.
+          </div>
         </div>
 
         {/* Glow sliders */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
+          <div className="group/tip relative space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-zinc-400">Milestone-Glow</label>
               <span className="text-xs font-black tabular-nums text-amber-300">{Math.round(visualConfig.milestoneGlowIntensity * 100)}%</span>
@@ -1635,8 +1652,11 @@ function PassEditor({
               onChange={(e) => setVC("milestoneGlowIntensity", Number(e.target.value))}
               className="w-full accent-amber-400"
             />
+            <div className="pointer-events-none absolute -top-2 left-0 z-50 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+              Stärke des Leuchteffekts (Glow) auf Meilenstein-Kacheln (die hervorgehobenen Tiers mit ✦ MILESTONE-Badge). 0 % = kein Glow, 100 % = maximaler Glow. Höhere Werte betonen besondere Tier-Belohnungen stärker und erzeugen einen Premium-Eindruck. Standard: 60 %.
+            </div>
           </div>
-          <div className="space-y-1.5">
+          <div className="group/tip relative space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-zinc-400">Track-Glow</label>
               <span className="text-xs font-black tabular-nums text-purple-300">{Math.round(visualConfig.trackGlowIntensity * 100)}%</span>
@@ -1647,12 +1667,20 @@ function PassEditor({
               onChange={(e) => setVC("trackGlowIntensity", Number(e.target.value))}
               className="w-full accent-purple-400"
             />
+            <div className="pointer-events-none absolute -top-2 left-0 z-50 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+              Generelle Glow-Stärke auf verfügbaren (anklickbaren) Kacheln im gesamten Track. Beeinflusst den äußeren Box-Shadow aller Kacheln die ein Spieler gerade abholen kann. 0 % = minimaler Glow, 100 % = sehr starkes Leuchten. Standard: 50 %. Kombiniert mit Milestone-Glow für maximalen visuellen Impact.
+            </div>
           </div>
         </div>
 
         {/* Rarity color overrides */}
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-zinc-400">Rarity-Farb-Overrides (leer = Standard)</p>
+          <div className="group/tip relative inline-flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-zinc-400">Rarity-Farb-Overrides (leer = Standard)</p>
+            <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-80 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+              Überschreibt die Standard-Farben für jede Seltenheitsstufe, die auf den Kacheln dieses Battle-Passes angezeigt werden. Normal=Grau, Selten=Lila, Mythisch=Amber, Ultra=Fuchsia. Ein Override ändert nur die Darstellung auf den Tiles — keine Spielmechanik. Leer lassen = globale Standardfarbe wird verwendet. Nützlich um z.B. einen Feuer-Pass mit roten Mythisch-Farben zu gestalten.
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {(["normal", "selten", "mythisch", "ultra"] as const).map((rarity) => {
               const defaults: Record<string, string> = { normal: "#94a3b8", selten: "#a78bfa", mythisch: "#f59e0b", ultra: "#e879f9" };
@@ -1677,6 +1705,127 @@ function PassEditor({
             })}
           </div>
           <p className="text-[10px] text-zinc-600">Überschreibt die Rarity-Farben auf den Tiles dieses Passes. Nur visuelle Änderung, keine Spielmechanik.</p>
+        </div>
+
+        {/* ── Tile-Dimensionen ──────────────────────────────────── */}
+        <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.015] p-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Tile-Dimensionen</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {([
+              { key: "normalTileWidth" as const, label: "Breite Normal", min: 90, max: 220, unit: "px", tooltip: "Breite der normalen Tier-Kacheln in Pixeln. Kleinere Werte = mehr Kacheln sichtbar gleichzeitig; größere Werte = imposantere Darstellung. Standard: 140 px." },
+              { key: "normalTileHeight" as const, label: "Höhe Normal", min: 150, max: 340, unit: "px", tooltip: "Höhe der normalen Tier-Kacheln in Pixeln. Beeinflusst den Raum für das Preview-Bild und den Claim-Button. Standard: 228 px." },
+              { key: "milestoneTileWidth" as const, label: "Breite Milestone", min: 110, max: 260, unit: "px", tooltip: "Breite der hervorgehobenen Meilenstein-Kacheln. Sollte größer als 'Breite Normal' sein um den besonderen Status zu unterstreichen. Standard: 172 px." },
+              { key: "milestoneTileHeight" as const, label: "Höhe Milestone", min: 180, max: 400, unit: "px", tooltip: "Höhe der Meilenstein-Kacheln. Größere Meilenstein-Kacheln erzeugen einen dramatischen Effekt im Track. Standard: 284 px." },
+            ] as { key: keyof BpVisualConfig; label: string; min: number; max: number; unit: string; tooltip: string }[]).map(({ key, label, min, max, unit, tooltip }) => (
+              <div key={key} className="group/tip relative space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-semibold text-zinc-400">{label}</label>
+                  <span className="text-[10px] font-black tabular-nums text-fuchsia-300">{visualConfig[key] as number}{unit}</span>
+                </div>
+                <input
+                  type="range" min={min} max={max} step={2}
+                  value={visualConfig[key] as number}
+                  onChange={(e) => setVC(key, Number(e.target.value))}
+                  className="w-full accent-fuchsia-400"
+                />
+                <div className="pointer-events-none absolute -top-2 left-0 right-0 z-50 hidden rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block" style={{ bottom: "auto", top: "auto", marginBottom: 4 }}>
+                  {tooltip}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Preview-Versatz ───────────────────────────────────── */}
+        <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.015] p-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Preview-Versatz (Feintuning)</p>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { key: "tileOffsetX" as const, label: "X-Versatz", color: "text-sky-300", accentClass: "accent-sky-400",
+                tooltip: "Verschiebt das Vorschau-Objekt horizontal innerhalb der Kachel. Negativer Wert = nach links, positiver Wert = nach rechts. Nützlich wenn ein Item-Typ optisch leicht versetzt erscheint. Bereich: –30 bis +30 px. Standard: 0." },
+              { key: "tileOffsetY" as const, label: "Y-Versatz", color: "text-emerald-300", accentClass: "accent-emerald-400",
+                tooltip: "Verschiebt das Vorschau-Objekt vertikal innerhalb der Kachel. Negativer Wert = nach oben, positiver Wert = nach unten. Nützlich um abgeschnittene Objekte (z. B. Hüte) neu zu zentrieren. Bereich: –30 bis +30 px. Standard: 0." },
+            ] as { key: keyof BpVisualConfig; label: string; color: string; accentClass: string; tooltip: string }[]).map(({ key, label, color, accentClass, tooltip }) => (
+              <div key={key} className="group/tip relative space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className={`text-[10px] font-semibold text-zinc-400`}>{label}</label>
+                  <span className={`text-[10px] font-black tabular-nums ${color}`}>{(visualConfig[key] as number) >= 0 ? "+" : ""}{visualConfig[key] as number} px</span>
+                </div>
+                <input
+                  type="range" min={-30} max={30} step={1}
+                  value={visualConfig[key] as number}
+                  onChange={(e) => setVC(key, Number(e.target.value))}
+                  className={`w-full ${accentClass}`}
+                />
+                <div className="pointer-events-none absolute -top-2 left-0 z-50 hidden w-64 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+                  {tooltip}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-zinc-600">Tipp: Gilt für alle Tiles dieses Passes gleichzeitig. Für feingranulare Kontrolle pro Item-Typ das Item selbst bearbeiten.</p>
+        </div>
+
+        {/* ── 3D-Tilt + Glassmorphismus + Container-Gap ─────────── */}
+        <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.015] p-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">3D-Effekte & Abstände</p>
+
+          {/* Tilt toggle */}
+          <div className="group/tip relative">
+            <button
+              onClick={() => setVC("enableTiltEffect", !(visualConfig.enableTiltEffect ?? true))}
+              className={`flex w-full items-start gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                (visualConfig.enableTiltEffect ?? true)
+                  ? "border-fuchsia-400/50 bg-fuchsia-500/15 text-fuchsia-200"
+                  : "border-white/10 text-zinc-500 hover:border-white/20"
+              }`}
+            >
+              <span className="mt-0.5 shrink-0">
+                {(visualConfig.enableTiltEffect ?? true) ? <CheckCircle2 className="h-3.5 w-3.5 text-fuchsia-400" /> : <Lock className="h-3.5 w-3.5 opacity-40" />}
+              </span>
+              <div>
+                <span className="text-xs font-black">3D-Tilt-Effekt</span>
+                <p className="text-[10px] opacity-60 mt-0.5">Kacheln kippen beim Hover perspektivisch in 3D.</p>
+              </div>
+            </button>
+            <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+              Aktiviert einen echten 3D-Perspektiv-Kipp-Effekt wenn der Mauszeiger über eine Kachel bewegt wird (ähnlich wie in Fortnite oder Valorant). Die Kachel kippt in Richtung des Mauszeigers. Empfohlen für Desktop; auf mobilen Geräten hat dieser Schalter keinen Effekt.
+            </div>
+          </div>
+
+          {/* Glassmorphism slider */}
+          <div className="group/tip relative space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-400">Glassmorphismus-Stärke</label>
+              <span className="text-xs font-black tabular-nums text-cyan-300">{Math.round((visualConfig.glassmorphismIntensity ?? 0.5) * 100)}%</span>
+            </div>
+            <input
+              type="range" min={0} max={1} step={0.05}
+              value={visualConfig.glassmorphismIntensity ?? 0.5}
+              onChange={(e) => setVC("glassmorphismIntensity", Number(e.target.value))}
+              className="w-full accent-cyan-400"
+            />
+            <div className="pointer-events-none absolute -top-2 left-0 z-50 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+              Stärke des Frostedglass-Effekts (backdrop-blur) hinter den Kacheln. 0 % = kein Blur, 100 % = maximaler Blur (~12 px). Höhere Werte sehen edler aus, können aber auf schwächeren Geräten die Performance leicht beeinflussen. Standard: 50 %.
+            </div>
+          </div>
+
+          {/* Container gap slider */}
+          <div className="group/tip relative space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-400">Abstand zwischen Kacheln</label>
+              <span className="text-xs font-black tabular-nums text-amber-300">{visualConfig.containerGap ?? 8} px</span>
+            </div>
+            <input
+              type="range" min={4} max={24} step={2}
+              value={visualConfig.containerGap ?? 8}
+              onChange={(e) => setVC("containerGap", Number(e.target.value))}
+              className="w-full accent-amber-400"
+            />
+            <div className="pointer-events-none absolute -top-2 left-0 z-50 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
+              Horizontaler Abstand zwischen den Tier-Kacheln im Track in Pixeln. Kleinere Werte lassen mehr Kacheln gleichzeitig sehen, größere Werte geben dem Layout mehr Luft und Eleganz. Standard: 8 px. Empfehlung: 8–14 px.
+            </div>
+          </div>
         </div>
 
         {/* Live preview hint */}

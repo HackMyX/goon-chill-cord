@@ -16,6 +16,7 @@ import {
 } from "@/lib/site-config";
 import { SITE_LOGO_ICONS, resolveSiteLogoIcon, type SiteLogoIconName } from "@/lib/site-logo-icons";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 const ICON_NAMES = Object.keys(SITE_LOGO_ICONS) as SiteLogoIconName[];
 
@@ -99,6 +100,7 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
       <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
         <Palette className="h-5 w-5 text-pink-400" />
         Branding
+        <AdminTooltip text="Grundlegende Identität der Site: Name, Logo, Versions-Badge und Startguthaben. Änderungen gelten sofort für alle Nutzer beim nächsten Seitenaufruf." />
       </h3>
 
       <div className="flex flex-wrap gap-4">
@@ -116,7 +118,10 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
           </span>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold text-zinc-400">Versions-Badge (TopBar)</span>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+            Versions-Badge (TopBar)
+            <AdminTooltip text="Kleiner klickbarer Badge links neben dem Logo in der Navigation. Führt zu /patchnotes. Nutze das Format 'v1.0.0'. Empfehlung: bei jedem Major-Update hochzählen, damit Nutzer Änderungen bemerken." />
+          </span>
           <input
             type="text"
             maxLength={20}
@@ -192,6 +197,7 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
         <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
           <Coins className="h-3.5 w-3.5 text-amber-400" />
           Startguthaben für neue User ({form.currencyName || "CR"})
+          <AdminTooltip text="Credits die ein neuer Nutzer beim ersten Login erhält. Gilt nur bei der allerersten Anmeldung — bestehende Nutzer werden nicht beeinflusst. Empfehlung: 500–2.000 CR, damit Neulinge sofort etwas ausprobieren können." />
         </span>
         <input
           type="number"
@@ -206,7 +212,10 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
 
       {/* Global labels */}
       <div className="mt-6 border-t border-white/10 pt-5">
-        <h4 className="mb-4 text-sm font-bold text-zinc-200">Globale Bezeichnungen</h4>
+        <h4 className="mb-4 flex items-center gap-2 text-sm font-bold text-zinc-200">
+          Globale Bezeichnungen
+          <AdminTooltip text="Ändert die Bezeichnungen der Spielwährung, des Schadens und der Rüstung überall auf der Site gleichzeitig. Änderungen erscheinen sofort in Tooltips, Badges und der Garderobe. Maximal 12 Zeichen pro Label." />
+        </h4>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="flex flex-col gap-1 rounded-xl border border-amber-400/20 bg-amber-400/5 p-3">
             <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
@@ -255,6 +264,7 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
         <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-zinc-200">
           <Sparkles className="h-4 w-4 text-purple-400" />
           Seltenheits-Bezeichnungen
+          <AdminTooltip text="Ändert die Anzeigenamen der vier Item-Stufen überall auf der Site (Badges, Filter, Shop, Garderobe). Beispiele: Normal → 'Common', Selten → 'Rare', Mythisch → 'Legendary', Ultra → 'Godlike'. Maximal 20 Zeichen." />
         </h4>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {(["normal", "selten", "mythisch", "ultra"] as const).map((r) => (
@@ -279,6 +289,7 @@ export function SiteConfigEditor({ config }: { config: SiteConfig }) {
         <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-zinc-200">
           <Zap className="h-4 w-4 text-amber-400" />
           Perk-Bezeichnungen
+          <AdminTooltip text="Namen der drei Charakter-Perks die Ausrüstungs-Items verleihen können. Werden in Stat-Badges, Tooltips und der Garderobe angezeigt. Beispiele: Tempo → 'Haste', Sprung → 'Leap', Regen → 'Lifesteal'. Maximal 20 Zeichen." />
         </h4>
         <div className="grid grid-cols-3 gap-3">
           {(
@@ -410,6 +421,7 @@ function TopBarLayoutEditor({
       <h4 className="mb-1 flex items-center gap-2 text-sm font-bold text-zinc-200">
         <Layout className="h-4 w-4 text-purple-400" />
         TopBar-Layout (rechte Seite)
+        <AdminTooltip text="Steuert, welche Buttons in der oberen Navigation rechts erscheinen und in welcher Reihenfolge. Logo, Credits-Anzeige und Admin/Mod-Buttons sind immer fixiert und hier nicht änderbar. Pfeilbuttons verschieben die Position, Auge blendet aus." />
       </h4>
       <p className="mb-4 text-[11px] text-zinc-500">
         Aktiviere Buttons und lege die Reihenfolge fest. Logo, Credits und Admin/Mod-Buttons sind immer sichtbar.
@@ -423,6 +435,7 @@ function TopBarLayoutEditor({
             <p className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
               <Type className="h-3.5 w-3.5 text-indigo-400" />
               Button-Beschriftungen
+              <AdminTooltip text="Wenn aktiv: Jeder TopBar-Button zeigt das Icon plus einen kurzen Textlabel darunter (z.B. 'Shop', 'Garderobe'). Wenn inaktiv: Nur Icons, platzsparender auf kleinen Bildschirmen." />
             </p>
             <p className="text-[11px] text-zinc-500 mt-0.5">Icon + Textlabel anzeigen</p>
           </div>
@@ -444,6 +457,7 @@ function TopBarLayoutEditor({
           <p className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
             <Monitor className="h-3.5 w-3.5 text-sky-400" />
             Button-Stil
+            <AdminTooltip text="'Icon-Only': Runde Icon-Buttons (kompakt, klassisch). 'Icon + Text': Längliche Pill-Buttons mit Icon und Text nebeneinander (moderner Look, braucht mehr Platz). Gilt nur wenn Button-Beschriftungen aktiviert sind." />
           </p>
           <div className="flex gap-2">
             {(["icon", "pill"] as const).map((style) => (
@@ -609,6 +623,7 @@ function HomepageConfigEditor({
       <h4 className="mb-1 flex items-center gap-2 text-sm font-bold text-zinc-200">
         <Home className="h-4 w-4 text-fuchsia-400" />
         Startseite konfigurieren
+        <AdminTooltip text="Konfiguriert den Inhalt der Startseite (/) vollständig. Alle Änderungen gelten sofort nach dem Speichern — kein Neustart nötig. Nutzer die gerade auf der Startseite sind, sehen die Änderungen beim nächsten Seitenaufruf." />
       </h4>
       <p className="mb-5 text-[11px] text-zinc-500">
         Steuere Inhalt, Reihenfolge und Ankündigungen der Startseite — alles in Echtzeit nach dem Speichern.
@@ -619,6 +634,7 @@ function HomepageConfigEditor({
         <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
           <Type className="h-3.5 w-3.5" />
           Hero-Text
+          <AdminTooltip text="Der große Begrüßungstext oben auf der Startseite. Titel-Platzhalter '{name}' wird automatisch durch den Nutzernamen ersetzt (z.B. 'Willkommen, Leon!'). Leer lassen = Site-Name wird genutzt." />
         </p>
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
@@ -653,6 +669,7 @@ function HomepageConfigEditor({
           <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
             <Megaphone className="h-3.5 w-3.5" />
             Ankündigung
+            <AdminTooltip text="Farbiger Banner oben auf der Startseite für wichtige Nachrichten (Events, Wartungen, Updates). Nutzer können den Banner nach dem Lesen wegklicken (dismissable). Er erscheint wieder wenn du den Text änderst." />
           </p>
           <button
             onMouseEnter={sound.hover}
@@ -702,8 +719,9 @@ function HomepageConfigEditor({
 
       {/* Section toggles */}
       <div className="mb-5 rounded-xl border border-white/8 bg-white/[0.02] p-4">
-        <p className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-500">
+        <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
           Sektionen ein-/ausblenden
+          <AdminTooltip text="Steuert welche Bereiche auf der Startseite sichtbar sind. Ausgeblendete Sektionen existieren weiterhin, werden aber für alle Nutzer versteckt. Nützlich um die Seite aufgeräumt zu halten oder temporär Bereiche zu deaktivieren." />
         </p>
         <div className="flex flex-col gap-2">
           {[
@@ -730,8 +748,9 @@ function HomepageConfigEditor({
 
       {/* Leaderboard options */}
       <div className="mb-5 rounded-xl border border-white/8 bg-white/[0.02] p-4">
-        <p className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-500">
+        <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
           Bestenliste — Optionen
+          <AdminTooltip text="Konfiguriert die Bestenliste auf der Startseite. 'Podium'-Stil: Top 3 groß dargestellt mit animierten Podestplätzen. 'Liste'-Stil: Kompakte Tabelle aller Einträge. Der Streak-Tab zeigt eine separate Bestenliste nach Login-Streak-Tagen." />
         </p>
 
         {/* Streak tab toggle */}

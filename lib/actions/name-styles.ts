@@ -7,6 +7,50 @@ import { logDebugEvent } from "@/lib/debug-log-server";
 import { NAME_STYLES, type NameStyleDef, type NameStyleRarityConfig, type NameStyleRarity } from "@/lib/name-styles";
 import { checkAndAwardNameStyleBadges } from "@/lib/actions/badges";
 
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+/**
+ * Guarantees that `styleKey` exists in the `name_styles` DB table.
+ * If it only lives in the local NAME_STYLES catalog it is upserted first,
+ * preventing the `user_name_styles_style_key_fkey` foreign-key crash.
+ * Throws if the key is unknown everywhere.
+ */
+export async function ensureStyleInDb(styleKey: string, adminClient?: AdminClient): Promise<void> {
+  const admin = adminClient ?? createAdminClient();
+  const { data } = await admin
+    .from("name_styles")
+    .select("key")
+    .eq("key", styleKey)
+    .maybeSingle();
+  if (data) return; // already there
+
+  const local = NAME_STYLES[styleKey];
+  if (!local) throw new Error(`Name-Style "${styleKey}" existiert weder in der DB noch im lokalen Katalog.`);
+
+  const { error } = await admin.from("name_styles").upsert({
+    key:              local.key,
+    label:            local.label,
+    description:      local.description ?? "",
+    rarity:           local.rarity,
+    category:         local.category,
+    color1:           local.color1,
+    color2:           local.color2 ?? null,
+    color3:           local.color3 ?? null,
+    color4:           local.color4 ?? null,
+    animation_type:   local.animation_type,
+    animation_speed:  local.animation_speed,
+    glow_color:       local.glow_color ?? null,
+    glow_radius:      local.glow_radius,
+    prefix_icon:      local.prefix_icon ?? null,
+    suffix_icon:      local.suffix_icon ?? null,
+    unlock_price_cr:  local.unlock_price_cr,
+    can_win_from_case: local.can_win_from_case,
+    is_special:       local.is_special,
+  }, { onConflict: "key" });
+
+  if (error) throw new Error(`ensureStyleInDb upsert failed: ${error.message}`);
+}
+
 export interface UserNameStyleRow {
   id: string;
   styleKey: string;
@@ -183,6 +227,9 @@ export async function purchaseNameStyle(styleKey: string): Promise<{ ok: boolean
       .eq("key", styleKey);
   }
 
+  // Guarantee FK target exists before insert
+  try { await ensureStyleInDb(styleKey, admin); } catch (e) { return { ok: false, error: String(e) }; }
+
   const { error: grantErr } = await admin
     .from("user_name_styles")
     .insert({ user_id: user.id, style_key: styleKey, source: "purchased" });
@@ -215,6 +262,7 @@ export async function adminGrantNameStyle(
   try {
     const actor = await requireAdminUser();
     const admin = createAdminClient();
+    await ensureStyleInDb(styleKey, admin);
     const { error } = await admin
       .from("user_name_styles")
       .upsert({ user_id: userId, style_key: styleKey, source: "gifted" }, { onConflict: "user_id,style_key" });
@@ -286,7 +334,7 @@ export async function adminForceEquipStyle(
     const admin = createAdminClient();
 
     if (styleKey && styleKey !== "default") {
-      // Ensure they own it first
+      await ensureStyleInDb(styleKey, admin);
       await admin
         .from("user_name_styles")
         .upsert({ user_id: userId, style_key: styleKey, source: "gifted" }, { onConflict: "user_id,style_key" });
@@ -330,7 +378,8 @@ export async function adminWarnUser(
       .eq("id", userId);
     if (error) return { ok: false, error: error.message };
 
-    // Optionally force the "warned" name style
+    // Optionally force the "warned" name style (ensure FK target exists first)
+    await ensureStyleInDb("warned", admin);
     await admin
       .from("user_name_styles")
       .upsert({ user_id: userId, style_key: "warned", source: "gifted" }, { onConflict: "user_id,style_key" });

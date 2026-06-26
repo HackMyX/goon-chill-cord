@@ -324,6 +324,11 @@ export async function dropPlinkoBall(input: {
     void incrementBpQuestProgress(user.id, "plinko_play", 1);
   } catch { /* non-fatal */ }
 
+  try {
+    const { incrementDailyQuestProgress } = await import("@/lib/actions/daily-quests");
+    void incrementDailyQuestProgress("plinko_play", 1);
+  } catch { /* non-fatal */ }
+
   return { success: true, bucketIndex: clampedIdx, multiplier, payout, newCredits, path };
 }
 

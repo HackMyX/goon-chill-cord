@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, Save } from "lucide-react";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
 import {
@@ -216,7 +217,10 @@ export default function HomepageChatConfigEditor() {
         header={
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-bold text-zinc-200">Allgemein</p>
+              <p className="flex items-center gap-1.5 text-sm font-bold text-zinc-200">
+                Allgemein
+                <AdminTooltip text="Haupt-Schalter für den Startseiten-Chat. Wenn deaktiviert, ist die Chat-Sidebar komplett ausgeblendet. 'Eingabefeld anzeigen' steuert ob Nutzer schreiben können (Chat kann auch read-only sein). Titel erscheint als Tab-Bezeichnung in der Support-Leiste." />
+              </p>
               <p className="text-xs text-zinc-500">
                 Chat-Sidebar aktivieren, Titel & Eingabe
               </p>
@@ -255,7 +259,10 @@ export default function HomepageChatConfigEditor() {
         header={
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-bold text-zinc-200">Standard-Zustand</p>
+              <p className="flex items-center gap-1.5 text-sm font-bold text-zinc-200">
+                Standard-Zustand
+                <AdminTooltip text="Steuert ob die Chat-Sidebar beim ersten Laden der Seite automatisch aufgeklappt ist. Desktop und Mobile können unterschiedlich eingestellt werden. Auf Mobile empfiehlt sich 'geschlossen' um Platz zu sparen. Nutzer können die Sidebar immer manuell öffnen/schließen." />
+              </p>
               <p className="text-xs text-zinc-500">
                 Standardmäßig offen oder geschlossen
               </p>
@@ -282,7 +289,10 @@ export default function HomepageChatConfigEditor() {
         header={
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-bold text-zinc-200">Erscheinungsbild</p>
+              <p className="flex items-center gap-1.5 text-sm font-bold text-zinc-200">
+                Erscheinungsbild
+                <AdminTooltip text="Optisches Design der Chat-Sidebar: Breite (220–500px), Position links oder rechts, Hintergrund-Transparenz (0=komplett transparent, 90=fast undurchsichtig), Blur-Intensität für den Glasmorphismus-Effekt, Schriftgröße und Kompaktmodus (weniger Padding zwischen Nachrichten)." />
+              </p>
               <p className="text-xs text-zinc-500">
                 Breite, Position, Glasmorphismus & Schrift
               </p>
@@ -350,7 +360,10 @@ export default function HomepageChatConfigEditor() {
         header={
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-bold text-zinc-200">Nachrichten</p>
+              <p className="flex items-center gap-1.5 text-sm font-bold text-zinc-200">
+                Nachrichten
+                <AdminTooltip text="Steuert den Inhalt jeder einzelnen Chat-Nachricht. 'Max. Nachrichten' begrenzt die im Speicher gehaltene Historie (älter = verworfen). Auto-Scrollen scrollt automatisch nach unten bei neuen Nachrichten. Relative Zeitangaben (z.B. '2m') sind platzsparender als absolute Uhrzeiten." />
+              </p>
               <p className="text-xs text-zinc-500">
                 Avatare, Badges, Zeitstempel & Animation
               </p>
