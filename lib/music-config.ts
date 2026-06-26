@@ -47,6 +47,29 @@ export interface MusicConfig {
   maxUserVolume: number;
   tracks: MusicTrack[];
   pageAssignments: Partial<Record<MusicPageKey, string | null>>;
+  /**
+   * Optional exact background-music volume per page/game (0–1). When a page has
+   * no entry here, `defaultVolume` is used. In dictator mode (userCanAdjustVolume
+   * = false) this value is applied to the player EXACTLY — no localStorage, no
+   * hardcoded fallback.
+   */
+  pageVolumes: Partial<Record<MusicPageKey, number>>;
+}
+
+/** Clamp a volume into the valid 0–1 range. */
+export function clampVolume(v: number): number {
+  if (!Number.isFinite(v)) return 0;
+  return Math.min(1, Math.max(0, v));
+}
+
+/**
+ * Resolve the exact background-music volume for a given page. Per-page override
+ * wins; otherwise the global default volume is used. Always returns 0–1.
+ */
+export function resolvePageVolume(config: MusicConfig, page: MusicPageKey): number {
+  const perPage = config.pageVolumes?.[page];
+  const v = typeof perPage === "number" ? perPage : config.defaultVolume;
+  return clampVolume(v);
 }
 
 export const PAGE_LABELS: Record<MusicPageKey, string> = {
@@ -144,6 +167,7 @@ export const DEFAULT_MUSIC_CONFIG: MusicConfig = {
   userCanAdjustVolume: false,
   maxUserVolume:       1.0,
   tracks:              BUILT_IN_TRACKS,
+  pageVolumes:         {},
   pageAssignments: {
     homepage:   "chl_midnight",
     snake:      "arc_neon_rush",

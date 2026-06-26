@@ -368,6 +368,23 @@ export function MusicConfigEditor() {
     }));
   }, []);
 
+  // Per-page volume overrides (stored in config.pageVolumes). Absent = inherits
+  // the global Standard-Lautstärke; present = exact volume applied to that page.
+  const setPageVolume = useCallback((pageKey: MusicPageKey, v: number) => {
+    setConfig((c) => ({
+      ...c,
+      pageVolumes: { ...(c.pageVolumes ?? {}), [pageKey]: Math.min(1, Math.max(0, v)) },
+    }));
+  }, []);
+
+  const clearPageVolume = useCallback((pageKey: MusicPageKey) => {
+    setConfig((c) => {
+      const pv = { ...(c.pageVolumes ?? {}) };
+      delete pv[pageKey];
+      return { ...c, pageVolumes: pv };
+    });
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-10 text-sm text-zinc-600">
@@ -441,7 +458,7 @@ export function MusicConfigEditor() {
             <Volume2 className="h-4 w-4 text-zinc-500" />
             <span className="flex items-center gap-1.5 text-sm text-zinc-300">
               Standard-Lautstärke
-              <AdminTooltip text="Startlautstärke für alle neuen Besucher (0–100%). Nutzer mit gespeicherter Einstellung (localStorage) überschreiben diesen Wert mit ihrem eigenen. Empfehlung: 10–20% — niedriger Wert verhindert, dass Musik beim ersten Besuch erschreckt." />
+              <AdminTooltip text="Globale Basis-Lautstärke (0–100%) für jede Seite OHNE eigene Lautstärke (siehe 'Musik pro Seite'). Im Diktator-Modus (User-Lautstärke gesperrt) wird dieser Wert exakt beim Spieler übernommen. Nur wenn 'Lautstärke anpassen erlauben' aktiv ist, kann der Nutzer ihn mit seinem eigenen Wert überschreiben. Empfehlung: 10–20%." />
             </span>
             <span className="ml-auto text-sm font-bold text-purple-300 tabular-nums">
               {Math.round(config.defaultVolume * 100)}%
@@ -454,7 +471,7 @@ export function MusicConfigEditor() {
             className="w-full accent-purple-400"
             style={{ height: "6px" }}
           />
-          <p className="text-[10px] text-zinc-600">Startlautstärke für neue Besucher (wird von gespeicherten User-Einstellungen überschrieben).</p>
+          <p className="text-[10px] text-zinc-600">Basis-Lautstärke für Seiten ohne eigene Einstellung. Im Diktator-Modus exakt übernommen; nur bei erlaubter User-Steuerung überschreibbar.</p>
         </div>
 
         {/* Fade times */}
@@ -574,35 +591,69 @@ export function MusicConfigEditor() {
 
       {/* ── Musik pro Seite ─────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-        <SectionHeader icon={Music} title="Musik pro Seite" subtitle="Welcher Track läuft auf welcher Seite?" tip="Weise jeder Seite einen Track zu. Wenn eine Seite keinen Track hat (— Kein Musik —), wird beim Navigieren dorthin die Musik ausgeblendet. Tracks wechseln mit sanftem Fade-Out/Fade-In. Dieselbe Track-ID auf mehreren Seiten = Musik läuft nahtlos weiter ohne Neustart." />
+        <SectionHeader icon={Music} title="Musik pro Seite" subtitle="Track + exakte Lautstärke je Seite" tip="Weise jeder Seite einen Track UND eine exakte Lautstärke zu. Ohne eigene Lautstärke nutzt die Seite die globale Standard-Lautstärke. Im Diktator-Modus (User-Lautstärke gesperrt) wird dieser Wert exakt beim Spieler übernommen — auf jeder Seite. Seiten ohne Track (— Kein Musik —) blenden die Musik aus. Dieselbe Track-ID auf mehreren Seiten = Musik läuft nahtlos weiter." />
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {PAGE_ROUTES.map((pageKey) => {
             const Icon = PAGE_ICONS[pageKey];
             const currentId    = config.pageAssignments[pageKey] ?? "";
             const currentTrack = config.tracks.find((t) => t.id === currentId);
+            const override     = config.pageVolumes?.[pageKey];
+            const hasOverride  = typeof override === "number";
+            const effVol       = hasOverride ? override : config.defaultVolume;
             return (
-              <div key={pageKey} className="flex items-center gap-2.5 rounded-xl border border-white/6 bg-white/[0.01] px-3 py-2.5">
-                <Icon className="h-4 w-4 shrink-0 text-zinc-500" />
-                <span className="w-32 shrink-0 text-xs font-semibold text-zinc-300">{PAGE_LABELS[pageKey]}</span>
-                <select
-                  value={currentId}
-                  onChange={(e) =>
-                    setConfig((c) => ({
-                      ...c,
-                      pageAssignments: { ...c.pageAssignments, [pageKey]: e.target.value || null },
-                    }))
-                  }
-                  className="flex-1 min-w-0 rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
-                >
-                  {trackOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                {currentTrack && (
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold ${VIBE_COLORS[currentTrack.vibe]}`}>
-                    {VIBE_LABELS[currentTrack.vibe].split(" ")[0]}
+              <div key={pageKey} className="flex flex-col gap-2 rounded-xl border border-white/6 bg-white/[0.01] px-3 py-2.5">
+                <div className="flex items-center gap-2.5">
+                  <Icon className="h-4 w-4 shrink-0 text-zinc-500" />
+                  <span className="w-32 shrink-0 text-xs font-semibold text-zinc-300">{PAGE_LABELS[pageKey]}</span>
+                  <select
+                    value={currentId}
+                    onChange={(e) =>
+                      setConfig((c) => ({
+                        ...c,
+                        pageAssignments: { ...c.pageAssignments, [pageKey]: e.target.value || null },
+                      }))
+                    }
+                    className="flex-1 min-w-0 rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+                  >
+                    {trackOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  {currentTrack && (
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold ${VIBE_COLORS[currentTrack.vibe]}`}>
+                      {VIBE_LABELS[currentTrack.vibe].split(" ")[0]}
+                    </span>
+                  )}
+                </div>
+
+                {/* Per-page volume */}
+                <div className="flex items-center gap-2 pl-[26px]">
+                  <Volume2 className={`h-3.5 w-3.5 shrink-0 ${hasOverride ? "text-purple-400" : "text-zinc-600"}`} />
+                  <input
+                    type="range" min={0} max={1} step={0.01}
+                    value={effVol}
+                    onChange={(e) => setPageVolume(pageKey, parseFloat(e.target.value))}
+                    className={`h-1 flex-1 cursor-pointer ${hasOverride ? "accent-purple-400" : "accent-zinc-600"}`}
+                    aria-label={`Lautstärke ${PAGE_LABELS[pageKey]}`}
+                  />
+                  <span className={`w-9 shrink-0 text-right text-[11px] font-bold tabular-nums ${hasOverride ? "text-purple-300" : "text-zinc-500"}`}>
+                    {Math.round(effVol * 100)}%
                   </span>
-                )}
+                  {hasOverride ? (
+                    <button
+                      type="button"
+                      onClick={() => clearPageVolume(pageKey)}
+                      title="Auf globale Standard-Lautstärke zurücksetzen"
+                      className="shrink-0 rounded border border-white/10 px-1.5 py-0.5 text-[9px] font-bold text-zinc-400 hover:text-zinc-200 hover:border-white/20 transition-colors"
+                    >
+                      Standard
+                    </button>
+                  ) : (
+                    <span className="shrink-0 rounded border border-white/6 px-1.5 py-0.5 text-[9px] font-bold text-zinc-600">
+                      erbt
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}

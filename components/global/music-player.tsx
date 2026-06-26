@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Music, VolumeX, Volume1, Volume2 } from "lucide-react";
 import { getMusicConfig } from "@/lib/actions/music";
 import { MusicSynth } from "@/lib/music-synth";
-import type { MusicConfig, MusicPageKey } from "@/lib/music-config";
+import { resolvePageVolume, clampVolume, type MusicConfig, type MusicPageKey } from "@/lib/music-config";
 
 const LS_VOL   = "gn_music_vol";
 const LS_MUTED = "gn_music_muted";
@@ -46,6 +46,9 @@ export function MusicPlayer() {
   const activeIsSynth  = useRef(false);
   const interactedRef  = useRef(false);
   const pendingUrlRef  = useRef<string | null>(null);
+  // User's manually-chosen volume (null = never set). Only honored when the
+  // admin allows users to adjust volume; ignored in dictator mode.
+  const userOverrideRef = useRef<number | null>(null);
 
   const [config, setConfig]       = useState<MusicConfig | null>(null);
   const [volume, setVolume]       = useState(0.12);
@@ -74,8 +77,10 @@ export function MusicPlayer() {
     const savedMuted = localStorage.getItem(LS_MUTED);
     if (savedVol !== null) {
       const v = parseFloat(savedVol);
-      setVolume(v);
-      volumeRef.current = v;
+      // Remember the user's choice, but do NOT force it onto playback yet — the
+      // effective volume is resolved per page once the config loads (and the
+      // override is only honored when the admin allows volume control).
+      if (Number.isFinite(v)) userOverrideRef.current = clampVolume(v);
     }
     if (savedMuted !== null) {
       const m = savedMuted === "true";
@@ -218,12 +223,34 @@ export function MusicPlayer() {
     }
   }, [fadeOut]);
 
+  // ── Resolve the EXACT volume for a page and apply it ──────────────────────
+  // Per-page admin volume is authoritative. In dictator mode (no user volume
+  // control) localStorage is ignored entirely, so the admin value is taken over
+  // 1:1 on every page. When users may adjust volume, their saved override wins
+  // (capped to maxUserVolume); otherwise the per-page admin value is the default.
+  const resolveVolumeForPage = useCallback((cfg: MusicConfig, pageKey: MusicPageKey) => {
+    const base = resolvePageVolume(cfg, pageKey);
+    let eff = base;
+    if (cfg.userCanAdjustVolume && userOverrideRef.current !== null) {
+      eff = Math.min(userOverrideRef.current, cfg.maxUserVolume ?? 1);
+    }
+    eff = clampVolume(eff);
+    if (eff !== volumeRef.current) {
+      volumeRef.current = eff;
+      setVolume(eff);
+    }
+    return eff;
+  }, []);
+
   // ── Decide track for current pathname ─────────────────────────────────────
   const applyRoute = useCallback((pn: string) => {
     const cfg = configRef.current;
     if (!cfg?.enabled) return;
 
     const pageKey = getPageKey(pn);
+    // Apply this page's exact volume BEFORE (re)starting any track, so the synth
+    // and audio element both start at the configured level — never a stale value.
+    resolveVolumeForPage(cfg, pageKey);
     const trackId = cfg.pageAssignments[pageKey] ?? null;
     const track   = trackId ? cfg.tracks.find((t) => t.id === trackId) : null;
 
@@ -246,7 +273,7 @@ export function MusicPlayer() {
     } else {
       loadAndPlay(track.url);
     }
-  }, [stopCurrent, loadAndPlay]);
+  }, [stopCurrent, loadAndPlay, resolveVolumeForPage]);
 
   // ── First user interaction — start music / resume iOS AudioContext ─────────
   useEffect(() => {
@@ -255,7 +282,10 @@ export function MusicPlayer() {
       interactedRef.current = true;
       // Resume synth context for iOS
       synthRef.current?.resume();
-      if (pendingUrlRef.current) {
+      const cfg = configRef.current;
+      if (pendingUrlRef.current && cfg) {
+        // Resolve the exact volume for the current page before the deferred start.
+        resolveVolumeForPage(cfg, getPageKey(pathname));
         loadAndPlay(pendingUrlRef.current);
         pendingUrlRef.current = null;
       } else {
@@ -305,6 +335,7 @@ export function MusicPlayer() {
     const v = Math.min(parseFloat(e.target.value), max);
     setVolume(v);
     volumeRef.current = v;
+    userOverrideRef.current = v;
     localStorage.setItem(LS_VOL, String(v));
     if (v > 0 && muted) {
       setMuted(false);
