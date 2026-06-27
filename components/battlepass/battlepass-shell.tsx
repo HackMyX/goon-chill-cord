@@ -998,8 +998,8 @@ function TrackTileCard({
     if (!el || typeof IntersectionObserver === "undefined") return;
     const root = scrollRootRef?.current ?? null;
     const obs = new IntersectionObserver(
-      (entries) => setInView((entries[0]?.intersectionRatio ?? 1) >= 0.82),
-      { root, rootMargin: "0px", threshold: [0, 0.5, 0.82, 1] },
+      (entries) => setInView((entries[0]?.intersectionRatio ?? 1) >= 0.5),
+      { root, rootMargin: "0px", threshold: [0, 0.25, 0.5, 0.75, 1] },
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -1421,6 +1421,14 @@ function HorizontalTrack({
 
       {/* Scrollable row — negative margin compensates for top padding that prevents vertical clip */}
       <div className="relative -mt-3">
+        {/* Edge-Masken: verdecken den 3D-Überstand am linken/rechten Rand → Kacheln gleiten sauber
+            unter den Rand statt aus dem Container zu ragen oder zu poppen (kein Rand-Bug). */}
+        {roadMode && (
+          <>
+            <div className="pointer-events-none absolute inset-y-0 z-20" style={{ left: -14, width: 88, background: "linear-gradient(to right, rgb(9,7,17) 26%, rgba(9,7,17,0))" }} />
+            <div className="pointer-events-none absolute inset-y-0 z-20" style={{ right: -14, width: 88, background: "linear-gradient(to left, rgb(9,7,17) 26%, rgba(9,7,17,0))" }} />
+          </>
+        )}
         {/* Left arrow */}
         {canScrollLeft && (
           <button

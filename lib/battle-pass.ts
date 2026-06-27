@@ -121,6 +121,15 @@ export interface BattlePassTier {
   rewardNameStyleKey: string | null;
   rewardAbilityKey: string | null;
   rewardAbilityName: string | null;
+  /** Enriched item combat stats (set server-side for item rewards) so the UI can show values. */
+  rewardItemStats?: {
+    damage: number | null;
+    armor: number | null;
+    perkType: string | null;
+    perkMagnitude: number | null;
+    shieldHp: number | null;
+    shieldRegenCooldownSec: number | null;
+  } | null;
   rewardQuantity: number;
   highlightTier: boolean;
   description: string | null;

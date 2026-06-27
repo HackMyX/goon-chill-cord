@@ -103,11 +103,11 @@ async function enrichItemRewards(
 
   const { data: items } = await admin
     .from("items")
-    .select("id, name, type, rarity")
+    .select("id, name, type, rarity, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec")
     .in("id", ids);
   if (!items) return;
 
-  const byId = new Map(items.map((it) => [it.id as string, it]));
+  const byId = new Map(items.map((it) => [it.id as string, it as Record<string, unknown>]));
   for (const t of tiers) {
     if (t.rewardType !== "item" || !t.rewardItemId) continue;
     const it = byId.get(t.rewardItemId);
@@ -115,6 +115,14 @@ async function enrichItemRewards(
     t.rewardItemName = (it.name as string | null) ?? t.rewardItemName;
     t.rewardItemType = (it.type as string | null) ?? t.rewardItemType;
     t.rewardItemRarity = ((it.rarity as Rarity | null) ?? t.rewardItemRarity) ?? null;
+    t.rewardItemStats = {
+      damage: (it.damage as number | null) ?? null,
+      armor: (it.armor as number | null) ?? null,
+      perkType: (it.perk_type as string | null) ?? null,
+      perkMagnitude: (it.perk_magnitude as number | null) ?? null,
+      shieldHp: (it.shield_hp as number | null) ?? null,
+      shieldRegenCooldownSec: (it.shield_regen_cooldown_sec as number | null) ?? null,
+    };
   }
 }
 

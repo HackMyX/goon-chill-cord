@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Pause, Play, Crown, Sparkles, Gift, Star, Lock, CheckCircle2 } from "lucide-react";
 import { CaseDropView } from "@/components/cases/case-item-3d";
+import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { WORN_TYPES } from "@/lib/case-display-config";
 import { RARITY_LABELS } from "@/lib/cases";
 import type { BattlePassTier, UserBpStatus } from "@/lib/battle-pass";
@@ -110,6 +111,9 @@ export function PodiumShowcase({
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
+      {/* Ultra = animierter RGB-Rahmen um die ganze Bühne */}
+      {meta.isUltra && <span aria-hidden className="rainbow-border" />}
+
       {/* Spotlight cone from top */}
       <div
         className="pointer-events-none absolute left-1/2 top-0 h-full w-2/3 -translate-x-1/2"
@@ -205,8 +209,9 @@ export function PodiumShowcase({
             </span>
             {tier.rewardItemRarity && (
               meta.isUltra ? (
-                <span className="rainbow-border relative rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider">
-                  <span className="rainbow-text">{RARITY_LABELS.ultra}</span>
+                <span className="relative inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider">
+                  <span aria-hidden className="rainbow-border" />
+                  <span className="rainbow-text relative">{RARITY_LABELS.ultra}</span>
                 </span>
               ) : (
                 <span className="rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider" style={{ borderColor: `${meta.color}55`, color: meta.color, background: `${meta.color}12` }}>
@@ -228,6 +233,23 @@ export function PodiumShowcase({
               </span>
             )}
           </div>
+
+          {/* Item-Werte (Schaden / Rüstung / Perk / Schild) — synct mit den Item-Daten der Seite */}
+          {tier.rewardType === "item" && tier.rewardItemStats && (
+            <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
+              <ItemStatBadges
+                damage={tier.rewardItemStats.damage}
+                armor={tier.rewardItemStats.armor}
+                perk_type={tier.rewardItemStats.perkType}
+                perk_magnitude={tier.rewardItemStats.perkMagnitude}
+                shield_hp={tier.rewardItemStats.shieldHp}
+                shield_regen_cooldown_sec={tier.rewardItemStats.shieldRegenCooldownSec}
+                itemName={tier.rewardItemName ?? undefined}
+                itemType={tier.rewardItemType ?? undefined}
+                itemRarity={tier.rewardItemRarity ?? undefined}
+              />
+            </div>
+          )}
         </motion.div>
 
         {/* Progress dots / bar */}
