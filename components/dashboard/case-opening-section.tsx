@@ -350,7 +350,7 @@ function PoolPopup({
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const PAGE_SIZE = 48;
+  const PAGE_SIZE = 20;
 
   useEffect(() => { setMounted(true); }, []);
   // Reset to the first page whenever the filter/search changes.
@@ -474,8 +474,9 @@ function PoolPopup({
             paged.map((p, i) => {
               const hex = RARITY_HEX[p.rarity];
               const subj = poolEntryToSubject(p);
-              // Pool cards stay light (isolated) so a big pool always loads fast
-              // and smoothly — the full character view is one click away.
+              // Worn items (hair/face/clothes) need a body or they look empty —
+              // 20/page keeps the live scene count low enough to stay smooth.
+              const character = subj.kind === "item" && needsCharacter(p.type, cfg);
               return (
                 <button
                   key={`${p.rarity}-${p.type}-${p.name}-${i}`}
@@ -493,7 +494,7 @@ function PoolPopup({
                       lazy
                       rootRef={scrollRef}
                       gender={gender}
-                      character={false}
+                      character={character}
                       scale={cfg.reelItemScale}
                       fallbackColor={hex}
                     />
@@ -537,6 +538,88 @@ function PoolPopup({
 
       {subject && <UniversalPreviewModal subject={subject} onClose={() => setSubject(null)} />}
     </div>,
+    document.body,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Win reveal — centered modal (portal), never clipped, always fits
+// ---------------------------------------------------------------------------
+
+function WinReveal({
+  drop, cfg, gender, viewIndex, onClose,
+}: {
+  drop: WonDrop;
+  cfg: CaseDisplayConfig;
+  gender: "m" | "w";
+  viewIndex: number;
+  onClose: () => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
+
+  const hex = RARITY_HEX[drop.rarity as Rarity];
+  const boxW = Math.round(300 * cfg.revealScale);
+  const boxH = Math.round(280 * cfg.revealScale);
+
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-[120] flex cursor-pointer items-center justify-center p-4"
+      style={{ background: "rgba(2,2,6,0.86)", backdropFilter: "blur(6px)" }}
+    >
+      <motion.div
+        initial={{ opacity: 0.9, scale: 0.4 }}
+        animate={{ opacity: 0, scale: 2 }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+        className="pointer-events-none absolute inset-0"
+        style={{ background: `radial-gradient(circle at 50% 45%, ${hex} 0%, transparent 55%)` }}
+      />
+      <motion.div
+        initial={{ scale: 0.7, y: 16 }}
+        animate={{ scale: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 18 }}
+        className="relative z-10 flex flex-col items-center gap-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative" style={{ width: boxW, height: boxH, maxWidth: "86vw" }}>
+          <CaseDropView
+            subject={dropToSubject(drop)}
+            viewIndex={viewIndex}
+            rotate={cfg.autoRotate}
+            rotateSpeed={cfg.rotateSpeed * 1.2}
+            shadow
+            gender={gender}
+            character={drop.kind === "item" && needsCharacter(drop.item.type, cfg)}
+            scale={cfg.reelItemScale}
+          />
+        </div>
+        <span className="glow-text text-center text-2xl font-extrabold text-zinc-50">{drop.name}</span>
+        <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+          {drop.kind === "item" ? getTypeLabel(drop.item.type) : EXTRA_KIND_LABEL[drop.kind]}
+        </span>
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          <RarityBadge rarity={drop.rarity as Rarity} />
+          {drop.kind === "item" && (
+            <ItemStatBadges
+              damage={drop.item.damage}
+              armor={drop.item.armor}
+              perk_type={drop.item.perk_type}
+              perk_magnitude={drop.item.perk_magnitude}
+              shield_hp={drop.item.shield_hp}
+              shield_regen_cooldown_sec={drop.item.shield_regen_cooldown_sec}
+              itemName={drop.item.name}
+              itemType={drop.item.type}
+            />
+          )}
+        </div>
+        <span className="mt-1 text-[11px] text-zinc-500">Klicken zum Schließen</span>
+      </motion.div>
+    </motion.div>,
     document.body,
   );
 }
@@ -635,7 +718,7 @@ export function CaseOpeningSection({
   // Tell the shell when a full-screen modal/popup is open so reel 3D from every
   // section can be suppressed (the shared canvas otherwise bleeds over modals).
   useEffect(() => {
-    onModalChange?.(index, poolOpen || phase === "batch_result");
+    onModalChange?.(index, poolOpen || phase === "batch_result" || phase === "result");
   }, [poolOpen, phase, index, onModalChange]);
 
   // Reel must not draw 3D when a modal is open OR while the win reveal overlay
@@ -880,65 +963,19 @@ export function CaseOpeningSection({
               fireWinCelebration(wonDrop.rarity as Rarity);
             }}
           />
-
-          <AnimatePresence>
-            {phase === "result" && wonDrop && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={handleContinue}
-                className="absolute inset-0 z-30 flex cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-[#030305]/90"
-              >
-                <motion.div
-                  initial={{ opacity: 0.9, scale: 0.3 }}
-                  animate={{ opacity: 0, scale: 1.8 }}
-                  transition={{ duration: 0.7, ease: "easeOut" }}
-                  className="pointer-events-none absolute inset-0"
-                  style={{ background: `radial-gradient(circle, ${RARITY_HEX[wonDrop.rarity as Rarity]} 0%, transparent 65%)` }}
-                />
-                <motion.div
-                  initial={{ scale: 0.7, y: 10 }}
-                  animate={{ scale: 1, y: 0 }}
-                  transition={{ type: "spring", stiffness: 260, damping: 18 }}
-                  className="relative z-10 flex flex-col items-center gap-1"
-                >
-                  <div className="relative" style={{ width: 180 * cfg.revealScale, height: 150 * cfg.revealScale }}>
-                    <CaseDropView
-                      subject={dropToSubject(wonDrop)}
-                      viewIndex={winViewIndex}
-                      rotate={cfg.autoRotate}
-                      rotateSpeed={cfg.rotateSpeed * 1.3}
-                      shadow
-                      gender={gender}
-                      character={wonDrop.kind === "item" && needsCharacter(wonDrop.item.type, cfg)}
-                      scale={cfg.reelItemScale}
-                    />
-                  </div>
-                  <span className="glow-text text-lg font-bold text-zinc-50">{wonDrop.name}</span>
-                  <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
-                    {wonDrop.kind === "item" ? getTypeLabel(wonDrop.item.type) : EXTRA_KIND_LABEL[wonDrop.kind]}
-                  </span>
-                  <div className="flex flex-wrap items-center justify-center gap-1.5">
-                    <RarityBadge rarity={wonDrop.rarity as Rarity} />
-                    {wonDrop.kind === "item" && (
-                      <ItemStatBadges
-                        damage={wonDrop.item.damage}
-                        armor={wonDrop.item.armor}
-                        perk_type={wonDrop.item.perk_type}
-                        perk_magnitude={wonDrop.item.perk_magnitude}
-                        shield_hp={wonDrop.item.shield_hp}
-                        shield_regen_cooldown_sec={wonDrop.item.shield_regen_cooldown_sec}
-                        itemName={wonDrop.item.name}
-                        itemType={wonDrop.item.type}
-                      />
-                    )}
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
+      )}
+
+      {/* Win reveal — a centered modal (portal), so it is never clipped by the
+          reel box and its size always fits no matter the item. */}
+      {phase === "result" && wonDrop && (
+        <WinReveal
+          drop={wonDrop}
+          cfg={cfg}
+          gender={gender}
+          viewIndex={winViewIndex}
+          onClose={handleContinue}
+        />
       )}
 
       {/* Batch pending spinner */}

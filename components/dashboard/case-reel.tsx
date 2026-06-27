@@ -102,10 +102,13 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
   // ── Draw-window tracking (cull everything outside the reel box) ─────────────
   useEffect(() => {
     const compute = (val: number) => {
-      // Only slots FULLY inside the reel box draw 3D — so nothing ever renders
-      // in the empty bands left/right of the reel (the reported leak).
-      const lo = Math.ceil((4 - val) / STEP);
-      const hi = Math.floor((containerWidth - ITEM_WIDTH - 4 - val) / STEP);
+      // Draw every slot that OVERLAPS the reel box (incl. the ones sliding in at
+      // the front and out at the back) so an item is always shown right to the
+      // edge — no blinking in/out. The part that pokes outside the box is hidden
+      // by the outer band masks below (drei can only scissor to the full-screen
+      // canvas, not to the reel box, so the masks do the edge clipping).
+      const lo = Math.floor((-ITEM_WIDTH - val) / STEP);
+      const hi = Math.ceil((containerWidth - val) / STEP);
       const prev = winRef.current;
       if (prev[0] !== lo || prev[1] !== hi) {
         winRef.current = [lo, hi];
@@ -217,11 +220,24 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
   }, [spinning, spinToken, warmup, items.length, STEP]);
 
   return (
-    <div
-      ref={containerRef}
-      className={`relative w-full overflow-hidden rounded-2xl bg-black/20 ${justLanded ? "animate-case-shake" : ""}`}
-      style={{ height: REEL_HEIGHT }}
-    >
+    <div className="relative w-full" style={{ height: REEL_HEIGHT }}>
+      {/* Outer band masks — sit ABOVE the shared canvas (z-[45]) and cover the
+          area just LEFT/RIGHT of the reel so the part of an edge item poking
+          outside the reel box is hidden (drei can't scissor to the box). They
+          fade to transparent so the page shows through cleanly. */}
+      <div
+        className="pointer-events-none absolute top-0 bottom-0 z-[45]"
+        style={{ right: "100%", width: ITEM_WIDTH + 48, background: "linear-gradient(to right, transparent, #08060f 78%)" }}
+      />
+      <div
+        className="pointer-events-none absolute top-0 bottom-0 z-[45]"
+        style={{ left: "100%", width: ITEM_WIDTH + 48, background: "linear-gradient(to left, transparent, #08060f 78%)" }}
+      />
+
+      <div
+        ref={containerRef}
+        className={`relative h-full w-full overflow-hidden rounded-2xl bg-black/20 ${justLanded ? "animate-case-shake" : ""}`}
+      >
       {/* amber focus window — above the shared 3D canvas */}
       <div
         className="pointer-events-none absolute top-0 bottom-0 left-1/2 z-[60] -translate-x-1/2 rounded-lg border-x-2 border-amber-400/70 bg-amber-400/[0.05] shadow-[inset_0_4px_10px_rgba(0,0,0,0.45)]"
@@ -307,6 +323,7 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
           );
         })}
       </motion.div>
+      </div>
     </div>
   );
 });
