@@ -1358,12 +1358,17 @@ function HorizontalTrack({
   const [fullPreviewSubject, setFullPreviewSubject] = useState<PreviewSubject | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [viewFrac, setViewFrac] = useState(1);
 
   function updateScrollState() {
     const el = scrollRef.current;
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 8);
     setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
+    const max = el.scrollWidth - el.clientWidth;
+    setScrollProgress(max > 0 ? el.scrollLeft / max : 0);
+    setViewFrac(el.scrollWidth > 0 ? el.clientWidth / el.scrollWidth : 1);
   }
 
   function scrollBy(delta: number) {
@@ -1464,6 +1469,41 @@ function HorizontalTrack({
           </button>
         )}
       </div>
+
+      {/* Scroll-Fortschritt — macht sichtbar, dass die Bahn ALLE Stufen enthält */}
+      {roadMode && viewFrac < 0.999 && (
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-[10px] font-bold tabular-nums text-white/30">1</span>
+          <button
+            onClick={() => scrollBy(-300)}
+            className="rounded-full p-0.5 text-white/30 transition-colors hover:text-white/70 disabled:opacity-20"
+            disabled={!canScrollLeft}
+            aria-label="zurück"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+            <div
+              className="absolute inset-y-0 rounded-full transition-[left] duration-150"
+              style={{
+                left: `${scrollProgress * (1 - viewFrac) * 100}%`,
+                width: `${Math.max(8, viewFrac * 100)}%`,
+                background: accent,
+                boxShadow: `0 0 8px ${glow}`,
+              }}
+            />
+          </div>
+          <button
+            onClick={() => scrollBy(300)}
+            className="rounded-full p-0.5 text-white/30 transition-colors hover:text-white/70 disabled:opacity-20"
+            disabled={!canScrollRight}
+            aria-label="weiter"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+          <span className="text-[10px] font-bold tabular-nums text-white/30">{tiers.length}</span>
+        </div>
+      )}
 
       {/* Selected tier detail panel — rich visual preview */}
       <AnimatePresence>

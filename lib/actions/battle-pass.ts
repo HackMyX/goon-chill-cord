@@ -1192,7 +1192,7 @@ export async function adminAutoFillBpTiers(
   // Fetch pass to get tierCount
   const { data: passRow, error: passError } = await admin
     .from("battle_passes")
-    .select("id, tier_count")
+    .select("id, tier_count, elite_enabled")
     .eq("id", passId)
     .single();
 
@@ -1201,14 +1201,19 @@ export async function adminAutoFillBpTiers(
   }
 
   const tierCount = passRow.tier_count as number;
+  const passEliteEnabled = passRow.elite_enabled === true;
 
   // ── Echte Items laden → der Generator vergibt KONKRETE Items (reward_item_id), damit die
   //    3D-Modelle in den Kacheln erscheinen (statt generischer Würfel). Gruppiert nach Seltenheit.
   const RAMP: Rarity[] = ["normal", "selten", "mythisch", "ultra"];
   const byRarity: Record<string, { id: string; type: string | null }[]> = { normal: [], selten: [], mythisch: [], ultra: [] };
+  // Getragene Items (hat/hair/face/jacket/pants/shoes) brauchen einen Charakter und clippen in
+  // kleinen Kacheln → der Generator überspringt sie; sie können manuell im Pool platziert werden.
+  const WORN = new Set(["hat", "hair", "face", "jacket", "pants", "shoes"]);
   try {
     const { data: itemRows } = await admin.from("items").select("id, type, rarity");
     for (const it of (itemRows ?? []) as { id: string; type: string | null; rarity: string }[]) {
+      if (it.type && WORN.has(it.type)) continue;
       if (byRarity[it.rarity]) byRarity[it.rarity].push({ id: it.id, type: it.type });
     }
   } catch { /* keine Items → Fallback auf Credits unten */ }
@@ -1233,7 +1238,7 @@ export async function adminAutoFillBpTiers(
 
   // ── Track-Grenzen robust (Summe == tierCount, nie negativ) ──
   let freeCount = Math.round(tierCount * config.freeRatio / 100);
-  let eliteCount = Math.round(tierCount * config.eliteRatio / 100);
+  let eliteCount = passEliteEnabled ? Math.round(tierCount * config.eliteRatio / 100) : 0;
   if (freeCount + eliteCount > tierCount) {
     eliteCount = Math.max(0, tierCount - freeCount);
     if (freeCount > tierCount) freeCount = tierCount;
