@@ -1,7 +1,9 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import type { RefObject } from "react";
 import { motion, useMotionValue, animate } from "framer-motion";
+import { Canvas } from "@react-three/fiber";
 import { RARITY_STYLES, type Rarity } from "@/lib/cases";
 import { RARITY_HEX } from "@/lib/rarity-colors";
 import { CaseDropView } from "@/components/cases/case-item-3d";
@@ -83,6 +85,18 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
   const translateXRef = useRef(0);
   const onSpinCompleteRef = useRef(onSpinComplete);
   onSpinCompleteRef.current = onSpinComplete;
+
+  // Stable per-slot DOM refs. Each mounted slot's 3D-area box is the TRACK that
+  // the dedicated reel <Canvas> below scissors its View to. WebGL clamps every
+  // scissor to the canvas framebuffer (= the overflow-hidden reel box), so an
+  // item sliding past the edge is physically cut at the box — no 3D ever leaks
+  // outside the reel (the old shared-canvas + CSS-mask approach could bleed).
+  const slotRefs = useRef<Map<number, RefObject<HTMLDivElement | null>>>(new Map());
+  const getSlotRef = (i: number): RefObject<HTMLDivElement | null> => {
+    let r = slotRefs.current.get(i);
+    if (!r) { r = { current: null }; slotRefs.current.set(i, r); }
+    return r;
+  };
 
   useEffect(() => {
     const el = containerRef.current;
@@ -219,64 +233,40 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spinning, spinToken, warmup, items.length, STEP]);
 
+  // Per-slot render data, derived once and shared by the DOM chrome (borders,
+  // labels, fallback glow) and the dedicated reel canvas (the 3D itself). A
+  // MOUNT buffer beyond the visible box keeps 3D fully loaded BEFORE it scrolls
+  // in (no empty-then-pop) and a little after it leaves; only slots actually
+  // inside the box are DRAWN (visible).
+  const MOUNT_BUF = 3;
+  const slots = displayItems.map((entry, i) => {
+    const isItem = (entry.subject?.kind ?? "item") === "item";
+    return {
+      entry,
+      i,
+      style: RARITY_STYLES[entry.rarity],
+      isTarget: spinning && i === targetIndex,
+      isMounted: i >= win[0] - MOUNT_BUF && i <= win[1] + MOUNT_BUF,
+      isVisible: i >= win[0] && i <= win[1] && !suppressed,
+      subject: entrySubject(entry),
+      // Character bodies are heavy — only while the reel is calm (idle), not in
+      // the fast warmup/spin where items whip past. Win reveal / pool / batch
+      // use the character render where it actually matters.
+      character: isItem && !spinning && !warmup && needsCharacter(entry.type, cfg),
+    };
+  });
+
   return (
     <div className="relative w-full" style={{ height: REEL_HEIGHT }}>
-      {/* Outer band masks — sit ABOVE the shared canvas (z-[45]) and cover the
-          area just LEFT/RIGHT of the reel so the part of an edge item poking
-          outside the reel box is hidden (drei can't scissor to the box). They
-          fade to transparent so the page shows through cleanly. */}
-      <div
-        className="pointer-events-none absolute top-0 bottom-0 z-[45]"
-        style={{ right: "100%", width: ITEM_WIDTH + 48, background: "linear-gradient(to right, transparent, #08060f 78%)" }}
-      />
-      <div
-        className="pointer-events-none absolute top-0 bottom-0 z-[45]"
-        style={{ left: "100%", width: ITEM_WIDTH + 48, background: "linear-gradient(to left, transparent, #08060f 78%)" }}
-      />
-
       <div
         ref={containerRef}
         className={`relative h-full w-full overflow-hidden rounded-2xl bg-black/20 ${justLanded ? "animate-case-shake" : ""}`}
       >
-      {/* amber focus window — above the shared 3D canvas */}
-      <div
-        className="pointer-events-none absolute top-0 bottom-0 left-1/2 z-[60] -translate-x-1/2 rounded-lg border-x-2 border-amber-400/70 bg-amber-400/[0.05] shadow-[inset_0_4px_10px_rgba(0,0,0,0.45)]"
-        style={{ width: ITEM_WIDTH }}
-      />
-      <div className="pointer-events-none absolute -top-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[9px] border-t-[12px] border-x-transparent border-t-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.85)]" />
-      <div className="pointer-events-none absolute -bottom-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[9px] border-b-[12px] border-x-transparent border-b-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.85)]" />
-
-      {/* edge masks — sit ABOVE the canvas (z-[58]) to hide any item straddling
-          the reel boundary, so nothing ever appears outside the reel box */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-[58] w-20 bg-gradient-to-r from-[#08060f] via-[#08060f]/80 to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-[58] w-20 bg-gradient-to-l from-[#08060f] via-[#08060f]/80 to-transparent" />
-
-      {warmup && (
-        <div
-          className="pointer-events-none absolute inset-0 z-[59] animate-pulse rounded-2xl"
-          style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(245,158,11,0.16) 0%, transparent 70%)" }}
-        />
-      )}
-
-      <motion.div className="flex h-full items-center" style={{ x, gap: GAP }}>
-        {displayItems.map((entry, i) => {
-          const style = RARITY_STYLES[entry.rarity];
-          const isTarget = spinning && i === targetIndex;
-          // MOUNT a buffer of slots beyond the visible box so 3D is fully loaded
-          // BEFORE it scrolls in (no empty-then-pop) and stays loaded a little
-          // after it leaves. Only slots actually inside the box are DRAWN
-          // (visible) — so nothing ever renders outside the reel (no leak).
-          const MOUNT_BUF = 3;
-          const isMounted = i >= win[0] - MOUNT_BUF && i <= win[1] + MOUNT_BUF;
-          const isVisible = i >= win[0] && i <= win[1] && !suppressed;
-          const subject = entrySubject(entry);
-          const isItem = subject.kind === "item";
-          // Character bodies are heavy — only while the reel is calm (idle), not
-          // during the fast warmup/spin where items whip past (the win reveal,
-          // pool and batch use the character render where it matters).
-          const character = isItem && !spinning && !warmup && needsCharacter(entry.type, cfg);
-
-          return (
+        {/* ── DOM chrome (z-10): slot box, border, rarity glow, label. Each
+            mounted slot's 3D-area box is an empty TRACK <div> the canvas draws
+            into; un-mounted slots show a cheap rarity-tinted fallback glow. ── */}
+        <motion.div className="relative z-[10] flex h-full items-center" style={{ x, gap: GAP }}>
+          {slots.map(({ entry, i, style, isTarget, isMounted }) => (
             <div key={`${entry.key}-${i}`} style={{ width: ITEM_WIDTH }} className="flex h-full shrink-0 items-center justify-center">
               <div
                 className={`relative flex w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border bg-black/25 backdrop-blur-[2px] transition-all duration-300 ${
@@ -295,19 +285,8 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
                 )}
                 {style.rainbow && <span aria-hidden className="rainbow-border" />}
 
-                <div className="relative w-full" style={{ height: ITEM_3D_H }}>
-                  {isMounted ? (
-                    <CaseDropView
-                      subject={subject}
-                      viewIndex={viewBase + i}
-                      visible={isVisible}
-                      rotate={cfg.autoRotate && (!spinning || isTarget)}
-                      rotateSpeed={cfg.rotateSpeed * (isTarget ? 1.5 : 1)}
-                      gender={gender}
-                      character={character}
-                      scale={cfg.reelItemScale}
-                    />
-                  ) : (
+                <div ref={getSlotRef(i)} className="relative w-full" style={{ height: ITEM_3D_H }}>
+                  {!isMounted && (
                     <div
                       className="absolute inset-0 rounded-md"
                       style={{ background: `radial-gradient(circle at 50% 45%, ${RARITY_HEX[entry.rarity]}18 0%, transparent 72%)` }}
@@ -320,9 +299,56 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
                 </span>
               </div>
             </div>
-          );
-        })}
-      </motion.div>
+          ))}
+        </motion.div>
+
+        {/* ── Dedicated, box-clipped 3D canvas (z-30). position:absolute inset-0
+            inside the overflow-hidden box → physically clipped. Each mounted
+            slot's View scissors to its track <div>, clamped by WebGL to this
+            framebuffer (= the box). NOTHING can render outside the reel. Lives
+            in normal flow, so fixed modals (z-120) always cover it. ── */}
+        <Canvas
+          style={{ position: "absolute", inset: 0, zIndex: 30, pointerEvents: "none" }}
+          dpr={[1, 1.5]}
+          gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
+        >
+          {slots
+            .filter((s) => s.isMounted)
+            .map(({ i, subject, isVisible, isTarget, character }) => (
+              <CaseDropView
+                key={i}
+                subject={subject}
+                viewIndex={viewBase + i}
+                visible={isVisible}
+                rotate={cfg.autoRotate && (!spinning || isTarget)}
+                rotateSpeed={cfg.rotateSpeed * (isTarget ? 1.5 : 1)}
+                gender={gender}
+                character={character}
+                scale={cfg.reelItemScale}
+                track={getSlotRef(i) as RefObject<HTMLElement | null>}
+              />
+            ))}
+        </Canvas>
+
+        {/* amber focus window (z-60) — above the reel canvas */}
+        <div
+          className="pointer-events-none absolute top-0 bottom-0 left-1/2 z-[60] -translate-x-1/2 rounded-lg border-x-2 border-amber-400/70 bg-amber-400/[0.05] shadow-[inset_0_4px_10px_rgba(0,0,0,0.45)]"
+          style={{ width: ITEM_WIDTH }}
+        />
+        <div className="pointer-events-none absolute -top-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[9px] border-t-[12px] border-x-transparent border-t-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.85)]" />
+        <div className="pointer-events-none absolute -bottom-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[9px] border-b-[12px] border-x-transparent border-b-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.85)]" />
+
+        {/* edge masks (z-58) — purely cosmetic fade now that clipping is physical:
+            items melt softly into the box edges instead of a hard pixel cut. */}
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-[58] w-20 bg-gradient-to-r from-[#08060f] via-[#08060f]/80 to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-[58] w-20 bg-gradient-to-l from-[#08060f] via-[#08060f]/80 to-transparent" />
+
+        {warmup && (
+          <div
+            className="pointer-events-none absolute inset-0 z-[59] animate-pulse rounded-2xl"
+            style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(245,158,11,0.16) 0%, transparent 70%)" }}
+          />
+        )}
       </div>
     </div>
   );

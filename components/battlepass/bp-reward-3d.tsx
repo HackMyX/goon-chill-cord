@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useRef, useMemo } from "react";
+import type { RefObject } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { View, PerspectiveCamera, ContactShadows } from "@react-three/drei";
@@ -377,6 +378,7 @@ export function BpRewardView3D({
   viewIndex,
   visible = true,
   lightColor,
+  track,
 }: {
   rewardType: string;
   rarity?: string;
@@ -384,11 +386,16 @@ export function BpRewardView3D({
   viewIndex: number;
   visible?: boolean;
   lightColor?: string;
+  /** When set, the View is rendered INSIDE a dedicated <Canvas> (CanvasView
+   *  path) and scissors to this tracked DOM box — physically clipped to the
+   *  canvas framebuffer. Used by the box-clipped reel canvas. */
+  track?: RefObject<HTMLElement | null>;
 }) {
   return (
     <View
       index={viewIndex + 1}
       visible={visible}
+      track={track as RefObject<HTMLElement> | undefined}
       style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
     >
       <PerspectiveCamera makeDefault position={[0, 0.15, 2.8]} fov={42} />

@@ -116,6 +116,10 @@ export interface CaseItem3DProps {
   character?: boolean;
   /** Camera zoom multiplier (>1 = closer/bigger). */
   scale?: number;
+  /** When set, this View is rendered INSIDE a dedicated <Canvas> and scissors to
+   *  this tracked DOM box — physically clipped to the canvas framebuffer (the
+   *  box-clipped reel). When absent it uses the shared full-viewport canvas. */
+  track?: RefObject<HTMLElement | null>;
 }
 
 export function CaseItem3D({
@@ -128,6 +132,7 @@ export function CaseItem3D({
   gender = "m",
   character = false,
   scale = 1,
+  track,
 }: CaseItem3DProps) {
   const baseCfg = character ? getCharCam(item.type) : getCam(item.type);
   const z = Math.max(0.4, scale || 1);
@@ -140,6 +145,7 @@ export function CaseItem3D({
     <View
       index={viewIndex}
       visible={visible}
+      track={track as RefObject<HTMLElement> | undefined}
       style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
     >
       <CameraRig cfg={cfg} />
@@ -232,6 +238,8 @@ export interface CaseDropViewProps {
   scale?: number;
   /** Scroll container for lazy intersection clipping (pool popup). */
   rootRef?: RefObject<Element | null>;
+  /** Tracked DOM box for the in-canvas (box-clipped reel) render path. */
+  track?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -254,6 +262,7 @@ export function CaseDropView({
   character = false,
   scale = 1,
   rootRef,
+  track,
 }: CaseDropViewProps) {
   let node: ReactNode;
   if (subject.kind === "item") {
@@ -268,6 +277,7 @@ export function CaseDropView({
         gender={gender}
         character={character}
         scale={scale}
+        track={track}
       />
     );
   } else {
@@ -279,6 +289,7 @@ export function CaseDropView({
         creditsAmount={r.creditsAmount}
         viewIndex={viewIndex}
         visible={visible}
+        track={track}
       />
     );
   }

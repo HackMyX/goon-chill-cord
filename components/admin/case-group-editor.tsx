@@ -3,7 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import {
   Save, Plus, Trash2, ChevronUp, ChevronDown, Info, Search, X,
-  Star, Settings, Package, Wand2, ArrowUpDown, AlertTriangle, Eye, Gift,
+  Star, Settings, Package, Wand2, AlertTriangle, Eye, Gift,
+  BookOpen, Coins, Percent, Layers, Sparkles, Boxes, ChevronRight, Dices, Zap,
 } from "lucide-react";
 import { updateCaseTier, type UpdateCaseTierInput } from "@/lib/actions/admin";
 import {
@@ -1339,6 +1340,259 @@ function CaseDisplayConfigEditor() {
   );
 }
 
+// ─── Onboarding guide — "Wie das Case-System funktioniert" ───────────────────
+
+/** One step in the 4-step build flow. */
+function GuideStep({
+  n, icon: StepIcon, title, accent, children,
+}: {
+  n: number;
+  icon: typeof Package;
+  title: string;
+  accent: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative flex gap-3 rounded-xl border border-white/8 bg-black/20 p-3">
+      <div
+        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-sm font-black"
+        style={{ background: `${accent}1f`, color: accent, border: `1px solid ${accent}40` }}
+      >
+        {n}
+      </div>
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-sm font-bold text-zinc-100">
+          <StepIcon className="h-4 w-4" style={{ color: accent }} />
+          {title}
+        </p>
+        <div className="mt-1 text-[11.5px] leading-relaxed text-zinc-400">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** A glossary chip: bold term + short plain-language definition. */
+function GlossaryItem({ term, children }: { term: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2">
+      <p className="text-[11px] font-bold text-zinc-200">{term}</p>
+      <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">{children}</p>
+    </div>
+  );
+}
+
+function CaseGuide() {
+  const [open, setOpen] = useState(true);
+  const sound = useSoundManager();
+  const { rarityLabels } = useSiteConfig();
+  const rarityLabel = (r: Rarity) =>
+    r === "normal" ? rarityLabels.normal
+    : r === "selten" ? rarityLabels.selten
+    : r === "mythisch" ? rarityLabels.mythisch
+    : rarityLabels.ultra;
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-purple-400/25 bg-gradient-to-b from-purple-500/[0.07] to-fuchsia-500/[0.02]">
+      {/* Header / toggle */}
+      <button
+        onMouseEnter={sound.hover}
+        onClick={() => { sound.click(); setOpen((v) => !v); }}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.02]"
+      >
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10">
+          <BookOpen className="h-4 w-4 text-fuchsia-300" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-black tracking-tight text-zinc-50">
+            So funktioniert das Case-System
+          </p>
+          <p className="text-[11px] text-zinc-400">
+            Komplett-Anleitung: Gruppen, Tiers, Chancen, Pools, Extra-Drops &amp; Name-Styles — idiotensicher.
+          </p>
+        </div>
+        <ChevronDown className={`h-5 w-5 flex-shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="space-y-5 border-t border-white/8 px-4 py-4">
+          {/* 1 — Hierarchy flow */}
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-purple-300">
+              Die Hierarchie auf einen Blick
+            </p>
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+              {[
+                { icon: Boxes,    label: "Gruppe",        desc: "Eine Case wie ein Cosmetics-Case. Erscheint als eigener Block auf der Seite.", hex: "#a855f7" },
+                { icon: Layers,   label: "Tiers",         desc: "Varianten der Gruppe: Standard & Premium (oder mehr). Jeder mit eigenem Preis & Chancen.", hex: "#3898ff" },
+                { icon: Percent,  label: "Rarität-Töpfe", desc: "Pro Tier: Chance pro Seltenheit. Summe = 100 %.", hex: "#f59e0b" },
+                { icon: Package,  label: "Pool",          desc: "Welche Items/Belohnungen in jedem Topf liegen.", hex: "#e879f9" },
+              ].map((s, i, arr) => (
+                <div key={s.label} className="flex flex-1 items-center gap-2">
+                  <div className="flex-1 rounded-xl border bg-black/25 p-3" style={{ borderColor: `${s.hex}33` }}>
+                    <p className="flex items-center gap-1.5 text-xs font-bold" style={{ color: s.hex }}>
+                      <s.icon className="h-4 w-4" />
+                      {s.label}
+                    </p>
+                    <p className="mt-1 text-[10.5px] leading-snug text-zinc-400">{s.desc}</p>
+                  </div>
+                  {i < arr.length - 1 && (
+                    <ChevronRight className="hidden h-4 w-4 flex-shrink-0 text-zinc-600 sm:block" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 2 — 4 steps */}
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-purple-300">
+              In 4 Schritten zur eigenen Case
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <GuideStep n={1} icon={Boxes} title="Gruppe erstellen" accent="#a855f7">
+                Unten „<strong className="text-zinc-300">Neue Case-Gruppe erstellen</strong>" → Titel, Icon und
+                Item-Typen wählen. Die Gruppe erscheint sofort auf der Cases-Seite (sofern aktiviert).
+              </GuideStep>
+              <GuideStep n={2} icon={Coins} title="Tiers & Preise einstellen" accent="#3898ff">
+                Jede Gruppe hat einen <strong className="text-zinc-300">Standard</strong>- und einen{" "}
+                <strong className="text-zinc-300">Premium</strong>-Tier. Pro Tier: Preis, „Sofort-Zeigen"-Gebühr und
+                Mehrfach-Limit. Eigene Tiers lassen sich ergänzen.
+              </GuideStep>
+              <GuideStep n={3} icon={Percent} title="Chancen pro Rarität" accent="#f59e0b">
+                Unter <strong className="text-zinc-300">CHANCEN</strong> setzt du die Wahrscheinlichkeit pro
+                Seltenheit. Die Anzeige rechnet die Summe live — sie sollte{" "}
+                <strong className="text-emerald-300">100 %</strong> ergeben.
+              </GuideStep>
+              <GuideStep n={4} icon={Package} title="Pool füllen" accent="#e879f9">
+                Wähle <strong className="text-zinc-300">Item-Typen</strong> (ganze Kategorien) oder pro Rarität{" "}
+                <strong className="text-zinc-300">exakte Items</strong>. Dazu optional{" "}
+                <strong className="text-fuchsia-300">Extra-Drops</strong> (Credits, Name-Styles, Fähigkeiten, Badges).
+              </GuideStep>
+            </div>
+          </div>
+
+          {/* 3 — Probability model */}
+          <div className="rounded-xl border border-amber-400/20 bg-amber-500/[0.04] p-3.5">
+            <p className="mb-1.5 flex items-center gap-2 text-sm font-bold text-amber-200">
+              <Dices className="h-4 w-4" />
+              Wie ein Gewinn gezogen wird (genau so läuft es in der Datenbank)
+            </p>
+            <ol className="list-inside list-decimal space-y-1 text-[11.5px] leading-relaxed text-zinc-300">
+              <li>
+                <strong>Rarität auslosen:</strong> Zuerst entscheidet das Spiel anhand deiner CHANCEN-Gewichte,
+                welche Seltenheit fällt (Gewichte werden automatisch auf 100 % normalisiert — du musst nicht exakt
+                treffen, aber es ist sauberer).
+              </li>
+              <li>
+                <strong>Aus dem Rarität-Topf ziehen:</strong> Innerhalb dieser Seltenheit wird gleichverteilt
+                gezogen. Jedes Pool-Item = <strong>1 Los</strong>. Ein Extra-Drop zählt mit seinem{" "}
+                <strong>Gewicht</strong> als so viele Lose (Gewicht 3 = 3× so wahrscheinlich wie ein einzelnes Item).
+              </li>
+              <li>
+                <strong>Pool-Quelle:</strong> Hast du für die Rarität <em>exakte Items</em> gewählt, kommen nur die
+                in den Topf. Sonst alle Items der gewählten Typen mit dieser Seltenheit.
+              </li>
+            </ol>
+            <p className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-300/80">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              Hat ein Rarität-Topf <strong>kein</strong> Item und <strong>keinen</strong> Extra-Drop, kann diese
+              Seltenheit nie fallen — selbst wenn ihre Chance &gt; 0 ist. Die Chance verteilt sich dann auf die
+              übrigen Töpfe.
+            </p>
+          </div>
+
+          {/* 4 — Pool: types vs exact */}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded-xl border border-blue-400/20 bg-blue-500/[0.04] p-3">
+              <p className="flex items-center gap-1.5 text-xs font-bold text-blue-200">
+                <Layers className="h-4 w-4" /> Item-Typen (der einfache Weg)
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                Wähle Kategorien wie <code className="rounded bg-black/40 px-1">hat</code>,{" "}
+                <code className="rounded bg-black/40 px-1">jacket</code>. <strong className="text-zinc-300">Alle</strong>{" "}
+                Items dieser Typen (je Rarität) landen automatisch im Pool. Neue Items derselben Typen kommen später
+                von selbst dazu.
+              </p>
+            </div>
+            <div className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/[0.04] p-3">
+              <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-200">
+                <Star className="h-4 w-4" /> Exakte Items pro Rarität (volle Kontrolle)
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                Wähle für eine Seltenheit gezielt einzelne Items. Dann droppt{" "}
+                <strong className="text-zinc-300">nur diese Auswahl</strong> — der Typen-Pool wird für diese Rarität
+                ignoriert. Pro Seltenheit getrennt einstellbar.
+              </p>
+            </div>
+          </div>
+
+          {/* 5 — Extras & name styles */}
+          <div className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/[0.04] p-3.5">
+            <p className="mb-1.5 flex items-center gap-2 text-sm font-bold text-fuchsia-200">
+              <Sparkles className="h-4 w-4" /> Extra-Drops &amp; Name-Styles — wo was eingestellt wird
+            </p>
+            <ul className="space-y-1 text-[11.5px] leading-relaxed text-zinc-400">
+              <li>
+                <Gift className="mr-1 inline-block h-3.5 w-3.5 text-fuchsia-400" />
+                <strong className="text-zinc-300">Extra-Drops</strong> (Credits, Name-Style, Fähigkeit, Badge) legst
+                du direkt im Tier an. Sie mischen sich in den gewählten Rarität-Topf.
+              </li>
+              <li>
+                <Wand2 className="mr-1 inline-block h-3.5 w-3.5 text-fuchsia-400" />
+                <strong className="text-zinc-300">Name-Style Bonus-Drops</strong> sind ein separater Zusatz-Roll
+                nach dem Öffnen. Drei Schalter greifen ineinander:
+                <ul className="mt-1 list-inside list-disc pl-4 text-[11px] text-zinc-500">
+                  <li><strong className="text-zinc-400">Im Tier:</strong> „Name-Style Bonus-Drops aktivieren" an/aus.</li>
+                  <li><strong className="text-zinc-400">Name-Styles → Seltenheiten-Konfiguration:</strong> Chance pro Rarität.</li>
+                  <li><strong className="text-zinc-400">Name-Styles → Style bearbeiten:</strong> „Aus Case gewinnbar" pro Style.</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          {/* 6 — Glossary */}
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-purple-300">
+              Begriffe in einem Satz
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <GlossaryItem term="Tier">Eine kaufbare Variante einer Case (Standard / Premium / eigene).</GlossaryItem>
+              <GlossaryItem term="Rarität-Topf">Alle möglichen Gewinne einer Seltenheit innerhalb eines Tiers.</GlossaryItem>
+              <GlossaryItem term="Gewicht">Lose-Anzahl im Topf. Item = 1 Los, Extra-Drop = sein Gewicht.</GlossaryItem>
+              <GlossaryItem term="Sofort-Zeigen">Optionale Gebühr, um die Spin-Animation zu überspringen.</GlossaryItem>
+              <GlossaryItem term="Mehrfach-Open">Mehrere Cases auf einmal öffnen (2–10), Ergebnis als Raster.</GlossaryItem>
+              <GlossaryItem term="Premium-Tier">Teurerer Tier, meist mit besseren Chancen / eigenem Pool.</GlossaryItem>
+            </div>
+          </div>
+
+          {/* 7 — Rarity legend (exact SSOT colors) */}
+          <div>
+            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-purple-300">
+              <Zap className="h-3.5 w-3.5" /> Seltenheits-Farben (projektweit identisch)
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {RARITY_ORDER.map((r) => (
+                <span
+                  key={r}
+                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold"
+                  style={{ borderColor: `${RARITY_HEX[r]}55`, color: RARITY_HEX[r], background: `${RARITY_HEX[r]}12` }}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: RARITY_HEX[r] }} />
+                  {rarityLabel(r)}
+                </span>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[10.5px] text-zinc-500">
+              Diese Farbwerte sind die zentrale Quelle (<code className="rounded bg-black/40 px-1">RARITY_HEX</code>) und
+              gelten überall gleich: Cases, Shop, Garderobe, 3D-Welt, Battle-Pass.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CasesAdminTab({ caseGroups: initialGroups, caseTiers: initialTiers, items }: CasesAdminTabProps) {
   const [groups, setGroups] = useState(initialGroups);
   const [abilities, setAbilities] = useState<AbilityLite[]>([]);
@@ -1402,32 +1656,8 @@ export function CasesAdminTab({ caseGroups: initialGroups, caseTiers: initialTie
       {/* Display / sizing — live for all players */}
       <CaseDisplayConfigEditor />
 
-      {/* Help overview */}
-      <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
-        <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">
-          <ArrowUpDown className="h-4 w-4 text-purple-400" />
-          Cases & Tiers verwalten
-        </p>
-        <div className="grid gap-2 text-[11px] leading-relaxed text-zinc-400 sm:grid-cols-3">
-          <div>
-            <p className="mb-0.5 font-semibold text-zinc-300">Wie Cases funktionieren</p>
-            Jede Case-Gruppe hat mehrere Tiers (z.B. Standard + Premium). Spieler wählen welchen Tier
-            sie öffnen. Du kannst beliebig viele Gruppen erstellen — jede erscheint automatisch auf der Cases-Seite.
-          </div>
-          <div>
-            <p className="mb-0.5 font-semibold text-zinc-300">Item-Pool</p>
-            Wähle Typen → Items dieser Typen landen im Pool. Oder wähle pro Rarität spezifische Items für
-            noch mehr Kontrolle. Ein Tier hat immer genau einen Pool — Typen ODER spezifische Items (letztere
-            haben Vorrang wenn ausgewählt).
-          </div>
-          <div>
-            <p className="mb-0.5 font-semibold text-zinc-300">Name-Styles aus Cases</p>
-            Aktiviere "Name-Styles Bonus-Drops" pro Tier. Wahrscheinlichkeit einstellbar unter{" "}
-            <strong className="text-zinc-200">Name-Styles → Seltenheiten-Konfiguration</strong>.
-            Welche Styles gewinnbar sind: <strong className="text-zinc-200">Name-Styles → Style bearbeiten → "Aus Case gewinnbar"</strong>.
-          </div>
-        </div>
-      </div>
+      {/* Onboarding guide — full, idiot-proof "how cases work" explainer */}
+      <CaseGuide />
 
       {/* Migration notice */}
       {initialGroups.length === 0 && initialTiers.length > 0 && (
