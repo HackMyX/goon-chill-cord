@@ -24,6 +24,7 @@ import {
   adminAssignQuestToPass, adminUpdateBpQuest, adminDeleteBpQuest,
   adminAutoGenerateQuests, adminGetQuestStats, adminResetQuestProgress,
 } from "@/lib/actions/bp-quests";
+import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
 import { BP_THEMES, DEFAULT_AUTOFILL_CONFIG, DEFAULT_BP_VISUAL_CONFIG } from "@/lib/battle-pass";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
 import type {
@@ -664,6 +665,8 @@ function TierEditorModal({
   const [rewardBadgeText, setRewardBadgeText] = useState(existing?.rewardBadgeText ?? "");
   const [rewardXpBoost, setRewardXpBoost] = useState(existing?.rewardXpBoost ?? 1);
   const [rewardNameStyleKey, setRewardNameStyleKey] = useState(existing?.rewardNameStyleKey ?? "");
+  const [rewardAbilityKey, setRewardAbilityKey] = useState(existing?.rewardAbilityKey ?? "");
+  const [abilities, setAbilities] = useState<{ key: string; name: string; icon: string; rarity: string }[]>([]);
   const [rewardQuantity, setRewardQuantity] = useState(existing?.rewardQuantity ?? 1);
   const [highlightTier, setHighlightTier] = useState(existing?.highlightTier ?? false);
   const [description, setDescription] = useState(existing?.description ?? "");
@@ -678,6 +681,15 @@ function TierEditorModal({
   // Derive isPremium and isElite from track
   const isPremium = track === "premium";
   const isElite = track === "elite";
+
+  // Fähigkeiten LIVE aus ability_definitions (synct automatisch mit dem Fähigkeiten-Admin)
+  useEffect(() => {
+    let alive = true;
+    getAllAbilityDefinitions()
+      .then((defs) => { if (alive) setAbilities(defs.map((d) => ({ key: d.key, name: d.name, icon: d.icon, rarity: d.rarity }))); })
+      .catch(() => { /* leer lassen */ });
+    return () => { alive = false; };
+  }, []);
 
   async function handleSave() {
     setSaving(true);
@@ -696,6 +708,7 @@ function TierEditorModal({
       rewardItemRarity: rewardType === "random_item" ? rewardItemRarity : null,
       rewardXpBoost: rewardType === "xp_boost" ? rewardXpBoost : null,
       rewardNameStyleKey: rewardType === "name_style" ? (rewardNameStyleKey.trim() || null) : null,
+      rewardAbilityKey: rewardType === "ability" ? (rewardAbilityKey || null) : null,
       rewardQuantity: Math.max(1, rewardQuantity),
       highlightTier,
       description: description.trim() || null,
@@ -1011,6 +1024,28 @@ function TierEditorModal({
                 </label>
                 <p className="text-[10px] text-zinc-500">
                   Key des Name-Styles aus dem Katalog (z.B. galaxy, rainbow, prismatic…). Der User erhält diesen Style dauerhaft.
+                </p>
+              </div>
+            )}
+
+            {rewardType === "ability" && (
+              <div className="space-y-2">
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Fähigkeit auswählen
+                  <select
+                    value={rewardAbilityKey}
+                    onChange={(e) => setRewardAbilityKey(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+                  >
+                    <option value="">— Fähigkeit wählen —</option>
+                    {abilities.map((ab) => (
+                      <option key={ab.key} value={ab.key}>{ab.icon ? `${ab.icon} ` : ""}{ab.name} ({ab.rarity})</option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-[10px] text-zinc-500">
+                  Liste kommt live aus dem Fähigkeiten-Admin ({abilities.length} verfügbar) — neue Fähigkeiten erscheinen hier automatisch.
+                  {abilities.length === 0 && " Noch keine angelegt."}
                 </p>
               </div>
             )}

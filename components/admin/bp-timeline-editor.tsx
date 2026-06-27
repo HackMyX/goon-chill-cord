@@ -3,13 +3,14 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
   Wand2, Trash2, Sparkles, GripVertical, Plus, Crown, Gem, Info,
-  Coins, Package, Trophy, TrendingUp, Palette, Search, X,
+  Coins, Package, Trophy, TrendingUp, Palette, Search, X, Zap,
 } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 import {
   adminPlaceBpReward, adminClearBpTier, adminUpsertBpTier, searchBpItems,
   type AdminTierInput,
 } from "@/lib/actions/battle-pass";
+import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
 import { RARITY_ORDER, RARITY_LABELS } from "@/lib/cases";
 import type { BattlePassTier, BpRewardType } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
@@ -79,6 +80,7 @@ interface PoolItem {
   rewardBadgeText?: string;
   rewardXpBoost?: number;
   rewardNameStyleKey?: string;
+  rewardAbilityKey?: string;
 }
 
 function buildInput(p: PoolItem, tierNumber: number, track: Track): AdminTierItem {
@@ -97,6 +99,7 @@ function buildInput(p: PoolItem, tierNumber: number, track: Track): AdminTierIte
     rewardItemRarity: p.rewardItemRarity ?? null,
     rewardXpBoost: p.rewardXpBoost ?? null,
     rewardNameStyleKey: p.rewardNameStyleKey ?? null,
+    rewardAbilityKey: p.rewardAbilityKey ?? null,
     rewardQuantity: 1,
     highlightTier: false,
     description: null,
@@ -144,6 +147,7 @@ export function BpRewardStudio({
   const [itemQuery, setItemQuery] = useState("");
   const [itemResults, setItemResults] = useState<ItemHit[]>([]);
   const [searching, setSearching] = useState(false);
+  const [abilities, setAbilities] = useState<{ key: string; name: string; icon: string; rarity: string }[]>([]);
 
   const tierMap = useMemo(() => new Map(tiers.map((t) => [t.tierNumber, t])), [tiers]);
   const lanes: Track[] = eliteEnabled ? ["elite", "premium", "free"] : ["premium", "free"];
@@ -158,6 +162,16 @@ export function BpRewardStudio({
   }, [tiers]);
 
   useEffect(() => () => { cleanupRef.current?.(); }, []);
+
+  // Fähigkeiten LIVE aus ability_definitions laden → wächst automatisch mit, sobald im
+  // Fähigkeiten-Admin neue angelegt werden (kein hartcodierter Katalog).
+  useEffect(() => {
+    let alive = true;
+    getAllAbilityDefinitions()
+      .then((defs) => { if (alive) setAbilities(defs.map((d) => ({ key: d.key, name: d.name, icon: d.icon, rarity: d.rarity }))); })
+      .catch(() => { /* leer lassen */ });
+    return () => { alive = false; };
+  }, []);
 
   // Debounced item search
   useEffect(() => {
@@ -421,6 +435,34 @@ export function BpRewardStudio({
                   <Package className="h-3.5 w-3.5 shrink-0" style={{ color: col }} />
                   <span className="flex-1 truncate text-[10px] font-semibold text-zinc-200">{it.name}</span>
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: col }} />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Fähigkeiten — Liste aus ability_definitions, synct automatisch */}
+          <p className="mb-1 mt-3 px-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400">
+            Fähigkeiten <span className="text-zinc-600">({abilities.length})</span>
+          </p>
+          <div className="max-h-44 space-y-1 overflow-y-auto pr-0.5" style={{ scrollbarWidth: "thin" }}>
+            {abilities.length === 0 && (
+              <p className="px-1 py-1 text-[10px] text-zinc-500">Keine Fähigkeiten angelegt — lege im Fähigkeiten-Admin welche an.</p>
+            )}
+            {abilities.map((ab) => {
+              const col = RARITY_HEX[ab.rarity] ?? "#22d3ee";
+              const item: PoolItem = { rewardType: "ability", label: ab.name, emoji: ab.icon || "✨", color: col, rewardAbilityKey: ab.key };
+              return (
+                <div
+                  key={ab.key}
+                  onPointerDown={(e) => startDrag({ src: "pool", item }, e)}
+                  title={`${ab.name} (${ab.rarity}) — auf eine Stufe ziehen`}
+                  className="flex cursor-grab select-none items-center gap-1.5 rounded-lg border px-1.5 py-1 active:cursor-grabbing"
+                  style={{ touchAction: "none", borderColor: `${col}40`, background: `${col}0f` }}
+                >
+                  <GripVertical className="h-3 w-3 shrink-0 text-white/25" />
+                  <span className="text-sm leading-none">{ab.icon || "✨"}</span>
+                  <span className="flex-1 truncate text-[10px] font-semibold text-zinc-200">{ab.name}</span>
+                  <Zap className="h-3 w-3 shrink-0" style={{ color: col }} />
                 </div>
               );
             })}
