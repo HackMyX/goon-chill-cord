@@ -1206,20 +1206,20 @@ export async function adminAutoFillBpTiers(
   // ── Echte Items laden → der Generator vergibt KONKRETE Items (reward_item_id), damit die
   //    3D-Modelle in den Kacheln erscheinen (statt generischer Würfel). Gruppiert nach Seltenheit.
   const RAMP: Rarity[] = ["normal", "selten", "mythisch", "ultra"];
-  const byRarity: Record<string, { id: string; type: string | null }[]> = { normal: [], selten: [], mythisch: [], ultra: [] };
+  const byRarity: Record<string, { id: string; type: string | null; name: string }[]> = { normal: [], selten: [], mythisch: [], ultra: [] };
   // Getragene Items (hat/hair/face/jacket/pants/shoes) brauchen einen Charakter und clippen in
   // kleinen Kacheln → der Generator überspringt sie; sie können manuell im Pool platziert werden.
   const WORN = new Set(["hat", "hair", "face", "jacket", "pants", "shoes"]);
   try {
-    const { data: itemRows } = await admin.from("items").select("id, type, rarity");
-    for (const it of (itemRows ?? []) as { id: string; type: string | null; rarity: string }[]) {
+    const { data: itemRows } = await admin.from("items").select("id, type, rarity, name");
+    for (const it of (itemRows ?? []) as { id: string; type: string | null; rarity: string; name: string | null }[]) {
       if (it.type && WORN.has(it.type)) continue;
-      if (byRarity[it.rarity]) byRarity[it.rarity].push({ id: it.id, type: it.type });
+      if (byRarity[it.rarity]) byRarity[it.rarity].push({ id: it.id, type: it.type, name: it.name ?? "Item" });
     }
   } catch { /* keine Items → Fallback auf Credits unten */ }
   const hasAnyItems = RAMP.some((r) => byRarity[r].length > 0);
   const pickIdx: Record<string, number> = { normal: 0, selten: 0, mythisch: 0, ultra: 0 };
-  const pickItem = (rarity: Rarity): { id: string; type: string | null } | null => {
+  const pickItem = (rarity: Rarity): { id: string; type: string | null; name: string } | null => {
     // bevorzugte Seltenheit, dann nächstbeste mit Bestand
     for (const r of [rarity, ...RAMP.filter((x) => x !== rarity)]) {
       const pool = byRarity[r];
@@ -1285,12 +1285,13 @@ export async function adminAutoFillBpTiers(
     let reward_item_id: string | null = null;
     let reward_item_type: string | null = null;
     let reward_item_rarity: Rarity | null = null;
+    let pickedName: string | null = null;
     if (rewardType === "item") {
       const rar: Rarity = isMilestone ? "ultra" : rarityForTier(tierNumber);
       if (config.resolveRandomItems !== false) {
-        // Konkretes Item schon jetzt auswürfeln → echtes 3D-Modell in der Kachel
+        // Konkretes Item schon jetzt auswürfeln → echtes 3D-Modell + echter Name in der Kachel
         const it = pickItem(rar);
-        if (it) { reward_item_id = it.id; reward_item_type = it.type; reward_item_rarity = rar; }
+        if (it) { reward_item_id = it.id; reward_item_type = it.type; reward_item_rarity = rar; pickedName = it.name; }
         else { rewardType = "credits"; } // keine Items vorhanden
       } else {
         // Als Überraschungs-Drop belassen — Item wird erst beim Claim gewürfelt
@@ -1320,7 +1321,14 @@ export async function adminAutoFillBpTiers(
       : rewardType === "credits" ? "💰"
       : rewardType === "item" ? "📦"
       : rewardType === "xp_boost" ? "⚡" : "🏆";
-    const name = isMilestone ? `Meilenstein ${tierNumber}` : `Tier ${tierNumber}`;
+    // Aussagekräftiger Name (User will Items immer mit echtem Namen sehen)
+    const name =
+      rewardType === "item" ? (pickedName ?? `Level ${tierNumber}`)
+      : rewardType === "credits" ? (isMilestone ? `Meilenstein ${tierNumber}` : "Credits")
+      : rewardType === "random_item" ? "Zufalls-Item"
+      : rewardType === "xp_boost" ? "XP-Boost"
+      : rewardType === "badge" ? (reward_badge_text ?? "Season Badge")
+      : `Level ${tierNumber}`;
     const tierDisplayMode = (config.milestoneAlways3D && isMilestone) ? "3d" : (config.defaultDisplayMode ?? "3d");
 
     rows.push({

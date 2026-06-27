@@ -1425,7 +1425,7 @@ function HorizontalTrack({
         {canScrollLeft && (
           <button
             onClick={() => scrollBy(-300)}
-            className="absolute left-0 top-1/2 z-10 -translate-y-1/2 -translate-x-1 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-zinc-900/90 text-white/60 shadow-xl hover:text-white transition-colors backdrop-blur-sm"
+            className="absolute left-0 top-1/2 z-30 -translate-y-1/2 -translate-x-1 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-zinc-900/95 text-white/70 shadow-xl hover:text-white transition-colors backdrop-blur-sm"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -1466,7 +1466,7 @@ function HorizontalTrack({
         {canScrollRight && (
           <button
             onClick={() => scrollBy(300)}
-            className="absolute right-0 top-1/2 z-10 -translate-y-1/2 translate-x-1 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-zinc-900/90 text-white/60 shadow-xl hover:text-white transition-colors backdrop-blur-sm"
+            className="absolute right-0 top-1/2 z-30 -translate-y-1/2 translate-x-1 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-zinc-900/95 text-white/70 shadow-xl hover:text-white transition-colors backdrop-blur-sm"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -2327,8 +2327,8 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
               const showLockHint = (!hasPremium && premiumTiers.length > 0) || (pass.eliteEnabled && !hasElite && eliteTiers.length > 0);
               return (
                 <motion.div
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   transition={{ delay: 0.05 }}
                   className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-white/[0.025] to-black/30 p-4 sm:p-5"
                   style={{ boxShadow: `0 0 50px ${glow}10` }}

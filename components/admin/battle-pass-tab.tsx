@@ -280,7 +280,7 @@ function AutoFillModal({
       const res = await adminAutoFillBpTiers(passId, config);
       if (res.success) {
         sound.save();
-        setResult({ success: true, message: `${res.count} Tiers generiert — klicke unten auf jeden Tier um ihn einzeln zu bearbeiten.` });
+        setResult({ success: true, message: `${res.count} Levels generiert — klicke unten auf jedes Level um es einzeln zu bearbeiten.` });
         await onDone();
         setTimeout(() => onClose(), 1500);
       } else {
@@ -304,7 +304,7 @@ function AutoFillModal({
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Wand2 className="h-4 w-4 text-purple-400" />
-            <h3 className="font-bold text-zinc-100">Auto-Befüllen ({tierCount} Tiers)</h3>
+            <h3 className="font-bold text-zinc-100">Auto-Befüllen ({tierCount} Levels)</h3>
           </div>
           <button onClick={onClose} className="rounded-full p-1 text-zinc-500 hover:text-zinc-300 transition-colors">
             <X className="h-4 w-4" />
@@ -342,7 +342,7 @@ function AutoFillModal({
 
           {/* Milestone interval */}
           <label className="flex flex-col gap-1 text-xs text-zinc-400">
-            Milestone-Tier-Intervall (alle N Tiers)
+            Milestone-Level-Intervall (alle N Levels)
             <div className="flex items-center gap-3">
               <input
                 type="number"
@@ -352,7 +352,7 @@ function AutoFillModal({
                 max={50}
                 className="w-24 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
               />
-              <span className="text-xs text-zinc-500">Alle {config.milestoneTierInterval} Tiers = Milestone (hervorgehoben)</span>
+              <span className="text-xs text-zinc-500">Alle {config.milestoneTierInterval} Levels = Milestone (hervorgehoben)</span>
             </div>
           </label>
 
@@ -654,7 +654,7 @@ function TierEditorModal({
       ? "premium"
       : (existing ? "free" : (initialTrackProp ?? "free"));
 
-  const [name, setName] = useState(existing?.name ?? `Tier ${tierNumber}`);
+  const [name, setName] = useState(existing?.name ?? `Level ${tierNumber}`);
   const [icon, setIcon] = useState(existing?.icon ?? "🎁");
   const [track, setTrack] = useState<TierTrack>(initialTrack);
   const [rewardType, setRewardType] = useState<BpRewardType>(existing?.rewardType ?? "credits");
@@ -706,7 +706,7 @@ function TierEditorModal({
     setError(null);
     const input: AdminTierInput = {
       tierNumber,
-      name: name.trim() || `Tier ${tierNumber}`,
+      name: name.trim() || `Level ${tierNumber}`,
       isPremium,
       isElite,
       rewardType,
@@ -748,7 +748,7 @@ function TierEditorModal({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-bold text-zinc-100">Tier {tierNumber} bearbeiten</h3>
+            <h3 className="font-bold text-zinc-100">Level {tierNumber} bearbeiten</h3>
             <button onClick={onClose} className="rounded-full p-1 text-zinc-500 hover:text-zinc-300 transition-colors">
               <X className="h-4 w-4" />
             </button>
@@ -793,7 +793,7 @@ function TierEditorModal({
               <input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Flavor-Text für den Tier…"
+                placeholder="Flavor-Text für das Level…"
                 className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
               />
             </label>
@@ -838,7 +838,7 @@ function TierEditorModal({
               className={`w-full flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${highlightTier ? "border-yellow-400/60 bg-yellow-500/15 text-yellow-200" : "border-white/10 text-zinc-400 hover:border-white/20"}`}
             >
               <Star className="h-3.5 w-3.5" />
-              {highlightTier ? "⭐ Milestone-Tier (hervorgehoben)" : "Als Milestone-Tier markieren"}
+              {highlightTier ? "⭐ Milestone-Level (hervorgehoben)" : "Als Milestone-Level markieren"}
             </button>
 
             {/* ── Visualisierungs-Profil ── */}
@@ -891,7 +891,7 @@ function TierEditorModal({
                     <span>{showTierName ? "✓" : "✗"}</span> Name einblenden
                   </button>
                   <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-64 rounded-lg border border-purple-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
-                    Zeigt oder versteckt den Tier-Namen (z.B. &quot;Tier 5&quot; oder &quot;Legendäre Rüstung&quot;) unterhalb des Vorschau-Icons auf der Kachel. Bei Kacheln mit wenig Platz oder rein visuellen Rewards kann das Ausblenden cleaner wirken.
+                    Zeigt oder versteckt den Level-Namen (z.B. &quot;Level 5&quot; oder &quot;Legendäre Rüstung&quot;) unterhalb des Vorschau-Icons auf der Kachel. Bei Kacheln mit wenig Platz oder rein visuellen Rewards kann das Ausblenden cleaner wirken.
                   </div>
                 </div>
                 <div className="group/tip relative">
@@ -904,7 +904,7 @@ function TierEditorModal({
                     <span>{showTierDescription ? "✓" : "✗"}</span> Beschreibung
                   </button>
                   <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-64 rounded-lg border border-purple-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
-                    Zeigt oder versteckt den Beschreibungstext im Tier-Detail-Panel (erscheint wenn User auf die Kachel klickt). Nützlich um storytelling hinzuzufügen oder bei einfachen Rewards wegzulassen.
+                    Zeigt oder versteckt den Beschreibungstext im Level-Detail-Panel (erscheint wenn User auf die Kachel klickt). Nützlich um storytelling hinzuzufügen oder bei einfachen Rewards wegzulassen.
                   </div>
                 </div>
               </div>
@@ -1032,7 +1032,7 @@ function TierEditorModal({
                   <input type="number" value={rewardXpBoost} onChange={(e) => setRewardXpBoost(Math.max(1, Number(e.target.value) || 1))} min={1}
                     className="w-32 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
                 </label>
-                <p className="text-[10px] text-zinc-500">Fügt dem User zusätzliche Fortschrittstage hinzu (überspringt Tiers).</p>
+                <p className="text-[10px] text-zinc-500">Fügt dem User zusätzliche Fortschrittstage hinzu (überspringt Levels).</p>
               </div>
             )}
 
@@ -1692,7 +1692,7 @@ function PassEditor({
             className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
-          Anzahl Tiers (1–50)
+          Anzahl Levels (1–50)
           <input type="number" value={tierCount} onChange={(e) => setTierCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} min={1} max={50}
             className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
@@ -1748,7 +1748,7 @@ function PassEditor({
           {progressionType === "xp" && (
             <>
               <label className="flex flex-col gap-1 text-xs text-zinc-400">
-                BP-XP pro Tier
+                BP-XP pro Level
                 <input type="number" min={100} max={100000} value={bpXpPerTier} onChange={(e) => setBpXpPerTier(Number(e.target.value))}
                   className="rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60 min-h-[44px]" />
               </label>
@@ -1762,7 +1762,7 @@ function PassEditor({
         </div>
         {progressionType === "xp" && (
           <p className="text-[10px] text-zinc-500">
-            Spieler schalten Tiers durch BP-XP frei (verdient durch Aufgaben). {bpXpPerTier.toLocaleString("de-DE")} XP = 1 Tier. Gesamt für alle {tierCount} Tiers: {(bpXpPerTier * tierCount).toLocaleString("de-DE")} XP.
+            Spieler schalten Levels durch BP-XP frei (verdient durch Aufgaben). {bpXpPerTier.toLocaleString("de-DE")} XP = 1 Level. Gesamt für alle {tierCount} Levels: {(bpXpPerTier * tierCount).toLocaleString("de-DE")} XP.
           </p>
         )}
       </div>
@@ -1780,7 +1780,7 @@ function PassEditor({
               key: "showTileAnimations" as const,
               label: "Tile-Animationen",
               desc: "Pulsieren / Shimmer auf Tiles",
-              tooltip: "Schaltet alle Bewegungsanimationen auf den Tier-Kacheln ein oder aus. Dazu gehören: Shimmer-Effekte auf verfügbaren Kacheln, pulsierende Glow-Ringe, diagonale Scan-Linien und Ecken-Lichtblitze. Deaktivierung verbessert die Performance auf schwächeren Geräten oder ergibt eine ruhigere, cleane Optik.",
+              tooltip: "Schaltet alle Bewegungsanimationen auf den Level-Kacheln ein oder aus. Dazu gehören: Shimmer-Effekte auf verfügbaren Kacheln, pulsierende Glow-Ringe, diagonale Scan-Linien und Ecken-Lichtblitze. Deaktivierung verbessert die Performance auf schwächeren Geräten oder ergibt eine ruhigere, cleane Optik.",
             },
             {
               key: "showParticleField" as const,
@@ -1843,7 +1843,7 @@ function PassEditor({
               className="w-full accent-amber-400"
             />
             <div className="pointer-events-none absolute -top-2 left-0 z-50 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
-              Stärke des Leuchteffekts (Glow) auf Meilenstein-Kacheln (die hervorgehobenen Tiers mit ✦ MILESTONE-Badge). 0 % = kein Glow, 100 % = maximaler Glow. Höhere Werte betonen besondere Tier-Belohnungen stärker und erzeugen einen Premium-Eindruck. Standard: 60 %.
+              Stärke des Leuchteffekts (Glow) auf Meilenstein-Kacheln (die hervorgehobenen Levels mit ✦ MILESTONE-Badge). 0 % = kein Glow, 100 % = maximaler Glow. Höhere Werte betonen besondere Level-Belohnungen stärker und erzeugen einen Premium-Eindruck. Standard: 60 %.
             </div>
           </div>
           <div className="group/tip relative space-y-1.5">
@@ -1902,8 +1902,8 @@ function PassEditor({
           <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Tile-Dimensionen</p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {([
-              { key: "normalTileWidth" as const, label: "Breite Normal", min: 90, max: 220, unit: "px", tooltip: "Breite der normalen Tier-Kacheln in Pixeln. Kleinere Werte = mehr Kacheln sichtbar gleichzeitig; größere Werte = imposantere Darstellung. Standard: 140 px." },
-              { key: "normalTileHeight" as const, label: "Höhe Normal", min: 150, max: 340, unit: "px", tooltip: "Höhe der normalen Tier-Kacheln in Pixeln. Beeinflusst den Raum für das Preview-Bild und den Claim-Button. Standard: 228 px." },
+              { key: "normalTileWidth" as const, label: "Breite Normal", min: 90, max: 220, unit: "px", tooltip: "Breite der normalen Level-Kacheln in Pixeln. Kleinere Werte = mehr Kacheln sichtbar gleichzeitig; größere Werte = imposantere Darstellung. Standard: 140 px." },
+              { key: "normalTileHeight" as const, label: "Höhe Normal", min: 150, max: 340, unit: "px", tooltip: "Höhe der normalen Level-Kacheln in Pixeln. Beeinflusst den Raum für das Preview-Bild und den Claim-Button. Standard: 228 px." },
               { key: "milestoneTileWidth" as const, label: "Breite Milestone", min: 110, max: 260, unit: "px", tooltip: "Breite der hervorgehobenen Meilenstein-Kacheln. Sollte größer als 'Breite Normal' sein um den besonderen Status zu unterstreichen. Standard: 172 px." },
               { key: "milestoneTileHeight" as const, label: "Höhe Milestone", min: 180, max: 400, unit: "px", tooltip: "Höhe der Meilenstein-Kacheln. Größere Meilenstein-Kacheln erzeugen einen dramatischen Effekt im Track. Standard: 284 px." },
             ] as { key: keyof BpVisualConfig; label: string; min: number; max: number; unit: string; tooltip: string }[]).map(({ key, label, min, max, unit, tooltip }) => (
@@ -1961,10 +1961,10 @@ function PassEditor({
           <div className="group/tip relative">
             <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Layout-Modus</p>
             <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
-              Bestimmt, wie die Tier-Kacheln des Battle-Passes angeordnet werden.<br />
-              <strong>Karussell:</strong> Horizontales Scrollen pro Track — der bewährte Battle-Pass-Look (Fortnite-Stil). Ideal für 8–30 Tiers.<br />
-              <strong>Klassik-Grid:</strong> Responsives Raster das sich an die Bildschirmbreite anpasst — gut für kompakte Pässe mit 6–12 Tiers.<br />
-              <strong>Vertical-Liste:</strong> Jeder Tier als Zeile — übersichtlich für Pässe mit langer Beschreibung oder vielen Metadaten. Empfohlen für Wartungs- oder Sonder-Pässe.
+              Bestimmt, wie die Level-Kacheln des Battle-Passes angeordnet werden.<br />
+              <strong>Karussell:</strong> Horizontales Scrollen pro Track — der bewährte Battle-Pass-Look (Fortnite-Stil). Ideal für 8–30 Levels.<br />
+              <strong>Klassik-Grid:</strong> Responsives Raster das sich an die Bildschirmbreite anpasst — gut für kompakte Pässe mit 6–12 Levels.<br />
+              <strong>Vertical-Liste:</strong> Jedes Level als Zeile — übersichtlich für Pässe mit langer Beschreibung oder vielen Metadaten. Empfohlen für Wartungs- oder Sonder-Pässe.
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -2047,7 +2047,7 @@ function PassEditor({
               className="w-full accent-amber-400"
             />
             <div className="pointer-events-none absolute -top-2 left-0 z-50 hidden w-72 rounded-lg border border-fuchsia-500/30 bg-zinc-950/95 p-2.5 text-[10px] text-zinc-300 shadow-2xl group-hover/tip:block">
-              Horizontaler Abstand zwischen den Tier-Kacheln im Track in Pixeln. Kleinere Werte lassen mehr Kacheln gleichzeitig sehen, größere Werte geben dem Layout mehr Luft und Eleganz. Standard: 8 px. Empfehlung: 8–14 px.
+              Horizontaler Abstand zwischen den Level-Kacheln im Track in Pixeln. Kleinere Werte lassen mehr Kacheln gleichzeitig sehen, größere Werte geben dem Layout mehr Luft und Eleganz. Standard: 8 px. Empfehlung: 8–14 px.
             </div>
           </div>
         </div>
@@ -2125,7 +2125,7 @@ function PassEditor({
           </label>
         </div>
         {!eliteEnabled && (
-          <p className="text-[10px] text-zinc-600">Aktiviere den Elite-Track, um einen dritten Tier-Track mit separatem Preis anzubieten.</p>
+          <p className="text-[10px] text-zinc-600">Aktiviere den Elite-Track, um einen dritten Level-Track mit separatem Preis anzubieten.</p>
         )}
       </div>
 
@@ -2315,7 +2315,7 @@ function PassEditor({
             }`}
           >
             <Star className="h-3.5 w-3.5" />
-            {showTierCountInShop ? "Tier-Anzahl anzeigen" : "Tier-Anzahl versteckt"}
+            {showTierCountInShop ? "Level-Anzahl anzeigen" : "Level-Anzahl versteckt"}
           </button>
         </div>
       </div>
@@ -2396,7 +2396,7 @@ function PassEditor({
       {/* Tier editor grid */}
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <p className="flex-1 text-xs font-semibold text-zinc-400">Tier-Belohnungen konfigurieren</p>
+          <p className="flex-1 text-xs font-semibold text-zinc-400">Level-Belohnungen konfigurieren</p>
           <button
             onClick={() => setShowAutoFill(true)}
             className="flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-500/20 hover:border-purple-400/60 transition-colors"
@@ -2430,7 +2430,7 @@ function PassEditor({
               <button
                 key={n}
                 onClick={() => setEditingTier({ num: n, existing: tier ?? null })}
-                title={tier ? `Tier ${n} bearbeiten` : `Tier ${n} erstellen`}
+                title={tier ? `Level ${n} bearbeiten` : `Level ${n} erstellen`}
                 className={`group relative flex flex-col items-center gap-0.5 rounded-lg border transition-all hover:scale-105 ${
                   isHighlight ? "px-3 py-3 ring-1 ring-yellow-400/40" : "px-2 py-2"
                 } ${
@@ -2580,7 +2580,7 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
             className="w-full sm:w-28 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-400">
-          Anzahl Tiers
+          Anzahl Levels
           <input type="number" value={tierCount} onChange={(e) => setTierCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} min={1} max={50}
             className="w-full sm:w-24 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
         </label>
@@ -2753,9 +2753,9 @@ export function BattlePassTab({ initialPasses, migrationNeeded = false }: { init
       <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
         <h2 className="mb-1 text-base font-bold text-zinc-100">Battle Pass System</h2>
         <p className="text-xs text-zinc-500">
-          Erstelle saisonale Pässe mit Tier-Belohnungen. Premium-Käufer schalten alle Tiers frei und erhalten Spin-Bonus.
+          Erstelle saisonale Pässe mit Level-Belohnungen. Premium-Käufer schalten alle Levels frei und erhalten Spin-Bonus.
           Belohnungstypen: Credits, spezifische Items, zufällige Items nach Seltenheit, Badges/Titel, Fortschritts-Boosts.
-          Elite-Track: optionaler dritter Track mit eigenem Preis und violetten Tiers.
+          Elite-Track: optionaler dritter Track mit eigenem Preis und violetten Levels.
         </p>
       </div>
 
@@ -2817,7 +2817,7 @@ export function BattlePassTab({ initialPasses, migrationNeeded = false }: { init
                     </span>
                   )}
                   <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">
-                    {pass.tiers.length}/{pass.tierCount} Tiers
+                    {pass.tiers.length}/{pass.tierCount} Levels
                   </span>
                   {pass.isActive && (
                     <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">AKTIV</span>
