@@ -1812,6 +1812,8 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [buyError, setBuyError] = useState<string | null>(null);
   const [purchaseAnim, setPurchaseAnim] = useState(false);
+  const [claimBurst, setClaimBurst] = useState<{ key: number; reward: string } | null>(null);
+  const burstKeyRef = useRef(0);
 
   const shellRef = useRef<HTMLDivElement>(null);
 
@@ -1857,16 +1859,32 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
       setClaimingId(null);
       if (res.success) {
         soundRef.current.bpTierClaim();
-        showToast(res.reward ? `✦ ${res.reward}` : "Reward abgeholt!", true);
+        const rewardLabel = res.reward ? `✦ ${res.reward}` : "Reward abgeholt!";
+        showToast(rewardLabel, true);
+        // Zero-Latency: optimistisch claimen, KEIN router.refresh() (kein Reload-Ruck).
         setUserStatus((prev) =>
           prev ? { ...prev, claimedTierIds: [...prev.claimedTierIds, tierId] } : prev
         );
-        router.refresh();
+        // Fettes Partikel-Feedback auf der Kachel/zentral.
+        burstKeyRef.current += 1;
+        setClaimBurst({ key: burstKeyRef.current, reward: res.reward ?? "" });
+        setTimeout(() => setClaimBurst((b) => (b && b.key === burstKeyRef.current ? null : b)), 1500);
+        // xp_boost erhöht progress_days → schaltet evtl. neue Stufen frei: gezielter Resync (kein Full-Reload).
+        if (res.rewardType === "xp_boost") {
+          getActiveBattlePass()
+            .then((view) => {
+              if (!view) return;
+              setPass(view.pass);
+              if (view.userStatus) setUserStatus(view.userStatus);
+            })
+            .catch(() => { /* optimistischer Stand bleibt */ });
+        }
       } else {
+        soundRef.current.error();
         showToast(res.error ?? "Fehler.", false);
       }
     });
-  }, [claimingId, isPending, router]);
+  }, [claimingId, isPending]);
 
   const handleBuyPremium = useCallback(() => {
     setBuyError(null);
@@ -1928,9 +1946,41 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
     </div>
   ) : null;
 
+  // Claim-Partikel: zentraler Funken-Burst + aufploppendes Reward-Label (zero-latency Feedback).
+  const ClaimBurst = claimBurst ? (
+    <div key={claimBurst.key} className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+      {Array.from({ length: 22 }, (_, i) => {
+        const ang = (i / 22) * Math.PI * 2;
+        const dist = 90 + (i % 5) * 26;
+        return (
+          <motion.div
+            key={i}
+            className="absolute text-lg"
+            style={{ color: accent, textShadow: `0 0 8px ${glow}` }}
+            initial={{ x: 0, y: 0, opacity: 1, scale: 0.4 }}
+            animate={{ x: Math.cos(ang) * dist, y: Math.sin(ang) * dist, opacity: 0, scale: 1.1 }}
+            transition={{ duration: 1.1, ease: "easeOut" }}
+          >
+            ✦
+          </motion.div>
+        );
+      })}
+      <motion.div
+        className="absolute rounded-full border px-4 py-2 text-sm font-bold backdrop-blur-md"
+        style={{ borderColor: `${accent}80`, background: `${accent}22`, color: "#fff", boxShadow: `0 0 28px ${glow}` }}
+        initial={{ scale: 0.5, opacity: 0, y: 10 }}
+        animate={{ scale: [0.5, 1.12, 1], opacity: [0, 1, 1, 0], y: [10, -6, -10] }}
+        transition={{ duration: 1.4, ease: "easeOut", times: [0, 0.25, 0.6, 1] }}
+      >
+        {claimBurst.reward ? `✦ ${claimBurst.reward}` : "✦ Abgeholt!"}
+      </motion.div>
+    </div>
+  ) : null;
+
   return (
     <div ref={shellRef} className="flex flex-1 flex-col min-h-0 relative">
       {CoinBurst}
+      {ClaimBurst}
 
       {/* ══ HERO ══════════════════════════════════════════════════════════ */}
       <div

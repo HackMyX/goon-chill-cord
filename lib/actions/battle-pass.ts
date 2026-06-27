@@ -1046,6 +1046,137 @@ export async function adminUpsertBpTier(
   return { success: true };
 }
 
+// ── Drag & Drop Timeline-Editor ───────────────────────────────────────────────
+// Belohnungs-Inhalt einer Stufe (alles AUSSER Identität pass_id/tier_number/id/created_at).
+// reward_item_name & reward_ability_name absichtlich AUSGELASSEN (existieren nicht in der DB).
+const BP_TIER_CONTENT_COLS =
+  "name, is_premium, is_elite, reward_type, reward_credits, reward_item_id, reward_item_type, " +
+  "reward_item_rarity, reward_badge_key, reward_badge_text, reward_xp_boost, reward_name_style_key, " +
+  "reward_ability_key, reward_quantity, highlight_tier, description, icon, bp_xp_required, " +
+  "display_mode, show_tier_name, show_tier_description";
+
+function bpTrackFlags(track: "free" | "premium" | "elite") {
+  return { is_premium: track === "premium", is_elite: track === "elite" };
+}
+
+function bpTierContent(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const col of BP_TIER_CONTENT_COLS.split(",").map((c) => c.trim())) {
+    out[col] = row[col] ?? null;
+  }
+  return out;
+}
+
+/**
+ * Verschiebt / tauscht eine Belohnung im visuellen Timeline-Editor.
+ * - fromTier === toTier  → reiner Track-Wechsel (Free/Premium/Elite) der Quelle.
+ * - Ziel belegt          → Tausch beider Stufen-Inhalte (Quelle erhält toTrack, das verdrängte
+ *                           Reward landet an der Quell-Stufe und behält deren bisherigen Track).
+ * - Ziel leer            → Verschieben (Quelle wird geleert, Ziel erhält Inhalt + toTrack).
+ * Belohnungs-Grant-Logik (claimBpTier) bleibt komplett unangetastet.
+ */
+export async function adminPlaceBpReward(
+  passId: string,
+  fromTier: number,
+  toTier: number,
+  toTrack: "free" | "premium" | "elite",
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdminUser();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+  const admin = createAdminClient();
+
+  const { data: src, error: srcErr } = await admin
+    .from("battle_pass_tiers")
+    .select(BP_TIER_CONTENT_COLS)
+    .eq("pass_id", passId)
+    .eq("tier_number", fromTier)
+    .maybeSingle();
+  if (srcErr) return { success: false, error: "Quell-Stufe konnte nicht geladen werden." };
+  if (!src) return { success: false, error: "Keine Belohnung an der Quell-Stufe." };
+  const srcRow = src as unknown as Record<string, unknown>;
+
+  // Reiner Track-Wechsel innerhalb derselben Stufe
+  if (fromTier === toTier) {
+    const { error } = await admin
+      .from("battle_pass_tiers")
+      .update(bpTrackFlags(toTrack))
+      .eq("pass_id", passId)
+      .eq("tier_number", fromTier);
+    if (error) return { success: false, error: "Track-Wechsel fehlgeschlagen." };
+    await broadcastBpChange();
+    revalidatePath("/admin");
+    revalidatePath("/battlepass");
+    return { success: true };
+  }
+
+  const { data: tgt } = await admin
+    .from("battle_pass_tiers")
+    .select(BP_TIER_CONTENT_COLS)
+    .eq("pass_id", passId)
+    .eq("tier_number", toTier)
+    .maybeSingle();
+
+  if (tgt) {
+    // TAUSCH: verdrängtes Reward → Quell-Stufe (behält Quell-Track); Quelle → Ziel (toTrack)
+    const srcTrack: "free" | "premium" | "elite" = srcRow.is_elite
+      ? "elite"
+      : srcRow.is_premium
+        ? "premium"
+        : "free";
+    const e1 = await admin
+      .from("battle_pass_tiers")
+      .update({ ...bpTierContent(tgt as unknown as Record<string, unknown>), ...bpTrackFlags(srcTrack) })
+      .eq("pass_id", passId)
+      .eq("tier_number", fromTier);
+    const e2 = await admin
+      .from("battle_pass_tiers")
+      .update({ ...bpTierContent(srcRow), ...bpTrackFlags(toTrack) })
+      .eq("pass_id", passId)
+      .eq("tier_number", toTier);
+    if (e1.error || e2.error) return { success: false, error: "Tausch fehlgeschlagen." };
+  } else {
+    // VERSCHIEBEN auf leere Stufe: Ziel anlegen, Quelle löschen
+    const e1 = await admin
+      .from("battle_pass_tiers")
+      .upsert(
+        { pass_id: passId, tier_number: toTier, ...bpTierContent(srcRow), ...bpTrackFlags(toTrack) },
+        { onConflict: "pass_id,tier_number" },
+      );
+    if (e1.error) return { success: false, error: "Verschieben fehlgeschlagen." };
+    const e2 = await admin
+      .from("battle_pass_tiers")
+      .delete()
+      .eq("pass_id", passId)
+      .eq("tier_number", fromTier);
+    if (e2.error) return { success: false, error: "Quell-Stufe konnte nicht geleert werden." };
+  }
+
+  await broadcastBpChange();
+  revalidatePath("/admin");
+  revalidatePath("/battlepass");
+  return { success: true };
+}
+
+/** Leert eine Stufe (löscht die Tier-Zeile). Belohnungs-Definition entfernt, Claims der User bleiben. */
+export async function adminClearBpTier(
+  passId: string,
+  tierNumber: number,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdminUser();
+  if (!user) return { success: false, error: "Kein Zugriff." };
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("battle_pass_tiers")
+    .delete()
+    .eq("pass_id", passId)
+    .eq("tier_number", tierNumber);
+  if (error) return { success: false, error: "Stufe konnte nicht geleert werden." };
+  await broadcastBpChange();
+  revalidatePath("/admin");
+  revalidatePath("/battlepass");
+  return { success: true };
+}
+
 export async function adminAutoFillBpTiers(
   passId: string,
   config: BpAutoFillConfig

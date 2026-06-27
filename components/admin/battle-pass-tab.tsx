@@ -10,6 +10,7 @@ import {
   Target, RotateCcw, RefreshCw, CheckCircle2, Lock,
 } from "lucide-react";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
+import { BpTimelineEditor } from "@/components/admin/bp-timeline-editor";
 import { useSoundManager } from "@/lib/sound-manager";
 import {
   adminListBattlePasses, adminCreateBattlePass, adminUpdateBattlePass,
@@ -620,21 +621,23 @@ function TierEditorModal({
   passId,
   tierNumber,
   existing,
+  initialTrack: initialTrackProp,
   onClose,
   onSaved,
 }: {
   passId: string;
   tierNumber: number;
   existing: BattlePassTier | null;
+  initialTrack?: TierTrack;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  // Derive track from existing tier
+  // Derive track from existing tier; for a NEW tier fall back to the lane that was clicked.
   const initialTrack: TierTrack = existing?.isElite
     ? "elite"
     : existing?.isPremium
       ? "premium"
-      : "free";
+      : (existing ? "free" : (initialTrackProp ?? "free"));
 
   const [name, setName] = useState(existing?.name ?? `Tier ${tierNumber}`);
   const [icon, setIcon] = useState(existing?.icon ?? "🎁");
@@ -1489,7 +1492,7 @@ function PassEditor({
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saved">("idle");
   const [activating, setActivating] = useState(false);
-  const [editingTier, setEditingTier] = useState<{ num: number; existing: BattlePassTier | null } | null>(null);
+  const [editingTier, setEditingTier] = useState<{ num: number; existing: BattlePassTier | null; track?: TierTrack } | null>(null);
   const [showPreview, setShowPreview] = useState(true);
   const [showStats, setShowStats] = useState(false);
   const [showAutoFill, setShowAutoFill] = useState(false);
@@ -2320,6 +2323,21 @@ function PassEditor({
             Auto-befüllen
           </button>
         </div>
+
+        {/* Visueller Drag & Drop Timeline-Editor (Tiefen-Editing weiter über Klick → TierEditorModal) */}
+        <div className="mb-3">
+          <BpTimelineEditor
+            passId={pass.id}
+            tiers={pass.tiers}
+            tierCount={tierCount}
+            eliteEnabled={eliteEnabled}
+            onEditTier={(num, existing, track) => setEditingTier({ num, existing, track })}
+            onOpenSmartGen={() => setShowAutoFill(true)}
+            onChanged={async () => { await onSaved(); router.refresh(); }}
+          />
+        </div>
+
+        <p className="mb-1.5 text-[11px] font-semibold text-zinc-500">Kompakt-Ansicht</p>
         <div className="flex flex-wrap gap-1.5">
           {Array.from({ length: tierCount }, (_, i) => i + 1).map((n) => {
             const tier = tierMap.get(n);
@@ -2369,6 +2387,7 @@ function PassEditor({
           passId={pass.id}
           tierNumber={editingTier.num}
           existing={editingTier.existing}
+          initialTrack={editingTier.track}
           onClose={() => setEditingTier(null)}
           onSaved={() => { onSaved(); router.refresh(); }}
         />
