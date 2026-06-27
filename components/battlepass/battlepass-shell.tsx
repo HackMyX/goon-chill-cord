@@ -859,11 +859,11 @@ function XpProgressBar({ bpXp, bpXpPerTier, tierCount, accent, glow }: {
           style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)" }}
         />
         <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white/70">
-          Tier {currentTier} · +{(bpXpPerTier - tierProgress).toLocaleString("de-DE")} XP bis Tier {currentTier + 1}
+          Level {currentTier} · +{(bpXpPerTier - tierProgress).toLocaleString("de-DE")} XP bis Level {currentTier + 1}
         </div>
       </div>
       <div className="flex justify-between text-[10px] text-white/25">
-        <span>Tier {currentTier} / {tierCount}</span>
+        <span>Level {currentTier} / {tierCount}</span>
         <span>{pct}%</span>
       </div>
     </div>
@@ -990,14 +990,16 @@ function TrackTileCard({
   // tile's DOM rect and ignores the carousel's overflow clip → tiles scrolled out of the
   // carousel would otherwise render their 3D across the whole page. CaseDropView self-culls
   // (lazy + rootRef); BpRewardView3D (coins/dice/etc.) did NOT → leaked. Gate it on view.
+  // Deterministisches Culling: 3D rendert NUR wenn die Kachel zu ≥82% im Scroll-Container liegt.
+  // Rand-Kacheln (teilweise rausgescrollt) zeigen kein 3D → kein Überstand/Leck, kein "Nachfliegen".
   const [inView, setInView] = useState(true);
   useEffect(() => {
     const el = cardRef.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
     const root = scrollRootRef?.current ?? null;
     const obs = new IntersectionObserver(
-      (entries) => setInView(entries[0]?.isIntersecting ?? true),
-      { root, rootMargin: "48px", threshold: 0.01 },
+      (entries) => setInView((entries[0]?.intersectionRatio ?? 1) >= 0.82),
+      { root, rootMargin: "0px", threshold: [0, 0.5, 0.82, 1] },
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -1082,7 +1084,7 @@ function TrackTileCard({
               {tooltipRarity}
             </p>
           )}
-          <p className="text-[9px] text-white/40 mt-0.5">{tooltipTrack} · Tier {tier.tierNumber}</p>
+          <p className="text-[9px] text-white/40 mt-0.5">{tooltipTrack} · Level {tier.tierNumber}</p>
           {displayMode === "3d" && (
             <p className="text-[9px] text-purple-300 mt-1">✦ 3D Live-Vorschau</p>
           )}
@@ -1221,7 +1223,7 @@ function TrackTileCard({
                       },
                     }}
                     viewIndex={viewIndex}
-                    visible={true}
+                    visible={inView}
                     character={WORN_TYPES.has(tier.rewardItemType!)}
                     lazy
                     rootRef={scrollRootRef}
@@ -1413,7 +1415,7 @@ function HorizontalTrack({
             {label}
           </h2>
           <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${labelColor}30, transparent)` }} />
-          <span className="text-[10px] text-white/30">{tiers.length} Tiers</span>
+          <span className="text-[10px] text-white/30">{tiers.length} Levels</span>
         </div>
       )}
 
@@ -1550,7 +1552,7 @@ function HorizontalTrack({
                         className="shrink-0 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest"
                         style={{ borderColor: `${panelColor}40`, color: panelColor, background: `${panelColor}12` }}
                       >
-                        Tier {selectedTierData.tierNumber}
+                        Level {selectedTierData.tierNumber}
                       </div>
                     </div>
                     <p className="text-sm font-semibold" style={{ color: `${panelColor}cc` }}>
@@ -1618,7 +1620,7 @@ function GridTrack({ tiers, label, labelColor, trackIcon, userStatus, progressDa
         <span style={{ color: labelColor }}>{trackIcon}</span>
         <h2 className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: labelColor }}>{label}</h2>
         <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${labelColor}30, transparent)` }} />
-        <span className="text-[10px] text-white/30">{tiers.length} Tiers</span>
+        <span className="text-[10px] text-white/30">{tiers.length} Levels</span>
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 pt-3">
         {tiers.map((tier, idx) => {
@@ -1779,7 +1781,7 @@ function ListTrack({ tiers, label, labelColor, trackIcon, userStatus, progressDa
         <span style={{ color: labelColor }}>{trackIcon}</span>
         <h2 className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: labelColor }}>{label}</h2>
         <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${labelColor}30, transparent)` }} />
-        <span className="text-[10px] text-white/30">{tiers.length} Tiers</span>
+        <span className="text-[10px] text-white/30">{tiers.length} Levels</span>
       </div>
       <div className="space-y-1.5">
         {tiers.map((tier) => (
@@ -2218,7 +2220,7 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
                 style={{ borderColor: `${accent}30`, background: `${accent}08`, color: "rgba(255,255,255,0.7)" }}
               >
                 <Layers className="h-4 w-4" style={{ color: accent }} />
-                <span className="font-black" style={{ color: accent }}>{pass.tierCount}</span> Tiers
+                <span className="font-black" style={{ color: accent }}>{pass.tierCount}</span> Levels
               </div>
               {pass.startDate && (
                 <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/50 backdrop-blur-sm">
@@ -2252,16 +2254,16 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
               className="mt-5 flex flex-wrap justify-center gap-2"
             >
               <span className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-white/50">
-                <Gift className="h-3 w-3" /> FREE · {freeTiers.length} Tiers
+                <Gift className="h-3 w-3" /> FREE · {freeTiers.length} Levels
               </span>
               {premiumTiers.length > 0 && (
                 <span className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-300">
-                  <Crown className="h-3 w-3" /> PREMIUM · {premiumTiers.length} Tiers · {pass.priceCr.toLocaleString("de-DE")} CR
+                  <Crown className="h-3 w-3" /> PREMIUM · {premiumTiers.length} Levels · {pass.priceCr.toLocaleString("de-DE")} CR
                 </span>
               )}
               {pass.eliteEnabled && eliteTiers.length > 0 && (
                 <span className="flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-300">
-                  <Sparkles className="h-3 w-3" /> ELITE · {eliteTiers.length} Tiers · {pass.elitePriceCr.toLocaleString("de-DE")} CR
+                  <Sparkles className="h-3 w-3" /> ELITE · {eliteTiers.length} Levels · {pass.elitePriceCr.toLocaleString("de-DE")} CR
                 </span>
               )}
             </motion.div>
@@ -2573,10 +2575,10 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
               <h4 className="mb-3 text-[10px] font-black uppercase tracking-widest" style={{ color: `${accent}60` }}>Überblick</h4>
               <div className="space-y-2.5">
                 {[
-                  { label: "Abgeholte Tiers", value: `${claimedCount} / ${pass.tierCount}`, color: "#34d399" },
-                  { label: "Verfügbare Tiers", value: String(pass.tiers.filter((t) => getTierState(t, userStatus, progressDays) === "available").length), color: accent },
-                  { label: "Gesperrte Tiers", value: String(pass.tiers.filter((t) => getTierState(t, userStatus, progressDays) === "locked").length), color: "rgba(255,255,255,0.25)" },
-                  { label: "Meilenstein-Tiers", value: String(pass.tiers.filter((t) => t.highlightTier).length), color: "#fbbf24" },
+                  { label: "Abgeholte Levels", value: `${claimedCount} / ${pass.tierCount}`, color: "#34d399" },
+                  { label: "Verfügbare Levels", value: String(pass.tiers.filter((t) => getTierState(t, userStatus, progressDays) === "available").length), color: accent },
+                  { label: "Gesperrte Levels", value: String(pass.tiers.filter((t) => getTierState(t, userStatus, progressDays) === "locked").length), color: "rgba(255,255,255,0.25)" },
+                  { label: "Meilenstein-Level", value: String(pass.tiers.filter((t) => t.highlightTier).length), color: "#fbbf24" },
                 ].map((s) => (
                   <div key={s.label} className="flex items-center justify-between text-xs">
                     <span className="text-white/35">{s.label}</span>

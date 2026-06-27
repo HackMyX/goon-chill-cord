@@ -82,6 +82,7 @@ export function PodiumShowcase({
   const meta = useMemo(() => {
     const tk = trackOf(tier);
     const rarity = tier.rewardItemRarity ?? null;
+    const isUltra = rarity === "ultra";
     const rColor = rarity ? (RARITY_HEX[rarity] ?? null) : null;
     const color = rColor ?? TRACK[tk].color;
     const isItem = tier.rewardType === "item" && !!tier.rewardItemName && !!tier.rewardItemType;
@@ -90,8 +91,10 @@ export function PodiumShowcase({
     const unlocked = (userStatus?.progressDays ?? 0) >= tier.tierNumber
       && (!tier.isPremium || (userStatus?.hasPremium ?? false))
       && (!tier.isElite || (userStatus?.hasElite ?? false));
-    return { tk, color, isItem, subj, claimed, unlocked };
+    return { tk, color, isItem, subj, claimed, unlocked, isUltra };
   }, [tier, userStatus]);
+
+  const RAINBOW = ["#ff0044", "#ff8800", "#ffee00", "#22dd55", "#00aaff", "#aa44ff", "#ff0044"];
 
   if (count === 0 || !tier) return null;
   const TrackIcon = TRACK[meta.tk].icon;
@@ -118,8 +121,10 @@ export function PodiumShowcase({
         className="pointer-events-none absolute left-1/2 top-[18%] h-56 w-56 -translate-x-1/2 rounded-full blur-[80px]"
         style={{ background: meta.color }}
         initial={{ opacity: 0.1, scale: 0.8 }}
-        animate={{ opacity: [0.18, 0.34, 0.18], scale: [0.9, 1.06, 0.9] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        animate={meta.isUltra
+          ? { opacity: [0.2, 0.4, 0.2], scale: [0.9, 1.08, 0.9], backgroundColor: RAINBOW }
+          : { opacity: [0.18, 0.34, 0.18], scale: [0.9, 1.06, 0.9] }}
+        transition={{ duration: meta.isUltra ? 3 : 4, repeat: Infinity, ease: meta.isUltra ? "linear" : "easeInOut" }}
       />
 
       {/* LIVE badge */}
@@ -153,7 +158,7 @@ export function PodiumShowcase({
           className="mb-1 flex items-center gap-2"
         >
           {tier.highlightTier && <Star className="h-4 w-4" style={{ color: meta.color }} />}
-          <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Tier {tier.tierNumber}</span>
+          <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Level {tier.tierNumber}</span>
           {tier.highlightTier && <Star className="h-4 w-4" style={{ color: meta.color }} />}
         </motion.div>
 
@@ -199,9 +204,15 @@ export function PodiumShowcase({
               <TrackIcon className="h-3 w-3" />{TRACK[meta.tk].label}
             </span>
             {tier.rewardItemRarity && (
-              <span className="rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider" style={{ borderColor: `${meta.color}55`, color: meta.color, background: `${meta.color}12` }}>
-                {RARITY_LABELS[tier.rewardItemRarity] ?? tier.rewardItemRarity}
-              </span>
+              meta.isUltra ? (
+                <span className="rainbow-border relative rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider">
+                  <span className="rainbow-text">{RARITY_LABELS.ultra}</span>
+                </span>
+              ) : (
+                <span className="rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider" style={{ borderColor: `${meta.color}55`, color: meta.color, background: `${meta.color}12` }}>
+                  {RARITY_LABELS[tier.rewardItemRarity] ?? tier.rewardItemRarity}
+                </span>
+              )
             )}
             {meta.claimed ? (
               <span className="flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-300">
@@ -230,7 +241,7 @@ export function PodiumShowcase({
                   onClick={() => setActive(i)}
                   className="h-1.5 rounded-full transition-all"
                   style={{ width: i === active ? 22 : 6, background: i === active ? meta.color : "rgba(255,255,255,0.18)" }}
-                  aria-label={`Tier ${tiers[i].tierNumber}`}
+                  aria-label={`Level ${tiers[i].tierNumber}`}
                 />
               ))}
             </div>

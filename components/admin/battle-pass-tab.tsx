@@ -2102,6 +2102,12 @@ function PassEditor({
             Elite-Track {eliteEnabled ? "aktiviert" : "deaktiviert"}
           </button>
         </div>
+        <p className="rounded-lg border border-violet-500/15 bg-violet-500/[0.05] px-3 py-2 text-[11px] leading-relaxed text-violet-200/80">
+          <b className="text-violet-200">Was ist der Elite-Track?</b> Ein <b>dritter, separat kaufbarer Premium-Track</b> über
+          Free und Premium. Spieler zahlen den Elite-Preis <i>zusätzlich</i> und schalten damit alle als 💎 Elite markierten
+          Level mit den wertvollsten/exklusivsten Belohnungen frei. Lässt du ihn aus, gibt es nur <b>Free + Premium</b>
+          (Level lassen sich dann nicht als Elite markieren).
+        </p>
         <div className={eliteEnabled ? "" : "pointer-events-none opacity-40"}>
           <label className="flex flex-col gap-1 text-xs text-zinc-400">
             Elite-Preis (CR)
