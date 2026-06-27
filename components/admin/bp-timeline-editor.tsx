@@ -1,10 +1,18 @@
 "use client";
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
-import { Wand2, Trash2, Sparkles, GripVertical, Plus, Crown, Gem, Info } from "lucide-react";
+import {
+  Wand2, Trash2, Sparkles, GripVertical, Plus, Crown, Gem, Info,
+  Coins, Package, Trophy, TrendingUp, Palette, Search, X,
+} from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
-import { adminPlaceBpReward, adminClearBpTier } from "@/lib/actions/battle-pass";
-import type { BattlePass, BattlePassTier, BpRewardType } from "@/lib/battle-pass";
+import {
+  adminPlaceBpReward, adminClearBpTier, adminUpsertBpTier, searchBpItems,
+  type AdminTierInput,
+} from "@/lib/actions/battle-pass";
+import { RARITY_ORDER, RARITY_LABELS } from "@/lib/cases";
+import type { BattlePassTier, BpRewardType } from "@/lib/battle-pass";
+import type { Rarity } from "@/lib/cases";
 
 type Track = "free" | "premium" | "elite";
 
@@ -46,23 +54,67 @@ function rewardColor(t: BattlePassTier): string | null {
   return null;
 }
 
-function ChipFace({ tier }: { tier: BattlePassTier }) {
-  const accent = rewardColor(tier) ?? TRACK_META[trackOf(tier)].color;
+function ChipFace({ icon, summary, type }: { icon: string; summary: string; type: BpRewardType }) {
   return (
     <div className="flex flex-col items-center justify-center gap-0.5">
-      <span className="text-lg leading-none">{tier.icon || REWARD_EMOJI[tier.rewardType]}</span>
-      <span className="px-0.5 text-center text-[8px] font-semibold leading-tight text-zinc-100 line-clamp-2">
-        {rewardSummary(tier)}
-      </span>
-      <span className="text-[7px]">{REWARD_EMOJI[tier.rewardType]}</span>
-      <span className="sr-only">{accent}</span>
+      <span className="text-lg leading-none">{icon || REWARD_EMOJI[type]}</span>
+      <span className="px-0.5 text-center text-[8px] font-semibold leading-tight text-zinc-100 line-clamp-2">{summary}</span>
+      <span className="text-[7px]">{REWARD_EMOJI[type]}</span>
     </div>
   );
 }
 
-type DragState = { from: number; x: number; y: number; over: { tier: number; track: Track } | null };
+// ── Pool reward blueprint ─────────────────────────────────────────────────────
+interface PoolItem {
+  rewardType: BpRewardType;
+  label: string;
+  emoji: string;
+  color: string;
+  rewardCredits?: number;
+  rewardItemId?: string;
+  rewardItemName?: string;
+  rewardItemType?: string;
+  rewardItemRarity?: Rarity | null;
+  rewardBadgeKey?: string;
+  rewardBadgeText?: string;
+  rewardXpBoost?: number;
+  rewardNameStyleKey?: string;
+}
 
-export function BpTimelineEditor({
+function buildInput(p: PoolItem, tierNumber: number, track: Track): AdminTierItem {
+  return {
+    tierNumber,
+    name: p.label,
+    isPremium: track === "premium",
+    isElite: track === "elite",
+    rewardType: p.rewardType,
+    rewardCredits: p.rewardCredits ?? null,
+    rewardItemId: p.rewardItemId ?? null,
+    rewardItemType: p.rewardItemType ?? null,
+    rewardItemName: p.rewardItemName ?? null,
+    rewardBadgeKey: p.rewardBadgeKey ?? null,
+    rewardBadgeText: p.rewardBadgeText ?? null,
+    rewardItemRarity: p.rewardItemRarity ?? null,
+    rewardXpBoost: p.rewardXpBoost ?? null,
+    rewardNameStyleKey: p.rewardNameStyleKey ?? null,
+    rewardQuantity: 1,
+    highlightTier: false,
+    description: null,
+    icon: p.emoji,
+    displayMode: p.rewardType === "credits" || p.rewardType === "badge" ? "auto" : "3d",
+    showTierName: true,
+    showTierDescription: true,
+  };
+}
+type AdminTierItem = AdminTierInput;
+
+type DragState =
+  | { src: "tile"; from: number; tier: BattlePassTier; x: number; y: number; over: { tier: number; track: Track } | null }
+  | { src: "pool"; item: PoolItem; x: number; y: number; over: { tier: number; track: Track } | null };
+
+type ItemHit = { id: string; name: string; rarity: Rarity; type: string };
+
+export function BpRewardStudio({
   passId,
   tiers,
   tierCount,
@@ -85,71 +137,78 @@ export function BpTimelineEditor({
   const [drag, setDrag] = useState<DragState | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
 
+  // Pool controls
+  const [creditAmt, setCreditAmt] = useState(2500);
+  const [boostDays, setBoostDays] = useState(2);
+  const [randomRarity, setRandomRarity] = useState<Rarity | null>(null);
+  const [itemQuery, setItemQuery] = useState("");
+  const [itemResults, setItemResults] = useState<ItemHit[]>([]);
+  const [searching, setSearching] = useState(false);
+
   const tierMap = useMemo(() => new Map(tiers.map((t) => [t.tierNumber, t])), [tiers]);
   const lanes: Track[] = eliteEnabled ? ["elite", "premium", "free"] : ["premium", "free"];
-
   const tierNumbers = useMemo(
     () => Array.from({ length: Math.max(1, Math.min(50, tierCount)) }, (_, i) => i + 1),
     [tierCount],
   );
-
   const counts = useMemo(() => {
     const c = { free: 0, premium: 0, elite: 0, total: tiers.length };
     for (const t of tiers) c[trackOf(t)]++;
     return c;
   }, [tiers]);
 
-  // Clean up any in-flight pointer listeners if the editor unmounts mid-drag.
   useEffect(() => () => { cleanupRef.current?.(); }, []);
+
+  // Debounced item search
+  useEffect(() => {
+    const q = itemQuery.trim();
+    if (!q) { setItemResults([]); setSearching(false); return; }
+    setSearching(true);
+    const id = setTimeout(async () => {
+      try {
+        const res = await searchBpItems(q);
+        setItemResults((res as ItemHit[]).slice(0, 24));
+      } catch { setItemResults([]); }
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [itemQuery]);
 
   const notify = useCallback((msg: string, ok: boolean) => {
     setFlash({ msg, ok });
     setTimeout(() => setFlash(null), 2200);
   }, []);
 
-  const place = useCallback(
-    async (from: number, to: number, toTrack: Track) => {
-      if (busy) return;
-      setBusy(true);
-      const res = await adminPlaceBpReward(passId, from, to, toTrack);
-      setBusy(false);
-      if (res.success) {
-        sound.save();
-        const verb = from === to ? "Track gewechselt" : tierMap.has(to) ? "Getauscht" : "Verschoben";
-        notify(`✓ ${verb}`, true);
-        await onChanged();
-      } else {
-        sound.error();
-        notify(res.error ?? "Fehler", false);
-      }
-    },
-    [busy, passId, sound, tierMap, notify, onChanged],
-  );
+  const finish = useCallback(async (ok: boolean, msg: string) => {
+    if (ok) { sound.save(); notify(`✓ ${msg}`, true); await onChanged(); }
+    else { sound.error(); notify(msg, false); }
+  }, [sound, notify, onChanged]);
 
-  const clear = useCallback(
-    async (tierNumber: number) => {
-      if (busy) return;
-      setBusy(true);
-      const res = await adminClearBpTier(passId, tierNumber);
-      setBusy(false);
-      if (res.success) {
-        sound.save();
-        notify("✓ Stufe geleert", true);
-        await onChanged();
-      } else {
-        sound.error();
-        notify(res.error ?? "Fehler", false);
-      }
-    },
-    [busy, passId, sound, notify, onChanged],
-  );
+  const dropTile = useCallback(async (from: number, to: number, track: Track) => {
+    setBusy(true);
+    const res = await adminPlaceBpReward(passId, from, to, track);
+    setBusy(false);
+    await finish(res.success, res.success ? (from === to ? "Track gewechselt" : tierMap.has(to) ? "Getauscht" : "Verschoben") : (res.error ?? "Fehler"));
+  }, [passId, finish, tierMap]);
 
-  // Resolve the timeline cell under a screen coordinate (works for mouse + touch).
+  const dropPool = useCallback(async (item: PoolItem, to: number, track: Track) => {
+    setBusy(true);
+    const res = await adminUpsertBpTier(passId, buildInput(item, to, track));
+    setBusy(false);
+    await finish(res.success, res.success ? `${item.label} → Tier ${to}` : (res.error ?? "Fehler"));
+  }, [passId, finish]);
+
+  const clear = useCallback(async (tierNumber: number) => {
+    setBusy(true);
+    const res = await adminClearBpTier(passId, tierNumber);
+    setBusy(false);
+    await finish(res.success, res.success ? "Stufe geleert" : (res.error ?? "Fehler"));
+  }, [passId, finish]);
+
   function cellUnder(x: number, y: number): { tier: number; track: Track } | null {
     if (typeof document === "undefined") return null;
     const el = document.elementFromPoint(x, y) as HTMLElement | null;
-    const cell = el?.closest("[data-bpcell]") as HTMLElement | null;
-    const raw = cell?.getAttribute("data-bpcell");
+    const raw = el?.closest("[data-bpcell]")?.getAttribute("data-bpcell");
     if (!raw) return null;
     const [track, tierStr] = raw.split(":");
     const tier = Number(tierStr);
@@ -157,30 +216,38 @@ export function BpTimelineEditor({
     return { tier, track };
   }
 
-  // Unified pointer drag (mouse, pen, touch). Below the move-threshold it counts as a click.
-  function startPointerDrag(n: number, e: React.PointerEvent) {
+  // Unified pointer drag for pool blueprints AND existing tiles.
+  function startDrag(seed: { src: "tile"; from: number; tier: BattlePassTier } | { src: "pool"; item: PoolItem }, e: React.PointerEvent) {
     if (busy) return;
-    if (e.button !== undefined && e.button !== 0) return; // ignore non-primary mouse buttons
+    if (e.button !== undefined && e.button !== 0) return;
     const startX = e.clientX, startY = e.clientY;
     let moved = false;
 
+    const setFromSeed = (x: number, y: number, over: { tier: number; track: Track } | null): DragState =>
+      seed.src === "tile"
+        ? { src: "tile", from: seed.from, tier: seed.tier, x, y, over }
+        : { src: "pool", item: seed.item, x, y, over };
+
     const move = (ev: PointerEvent) => {
-      const dx = ev.clientX - startX, dy = ev.clientY - startY;
-      if (!moved && Math.hypot(dx, dy) < 6) return;
+      if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
       moved = true;
       ev.preventDefault();
-      setDrag({ from: n, x: ev.clientX, y: ev.clientY, over: cellUnder(ev.clientX, ev.clientY) });
+      setDrag(setFromSeed(ev.clientX, ev.clientY, cellUnder(ev.clientX, ev.clientY)));
     };
     const up = (ev: PointerEvent) => {
       cleanup();
       if (moved) {
         const target = cellUnder(ev.clientX, ev.clientY);
-        if (target && !(target.tier === n && tierMap.get(n) && trackOf(tierMap.get(n)!) === target.track)) {
-          void place(n, target.tier, target.track);
+        if (target) {
+          if (seed.src === "tile") {
+            const same = target.tier === seed.from && trackOf(seed.tier) === target.track;
+            if (!same) void dropTile(seed.from, target.tier, target.track);
+          } else {
+            void dropPool(seed.item, target.tier, target.track);
+          }
         }
-      } else {
-        const tier = tierMap.get(n);
-        if (tier) onEditTier(n, tier, trackOf(tier));
+      } else if (seed.src === "tile") {
+        onEditTier(seed.from, seed.tier, trackOf(seed.tier));
       }
       setDrag(null);
     };
@@ -196,26 +263,85 @@ export function BpTimelineEditor({
     window.addEventListener("pointercancel", up);
   }
 
-  const draggedTier = drag ? tierMap.get(drag.from) ?? null : null;
+  // Pool blueprint chips (drag source)
+  const poolChips: { item: PoolItem; icon: React.ReactNode; hint: string; control?: React.ReactNode }[] = [
+    {
+      item: { rewardType: "credits", label: `${creditAmt.toLocaleString("de-DE")} Credits`, emoji: "💰", color: "#fbbf24", rewardCredits: creditAmt },
+      icon: <Coins className="h-4 w-4" style={{ color: "#fbbf24" }} />,
+      hint: "Credits direkt auf eine Stufe ziehen.",
+      control: (
+        <input
+          type="number" min={1} value={creditAmt}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => setCreditAmt(Math.max(1, Number(e.target.value) || 0))}
+          className="w-full rounded border border-white/10 bg-black/40 px-1.5 py-0.5 text-[10px] text-zinc-200 outline-none focus:border-amber-400/60"
+        />
+      ),
+    },
+    {
+      item: { rewardType: "random_item", label: "Zufalls-Item", emoji: "🎲", color: "#a855f7", rewardItemRarity: randomRarity },
+      icon: <Sparkles className="h-4 w-4" style={{ color: "#a855f7" }} />,
+      hint: "Zufälliges Item — optional auf eine Seltenheit beschränken.",
+      control: (
+        <select
+          value={randomRarity ?? ""}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => setRandomRarity((e.target.value || null) as Rarity | null)}
+          className="w-full rounded border border-white/10 bg-black/40 px-1 py-0.5 text-[10px] text-zinc-200 outline-none focus:border-purple-400/60"
+        >
+          <option value="">alle Seltenheiten</option>
+          {RARITY_ORDER.map((r) => <option key={r} value={r}>{RARITY_LABELS[r]}</option>)}
+        </select>
+      ),
+    },
+    {
+      item: { rewardType: "xp_boost", label: `+${boostDays} Fortschrittstag(e)`, emoji: "⚡", color: "#38bdf8", rewardXpBoost: boostDays },
+      icon: <TrendingUp className="h-4 w-4" style={{ color: "#38bdf8" }} />,
+      hint: "XP-Boost: schenkt Fortschrittstage.",
+      control: (
+        <input
+          type="number" min={1} value={boostDays}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => setBoostDays(Math.max(1, Number(e.target.value) || 1))}
+          className="w-full rounded border border-white/10 bg-black/40 px-1.5 py-0.5 text-[10px] text-zinc-200 outline-none focus:border-sky-400/60"
+        />
+      ),
+    },
+    {
+      item: { rewardType: "badge", label: "Season Badge", emoji: "🏆", color: "#f59e0b", rewardBadgeKey: "bp_milestone", rewardBadgeText: "Season Badge" },
+      icon: <Trophy className="h-4 w-4" style={{ color: "#f59e0b" }} />,
+      hint: "Badge/Titel (Key im Detail-Editor anpassbar).",
+    },
+    {
+      item: { rewardType: "name_style", label: "Name-Style", emoji: "🎨", color: "#e879f9", rewardNameStyleKey: "" },
+      icon: <Palette className="h-4 w-4" style={{ color: "#e879f9" }} />,
+      hint: "Name-Style — Key danach im Detail-Editor setzen.",
+    },
+  ];
+
+  const ghostNode = drag ? (
+    drag.src === "tile"
+      ? <ChipFace icon={drag.tier.icon} summary={rewardSummary(drag.tier)} type={drag.tier.rewardType} />
+      : <ChipFace icon={drag.item.emoji} summary={drag.item.label} type={drag.item.rewardType} />
+  ) : null;
+  const ghostColor = drag
+    ? (drag.src === "tile" ? (rewardColor(drag.tier) ?? TRACK_META[trackOf(drag.tier)].color) : drag.item.color)
+    : "#a78bfa";
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.03] to-black/30 p-3">
+    <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.04] to-black/40 p-3">
       {/* Header */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5">
-          <Sparkles className="h-4 w-4 text-purple-400" />
-          <span className="text-sm font-bold text-zinc-100">Visuelle Timeline</span>
-        </div>
+        <Sparkles className="h-4 w-4 text-purple-400" />
+        <span className="text-sm font-bold text-zinc-100">Reward-Studio</span>
         <div className="group/tip relative">
           <Info className="h-3.5 w-3.5 cursor-help text-zinc-500 hover:text-zinc-300" />
-          <div className="pointer-events-none absolute left-0 top-5 z-30 hidden w-72 rounded-lg border border-white/10 bg-[#15101f] p-2.5 text-[11px] leading-relaxed text-zinc-300 shadow-xl group-hover/tip:block">
-            <b className="text-zinc-100">Ziehen (Maus oder Finger):</b> Belohnungs-Kachel auf eine andere
-            Spur (Free/Premium/Elite) oder Stufe ziehen. <br />
-            • Andere Spur, gleiche Stufe → <b>Track-Wechsel</b>. <br />
-            • Belegte Stufe → beide Belohnungen werden <b>getauscht</b>. <br />
-            • Leere Stufe → Belohnung wird <b>verschoben</b>. <br />
-            <b className="text-zinc-100">Tippen/Klick</b> auf eine Kachel öffnet den Detail-Editor, das
-            <b> +</b> erstellt eine neue Stufe auf der angeklickten Spur.
+          <div className="pointer-events-none absolute left-0 top-5 z-30 hidden w-80 rounded-lg border border-white/10 bg-[#15101f] p-2.5 text-[11px] leading-relaxed text-zinc-300 shadow-xl group-hover/tip:block">
+            <b className="text-zinc-100">Pool → Timeline:</b> Belohnung aus dem Pool links anpacken und auf eine
+            Stufe/Spur ziehen (Maus oder Finger). <br />
+            <b className="text-zinc-100">Timeline:</b> bestehende Kachel ziehen → andere Spur = Track-Wechsel,
+            belegte Stufe = Tausch, leere Stufe = Verschieben. <br />
+            <b className="text-zinc-100">Tippen</b> auf eine Kachel öffnet den Detail-Editor; <b>Papierkorb</b> leert die Stufe.
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -224,145 +350,194 @@ export function BpTimelineEditor({
           </span>
           <button
             onClick={onOpenSmartGen}
-            className="flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-gradient-to-r from-purple-500/20 to-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-purple-200 transition-colors hover:border-purple-400/70 hover:from-purple-500/30"
-            title="Smart-Generator: berechnet anhand von Budget, Seltenheit & Mix automatisch einen kompletten Pass."
+            className="flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-gradient-to-r from-purple-500/25 to-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-purple-100 transition-colors hover:border-purple-400/70 hover:from-purple-500/40"
+            title="Smart-Generator: füllt anhand von Budget, Seltenheits-Kurve & Verteilung automatisch den kompletten Pass."
           >
             <Wand2 className="h-3.5 w-3.5" />
-            Smart-Generator
+            Smart-Generator KI
           </button>
         </div>
       </div>
 
-      {/* Timeline grid */}
-      <div className="overflow-x-auto pb-2" style={{ scrollbarWidth: "thin" }}>
-        <div className="flex min-w-min flex-col gap-1.5">
-          {lanes.map((lane) => {
-            const meta = TRACK_META[lane];
-            return (
-              <div key={lane} className="flex items-stretch gap-1.5">
-                {/* Lane label */}
+      <div className="flex flex-col gap-3 lg:flex-row">
+        {/* ── Reward Pool ── */}
+        <div className="shrink-0 rounded-xl border border-white/10 bg-black/30 p-2 lg:w-56">
+          <p className="mb-1.5 px-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400">Belohnungs-Pool</p>
+          <div className="space-y-1.5">
+            {poolChips.map((c, i) => (
+              <div
+                key={i}
+                className="rounded-lg border border-white/10 bg-white/[0.02] p-1.5 transition-colors hover:border-purple-400/40"
+              >
                 <div
-                  className="sticky left-0 z-10 flex w-16 shrink-0 flex-col items-center justify-center rounded-lg border px-1 py-1.5 text-center"
-                  style={{
-                    borderColor: `${meta.color}55`,
-                    background: `linear-gradient(180deg, ${meta.color}1f, ${meta.color}08)`,
-                  }}
+                  onPointerDown={(e) => startDrag({ src: "pool", item: c.item }, e)}
+                  title={`${c.hint} — ziehen auf eine Stufe`}
+                  className="flex cursor-grab select-none items-center gap-1.5 active:cursor-grabbing"
+                  style={{ touchAction: "none" }}
                 >
-                  <span className="text-base leading-none">{meta.emoji}</span>
-                  <span className="mt-0.5 text-[9px] font-bold tracking-wide" style={{ color: meta.color }}>
-                    {meta.short}
-                  </span>
+                  <GripVertical className="h-3 w-3 shrink-0 text-white/25" />
+                  {c.icon}
+                  <span className="flex-1 truncate text-[11px] font-semibold text-zinc-200">{c.item.label}</span>
                 </div>
-
-                {/* Cells per tier */}
-                {tierNumbers.map((n) => {
-                  const tier = tierMap.get(n);
-                  const onThisLane = tier && trackOf(tier) === lane;
-                  const cellKey = `${lane}:${n}`;
-                  const isOver = drag?.over?.tier === n && drag?.over?.track === lane;
-                  const isSource = drag?.from === n && onThisLane;
-                  const rColor = onThisLane ? rewardColor(tier) : null;
-                  const accent = rColor ?? meta.color;
-                  return (
-                    <div
-                      key={cellKey}
-                      data-bpcell={cellKey}
-                      className="relative h-[68px] w-[68px] shrink-0 rounded-lg border transition-all"
-                      style={{
-                        borderColor: isOver ? accent : onThisLane ? `${accent}66` : "rgba(255,255,255,0.07)",
-                        background: isOver
-                          ? `${accent}22`
-                          : onThisLane
-                            ? `linear-gradient(170deg, ${accent}26 0%, ${accent}0c 60%, rgba(0,0,0,0.4) 100%)`
-                            : "rgba(255,255,255,0.015)",
-                        boxShadow: isOver
-                          ? `0 0 14px ${meta.glow}`
-                          : onThisLane && tier?.highlightTier
-                            ? `0 0 10px ${accent}55`
-                            : "none",
-                      }}
-                    >
-                      {/* tier number tag on the top lane row */}
-                      {lane === lanes[0] && (
-                        <span className="absolute -top-[7px] left-1/2 z-10 -translate-x-1/2 rounded bg-[#0e0b18] px-1 text-[8px] font-bold text-zinc-500">
-                          {n}
-                        </span>
-                      )}
-
-                      {onThisLane ? (
-                        <div
-                          onPointerDown={(e) => startPointerDrag(n, e)}
-                          title={`Tier ${n} · ${meta.label} · ${rewardSummary(tier)} — Tippen: bearbeiten, Ziehen: verschieben/tauschen`}
-                          className={`group flex h-full w-full cursor-grab select-none flex-col items-center justify-center rounded-lg px-0.5 active:cursor-grabbing ${
-                            isSource ? "opacity-30" : ""
-                          }`}
-                          style={{ touchAction: "none" }}
-                        >
-                          <GripVertical className="absolute left-0.5 top-0.5 h-2.5 w-2.5 text-white/20 group-hover:text-white/50" />
-                          {tier.highlightTier && (
-                            <Crown className="absolute right-0.5 top-0.5 h-2.5 w-2.5" style={{ color: accent }} />
-                          )}
-                          <ChipFace tier={tier} />
-                          <span
-                            role="button"
-                            tabIndex={-1}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={(e) => { e.stopPropagation(); void clear(n); }}
-                            className="absolute bottom-0 right-0.5 hidden rounded p-0.5 text-zinc-500 hover:text-rose-400 group-hover:block"
-                            title="Stufe leeren"
-                          >
-                            <Trash2 className="h-2.5 w-2.5" />
-                          </span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => onEditTier(n, tier ?? null, lane)}
-                          title={tier ? `Tier ${n} liegt auf einer anderen Spur — Klick: bearbeiten` : `Tier ${n} auf "${meta.label}" erstellen`}
-                          className="flex h-full w-full items-center justify-center rounded-lg text-white/15 transition-colors hover:bg-white/[0.03] hover:text-white/40"
-                        >
-                          {tier ? <span className="h-1 w-1 rounded-full bg-white/15" /> : <Plus className="h-4 w-4" />}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                {c.control && <div className="mt-1">{c.control}</div>}
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          {/* Item search */}
+          <p className="mb-1 mt-3 px-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400">Items</p>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-500" />
+            <input
+              value={itemQuery}
+              onChange={(e) => setItemQuery(e.target.value)}
+              placeholder="Item suchen…"
+              className="w-full rounded-lg border border-white/10 bg-black/40 py-1 pl-7 pr-6 text-[11px] text-zinc-200 outline-none focus:border-purple-400/60"
+            />
+            {itemQuery && (
+              <button onClick={() => setItemQuery("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <div className="mt-1.5 max-h-44 space-y-1 overflow-y-auto pr-0.5" style={{ scrollbarWidth: "thin" }}>
+            {searching && <p className="px-1 py-1 text-[10px] text-zinc-500">Suche…</p>}
+            {!searching && itemQuery && itemResults.length === 0 && <p className="px-1 py-1 text-[10px] text-zinc-500">Nichts gefunden.</p>}
+            {itemResults.map((it) => {
+              const col = RARITY_HEX[it.rarity] ?? "#9ca3af";
+              const item: PoolItem = {
+                rewardType: "item", label: it.name, emoji: "📦", color: col,
+                rewardItemId: it.id, rewardItemName: it.name, rewardItemType: it.type, rewardItemRarity: it.rarity,
+              };
+              return (
+                <div
+                  key={it.id}
+                  onPointerDown={(e) => startDrag({ src: "pool", item }, e)}
+                  title={`${it.name} (${it.rarity}) — auf eine Stufe ziehen`}
+                  className="flex cursor-grab select-none items-center gap-1.5 rounded-lg border px-1.5 py-1 active:cursor-grabbing"
+                  style={{ touchAction: "none", borderColor: `${col}40`, background: `${col}0f` }}
+                >
+                  <GripVertical className="h-3 w-3 shrink-0 text-white/25" />
+                  <Package className="h-3.5 w-3.5 shrink-0" style={{ color: col }} />
+                  <span className="flex-1 truncate text-[10px] font-semibold text-zinc-200">{it.name}</span>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: col }} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Timeline ── */}
+        <div className="min-w-0 flex-1">
+          <div className="overflow-x-auto pb-2" style={{ scrollbarWidth: "thin" }}>
+            <div className="flex min-w-min flex-col gap-1.5">
+              {lanes.map((lane) => {
+                const meta = TRACK_META[lane];
+                return (
+                  <div key={lane} className="flex items-stretch gap-1.5">
+                    <div
+                      className="sticky left-0 z-10 flex w-16 shrink-0 flex-col items-center justify-center rounded-lg border px-1 py-1.5 text-center"
+                      style={{ borderColor: `${meta.color}55`, background: `linear-gradient(180deg, ${meta.color}1f, ${meta.color}08)` }}
+                    >
+                      <span className="text-base leading-none">{meta.emoji}</span>
+                      <span className="mt-0.5 text-[9px] font-bold tracking-wide" style={{ color: meta.color }}>{meta.short}</span>
+                    </div>
+
+                    {tierNumbers.map((n) => {
+                      const tier = tierMap.get(n);
+                      const onThisLane = tier && trackOf(tier) === lane;
+                      const cellKey = `${lane}:${n}`;
+                      const isOver = drag?.over?.tier === n && drag?.over?.track === lane;
+                      const isSource = drag?.src === "tile" && drag.from === n && onThisLane;
+                      const rColor = onThisLane ? rewardColor(tier) : null;
+                      const accent = rColor ?? meta.color;
+                      return (
+                        <div
+                          key={cellKey}
+                          data-bpcell={cellKey}
+                          className="relative h-[68px] w-[68px] shrink-0 rounded-lg border transition-all"
+                          style={{
+                            borderColor: isOver ? accent : onThisLane ? `${accent}66` : "rgba(255,255,255,0.07)",
+                            background: isOver
+                              ? `${accent}26`
+                              : onThisLane
+                                ? `linear-gradient(170deg, ${accent}26 0%, ${accent}0c 60%, rgba(0,0,0,0.4) 100%)`
+                                : "rgba(255,255,255,0.015)",
+                            boxShadow: isOver
+                              ? `0 0 16px ${meta.glow}`
+                              : onThisLane && tier?.highlightTier ? `0 0 10px ${accent}55` : "none",
+                          }}
+                        >
+                          {lane === lanes[0] && (
+                            <span className="absolute -top-[7px] left-1/2 z-10 -translate-x-1/2 rounded bg-[#0e0b18] px-1 text-[8px] font-bold text-zinc-500">{n}</span>
+                          )}
+
+                          {onThisLane ? (
+                            <div
+                              onPointerDown={(e) => startDrag({ src: "tile", from: n, tier }, e)}
+                              title={`Tier ${n} · ${meta.label} · ${rewardSummary(tier)} — Tippen: bearbeiten, Ziehen: verschieben/tauschen`}
+                              className={`group flex h-full w-full cursor-grab select-none flex-col items-center justify-center rounded-lg px-0.5 active:cursor-grabbing ${isSource ? "opacity-30" : ""}`}
+                              style={{ touchAction: "none" }}
+                            >
+                              <GripVertical className="absolute left-0.5 top-0.5 h-2.5 w-2.5 text-white/20 group-hover:text-white/50" />
+                              {tier.highlightTier && <Crown className="absolute right-0.5 top-0.5 h-2.5 w-2.5" style={{ color: accent }} />}
+                              <ChipFace icon={tier.icon} summary={rewardSummary(tier)} type={tier.rewardType} />
+                              <span
+                                role="button" tabIndex={-1}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => { e.stopPropagation(); void clear(n); }}
+                                className="absolute bottom-0 right-0.5 hidden rounded p-0.5 text-zinc-500 hover:text-rose-400 group-hover:block"
+                                title="Stufe leeren"
+                              >
+                                <Trash2 className="h-2.5 w-2.5" />
+                              </span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => onEditTier(n, tier ?? null, lane)}
+                              title={tier ? `Tier ${n} liegt auf einer anderen Spur — Klick: bearbeiten` : `Tier ${n} auf "${meta.label}" erstellen`}
+                              className="flex h-full w-full items-center justify-center rounded-lg text-white/15 transition-colors hover:bg-white/[0.03] hover:text-white/40"
+                            >
+                              {tier ? <span className="h-1 w-1 rounded-full bg-white/15" /> : <Plus className="h-4 w-4" />}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {flash && (
+            <div className={`mt-2 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${flash.ok ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : "border-rose-400/30 bg-rose-500/10 text-rose-300"}`}>
+              <Gem className="h-3 w-3" />
+              {flash.msg}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Flash feedback */}
-      {flash && (
-        <div
-          className={`mt-2 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${
-            flash.ok
-              ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
-              : "border-rose-400/30 bg-rose-500/10 text-rose-300"
-          }`}
-        >
-          <Gem className="h-3 w-3" />
-          {flash.msg}
-        </div>
-      )}
-
-      {/* Floating drag ghost (follows mouse/finger) */}
-      {drag && draggedTier && (
+      {/* Floating drag ghost */}
+      {drag && (
         <div
           className="pointer-events-none fixed z-[60] flex h-[64px] w-[64px] items-center justify-center rounded-lg border shadow-2xl"
           style={{
-            left: drag.x,
-            top: drag.y,
+            left: drag.x, top: drag.y,
             transform: "translate(-50%, -50%) rotate(-4deg)",
-            borderColor: (rewardColor(draggedTier) ?? TRACK_META[trackOf(draggedTier)].color),
-            background: "linear-gradient(170deg, rgba(20,16,31,0.96), rgba(10,8,18,0.96))",
-            boxShadow: `0 8px 24px ${TRACK_META[trackOf(draggedTier)].glow}`,
+            borderColor: ghostColor,
+            background: "linear-gradient(170deg, rgba(20,16,31,0.97), rgba(10,8,18,0.97))",
+            boxShadow: `0 8px 28px ${ghostColor}66`,
           }}
         >
-          <ChipFace tier={draggedTier} />
+          {ghostNode}
         </div>
       )}
     </div>
   );
 }
+
+// Backwards-compatible alias (older import name).
+export { BpRewardStudio as BpTimelineEditor };

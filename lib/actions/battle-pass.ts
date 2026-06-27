@@ -996,6 +996,8 @@ export interface AdminTierInput {
   rewardItemRarity: Rarity | null;
   rewardXpBoost: number | null;
   rewardNameStyleKey: string | null;
+  rewardAbilityKey?: string | null;
+  rewardItemName?: string | null;
   rewardQuantity: number;
   highlightTier: boolean;
   description: string | null;
@@ -1030,6 +1032,7 @@ export async function adminUpsertBpTier(
       reward_item_rarity: (input.rewardType === "random_item") ? input.rewardItemRarity : null,
       reward_xp_boost: (input.rewardType === "xp_boost") ? (input.rewardXpBoost ?? 1) : null,
       reward_name_style_key: (input.rewardType === "name_style") ? (input.rewardNameStyleKey ?? null) : null,
+      reward_ability_key: (input.rewardType === "ability") ? (input.rewardAbilityKey ?? null) : null,
       reward_quantity: Math.max(1, input.rewardQuantity),
       highlight_tier: input.highlightTier,
       description: input.description?.trim() || null,

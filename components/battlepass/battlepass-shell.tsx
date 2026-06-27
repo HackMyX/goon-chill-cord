@@ -1963,31 +1963,65 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
     </div>
   ) : null;
 
-  // Claim-Partikel: zentraler Funken-Burst + aufploppendes Reward-Label (zero-latency Feedback).
+  // Claim-Eskalation: Konfetti-Explosion + Funken-Ring + aufploppendes Reward-Label (zero-latency).
   const ClaimBurst = claimBurst ? (
-    <div key={claimBurst.key} className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
-      {Array.from({ length: 22 }, (_, i) => {
-        const ang = (i / 22) * Math.PI * 2;
-        const dist = 90 + (i % 5) * 26;
+    <div key={claimBurst.key} className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center overflow-hidden">
+      {/* Schockwellen-Ring */}
+      <motion.div
+        className="absolute rounded-full border-2"
+        style={{ borderColor: accent, width: 80, height: 80 }}
+        initial={{ scale: 0.2, opacity: 0.9 }}
+        animate={{ scale: 6, opacity: 0 }}
+        transition={{ duration: 0.9, ease: "easeOut" }}
+      />
+      {/* Konfetti */}
+      {Array.from({ length: 38 }, (_, i) => {
+        const ang = (i / 38) * Math.PI * 2 + (i % 3) * 0.2;
+        const dist = 120 + (i % 7) * 34;
+        const colors = [accent, "#fbbf24", "#34d399", "#f472b6", "#38bdf8", "#ffffff"];
+        const col = colors[i % colors.length];
+        const w = 6 + (i % 3) * 3;
         return (
           <motion.div
-            key={i}
-            className="absolute text-lg"
+            key={`c${i}`}
+            className="absolute rounded-[2px]"
+            style={{ width: w, height: w * 1.8, background: col, boxShadow: `0 0 6px ${col}99` }}
+            initial={{ x: 0, y: 0, opacity: 1, rotate: 0, scale: 1 }}
+            animate={{
+              x: Math.cos(ang) * dist,
+              y: Math.sin(ang) * dist + 120,
+              opacity: [1, 1, 0],
+              rotate: (i % 2 ? 1 : -1) * (220 + i * 12),
+              scale: 0.6,
+            }}
+            transition={{ duration: 1.5 + (i % 5) * 0.12, ease: "easeOut" }}
+          />
+        );
+      })}
+      {/* Funken */}
+      {Array.from({ length: 16 }, (_, i) => {
+        const ang = (i / 16) * Math.PI * 2;
+        const dist = 80 + (i % 4) * 22;
+        return (
+          <motion.div
+            key={`s${i}`}
+            className="absolute text-base"
             style={{ color: accent, textShadow: `0 0 8px ${glow}` }}
             initial={{ x: 0, y: 0, opacity: 1, scale: 0.4 }}
-            animate={{ x: Math.cos(ang) * dist, y: Math.sin(ang) * dist, opacity: 0, scale: 1.1 }}
-            transition={{ duration: 1.1, ease: "easeOut" }}
+            animate={{ x: Math.cos(ang) * dist, y: Math.sin(ang) * dist, opacity: 0, scale: 1.2 }}
+            transition={{ duration: 1, ease: "easeOut" }}
           >
             ✦
           </motion.div>
         );
       })}
+      {/* Reward-Label */}
       <motion.div
-        className="absolute rounded-full border px-4 py-2 text-sm font-bold backdrop-blur-md"
-        style={{ borderColor: `${accent}80`, background: `${accent}22`, color: "#fff", boxShadow: `0 0 28px ${glow}` }}
-        initial={{ scale: 0.5, opacity: 0, y: 10 }}
-        animate={{ scale: [0.5, 1.12, 1], opacity: [0, 1, 1, 0], y: [10, -6, -10] }}
-        transition={{ duration: 1.4, ease: "easeOut", times: [0, 0.25, 0.6, 1] }}
+        className="absolute rounded-full border px-5 py-2.5 text-base font-extrabold backdrop-blur-md"
+        style={{ borderColor: `${accent}90`, background: `${accent}26`, color: "#fff", boxShadow: `0 0 36px ${glow}` }}
+        initial={{ scale: 0.4, opacity: 0, y: 14 }}
+        animate={{ scale: [0.4, 1.18, 1], opacity: [0, 1, 1, 0], y: [14, -8, -14] }}
+        transition={{ duration: 1.6, ease: "easeOut", times: [0, 0.22, 0.62, 1] }}
       >
         {claimBurst.reward ? `✦ ${claimBurst.reward}` : "✦ Abgeholt!"}
       </motion.div>
