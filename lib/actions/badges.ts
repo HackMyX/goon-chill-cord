@@ -265,6 +265,18 @@ export async function adminDeleteBadgeDefinition(
     return { success: false, error: error.message };
   }
 
+  // The delete cascades to user_badges (FK), but profiles.prio_badges is a plain
+  // jsonb array (no FK) and would keep the now-dead key — rendering as a raw grey
+  // key at the player's name everywhere. Recompute every affected user's display
+  // list so the dead key is dropped (works for both auto and custom-pinned users).
+  const { data: affected } = await admin
+    .from("profiles")
+    .select("id")
+    .contains("prio_badges", [key]);
+  for (const row of affected ?? []) {
+    await recomputeAutoPrioBadges((row as { id: string }).id);
+  }
+
   revalidatePath("/");
   return { success: true };
 }

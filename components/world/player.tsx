@@ -8,7 +8,8 @@ import { StyledUsername } from "@/components/ui/styled-username";
 import { rarityColorFor, type EquippedItem } from "@/lib/rarity-colors";
 import { getBadgeStyle } from "@/lib/badges";
 import { SlashEffect, SLASH_EFFECT_LIFETIME_MS } from "@/components/world/hit-fx";
-import { getEquippedDamage, capsuleHitTest, momentumMultiplier, getPerkMultiplier, applyIncomingDamage, computePvpDamage } from "@/lib/combat";
+import { getEquippedDamage, capsuleHitTest, momentumMultiplier, getPerkMultiplier, applyIncomingDamage, MAX_PVP_DAMAGE } from "@/lib/combat";
+import { attemptPvpHit } from "@/lib/actions/pvp";
 import type { CharacterConfig } from "@/lib/character-config";
 import { CharacterModel, type CharacterLimbRefs } from "@/components/world/character-model";
 import { useKeyboardControls } from "@/components/world/use-keyboard-controls";
@@ -429,7 +430,15 @@ export function Player({
   useEffect(() => {
     return subscribeToWorldPvpDamage((payload) => {
       if (payload.targetUserId !== userId) return;
-      applyIncomingDamage(combatRef.current, payload.amount);
+      // Defense-in-depth: clamp whatever the broadcast claims to the per-hit cap.
+      // A legitimate (server-rolled) hit is always well under MAX_PVP_DAMAGE, so this
+      // only ever neutralises forged/garbage values (non-finite, negative, 999999…)
+      // — a cheating client can no longer one-shot a full-HP player.
+      const safeAmount = Number.isFinite(payload.amount)
+        ? Math.min(Math.max(0, payload.amount), MAX_PVP_DAMAGE)
+        : 0;
+      if (safeAmount <= 0) return;
+      applyIncomingDamage(combatRef.current, safeAmount);
       // Stronger shake than landing a hit — being punched hurts more than punching.
       cameraShake.current = 1.5;
       hurtTimer.current = 0.45;
@@ -921,26 +930,33 @@ export function Player({
           });
         }
       } else if (pvpEnabled && nearestPlayerId && nearestPlayerPos) {
-        cameraShake.current = 1;
-        // Client-authoritative PvP: compute damage locally (same formula as
-        // the old server action, including the PvP dampener) and broadcast
-        // immediately — no server round trip, no 300-800ms latency per hit.
-        // The hit test already passed above (capsuleHitTest), and damage is
-        // computed from the locally-loaded characterConfig, which matches
-        // what the server would have used anyway.
-        const pvpDmg = computePvpDamage(
-          baseDmg,
+        cameraShake.current = 1; // swing feedback is immediate; damage is server-gated
+        // Server-authoritative PvP (restores the originally-intended design, see
+        // lib/actions/pvp.ts): the server re-validates session-pvpEnabled + rate-limit
+        // + capsule hit-test and rolls damage from our ACTUALLY equipped weapon row,
+        // then we relay only the server-returned number. This closes the hole where
+        // damage was computed client-side and broadcast directly (forgeable →
+        // instant-kill) and restores the PvP XP / quest / audit / rate-limit that the
+        // removed call had silently dropped (attemptPvpHit had become dead code).
+        const targetId = nearestPlayerId;
+        const targetPos = nearestPlayerPos;
+        void attemptPvpHit({
+          targetUserId: targetId,
+          attackerX: g.position.x,
+          attackerZ: g.position.z,
+          attackerHeading: cc.yaw,
+          targetX: targetPos.x,
+          targetZ: targetPos.z,
           sprinting,
           airborne,
-          characterConfig.sprintDamageMultiplier,
-          characterConfig.airborneDamageMultiplier,
-          characterConfig.pvpDamageMultiplier
-        );
-        broadcastPvpDamage({ targetUserId: nearestPlayerId, attackerId: userId, amount: pvpDmg });
-        const targetHandle = remotePlayerRegistryRef.current.find((h) => h.id === nearestPlayerId);
-        // Pass the damage so the attacker sees the floating number on their
-        // own screen (self: false prevents them from receiving the broadcast).
-        targetHandle?.triggerBloodBurst(pvpDmg);
+        }).then((res) => {
+          if (!res.success || !res.hit || !res.damage) return;
+          broadcastPvpDamage({ targetUserId: targetId, attackerId: userId, amount: res.damage });
+          const targetHandle = remotePlayerRegistryRef.current.find((h) => h.id === targetId);
+          // Floating number on the attacker's own screen (the broadcast itself uses
+          // self:false so the attacker never re-receives + double-applies it).
+          targetHandle?.triggerBloodBurst(res.damage);
+        }).catch(() => { /* network hiccup — the swing visual already played */ });
       }
       debugLog("World", "attack", {
         damage: dmg,

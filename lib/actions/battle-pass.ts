@@ -515,6 +515,20 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
     return { success: false, error: "Nur für Premium-Pass-Inhaber." };
   }
 
+  // Reserve the claim ATOMICALLY before granting anything. UNIQUE(user_id,tier_id)
+  // means two concurrent claimBpTier() calls can't both pass this point, so the
+  // reward can never be double-granted by a double-click/double-request. If any
+  // grant step below early-returns an error, the finally block rolls this reservation
+  // back so the tier stays claimable (preserving the prior "a failed grant never
+  // consumes the claim" guarantee).
+  const { error: claimReserveErr } = await admin
+    .from("user_bp_tier_claims")
+    .insert({ user_id: user.id, pass_id: passId, tier_id: tierId });
+  if (claimReserveErr) return { success: false, error: "Bereits abgeholt." };
+
+  let claimGranted = false;
+  try {
+
   const rewardType = t.reward_type as BpRewardType;
   const quantity = (t.reward_quantity as number | null) ?? 1;
   let rewardMsg = "";
@@ -617,6 +631,7 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
         void logDebugEvent({ level: "error", scope: "battlepass:claim", message: "BP Name-Style-Grant fehlgeschlagen", detail: nsErr.message, context: { userId: user.id, tierId, styleKey } });
         return { success: false, error: "Der Name-Style konnte nicht vergeben werden. Bitte erneut versuchen — der Tier wurde NICHT abgeholt." };
       }
+      void import("@/lib/actions/badges").then((m) => m.checkAndAwardNameStyleBadges(user.id)).catch(() => {});
     }
     rewardMsg = `Name-Style: ${styleKey}`;
   } else if (rewardType === "ability") {
@@ -644,11 +659,9 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
     void awardXp(user.id, xpCfg.sources.bp_tier_claim ?? 50, "bp_tier_claim", `Tier ${tierNum}`);
   } catch { /* non-fatal */ }
 
-  await admin.from("user_bp_tier_claims").insert({
-    user_id: user.id,
-    pass_id: passId,
-    tier_id: tierId,
-  });
+  // All reward grants succeeded and no early-return fired — the reservation is now
+  // permanent (the finally below will NOT roll it back).
+  claimGranted = true;
 
   try {
     await admin.from("audit_logs").insert({
@@ -662,6 +675,15 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
   revalidatePath("/battlepass");
   revalidatePath("/");
   return { success: true, reward: rewardMsg, rewardType };
+
+  } finally {
+    if (!claimGranted) {
+      // A grant step bailed out with an error return → release the reserved claim
+      // so the tier stays claimable (no reward was kept).
+      await admin.from("user_bp_tier_claims").delete()
+        .eq("user_id", user.id).eq("tier_id", tierId);
+    }
+  }
 }
 
 export async function advanceBattlePassProgress(userId: string): Promise<void> {

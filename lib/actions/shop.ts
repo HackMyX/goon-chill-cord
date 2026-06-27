@@ -716,13 +716,18 @@ export async function purchaseShopItem(listingId: string): Promise<ShopPurchaseR
   }
 
   const newCredits = profile.credits - listing.price_cr;
-  const { error: creditError } = await admin
+  // Optimistic lock: the .eq("credits", profile.credits) guard only deducts if the
+  // balance is unchanged since we read it. A failed match returns 0 rows WITHOUT an
+  // error, so we MUST check the affected-row count — otherwise a concurrent second
+  // purchase (double-click/lag) would skip the charge and still deliver the item.
+  const { data: charged, error: creditError } = await admin
     .from("profiles")
     .update({ credits: newCredits })
     .eq("id", user.id)
-    .eq("credits", profile.credits);
-  if (creditError) {
-    logServerError("Shop", "purchase credit deduction failed", creditError.message);
+    .eq("credits", profile.credits)
+    .select("id");
+  if (creditError || !charged || charged.length === 0) {
+    if (creditError) logServerError("Shop", "purchase credit deduction failed", creditError.message);
     return { success: false, error: "Kauf fehlgeschlagen — bitte erneut versuchen." };
   }
 

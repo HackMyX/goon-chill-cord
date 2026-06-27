@@ -66,6 +66,9 @@ async function tryDropNameStyle(
     });
 
     if (error) return null;
+    // Award name-style achievement badges (ns_collector / ns_mythisch / ns_ultra)
+    // for case-won styles too — cases are the main way players obtain styles.
+    void import("@/lib/actions/badges").then((m) => m.checkAndAwardNameStyleBadges(userId)).catch(() => {});
     return picked.key;
   } catch {
     return null;
@@ -165,6 +168,7 @@ async function grantExtraDrop(
         }
         const { error } = await admin.from("user_name_styles").insert({ user_id: userId, style_key: styleKey, source: "won" });
         if (error) return { ok: false, error: "Name-Style konnte nicht vergeben werden." };
+        void import("@/lib/actions/badges").then((m) => m.checkAndAwardNameStyleBadges(userId)).catch(() => {});
       }
       return { ok: true, won: { kind: "name_style", rarity: drop.rarity, name: drop.label || styleKey, styleKey } };
     }
@@ -593,7 +597,13 @@ export async function openCaseBatch(tierId: string, count: number): Promise<Open
   const admin = createAdminClient();
   const itemPicks = picks.filter((p): p is { kind: "item"; item: WonItem } => p.kind === "item");
   if (itemPicks.length > 0) {
-    await supabase.from("inventory").insert(itemPicks.map((p) => ({ user_id: user.id, item_id: p.item.id })));
+    const { error: invErr } = await supabase.from("inventory").insert(itemPicks.map((p) => ({ user_id: user.id, item_id: p.item.id })));
+    if (invErr) {
+      // Items weren't delivered — roll back the charge + cases_opened (mirror openCase),
+      // so the user never pays totalCost for nothing on a batch open.
+      await supabase.from("profiles").update({ credits: profile.credits, cases_opened: profile.cases_opened }).eq("id", user.id);
+      return { success: false, error: "Öffnen fehlgeschlagen — bitte erneut versuchen." };
+    }
   }
   const drops: WonDrop[] = [];
   for (const p of picks) {

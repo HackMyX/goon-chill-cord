@@ -191,19 +191,27 @@ export async function incrementBpQuestProgress(
 
         const currentXp = (ubpRow?.bp_xp as number | null) ?? 0;
 
-        await admin
-          .from("user_battle_passes")
-          .upsert(
-            {
+        // CRITICAL: never voll-upserten — das würde has_premium/has_elite/progress_days
+        // eines bestehenden (ggf. bezahlten) Pass-Rows auf die Defaults zurücksetzen.
+        // Nur bp_xp anfassen; existierenden Row updaten, sonst frisch anlegen.
+        if (ubpRow) {
+          await admin
+            .from("user_battle_passes")
+            .update({ bp_xp: currentXp + bpXpReward })
+            .eq("user_id", userId)
+            .eq("pass_id", passId);
+        } else {
+          await admin
+            .from("user_battle_passes")
+            .insert({
               user_id: userId,
               pass_id: passId,
-              bp_xp: currentXp + bpXpReward,
+              bp_xp: bpXpReward,
               progress_days: 0,
               has_premium: false,
               has_elite: false,
-            },
-            { onConflict: "user_id,pass_id", ignoreDuplicates: false }
-          );
+            });
+        }
       }
     }
   } catch (e) {

@@ -108,21 +108,49 @@ export async function sweepExpiredAuctions(): Promise<void> {
       continue;
     }
 
-    const { error: itemErr } = await admin
+    // Atomic claim: flip active→sold BEFORE moving anything, so two concurrent
+    // sweeps (this runs on every /auctions page load) can't both process the same
+    // auction and double-charge the buyer / double-pay the seller.
+    const { data: claimedSweep, error: sweepClaimErr } = await admin
+      .from("auctions")
+      .update({ status: "sold", resolved_at: new Date().toISOString() })
+      .eq("id", auction.id)
+      .eq("status", "active")
+      .select("id");
+    if (sweepClaimErr || !claimedSweep || claimedSweep.length === 0) {
+      if (sweepClaimErr) logServerError("Auctions", "sweep claim failed", sweepClaimErr.message);
+      continue; // another sweep already finalized this one
+    }
+
+    // Guarded transfer: only move the item if the SELLER still owns it. Items are
+    // never escrowed out of the seller's inventory, so they can be traded/sold away
+    // while the auction is live. Without the user_id guard the old code ripped the
+    // item out of its new owner's inventory (item theft + seller double-dips). A
+    // 0-row result means the seller no longer owns it → void the auction, no charge.
+    const { data: transferred, error: itemErr } = await admin
       .from("inventory")
       .update({ user_id: auction.current_bidder_id, equipped: false })
-      .eq("id", auction.inventory_id);
+      .eq("id", auction.inventory_id)
+      .eq("user_id", auction.seller_id)
+      .select("id");
     if (itemErr) {
       logServerError("Auctions", "sweep item transfer failed", itemErr.message);
-      continue; // leave auction active — retried on the next sweep, no half-sale
+      await admin.from("auctions").update({ status: "active", resolved_at: null }).eq("id", auction.id);
+      continue; // unclaim — retried on the next sweep, no half-sale
+    }
+    if (!transferred || transferred.length === 0) {
+      logServerError("Auctions", "sweep: seller no longer owns the item — voiding auction", auction.id);
+      await admin.from("auctions").update({ status: "expired" }).eq("id", auction.id);
+      continue; // no sale, buyer is NOT charged
     }
     const { error: chargeErr } = await admin
       .from("profiles")
       .update({ credits: bidderProfile.credits - auction.current_bid })
       .eq("id", auction.current_bidder_id);
     if (chargeErr) {
-      logServerError("Auctions", "sweep buyer charge failed — rolling item back", chargeErr.message);
+      logServerError("Auctions", "sweep buyer charge failed — rolling back", chargeErr.message);
       await admin.from("inventory").update({ user_id: auction.seller_id }).eq("id", auction.inventory_id);
+      await admin.from("auctions").update({ status: "active", resolved_at: null }).eq("id", auction.id);
       continue;
     }
     const { error: payErr } = await admin
@@ -130,10 +158,6 @@ export async function sweepExpiredAuctions(): Promise<void> {
       .update({ credits: sellerProfile.credits + auction.current_bid })
       .eq("id", auction.seller_id);
     if (payErr) logServerError("Auctions", "sweep seller payout failed (item+charge already done)", payErr.message);
-    await admin
-      .from("auctions")
-      .update({ status: "sold", resolved_at: new Date().toISOString() })
-      .eq("id", auction.id);
 
     try {
       await admin.from("audit_logs").insert({
@@ -350,14 +374,24 @@ async function finalizeBuyout(
     return { success: false, error: "Profile konnten nicht geladen werden." };
   }
 
-  const { error: transferError } = await admin
+  // Guarded transfer: only move the item if the SELLER still owns it (items aren't
+  // escrowed, so a live-auction item can be traded away). A 0-row result means the
+  // seller no longer owns it → unclaim instead of stealing it from its new owner.
+  const { data: boughtRows, error: transferError } = await admin
     .from("inventory")
     .update({ user_id: buyerId, equipped: false })
-    .eq("id", auction.inventory_id);
+    .eq("id", auction.inventory_id)
+    .eq("user_id", auction.seller_id)
+    .select("id");
   if (transferError) {
     logServerError("Auctions", "finalizeBuyout item transfer failed", transferError.message);
     await unclaim();
     return { success: false, error: "Item-Transfer fehlgeschlagen — bitte erneut versuchen." };
+  }
+  if (!boughtRows || boughtRows.length === 0) {
+    logServerError("Auctions", "finalizeBuyout: seller no longer owns the item — voiding", auction.id);
+    await admin.from("auctions").update({ status: "expired" }).eq("id", auction.id);
+    return { success: false, error: "Dieses Item ist nicht mehr verfügbar." };
   }
 
   // Credit transfer — errors checked; on failure roll the item back to the

@@ -221,6 +221,16 @@ export function momentumMultiplier(
  */
 export const PVP_DAMAGE_MULTIPLIER = 0.40;
 
+/** Hard per-hit ceiling the *receiver* clamps every incoming PvP damage value to,
+ * no matter what the broadcast claims. PvP is deliberately balanced so the single
+ * hardest legitimate hit lands ~57 and "never an instant kill regardless of gear"
+ * (see PVP_DAMAGE_MULTIPLIER above) — so a real hit is always well under this cap
+ * and only forged/garbage values (e.g. 999999) are ever trimmed. This is the
+ * defense-in-depth layer behind the server-authoritative attemptPvpHit path: even
+ * if a cheating client calls broadcastPvpDamage directly, it can no longer one-shot
+ * a full-HP (100) player. */
+export const MAX_PVP_DAMAGE = 99;
+
 /** Single chokepoint for "how much HP does a landed PvP hit actually cost
  * the target" — lib/actions/pvp.ts' attemptPvpHit rolls this server-side,
  * exactly once, from the attacker's *actually-equipped* weapon row (never

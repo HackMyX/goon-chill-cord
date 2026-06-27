@@ -326,6 +326,18 @@ export async function submitSnakeScore(
   const modeCfg = speedMode === "grind" ? config.grind : speedMode === "x2" ? config.x2 : speedMode === "farm" ? config.farm : config.x1;
   if (!modeCfg.enabled) return { success: false, error: `Snake ${speedMode} ist deaktiviert.` };
 
+  // Server-side sanity cap on the SCORE itself (submitSnakeScore is directly callable):
+  // a snake can never eat more apples than the board has cells — its body would have to
+  // be longer than the entire board — so boardSize² is a hard, principled upper bound no
+  // legitimate run can reach. Without it, a forged submitSnakeScore(1_000_000, …) poisoned
+  // the best_score leaderboard and farmed unlimited XP/quest progress (the CR payout was
+  // already capped via sanityMax below, but best_score, XP and quests were fed the raw
+  // client score). A generous board-area cap never rejects a real highscore.
+  const maxBoardScore = Math.max(1, modeCfg.boardSize) * Math.max(1, modeCfg.boardSize);
+  if (score > maxBoardScore) {
+    return { success: false, error: "Ungültiger Score." };
+  }
+
   // Equipped ability (mutually exclusive): snake_cr_per_apple adds a flat bonus
   // per apple, credit_bonus multiplies the whole earning. Both are folded into
   // the base BEFORE the daily/sanity clamps so they still respect the limits.

@@ -222,6 +222,7 @@ async function grantLevelRewards(
           { user_id: userId, style_key: reward.nameStyleKey, source: "level_reward" },
           { onConflict: "user_id,style_key", ignoreDuplicates: true }
         );
+        void import("@/lib/actions/badges").then((m) => m.checkAndAwardNameStyleBadges(userId)).catch(() => {});
       }
     } catch { /* never let reward failure break the XP award */ }
   }

@@ -307,10 +307,19 @@ export async function dropPlinkoBall(input: {
     if (config.maxWinCr > 0) payout = Math.min(payout, config.maxWinCr);
   }
 
-  const netChange = payout - input.betAmount;
-  const newCredits = Math.max(0, currentCredits + netChange);
-
-  await admin.from("profiles").update({ credits: newCredits }).eq("id", user.id);
+  // Atomic, race-safe settlement: credits = credits + (payout - bet) WHERE credits >= bet,
+  // done server-side in one statement under the row lock. Replaces the old read-modify-write
+  // (read credits → write absolute newCredits) that let N parallel balls re-roll for free
+  // because the last absolute write won. Returns NULL if the player can't afford the bet.
+  const { data: settledCredits, error: settleErr } = await admin.rpc("apply_bet_result", {
+    p_user_id: user.id,
+    p_bet: input.betAmount,
+    p_payout: payout,
+  });
+  if (settleErr || settledCredits === null || settledCredits === undefined) {
+    return { success: false, error: `Nicht genug Credits (benötigt: ${input.betAmount.toLocaleString("de-DE")} CR).` };
+  }
+  const newCredits = settledCredits as number;
   await admin.from("plinko_plays").insert({
     user_id: user.id,
     risk_level: input.riskLevel,

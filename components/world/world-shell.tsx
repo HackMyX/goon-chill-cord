@@ -190,6 +190,10 @@ export function WorldShell({
   const [worldBlockReason, setWorldBlockReason] = useState<"same-browser" | "cross-device" | null>(null);
   const [isForceEntering, setIsForceEntering] = useState(false);
   const sessionTokenRef = useRef<string | null>(null);
+  // Holds the joinWorldRoom() untrack fn so BOTH the normal enter path and the
+  // "force enter" path are cleaned up on unmount (force-enter previously discarded
+  // the untrack fn → ghost presence avatar leaked for everyone else).
+  const worldUntrackRef = useRef<(() => void) | null>(null);
   const [deathStats, setDeathStats] = useState<{ forfeitedCr: number; forfeitedKillCount: number } | null>(null);
   // Seconds left in the "leaving the World" countdown, or null while no
   // disconnect is pending (this alone is the single source of truth for
@@ -575,7 +579,6 @@ export function WorldShell({
   // ── Multi-Tab / Cross-Device Session Enforcement ─────────────────────────
   useEffect(() => {
     let cancelled = false;
-    let worldUntrack: (() => void) | null = null;
     let entered = false;
 
     const LS_KEY = "goon_session_token_v1";
@@ -588,7 +591,7 @@ export function WorldShell({
       if (sessionTokenRef.current) {
         setSessionInWorld(sessionTokenRef.current, true).catch(() => {});
       }
-      worldUntrack = joinWorldRoom(userId);
+      worldUntrackRef.current = joinWorldRoom(userId);
     };
 
     const enterIfAllowed = async (guardStatus: string) => {
@@ -655,7 +658,8 @@ export function WorldShell({
         if (sessionTokenRef.current) {
           setSessionInWorld(sessionTokenRef.current, false).catch(() => {});
         }
-        worldUntrack?.();
+        worldUntrackRef.current?.();
+        worldUntrackRef.current = null;
       };
     }
 
@@ -664,7 +668,8 @@ export function WorldShell({
       if (sessionTokenRef.current) {
         setSessionInWorld(sessionTokenRef.current, false).catch(() => {});
       }
-      worldUntrack?.();
+      worldUntrackRef.current?.();
+      worldUntrackRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -732,7 +737,8 @@ export function WorldShell({
           if (sessionTokenRef.current) {
             setSessionInWorld(sessionTokenRef.current, true).catch(() => {});
           }
-          joinWorldRoom(userId);
+          // Capture the untrack fn so unmount cleans up this presence too (no ghost).
+          worldUntrackRef.current = joinWorldRoom(userId);
         }
       } catch {
         setIsForceEntering(false);
@@ -1107,23 +1113,12 @@ export function WorldShell({
           dpr={[1, 2]}
           camera={{ position: [0, 2.6, 6], fov: 55 }}
           className="absolute inset-0"
-          onCreated={({ gl, size, scene }) => {
+          onCreated={({ gl, size }) => {
             debugLog("World", "canvas created", { size, pixelRatio: gl.getPixelRatio() });
-            // Cleanup WebGL context on unmount to prevent context leaks on mobile
-            const renderer = gl;
-            const rootScene = scene;
-            return () => {
-              rootScene.traverse((obj) => {
-                const mesh = obj as THREE.Mesh;
-                mesh.geometry?.dispose();
-                if (Array.isArray(mesh.material)) {
-                  mesh.material.forEach((m) => m.dispose());
-                } else {
-                  (mesh.material as THREE.Material | undefined)?.dispose();
-                }
-              });
-              renderer.dispose();
-            };
+            // NOTE: R3F ignores any value returned from onCreated, so a cleanup
+            // closure here would never run. R3F already auto-disposes the renderer
+            // and scene on unmount (forceContextLoss + scene dispose), so no manual
+            // teardown is needed. (Removed dead dispose-return that never executed.)
           }}
         >
           <Suspense fallback={null}>

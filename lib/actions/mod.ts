@@ -560,6 +560,13 @@ export async function modCloseTicket(
       const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
       const newCredits = ((targetProfile?.credits as number) ?? 0) + rewardCredits;
       await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
+      // Mark the underlying ticket_rewards rows as paid so the canonical tickets.ts
+      // payout path can't pay the SAME reward again on a later close/status-change.
+      await admin.from("ticket_rewards")
+        .update({ paid_at: now })
+        .eq("ticket_id", ticketId)
+        .eq("deferred", true)
+        .is("paid_at", null);
     }
 
     if (ticket?.user_id) {
@@ -665,6 +672,16 @@ export async function modAddCredits(
     const perms = await effectivePerms(isAdminUser, user.id);
     if (!perms.canAddCredits) return { success: false, error: "Keine Berechtigung." };
     if (amount === 0) return { success: false, error: "Betrag darf nicht 0 sein." };
+    // Non-admin moderators may not grant credits to themselves, and are capped per action.
+    if (!isAdminUser && targetUserId === user.id) {
+      return { success: false, error: "Du kannst dir nicht selbst Credits gutschreiben." };
+    }
+    if (!isAdminUser) {
+      const cap = perms.maxRewardPerTicket && perms.maxRewardPerTicket > 0 ? perms.maxRewardPerTicket : 100000;
+      if (Math.abs(amount) > cap) {
+        return { success: false, error: `Betrag überschreitet dein Limit (max. ${cap} CR pro Aktion).` };
+      }
+    }
     const admin = createAdminClient();
     const { data: target } = await admin.from("profiles").select("credits").eq("id", targetUserId).single();
     if (!target) return { success: false, error: "Nutzer nicht gefunden." };
@@ -773,6 +790,13 @@ export async function modUpdateTicketStatus(
       const { data: targetProfile } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
       const newCredits = ((targetProfile?.credits as number) ?? 0) + rewardCredits;
       await admin.from("profiles").update({ credits: newCredits }).eq("id", ticket.user_id);
+      // Mark the underlying ticket_rewards rows as paid so the canonical tickets.ts
+      // payout path can't pay the SAME reward again on a later close/status-change.
+      await admin.from("ticket_rewards")
+        .update({ paid_at: now })
+        .eq("ticket_id", ticketId)
+        .eq("deferred", true)
+        .is("paid_at", null);
     }
 
     if (ticket?.user_id) {

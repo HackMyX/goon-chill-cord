@@ -119,6 +119,22 @@ export function NotificationsBell() {
             setTimeout(() => setBounce(false), 1000);
           }
         )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+          (payload) => {
+            const row = payload.new as { id: string; read: boolean };
+            setNotifications((curr) => curr.map((n) => (n.id === row.id ? { ...n, read: row.read } : n)));
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "DELETE", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+          (payload) => {
+            const row = payload.old as { id: string };
+            setNotifications((curr) => curr.filter((n) => n.id !== row.id));
+          }
+        )
         .subscribe();
     });
 

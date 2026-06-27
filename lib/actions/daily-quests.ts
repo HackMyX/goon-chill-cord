@@ -377,19 +377,24 @@ export async function claimDailyQuestReward(
     const rewardBpXp    = Number(q.reward_bp_xp)   ?? 0;
     const rewardItemRarity = (q.reward_item_rarity as string | null) ?? null;
 
-    // Mark as claimed first (optimistic)
-    const { error: updateErr } = await admin
+    // Atomic claim: only ONE concurrent request can flip reward_claimed false→true.
+    // The .eq("reward_claimed", false) guard + row-count check makes the whole
+    // grant idempotent regardless of double-click / double-request timing.
+    const { data: claimedRows, error: updateErr } = await admin
       .from("user_daily_quests")
       .update({ reward_claimed: true, claimed_at: new Date().toISOString() })
-      .eq("id", questId);
+      .eq("id", questId)
+      .eq("reward_claimed", false)
+      .select("id");
 
     if (updateErr) return { success: false, error: "Fehler beim Einlösen." };
+    if (!claimedRows || claimedRows.length === 0) {
+      return { success: false, error: "Belohnung bereits eingelöst." };
+    }
 
-    // Grant credits
+    // Grant credits atomically (relative increment — never read-modify-write).
     if (rewardCredits > 0) {
-      const { data: profile } = await admin.from("profiles").select("credits").eq("id", user.id).maybeSingle();
-      const current = Number((profile as Record<string, unknown> | null)?.credits ?? 0);
-      await admin.from("profiles").update({ credits: current + rewardCredits }).eq("id", user.id);
+      await admin.rpc("increment_credits", { user_id: user.id, amount: rewardCredits });
     }
 
     // Grant XP

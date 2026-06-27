@@ -299,6 +299,22 @@ async function resolveUser(args: Record<string, unknown>): Promise<
 
 // ── Function executor ────────────────────────────────────────────────────────
 
+/**
+ * Hard re-check that the CALLER is a real admin (role === "admin"), independent
+ * of the request-supplied `context` string. The `context` can be "admin" for a
+ * mere moderator who holds the canUseAdminAi flag — that flag must NEVER unlock
+ * role/reset/warning-destruction tools. Returns the verified admin user id for
+ * audit logging, or an error to be returned verbatim to the caller.
+ */
+async function requireRealAdminCaller(): Promise<{ adminUserId: string } | { error: string }> {
+  const c = await createClient();
+  const { data: { user: caller } } = await c.auth.getUser();
+  if (!caller) return { error: "Nicht eingeloggt." };
+  const { data: prof } = await c.from("profiles").select("role").eq("id", caller.id).single();
+  if (!isAdmin(prof)) return { error: "Keine Admin-Berechtigung — diese Aktion ist ausschließlich für echte Admins." };
+  return { adminUserId: caller.id };
+}
+
 async function executeFunction(
   name: string,
   args: Record<string, unknown>,
@@ -610,6 +626,9 @@ async function executeFunction(
       }
       case "set_role": {
         if (context !== "admin") return { error: "Keine Berechtigung." };
+        // Hard gate: only a REAL admin may change roles — never a mod with canUseAdminAi.
+        const gate2 = await requireRealAdminCaller();
+        if ("error" in gate2) return { success: false, error: gate2.error };
         const resolved2 = await resolveUser(args);
         if ("error" in resolved2) return { success: false, error: resolved2.error };
         const { userId: targetId2, resolvedUsername: rUser2 } = resolved2;
@@ -625,12 +644,29 @@ async function executeFunction(
             error: `Admin-Berechtigung von "${rUser2}" kann nicht durch die KI entfernt werden. Bitte manuell im Admin-Panel → User-Management ändern.`,
           };
         }
+        const prevRole2 = target2.role as string;
         const { error: roleErr } = await adminDb2.from("profiles").update({ role: newRole }).eq("id", targetId2);
         if (roleErr) return { success: false, error: roleErr.message };
-        return { success: true, username: target2.username as string, oldRole: target2.role as string, newRole };
+        // Keep mod permission overrides in sync with the role (mirror updateUserRole).
+        try {
+          const mod = await import("@/lib/actions/mod");
+          if (newRole === "moderator" && prevRole2 !== "moderator") {
+            await mod.syncPermissionsOnModRoleAssign?.(targetId2);
+          } else if (newRole !== "moderator" && prevRole2 === "moderator") {
+            await mod.clearModPermissionsOverride?.(targetId2);
+          }
+        } catch { /* permission sync is best-effort */ }
+        await adminDb2.from("mod_actions").insert({
+          mod_id: gate2.adminUserId, target_user_id: targetId2,
+          action_type: "role_change", reason: (args.reason as string) || null,
+          details: { oldRole: prevRole2, newRole, via: "admin_ai" },
+        });
+        return { success: true, username: target2.username as string, oldRole: prevRole2, newRole };
       }
       case "reset_user": {
         if (context !== "admin") return { error: "Keine Berechtigung." };
+        const gate3 = await requireRealAdminCaller();
+        if ("error" in gate3) return { success: false, error: gate3.error };
         const resolved3 = await resolveUser(args);
         if ("error" in resolved3) return { success: false, error: resolved3.error };
         const { userId: targetId3 } = resolved3;
@@ -645,6 +681,11 @@ async function executeFunction(
         if (resetErr) return { success: false, error: resetErr.message };
         await adminDb3.from("mod_actions").delete().eq("target_user_id", targetId3).eq("action_type", "warning");
         await adminDb3.from("mod_actions").delete().eq("target_user_id", targetId3).eq("action_type", "temp_ban");
+        await adminDb3.from("mod_actions").insert({
+          mod_id: gate3.adminUserId, target_user_id: targetId3,
+          action_type: "user_reset", reason: (args.reason as string) || null,
+          details: { creditsReset: args.resetCredits === true, oldCredits: target3.credits, oldStreak: target3.streak_days, via: "admin_ai" },
+        });
         return {
           success: true,
           username: target3.username as string,
@@ -655,12 +696,19 @@ async function executeFunction(
       }
       case "remove_warnings": {
         if (context !== "admin") return { error: "Keine Berechtigung." };
+        const gate4 = await requireRealAdminCaller();
+        if ("error" in gate4) return { success: false, error: gate4.error };
         const resolved4 = await resolveUser(args);
         if ("error" in resolved4) return { success: false, error: resolved4.error };
         const { userId: targetId4, resolvedUsername: rUser4 } = resolved4;
         const adminDb4 = createAdminClient();
         const { error: warnErr } = await adminDb4.from("mod_actions").delete().eq("target_user_id", targetId4).eq("action_type", "warning");
         if (warnErr) return { success: false, error: warnErr.message };
+        await adminDb4.from("mod_actions").insert({
+          mod_id: gate4.adminUserId, target_user_id: targetId4,
+          action_type: "warnings_cleared", reason: (args.reason as string) || null,
+          details: { via: "admin_ai" },
+        });
         return { success: true, username: rUser4, message: `Alle Verwarnungen von ${rUser4} wurden gelöscht.` };
       }
       case "get_user_history": {

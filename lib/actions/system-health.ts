@@ -1101,19 +1101,37 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
     results.push(warn("homepage_chat_cfg", "Homepage Chat Sidebar", "homepage_chat_config (default)", String(e)));
   }
 
-  // ── 34. Code-Bug-Hinweis: trade_offers vs trades ─────────────────────────
-  // cleanup-config.ts referenziert `.from("trade_offers")` für den Bereinigungsschlüssel
-  // "trade_offers_done", aber die tatsächliche Tabelle heißt `trades`.
-  // Die Bereinigung schlägt deshalb lautlos fehl (PG_UNDEFINED_TABLE wird abgefangen).
-  // Fix: In lib/actions/cleanup-config.ts den Tabellennamen auf "trades" ändern.
+  // ── 34. Handel-Bereinigung: trades-Tabelle erreichbar ────────────────────
+  // (Früherer Code-Bug — cleanup-config.ts nutzte .from("trade_offers") statt
+  // "trades" — ist behoben; cleanup-config.ts verwendet jetzt "trades".)
   try {
-    const { error: tradeOffersErr } = await admin.from("trades").select("*").limit(0);
-    results.push(tradeOffersErr
-      ? warn("trade_cleanup_bug", "Daten-Integrität", "Handel-Bereinigung (Code-Bug)",
-          `trades-Tabelle nicht erreichbar: ${tradeOffersErr.message}`)
-      : warn("trade_cleanup_bug", "Daten-Integrität", "Handel-Bereinigung (Code-Bug)",
-          "cleanup-config.ts verwendet .from(\"trade_offers\") statt .from(\"trades\") — Bereinigung schlägt lautlos fehl. In lib/actions/cleanup-config.ts korrigieren."));
+    const { error: tradesErr } = await admin.from("trades").select("*").limit(0);
+    results.push(tradesErr
+      ? warn("trade_cleanup_bug", "Daten-Integrität", "Handel-Bereinigung",
+          `trades-Tabelle nicht erreichbar: ${tradesErr.message}`)
+      : ok("trade_cleanup_bug", "Daten-Integrität", "Handel-Bereinigung",
+          "trades-Tabelle erreichbar — Bereinigung referenziert die korrekte Tabelle."));
   } catch { /* non-critical */ }
+
+  // ── 35. Atomare Bet-RPC (apply_bet_result) — race-safe Credit-Verbuchung ──
+  // Plinko (und künftige Wettspiele) verlassen sich darauf, dass Credits atomar
+  // verbucht werden (credits = credits + (payout - bet) WHERE credits >= bet).
+  // Fehlt die Funktion, fällt das auf nicht-atomares read-modify-write zurück
+  // → Credit-Duplikation. Migration: scripts/add-atomic-bet-rpc.cjs
+  try {
+    const { error: rpcErr } = await admin.rpc("apply_bet_result", {
+      p_user_id: "00000000-0000-0000-0000-000000000000",
+      p_bet: 0,
+      p_payout: 0,
+    });
+    results.push(rpcErr
+      ? err("rpc_apply_bet_result", "Economy", "apply_bet_result RPC",
+          `Atomare Bet-RPC fehlt/fehlerhaft: ${rpcErr.message} — scripts/add-atomic-bet-rpc.cjs ausführen.`)
+      : ok("rpc_apply_bet_result", "Economy", "apply_bet_result RPC",
+          "Atomare, race-sichere Credit-Verbuchung verfügbar."));
+  } catch (e) {
+    results.push(err("rpc_apply_bet_result", "Economy", "apply_bet_result RPC", String(e)));
+  }
 
   return results;
 }

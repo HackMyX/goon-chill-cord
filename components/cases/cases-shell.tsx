@@ -39,46 +39,46 @@ const RARITY_DEFS = [
     key: "normal" as Rarity,
     label: "Normal",
     description: "Solide Items für den Alltag",
-    iconClass: "text-zinc-300",
-    border: "border-zinc-500/25",
-    bg: "bg-zinc-500/5",
-    glow: "shadow-[0_0_20px_rgba(161,161,170,0.08)]",
-    hoverGlow: "hover:shadow-[0_0_32px_rgba(161,161,170,0.2)]",
-    dotColor: "bg-zinc-400",
-    textColor: "text-zinc-300",
-    barColor: "bg-zinc-400",
+    iconClass: "text-blue-300",
+    border: "border-blue-500/25",
+    bg: "bg-blue-500/5",
+    glow: "shadow-[0_0_20px_rgba(59,130,246,0.08)]",
+    hoverGlow: "hover:shadow-[0_0_32px_rgba(59,130,246,0.2)]",
+    dotColor: "bg-blue-400",
+    textColor: "text-blue-300",
+    barColor: "bg-blue-500",
     icon: Star,
-    sparkColor: "text-zinc-400",
+    sparkColor: "text-blue-400",
   },
   {
     key: "selten" as Rarity,
     label: "Selten",
     description: "Seltene Cosmetics & Waffen",
-    iconClass: "text-blue-300",
-    border: "border-blue-500/30",
-    bg: "bg-blue-500/5",
-    glow: "shadow-[0_0_20px_rgba(59,130,246,0.1)]",
-    hoverGlow: "hover:shadow-[0_0_32px_rgba(59,130,246,0.25)]",
-    dotColor: "bg-blue-400",
-    textColor: "text-blue-300",
-    barColor: "bg-blue-500",
+    iconClass: "text-purple-300",
+    border: "border-purple-500/30",
+    bg: "bg-purple-500/5",
+    glow: "shadow-[0_0_20px_rgba(168,85,247,0.1)]",
+    hoverGlow: "hover:shadow-[0_0_32px_rgba(168,85,247,0.25)]",
+    dotColor: "bg-purple-400",
+    textColor: "text-purple-300",
+    barColor: "bg-purple-500",
     icon: Sparkles,
-    sparkColor: "text-blue-400",
+    sparkColor: "text-purple-400",
   },
   {
     key: "mythisch" as Rarity,
     label: "Mythisch",
     description: "Begehrte mythische Ausrüstung",
-    iconClass: "text-purple-300",
-    border: "border-purple-500/35",
-    bg: "bg-purple-500/6",
-    glow: "shadow-[0_0_20px_rgba(168,85,247,0.12)]",
-    hoverGlow: "hover:shadow-[0_0_36px_rgba(168,85,247,0.3)]",
-    dotColor: "bg-purple-400",
-    textColor: "text-purple-300",
-    barColor: "bg-purple-500",
+    iconClass: "text-amber-300",
+    border: "border-amber-500/35",
+    bg: "bg-amber-500/6",
+    glow: "shadow-[0_0_20px_rgba(245,158,11,0.12)]",
+    hoverGlow: "hover:shadow-[0_0_36px_rgba(245,158,11,0.3)]",
+    dotColor: "bg-amber-400",
+    textColor: "text-amber-300",
+    barColor: "bg-amber-500",
     icon: Zap,
-    sparkColor: "text-purple-400",
+    sparkColor: "text-amber-400",
   },
   {
     key: "ultra" as Rarity,
@@ -345,22 +345,6 @@ export function CasesShell({
         dpr={[1, 1.5]}
         gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
         eventSource={casesRootRef as React.RefObject<HTMLElement>}
-        onCreated={({ gl, scene }) => {
-          const renderer = gl;
-          const rootScene = scene;
-          return () => {
-            rootScene.traverse((obj) => {
-              const mesh = obj as import("three").Mesh;
-              mesh.geometry?.dispose();
-              if (Array.isArray(mesh.material)) {
-                mesh.material.forEach((m) => m.dispose());
-              } else {
-                (mesh.material as import("three").Material | undefined)?.dispose();
-              }
-            });
-            renderer.dispose();
-          };
-        }}
       >
         <View.Port />
       </Canvas>

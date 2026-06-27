@@ -351,13 +351,19 @@ export async function submitSurveyResponse(
       answer_number: a.answerNumber ?? null,
     }));
 
+    // Record the response FIRST — UNIQUE(survey_id,user_id) on survey_responses is
+    // the atomic dedup gate. Writing it before the answers means a parallel double-
+    // submit loses the unique race here and never reaches the (un-constrained)
+    // survey_answers table → no ballot-stuffing.
+    if (user) {
+      const { error: dedupErr } = await admin
+        .from("survey_responses")
+        .insert({ survey_id: surveyId, user_id: user.id });
+      if (dedupErr) return { success: false, error: "Du hast bereits an dieser Umfrage teilgenommen." };
+    }
+
     const { error: ansErr } = await admin.from("survey_answers").insert(answerRows);
     if (ansErr) return { success: false, error: ansErr.message };
-
-    // Record response (for dedup)
-    if (user) {
-      await admin.from("survey_responses").insert({ survey_id: surveyId, user_id: user.id });
-    }
 
     return { success: true };
   } catch (e) { return { success: false, error: String(e) }; }

@@ -139,9 +139,20 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   let delta = won ? stake : -stake;
   let shielded = false;
   if (!won && shieldAvailable) {
-    // Daily shield absorbs the loss — no credits lost.
-    delta = 0;
-    shielded = true;
+    // Atomically CLAIM the once-per-day shield: the conditional update only matches
+    // if it hasn't already been used since today's UTC start. Under concurrent losing
+    // flips exactly one claim wins, so the shield can absorb only ONE loss per day
+    // (the old code read availability up-front and stamped at the end → multi-absorb).
+    const { data: shieldClaim } = await adminClient
+      .from("profiles")
+      .update({ don_shield_used_at: new Date().toISOString() })
+      .eq("id", user.id)
+      .or(`don_shield_used_at.is.null,don_shield_used_at.lt.${dayStartUtc.toISOString()}`)
+      .select("id");
+    if (shieldClaim && shieldClaim.length > 0) {
+      delta = 0;        // shield won — no credits lost
+      shielded = true;
+    }
   } else if (won && donEff?.effectType === "credit_bonus" && donEff.effectValue > 0) {
     // credit_bonus boosts the winnings.
     delta = Math.floor(stake * (1 + donEff.effectValue));
@@ -158,11 +169,7 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   if (updateError || !updatedRows || updatedRows.length === 0) {
     return { success: false, error: `Nicht genug ${currencyName}.` };
   }
-
-  // Record that the daily shield was consumed (after the credit update succeeds).
-  if (shielded) {
-    await adminClient.from("profiles").update({ don_shield_used_at: new Date().toISOString() }).eq("id", user.id);
-  }
+  // (shield consumption is already claimed atomically above — no late stamping)
 
   let remainingFlips: number | undefined;
   let remainingHourlyFlips: number | undefined;
