@@ -157,10 +157,10 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
 
       const SNAP_DISTANCE = STEP * 0.12;
       activeControlsRef.current = animate(x, dest + SNAP_DISTANCE, {
-        // Smooth wind-up from the idle scroll, long satisfying deceleration —
-        // one continuous motion (no separate warmup, no restart).
-        duration: 5.0,
-        ease: [0.4, 0, 0.18, 1],
+        // Fast start (continues the warmup speed → seamless, no restart) into a
+        // long satisfying deceleration onto the winning slot.
+        duration: 4.2,
+        ease: [0.16, 0.84, 0.24, 1],
         onUpdate: trackTicks,
         onComplete: () => {
           if (cancelled) return;

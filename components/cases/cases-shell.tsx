@@ -300,9 +300,9 @@ export function CasesShell({
                 return (
                   <motion.div
                     key={group.id}
-                    initial={{ opacity: 0, y: 28 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.12 + i * 0.09, type: "spring", stiffness: 180, damping: 22 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.12 + i * 0.09, duration: 0.4 }}
                   >
                     <CaseOpeningSection
                       group={group}

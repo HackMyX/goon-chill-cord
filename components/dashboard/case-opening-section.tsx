@@ -129,13 +129,34 @@ function buildPlaceholderReel(types: string[]): ReelEntry[] {
 
 function randomFrom<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 
-function buildFiller(count: number, prefix: string, pool: PreviewItem[], types: string[]): ReelEntry[] {
-  // Filler is purely decorative — only real catalogue items, never extra drops.
-  const itemPool = pool.filter((p) => !p.extra);
-  return Array.from({ length: count }, (_, i) => {
-    if (itemPool.length > 0) { const p = randomFrom(itemPool); return { key: `${prefix}-${i}`, rarity: p.rarity, type: p.type, name: p.name }; }
-    return { key: `${prefix}-${i}`, rarity: randomFrom(RARITY_ORDER), type: randomFrom(types) };
-  });
+/** A pool entry (item OR extra drop) → a reel slot, with the right subject so
+ *  extras (name styles, abilities, …) actually render as themselves in the reel. */
+function poolEntryToReelEntry(p: PreviewItem, key: string): ReelEntry {
+  const e: ReelEntry = { key, rarity: p.rarity, type: p.extra ? p.extra.kind : p.type, name: p.name };
+  if (p.extra) e.subject = poolEntryToSubject(p);
+  return e;
+}
+
+/** Builds decorative reel filler from the items, and GUARANTEES every extra drop
+ *  (name style / ability / badge / credits) appears a few times so everything in
+ *  the case is actually visible spinning by — pre-spin and during the spin. */
+function buildFiller(count: number, prefix: string, items: PreviewItem[], extras: PreviewItem[], types: string[]): ReelEntry[] {
+  const out: ReelEntry[] = [];
+  for (let i = 0; i < count; i++) {
+    if (items.length > 0) out.push(poolEntryToReelEntry(randomFrom(items), `${prefix}-${i}`));
+    else out.push({ key: `${prefix}-${i}`, rarity: randomFrom(RARITY_ORDER), type: randomFrom(types) });
+  }
+  if (extras.length > 0 && count >= 4) {
+    const repsPer = Math.max(1, Math.floor(count / 26));
+    let cursor = Math.floor(Math.random() * count);
+    extras.forEach((ex, ei) => {
+      for (let r = 0; r < repsPer; r++) {
+        out[cursor % count] = poolEntryToReelEntry(ex, `${prefix}-x${ei}-${r}`);
+        cursor += 5 + ei;
+      }
+    });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -681,20 +702,31 @@ export function CaseOpeningSection({
   const { currencyName } = useSiteConfig();
   const sound = useSoundManager();
 
-  // Pool gallery = catalogue items + every configured extra drop (deduped).
-  const poolWithExtras = useMemo(() => {
+  // Every configured extra drop across all tiers (deduped) — appears in the pool
+  // AND spinning in the reel AND is countable in the header.
+  const extraPoolEntries = useMemo(() => {
     const seen = new Set<string>();
-    const extraEntries: CasePoolEntry[] = [];
+    const out: CasePoolEntry[] = [];
     for (const tier of group.tiers) {
       for (const d of tier.extraDrops ?? []) {
         const k = `${d.kind}|${d.rarity}|${d.styleKey ?? ""}|${d.abilityKey ?? ""}|${d.badgeKey ?? ""}|${d.amount ?? ""}`;
         if (seen.has(k)) continue;
         seen.add(k);
-        extraEntries.push(extraToPoolEntry(d));
+        out.push(extraToPoolEntry(d));
       }
     }
-    return [...previewPool, ...extraEntries];
-  }, [previewPool, group.tiers]);
+    return out;
+  }, [group.tiers]);
+
+  const poolWithExtras = useMemo(() => [...previewPool, ...extraPoolEntries], [previewPool, extraPoolEntries]);
+
+  // The ONE true count used everywhere (header chip, chances text, popup title) —
+  // items + extra drops, deduped exactly like the popup, so they always match.
+  const poolCount = useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of poolWithExtras) seen.add(`${p.rarity}|${p.type}|${p.name}|${p.extra?.kind ?? ""}`);
+    return seen.size;
+  }, [poolWithExtras]);
 
   const placeholderReel = useMemo(() => buildPlaceholderReel(group.itemTypes), [group.itemTypes]);
   const [reel, setReel] = useState<ReelEntry[]>(placeholderReel);
@@ -704,10 +736,10 @@ export function CaseOpeningSection({
   useEffect(() => {
     if (mounted.current) return;
     mounted.current = true;
-    const randomized = buildFiller(PLACEHOLDER_COUNT, "idle", previewPool, group.itemTypes);
+    const randomized = buildFiller(PLACEHOLDER_COUNT, "idle", previewPool, extraPoolEntries, group.itemTypes);
     idleReelRef.current = randomized;
     setReel(randomized);
-  }, [previewPool, group.itemTypes]);
+  }, [previewPool, extraPoolEntries, group.itemTypes]);
 
   useEffect(() => {
     if (phase !== "spinning") return;
@@ -780,8 +812,8 @@ export function CaseOpeningSection({
     // when we switch to the spin strip — no content swap, no flicker, no restart.
     // Then a long filler run + the target guarantees a long continuous spin.
     const idle = idleReelRef.current;
-    const before = buildFiller(48, "before", previewPool, group.itemTypes);
-    const after = buildFiller(8, "after", previewPool, group.itemTypes);
+    const before = buildFiller(48, "before", previewPool, extraPoolEntries, group.itemTypes);
+    const after = buildFiller(8, "after", previewPool, extraPoolEntries, group.itemTypes);
     const spinReel = [...idle, ...idle, ...before, target, ...after];
     setReel(spinReel);
     setTargetIndex(idle.length * 2 + before.length);
@@ -947,7 +979,7 @@ export function CaseOpeningSection({
             items={reel}
             targetIndex={targetIndex}
             spinning={isSpinning}
-            warmup={false}
+            warmup={phase === "pending"}
             spinToken={spinToken}
             viewBase={reelViewBase}
             cfg={cfg}
@@ -1111,7 +1143,7 @@ export function CaseOpeningSection({
       {/* Chance bars */}
       <div className="glow-border-purple mt-6 space-y-3 p-4">
         <p className="text-center text-xs font-semibold tracking-wide text-purple-300">
-          GEWINNCHANCEN — {poolSize.toLocaleString("de-DE")} ITEMS IM POOL
+          GEWINNCHANCEN — {poolCount.toLocaleString("de-DE")} EINTRÄGE IM POOL
         </p>
         <ChanceBar weights={group.standard.rarityWeights} />
         <p className="flex items-center justify-center gap-1 text-center text-xs font-semibold tracking-wide text-amber-300">
@@ -1130,7 +1162,7 @@ export function CaseOpeningSection({
         >
           <Package className="h-4 w-4" />
           Pool ansehen
-          <span className="rounded-full bg-purple-500/25 px-2 py-0.5 text-xs">{poolSize.toLocaleString("de-DE")}</span>
+          <span className="rounded-full bg-purple-500/25 px-2 py-0.5 text-xs">{poolCount.toLocaleString("de-DE")}</span>
         </button>
       </div>
 

@@ -154,8 +154,12 @@ async function grantExtraDrop(
       const { data: owned } = await admin
         .from("user_name_styles").select("id").eq("user_id", userId).eq("style_key", styleKey).maybeSingle();
       if (!owned) {
-        const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
-        await ensureStyleInDb(styleKey, admin);
+        try {
+          const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
+          await ensureStyleInDb(styleKey, admin); // may throw if the style is unknown
+        } catch {
+          return { ok: false, error: "Name-Style konnte nicht angelegt werden." };
+        }
         const { error } = await admin.from("user_name_styles").insert({ user_id: userId, style_key: styleKey, source: "won" });
         if (error) return { ok: false, error: "Name-Style konnte nicht vergeben werden." };
       }
