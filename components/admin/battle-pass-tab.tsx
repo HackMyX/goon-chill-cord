@@ -25,6 +25,8 @@ import {
   adminAutoGenerateQuests, adminGetQuestStats, adminResetQuestProgress,
 } from "@/lib/actions/bp-quests";
 import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
+import { getNameStyleCatalog } from "@/lib/actions/name-styles";
+import { getBadgeDefinitions } from "@/lib/actions/badges";
 import { BP_THEMES, DEFAULT_AUTOFILL_CONFIG, DEFAULT_BP_VISUAL_CONFIG } from "@/lib/battle-pass";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES } from "@/lib/cases";
 import type {
@@ -667,6 +669,8 @@ function TierEditorModal({
   const [rewardNameStyleKey, setRewardNameStyleKey] = useState(existing?.rewardNameStyleKey ?? "");
   const [rewardAbilityKey, setRewardAbilityKey] = useState(existing?.rewardAbilityKey ?? "");
   const [abilities, setAbilities] = useState<{ key: string; name: string; icon: string; rarity: string }[]>([]);
+  const [nameStyles, setNameStyles] = useState<{ key: string; label: string; rarity: string }[]>([]);
+  const [badges, setBadges] = useState<{ key: string; label: string; icon: string }[]>([]);
   const [rewardQuantity, setRewardQuantity] = useState(existing?.rewardQuantity ?? 1);
   const [highlightTier, setHighlightTier] = useState(existing?.highlightTier ?? false);
   const [description, setDescription] = useState(existing?.description ?? "");
@@ -688,6 +692,12 @@ function TierEditorModal({
     getAllAbilityDefinitions()
       .then((defs) => { if (alive) setAbilities(defs.map((d) => ({ key: d.key, name: d.name, icon: d.icon, rarity: d.rarity }))); })
       .catch(() => { /* leer lassen */ });
+    getNameStyleCatalog()
+      .then((defs) => { if (alive) setNameStyles(defs.map((d) => ({ key: d.key, label: d.label, rarity: String(d.rarity) }))); })
+      .catch(() => {});
+    getBadgeDefinitions()
+      .then((defs) => { if (alive) setBadges(defs.map((d) => ({ key: d.key, label: d.label, icon: d.icon }))); })
+      .catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -984,19 +994,34 @@ function TierEditorModal({
             )}
 
             {rewardType === "badge" && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
                 <label className="flex flex-col gap-1 text-xs text-zinc-400">
-                  Badge-Text (sichtbar)
+                  Badge auswählen
+                  <select
+                    value={rewardBadgeKey}
+                    onChange={(e) => {
+                      const key = e.target.value;
+                      setRewardBadgeKey(key);
+                      const bd = badges.find((b) => b.key === key);
+                      if (bd && !rewardBadgeText.trim()) setRewardBadgeText(bd.label);
+                    }}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+                  >
+                    <option value="">— Badge wählen —</option>
+                    {badges.map((bd) => (
+                      <option key={bd.key} value={bd.key}>{bd.icon ? `${bd.icon} ` : ""}{bd.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Anzeige-Text (optional, überschreibt Label)
                   <input value={rewardBadgeText} onChange={(e) => setRewardBadgeText(e.target.value)}
                     placeholder="z.B. Season 1 Veteran"
                     className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
                 </label>
-                <label className="flex flex-col gap-1 text-xs text-zinc-400">
-                  Badge-Key (intern)
-                  <input value={rewardBadgeKey} onChange={(e) => setRewardBadgeKey(e.target.value)}
-                    placeholder="z.B. bp_s1_veteran"
-                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
-                </label>
+                <p className="text-[10px] text-zinc-500">
+                  Liste kommt live aus dem Badge-Admin ({badges.length} verfügbar) — neue Badges erscheinen automatisch.
+                </p>
               </div>
             )}
 
@@ -1014,16 +1039,20 @@ function TierEditorModal({
             {rewardType === "name_style" && (
               <div className="space-y-2">
                 <label className="flex flex-col gap-1 text-xs text-zinc-400">
-                  Name-Style Key
-                  <input
+                  Name-Style auswählen
+                  <select
                     value={rewardNameStyleKey}
                     onChange={(e) => setRewardNameStyleKey(e.target.value)}
-                    placeholder="z.B. galaxy, rainbow, celestial…"
                     className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
-                  />
+                  >
+                    <option value="">— Name-Style wählen —</option>
+                    {nameStyles.map((ns) => (
+                      <option key={ns.key} value={ns.key}>{ns.label} ({ns.rarity})</option>
+                    ))}
+                  </select>
                 </label>
                 <p className="text-[10px] text-zinc-500">
-                  Key des Name-Styles aus dem Katalog (z.B. galaxy, rainbow, prismatic…). Der User erhält diesen Style dauerhaft.
+                  Liste kommt live aus dem Name-Style-Katalog ({nameStyles.length} verfügbar) — neue Styles erscheinen automatisch. Der User erhält den Style dauerhaft.
                 </p>
               </div>
             )}

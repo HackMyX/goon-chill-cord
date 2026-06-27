@@ -11,6 +11,8 @@ import {
   type AdminTierInput,
 } from "@/lib/actions/battle-pass";
 import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
+import { getNameStyleCatalog } from "@/lib/actions/name-styles";
+import { getBadgeDefinitions } from "@/lib/actions/badges";
 import { RARITY_ORDER, RARITY_LABELS } from "@/lib/cases";
 import type { BattlePassTier, BpRewardType } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
@@ -148,6 +150,8 @@ export function BpRewardStudio({
   const [itemResults, setItemResults] = useState<ItemHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [abilities, setAbilities] = useState<{ key: string; name: string; icon: string; rarity: string }[]>([]);
+  const [nameStyles, setNameStyles] = useState<{ key: string; label: string; rarity: string }[]>([]);
+  const [badges, setBadges] = useState<{ key: string; label: string; icon: string; color: string }[]>([]);
 
   const tierMap = useMemo(() => new Map(tiers.map((t) => [t.tierNumber, t])), [tiers]);
   const lanes: Track[] = eliteEnabled ? ["elite", "premium", "free"] : ["premium", "free"];
@@ -161,6 +165,17 @@ export function BpRewardStudio({
     return c;
   }, [tiers]);
 
+  // Lesbares Label statt rohem Key (Name-Style/Badge/Fähigkeit) — aus den live geladenen Listen.
+  const labelFor = useCallback((t: BattlePassTier): string => {
+    if (t.rewardType === "name_style" && t.rewardNameStyleKey)
+      return nameStyles.find((n) => n.key === t.rewardNameStyleKey)?.label ?? t.rewardNameStyleKey;
+    if (t.rewardType === "ability" && t.rewardAbilityKey)
+      return abilities.find((a) => a.key === t.rewardAbilityKey)?.name ?? (t.rewardAbilityName || t.rewardAbilityKey);
+    if (t.rewardType === "badge")
+      return t.rewardBadgeText || badges.find((b) => b.key === t.rewardBadgeKey)?.label || "Badge";
+    return rewardSummary(t);
+  }, [nameStyles, abilities, badges]);
+
   useEffect(() => () => { cleanupRef.current?.(); }, []);
 
   // Fähigkeiten LIVE aus ability_definitions laden → wächst automatisch mit, sobald im
@@ -170,6 +185,12 @@ export function BpRewardStudio({
     getAllAbilityDefinitions()
       .then((defs) => { if (alive) setAbilities(defs.map((d) => ({ key: d.key, name: d.name, icon: d.icon, rarity: d.rarity }))); })
       .catch(() => { /* leer lassen */ });
+    getNameStyleCatalog()
+      .then((defs) => { if (alive) setNameStyles(defs.map((d) => ({ key: d.key, label: d.label, rarity: String(d.rarity) }))); })
+      .catch(() => {});
+    getBadgeDefinitions()
+      .then((defs) => { if (alive) setBadges(defs.map((d) => ({ key: d.key, label: d.label, icon: d.icon, color: d.color }))); })
+      .catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -321,21 +342,11 @@ export function BpRewardStudio({
         />
       ),
     },
-    {
-      item: { rewardType: "badge", label: "Season Badge", emoji: "🏆", color: "#f59e0b", rewardBadgeKey: "bp_milestone", rewardBadgeText: "Season Badge" },
-      icon: <Trophy className="h-4 w-4" style={{ color: "#f59e0b" }} />,
-      hint: "Badge/Titel (Key im Detail-Editor anpassbar).",
-    },
-    {
-      item: { rewardType: "name_style", label: "Name-Style", emoji: "🎨", color: "#e879f9", rewardNameStyleKey: "" },
-      icon: <Palette className="h-4 w-4" style={{ color: "#e879f9" }} />,
-      hint: "Name-Style — Key danach im Detail-Editor setzen.",
-    },
   ];
 
   const ghostNode = drag ? (
     drag.src === "tile"
-      ? <ChipFace icon={drag.tier.icon} summary={rewardSummary(drag.tier)} type={drag.tier.rewardType} />
+      ? <ChipFace icon={drag.tier.icon} summary={labelFor(drag.tier)} type={drag.tier.rewardType} />
       : <ChipFace icon={drag.item.emoji} summary={drag.item.label} type={drag.item.rewardType} />
   ) : null;
   const ghostColor = drag
@@ -467,6 +478,58 @@ export function BpRewardStudio({
               );
             })}
           </div>
+
+          {/* Name-Styles — Liste aus dem Katalog, synct automatisch */}
+          <p className="mb-1 mt-3 px-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400">
+            Name-Styles <span className="text-zinc-600">({nameStyles.length})</span>
+          </p>
+          <div className="max-h-44 space-y-1 overflow-y-auto pr-0.5" style={{ scrollbarWidth: "thin" }}>
+            {nameStyles.length === 0 && <p className="px-1 py-1 text-[10px] text-zinc-500">Keine Name-Styles.</p>}
+            {nameStyles.map((ns) => {
+              const col = RARITY_HEX[ns.rarity] ?? "#e879f9";
+              const item: PoolItem = { rewardType: "name_style", label: ns.label, emoji: "🎨", color: col, rewardNameStyleKey: ns.key };
+              return (
+                <div
+                  key={ns.key}
+                  onPointerDown={(e) => startDrag({ src: "pool", item }, e)}
+                  title={`${ns.label} (${ns.rarity}) — auf eine Stufe ziehen`}
+                  className="flex cursor-grab select-none items-center gap-1.5 rounded-lg border px-1.5 py-1 active:cursor-grabbing"
+                  style={{ touchAction: "none", borderColor: `${col}40`, background: `${col}0f` }}
+                >
+                  <GripVertical className="h-3 w-3 shrink-0 text-white/25" />
+                  <Palette className="h-3.5 w-3.5 shrink-0" style={{ color: col }} />
+                  <span className="flex-1 truncate text-[10px] font-semibold text-zinc-200">{ns.label}</span>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: col }} />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Badges — Liste aus badge_definitions, synct automatisch */}
+          <p className="mb-1 mt-3 px-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400">
+            Badges <span className="text-zinc-600">({badges.length})</span>
+          </p>
+          <div className="max-h-44 space-y-1 overflow-y-auto pr-0.5" style={{ scrollbarWidth: "thin" }}>
+            {badges.length === 0 && <p className="px-1 py-1 text-[10px] text-zinc-500">Keine Badges.</p>}
+            {badges.map((bd) => {
+              const col = bd.color || "#f59e0b";
+              const item: PoolItem = { rewardType: "badge", label: bd.label, emoji: bd.icon || "🏆", color: col, rewardBadgeKey: bd.key, rewardBadgeText: bd.label };
+              return (
+                <div
+                  key={bd.key}
+                  onPointerDown={(e) => startDrag({ src: "pool", item }, e)}
+                  title={`${bd.label} — auf eine Stufe ziehen`}
+                  className="flex cursor-grab select-none items-center gap-1.5 rounded-lg border px-1.5 py-1 active:cursor-grabbing"
+                  style={{ touchAction: "none", borderColor: `${col}40`, background: `${col}0f` }}
+                >
+                  <GripVertical className="h-3 w-3 shrink-0 text-white/25" />
+                  <span className="text-sm leading-none">{bd.icon || "🏆"}</span>
+                  <span className="flex-1 truncate text-[10px] font-semibold text-zinc-200">{bd.label}</span>
+                  <Trophy className="h-3 w-3 shrink-0" style={{ color: col }} />
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* ── Timeline ── */}
@@ -517,13 +580,13 @@ export function BpRewardStudio({
                           {onThisLane ? (
                             <div
                               onPointerDown={(e) => startDrag({ src: "tile", from: n, tier }, e)}
-                              title={`Tier ${n} · ${meta.label} · ${rewardSummary(tier)} — Tippen: bearbeiten, Ziehen: verschieben/tauschen`}
+                              title={`Tier ${n} · ${meta.label} · ${labelFor(tier)} — Tippen: bearbeiten, Ziehen: verschieben/tauschen`}
                               className={`group flex h-full w-full cursor-grab select-none flex-col items-center justify-center rounded-lg px-0.5 active:cursor-grabbing ${isSource ? "opacity-30" : ""}`}
                               style={{ touchAction: "none" }}
                             >
                               <GripVertical className="absolute left-0.5 top-0.5 h-2.5 w-2.5 text-white/20 group-hover:text-white/50" />
                               {tier.highlightTier && <Crown className="absolute right-0.5 top-0.5 h-2.5 w-2.5" style={{ color: accent }} />}
-                              <ChipFace icon={tier.icon} summary={rewardSummary(tier)} type={tier.rewardType} />
+                              <ChipFace icon={tier.icon} summary={labelFor(tier)} type={tier.rewardType} />
                               <span
                                 role="button" tabIndex={-1}
                                 onPointerDown={(e) => e.stopPropagation()}
