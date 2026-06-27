@@ -37,14 +37,14 @@ export type { ItemForPreview };
 
 const CHAR_GROUP_Y = -0.95;
 const CHAR_CAM: Record<string, CamCfg> = {
-  hat:    { pos: [0, 0.95, 2.3], target: [0, 0.85, 0], fov: 32 },
-  hair:   { pos: [0, 0.95, 2.2], target: [0, 0.85, 0], fov: 32 },
-  face:   { pos: [0, 0.9, 2.0],  target: [0, 0.85, 0], fov: 30 },
-  jacket: { pos: [0, 0.4, 3.0],  target: [0, 0.35, 0], fov: 34 },
-  pants:  { pos: [0, -0.1, 3.0], target: [0, -0.1, 0], fov: 34 },
-  shoes:  { pos: [0, -0.25, 2.6], target: [0, -0.55, 0], fov: 34 },
+  hat:    { pos: [0, 0.95, 1.9], target: [0, 0.92, 0], fov: 32 },
+  hair:   { pos: [0, 0.95, 1.9], target: [0, 0.92, 0], fov: 32 },
+  face:   { pos: [0, 0.9, 1.7],  target: [0, 0.9, 0],  fov: 30 },
+  jacket: { pos: [0, 0.45, 2.4], target: [0, 0.4, 0],  fov: 34 },
+  pants:  { pos: [0, -0.25, 2.3], target: [0, -0.35, 0], fov: 34 },
+  shoes:  { pos: [0, -0.5, 2.0], target: [0, -0.75, 0], fov: 34 },
 };
-const CHAR_CAM_DEFAULT: CamCfg = { pos: [0, 0.4, 3.2], target: [0, 0.3, 0], fov: 34 };
+const CHAR_CAM_DEFAULT: CamCfg = { pos: [0, 0.35, 3.1], target: [0, 0.3, 0], fov: 34 };
 
 function getCharCam(type: string): CamCfg {
   return CHAR_CAM[type] ?? CHAR_CAM_DEFAULT;

@@ -348,9 +348,13 @@ function PoolPopup({
   const [search, setSearch] = useState("");
   const [subject, setSubject] = useState<PreviewSubject | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [page, setPage] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const PAGE_SIZE = 48;
 
   useEffect(() => { setMounted(true); }, []);
+  // Reset to the first page whenever the filter/search changes.
+  useEffect(() => { setPage(0); }, [filter, search]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -389,6 +393,13 @@ function PoolPopup({
       (filter === "all" || p.rarity === filter) &&
       (!q || p.name.toLowerCase().includes(q) || p.type.toLowerCase().includes(q)),
   );
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const paged = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const goPage = (p: number) => {
+    setPage(Math.min(pageCount - 1, Math.max(0, p)));
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  };
 
   const pills: { key: Rarity | "all"; label: string; count: number }[] = [
     { key: "all", label: "Alle", count: unique.length },
@@ -460,10 +471,11 @@ function PoolPopup({
           {filtered.length === 0 ? (
             <p className="col-span-full py-10 text-center text-sm text-zinc-500">Keine Treffer.</p>
           ) : (
-            filtered.map((p, i) => {
+            paged.map((p, i) => {
               const hex = RARITY_HEX[p.rarity];
               const subj = poolEntryToSubject(p);
-              const character = subj.kind === "item" && needsCharacter(p.type, cfg);
+              // Pool cards stay light (isolated) so a big pool always loads fast
+              // and smoothly — the full character view is one click away.
               return (
                 <button
                   key={`${p.rarity}-${p.type}-${p.name}-${i}`}
@@ -481,7 +493,7 @@ function PoolPopup({
                       lazy
                       rootRef={scrollRef}
                       gender={gender}
-                      character={character}
+                      character={false}
                       scale={cfg.reelItemScale}
                       fallbackColor={hex}
                     />
@@ -498,6 +510,29 @@ function PoolPopup({
             })
           )}
         </div>
+
+        {/* Pagination */}
+        {pageCount > 1 && (
+          <div className="flex items-center justify-center gap-3 border-t border-white/[0.06] px-4 py-2.5">
+            <button
+              onClick={() => goPage(safePage - 1)}
+              disabled={safePage <= 0}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs font-bold text-zinc-200 transition-colors hover:border-purple-400/50 disabled:opacity-30"
+            >
+              ‹ Zurück
+            </button>
+            <span className="text-xs font-semibold text-zinc-400">
+              Seite {safePage + 1} / {pageCount}
+            </span>
+            <button
+              onClick={() => goPage(safePage + 1)}
+              disabled={safePage >= pageCount - 1}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs font-bold text-zinc-200 transition-colors hover:border-purple-400/50 disabled:opacity-30"
+            >
+              Weiter ›
+            </button>
+          </div>
+        )}
       </motion.div>
 
       {subject && <UniversalPreviewModal subject={subject} onClose={() => setSubject(null)} />}
@@ -829,7 +864,7 @@ export function CaseOpeningSection({
             items={reel}
             targetIndex={targetIndex}
             spinning={isSpinning}
-            warmup={phase === "pending"}
+            warmup={false}
             spinToken={spinToken}
             viewBase={reelViewBase}
             cfg={cfg}

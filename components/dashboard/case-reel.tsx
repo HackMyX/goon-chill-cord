@@ -154,8 +154,10 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
 
       const SNAP_DISTANCE = STEP * 0.12;
       activeControlsRef.current = animate(x, dest + SNAP_DISTANCE, {
-        duration: 4.0,
-        ease: [0.16, 0.84, 0.24, 1],
+        // Smooth wind-up from the idle scroll, long satisfying deceleration —
+        // one continuous motion (no separate warmup, no restart).
+        duration: 5.0,
+        ease: [0.4, 0, 0.18, 1],
         onUpdate: trackTicks,
         onComplete: () => {
           if (cancelled) return;
@@ -244,8 +246,13 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
         {displayItems.map((entry, i) => {
           const style = RARITY_STYLES[entry.rarity];
           const isTarget = spinning && i === targetIndex;
-          const inWindow = i >= win[0] && i <= win[1];
-          const show3d = inWindow && !suppressed;
+          // MOUNT a buffer of slots beyond the visible box so 3D is fully loaded
+          // BEFORE it scrolls in (no empty-then-pop) and stays loaded a little
+          // after it leaves. Only slots actually inside the box are DRAWN
+          // (visible) — so nothing ever renders outside the reel (no leak).
+          const MOUNT_BUF = 3;
+          const isMounted = i >= win[0] - MOUNT_BUF && i <= win[1] + MOUNT_BUF;
+          const isVisible = i >= win[0] && i <= win[1] && !suppressed;
           const subject = entrySubject(entry);
           const isItem = subject.kind === "item";
           // Character bodies are heavy — only while the reel is calm (idle), not
@@ -273,10 +280,11 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
                 {style.rainbow && <span aria-hidden className="rainbow-border" />}
 
                 <div className="relative w-full" style={{ height: ITEM_3D_H }}>
-                  {show3d ? (
+                  {isMounted ? (
                     <CaseDropView
                       subject={subject}
                       viewIndex={viewBase + i}
+                      visible={isVisible}
                       rotate={cfg.autoRotate && (!spinning || isTarget)}
                       rotateSpeed={cfg.rotateSpeed * (isTarget ? 1.5 : 1)}
                       gender={gender}
