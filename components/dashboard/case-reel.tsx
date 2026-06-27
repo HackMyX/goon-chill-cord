@@ -3,17 +3,20 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { motion, useMotionValue, animate } from "framer-motion";
 import { RARITY_STYLES, type Rarity } from "@/lib/cases";
+import { RARITY_HEX } from "@/lib/rarity-colors";
 import { CaseDropView } from "@/components/cases/case-item-3d";
 import type { PreviewSubject } from "@/components/ui/universal-preview-modal";
+import {
+  DEFAULT_CASE_DISPLAY_CONFIG,
+  needsCharacter,
+  type CaseDisplayConfig,
+} from "@/lib/case-display-config";
 import { debugLog } from "@/lib/debug";
 
-export const ITEM_WIDTH = 116;
-const GAP = 8;
-const STEP = ITEM_WIDTH + GAP;
+const GAP = 10;
 
 const IDLE_SEC_PER_ITEM = 1.25;
-// Warmup speed: 10× faster than idle — gives immediate visual feedback while
-// the server call is in flight.
+// Warmup speed: fast scroll while the server call is in flight.
 const WARMUP_SEC_PER_ITEM = IDLE_SEC_PER_ITEM * 0.1;
 
 export interface ReelEntry {
@@ -33,12 +36,14 @@ interface CaseReelProps {
   items: ReelEntry[];
   targetIndex: number;
   spinning: boolean;
-  /** True while the server call is in flight — speeds up the idle scroll so
-   *  it feels like the machine is "charging up" before the real spin lands. */
   warmup?: boolean;
   spinToken?: number;
-  /** Base offset for the shared-Canvas View indices (unique per case group). */
   viewBase?: number;
+  cfg?: CaseDisplayConfig;
+  gender?: "m" | "w";
+  /** When true (a modal/popup is open) the reel draws NO 3D so it can't bleed
+   *  over the modal via the shared full-viewport canvas. */
+  suppressed?: boolean;
   onTick?: () => void;
   onSpinComplete?: () => void;
 }
@@ -53,13 +58,26 @@ function entrySubject(entry: ReelEntry): PreviewSubject {
 }
 
 export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseReel(
-  { items, targetIndex, spinning, warmup = false, spinToken = 0, viewBase = 1, onTick, onSpinComplete },
+  {
+    items, targetIndex, spinning, warmup = false, spinToken = 0, viewBase = 1,
+    cfg = DEFAULT_CASE_DISPLAY_CONFIG, gender = "m", suppressed = false, onTick, onSpinComplete,
+  },
   ref,
 ) {
+  const ITEM_WIDTH = cfg.reelItemWidth;
+  const STEP = ITEM_WIDTH + GAP;
+  const REEL_HEIGHT = cfg.reelHeight;
+  const ITEM_BOX_H = REEL_HEIGHT - 18;
+  const ITEM_3D_H = ITEM_BOX_H - 30;
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(700);
   const x = useMotionValue(0);
   const [justLanded, setJustLanded] = useState(false);
+  // Draw window — only slots inside the reel box render real 3D (no leak).
+  const [win, setWin] = useState<[number, number]>([0, 9]);
+  const winRef = useRef<[number, number]>([0, 9]);
+  const lastWinAt = useRef(0);
 
   const activeControlsRef = useRef<ReturnType<typeof animate> | null>(null);
   const translateXRef = useRef(0);
@@ -81,6 +99,29 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
   const translateX = -(targetIndex * STEP) + (containerWidth / 2 - ITEM_WIDTH / 2);
   translateXRef.current = translateX;
 
+  // ── Draw-window tracking (cull everything outside the reel box) ─────────────
+  useEffect(() => {
+    const compute = (val: number) => {
+      // Only slots FULLY inside the reel box draw 3D — so nothing ever renders
+      // in the empty bands left/right of the reel (the reported leak).
+      const lo = Math.ceil((4 - val) / STEP);
+      const hi = Math.floor((containerWidth - ITEM_WIDTH - 4 - val) / STEP);
+      const prev = winRef.current;
+      if (prev[0] !== lo || prev[1] !== hi) {
+        winRef.current = [lo, hi];
+        setWin([lo, hi]);
+      }
+    };
+    compute(x.get());
+    const unsub = x.on("change", (v) => {
+      const now = performance.now();
+      if (now - lastWinAt.current < 40) return;
+      lastWinAt.current = now;
+      compute(v);
+    });
+    return () => unsub();
+  }, [containerWidth, STEP, ITEM_WIDTH, x]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -98,32 +139,12 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
   useEffect(() => {
     let cancelled = false;
     const loopDist = items.length * STEP;
-
-    // Always kill whatever was driving x before — idle, warmup and spin must
-    // never run two competing tweens on the same motion value (that overlap is
-    // exactly what made the warmup→spin handoff stutter / jump).
     activeControlsRef.current?.stop();
 
     if (spinning) {
-      // ── Spin animation ────────────────────────────────────────────────────
-      // SEAMLESS HANDOFF: do NOT reset x. We continue from wherever the warmup
-      // left the strip and simply decelerate into the winning slot. The parent
-      // always puts ~40 filler items BEFORE the target, so translateX is always
-      // well to the left of the current position — the motion is one continuous
-      // leftward spin with no teleport, no restart and no pause, and it always
-      // lands exactly on items[targetIndex] (the real server result).
-      const xNow = x.get();
+      // Seamless deceleration from the current position to the winning slot.
       const dest = translateX;
-
-      debugLog("CaseReel", "spin start", {
-        targetIndex,
-        itemAtTarget: items[targetIndex]?.name,
-        xNow,
-        translateX,
-        dest,
-        containerWidth,
-        reelLength: items.length,
-      });
+      debugLog("CaseReel", "spin start", { targetIndex, xNow: x.get(), dest });
 
       let lastTickIndex = Math.round(x.get() / -STEP);
       const trackTicks = (latest: number) => {
@@ -131,31 +152,18 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
         if (idx !== lastTickIndex) { lastTickIndex = idx; onTick?.(); }
       };
 
-      // Single continuous deceleration: a strong ease-out carries the bulk of
-      // the distance, a soft spring settles the final fraction onto the slot.
       const SNAP_DISTANCE = STEP * 0.12;
-      const bulkTarget = dest + SNAP_DISTANCE;
-
-      activeControlsRef.current = animate(x, bulkTarget, {
+      activeControlsRef.current = animate(x, dest + SNAP_DISTANCE, {
         duration: 4.0,
         ease: [0.16, 0.84, 0.24, 1],
         onUpdate: trackTicks,
         onComplete: () => {
           if (cancelled) return;
           activeControlsRef.current = animate(x, dest, {
-            type: "spring",
-            stiffness: 240,
-            damping: 30,
-            mass: 1,
+            type: "spring", stiffness: 240, damping: 30, mass: 1,
             onUpdate: trackTicks,
             onComplete: () => {
               if (cancelled) return;
-              debugLog("CaseReel", "spin landed", {
-                targetIndex,
-                itemAtTarget: items[targetIndex]?.name,
-                finalX: x.get(),
-                expectedX: dest,
-              });
               setJustLanded(true);
               onSpinComplete?.();
               setTimeout(() => setJustLanded(false), 520);
@@ -164,18 +172,11 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
         },
       });
 
-      return () => {
-        cancelled = true;
-        activeControlsRef.current?.stop();
-      };
+      return () => { cancelled = true; activeControlsRef.current?.stop(); };
     }
 
     if (warmup) {
-      // ── Warmup: fast scroll continuing from the current x position ──────────
-      // displayItems is doubled, so wrapping just means resetting x by loopDist
-      // to the visually identical spot. The spin above then picks up from here.
       let fromX = x.get();
-
       function loopFast() {
         if (cancelled) return;
         const toX = fromX - loopDist;
@@ -184,21 +185,17 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
           ease: "linear",
           onComplete: () => {
             if (cancelled) return;
-            fromX = toX + loopDist; // wrap: visually same position (doubled list)
+            fromX = toX + loopDist;
             x.set(fromX);
             loopFast();
           },
         });
       }
       loopFast();
-
-      return () => {
-        cancelled = true;
-        activeControlsRef.current?.stop();
-      };
+      return () => { cancelled = true; activeControlsRef.current?.stop(); };
     }
 
-    // ── Normal idle scroll ────────────────────────────────────────────────
+    // Idle scroll
     x.set(0);
     function loopIdle() {
       if (cancelled) return;
@@ -213,39 +210,32 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
       });
     }
     loopIdle();
-
-    return () => {
-      cancelled = true;
-      activeControlsRef.current?.stop();
-    };
-    // items.length is in deps so the idle loop resets with correct loopDist
-    // after a spin (when the spin reel is swapped back to the idle reel).
+    return () => { cancelled = true; activeControlsRef.current?.stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spinning, spinToken, warmup, items.length]);
+  }, [spinning, spinToken, warmup, items.length, STEP]);
 
   return (
     <div
       ref={containerRef}
-      className={`relative h-[130px] w-full overflow-hidden rounded-xl bg-transparent ${
-        justLanded ? "animate-case-shake" : ""
-      }`}
+      className={`relative w-full overflow-hidden rounded-2xl bg-black/20 ${justLanded ? "animate-case-shake" : ""}`}
+      style={{ height: REEL_HEIGHT }}
     >
-      {/* amber focus window — kept above the shared 3D canvas (z-[60]) */}
+      {/* amber focus window — above the shared 3D canvas */}
       <div
-        className="pointer-events-none absolute top-0 bottom-0 left-1/2 z-[60] -translate-x-1/2 border-x-2 border-amber-400/70 bg-amber-400/[0.05] shadow-[inset_0_4px_10px_rgba(0,0,0,0.45)]"
+        className="pointer-events-none absolute top-0 bottom-0 left-1/2 z-[60] -translate-x-1/2 rounded-lg border-x-2 border-amber-400/70 bg-amber-400/[0.05] shadow-[inset_0_4px_10px_rgba(0,0,0,0.45)]"
         style={{ width: ITEM_WIDTH }}
       />
-      <div className="pointer-events-none absolute -top-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[8px] border-t-[10px] border-x-transparent border-t-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
-      <div className="pointer-events-none absolute -bottom-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[8px] border-b-[10px] border-x-transparent border-b-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
+      <div className="pointer-events-none absolute -top-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[9px] border-t-[12px] border-x-transparent border-t-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.85)]" />
+      <div className="pointer-events-none absolute -bottom-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[9px] border-b-[12px] border-x-transparent border-b-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.85)]" />
 
-      {/* vignette fades */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-[#030305] to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-[#030305] to-transparent" />
+      {/* edge masks — sit ABOVE the canvas (z-[58]) to hide any item straddling
+          the reel boundary, so nothing ever appears outside the reel box */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-[58] w-20 bg-gradient-to-r from-[#08060f] via-[#08060f]/80 to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-[58] w-20 bg-gradient-to-l from-[#08060f] via-[#08060f]/80 to-transparent" />
 
-      {/* warmup glow pulse — amber scanline that signals "charging" */}
       {warmup && (
         <div
-          className="pointer-events-none absolute inset-0 z-[60] animate-pulse rounded-xl"
+          className="pointer-events-none absolute inset-0 z-[59] animate-pulse rounded-2xl"
           style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(245,158,11,0.16) 0%, transparent 70%)" }}
         />
       )}
@@ -254,44 +244,54 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
         {displayItems.map((entry, i) => {
           const style = RARITY_STYLES[entry.rarity];
           const isTarget = spinning && i === targetIndex;
+          const inWindow = i >= win[0] && i <= win[1];
+          const show3d = inWindow && !suppressed;
+          const subject = entrySubject(entry);
+          const isItem = subject.kind === "item";
+          // Character bodies are heavy — only while the reel is calm (idle), not
+          // during the fast warmup/spin where items whip past (the win reveal,
+          // pool and batch use the character render where it matters).
+          const character = isItem && !spinning && !warmup && needsCharacter(entry.type, cfg);
 
           return (
-            <div
-              key={`${entry.key}-${i}`}
-              style={{ width: ITEM_WIDTH }}
-              className="flex h-full shrink-0 items-center justify-center"
-            >
+            <div key={`${entry.key}-${i}`} style={{ width: ITEM_WIDTH }} className="flex h-full shrink-0 items-center justify-center">
               <div
-                className={`relative flex h-[112px] w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-lg border bg-black/25 backdrop-blur-[2px] transition-all duration-300 ${
+                className={`relative flex w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border bg-black/25 backdrop-blur-[2px] transition-all duration-300 ${
                   style.rainbow ? "border-transparent" : style.border
                 } ${
                   spinning
                     ? isTarget
-                      ? `opacity-100 ${justLanded ? "scale-[1.18]" : "scale-[1.06]"}`
+                      ? `opacity-100 ${justLanded ? "scale-[1.16]" : "scale-[1.05]"}`
                       : "opacity-60"
-                    : "opacity-90 scale-100"
+                    : "opacity-95 scale-100"
                 }`}
+                style={{ height: ITEM_BOX_H }}
               >
                 {isTarget && justLanded && style.pulseGlow && (
-                  <span aria-hidden className={`absolute inset-0 rounded-lg ${style.pulseGlow}`} />
+                  <span aria-hidden className={`absolute inset-0 rounded-xl ${style.pulseGlow}`} />
                 )}
                 {style.rainbow && <span aria-hidden className="rainbow-border" />}
 
-                {/* Item → 3D (shared Canvas); non-item drop → DOM hero */}
-                <div className="relative w-full" style={{ height: 76 }}>
-                  <CaseDropView
-                    subject={entrySubject(entry)}
-                    viewIndex={viewBase + i}
-                    rotate={!spinning || isTarget}
-                    rotateSpeed={isTarget ? 0.9 : 0.5}
-                  />
+                <div className="relative w-full" style={{ height: ITEM_3D_H }}>
+                  {show3d ? (
+                    <CaseDropView
+                      subject={subject}
+                      viewIndex={viewBase + i}
+                      rotate={cfg.autoRotate && (!spinning || isTarget)}
+                      rotateSpeed={cfg.rotateSpeed * (isTarget ? 1.5 : 1)}
+                      gender={gender}
+                      character={character}
+                      scale={cfg.reelItemScale}
+                    />
+                  ) : (
+                    <div
+                      className="absolute inset-0 rounded-md"
+                      style={{ background: `radial-gradient(circle at 50% 45%, ${RARITY_HEX[entry.rarity]}18 0%, transparent 72%)` }}
+                    />
+                  )}
                 </div>
 
-                <span
-                  className={`px-1 text-center text-[10px] font-semibold leading-tight line-clamp-2 ${
-                    style.rainbow ? "rainbow-text" : style.text
-                  }`}
-                >
+                <span className={`px-1 text-center text-[11px] font-semibold leading-tight line-clamp-2 ${style.rainbow ? "rainbow-text" : style.text}`}>
                   {entry.name ?? "???"}
                 </span>
               </div>

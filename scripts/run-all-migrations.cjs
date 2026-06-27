@@ -506,6 +506,8 @@ async function main() {
     `ALTER TABLE case_tiers ADD COLUMN IF NOT EXISTS name_styles_eligible BOOLEAN  DEFAULT false`,
     `ALTER TABLE case_tiers ADD COLUMN IF NOT EXISTS tier_sublabel        TEXT`,
     `ALTER TABLE case_tiers ADD COLUMN IF NOT EXISTS extra_drops          JSONB    NOT NULL DEFAULT '[]'::jsonb`,
+    `CREATE TABLE IF NOT EXISTS case_display_config (id text PRIMARY KEY DEFAULT 'default', config jsonb NOT NULL DEFAULT '{}'::jsonb, updated_at timestamptz NOT NULL DEFAULT now())`,
+    `INSERT INTO case_display_config (id, config) VALUES ('default', '{}'::jsonb) ON CONFLICT (id) DO NOTHING`,
     `UPDATE case_tiers SET sort_order = 0 WHERE id LIKE '%-standard' AND (sort_order IS NULL OR sort_order = 0)`,
     `UPDATE case_tiers SET sort_order = 1 WHERE id LIKE '%-premium'  AND (sort_order IS NULL OR sort_order = 0)`,
   ], client);

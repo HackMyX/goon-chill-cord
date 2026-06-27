@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Package, Coins, Sparkles, Star, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,6 +12,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import type { CaseGroup, Rarity, CasePoolEntry } from "@/lib/cases";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
+import { useLiveConfig } from "@/lib/use-live-config";
+import { getCaseDisplayConfig } from "@/lib/actions/case-display";
+import { DEFAULT_CASE_DISPLAY_CONFIG, type CaseDisplayConfig } from "@/lib/case-display-config";
 
 interface CaseGroupPreview {
   groupId: string;
@@ -25,6 +28,8 @@ interface CasesShellProps {
   streakDays: number;
   caseGroups: CaseGroup[];
   caseGroupPreviews: CaseGroupPreview[];
+  gender?: "m" | "w";
+  displayConfig?: CaseDisplayConfig;
   isAdmin?: boolean;
   isModerator?: boolean;
 }
@@ -99,6 +104,8 @@ export function CasesShell({
   streakDays,
   caseGroups,
   caseGroupPreviews,
+  gender = "m",
+  displayConfig,
   isAdmin = false,
   isModerator = false,
 }: CasesShellProps) {
@@ -106,6 +113,14 @@ export function CasesShell({
   useRealtimeProfile((row) => {
     if (typeof row.credits === "number") setCredits(row.credits);
   });
+  const [cfg, setCfg] = useState<CaseDisplayConfig>(displayConfig ?? DEFAULT_CASE_DISPLAY_CONFIG);
+  useLiveConfig("case-display-live", getCaseDisplayConfig, setCfg);
+  // Track which sections have a modal/popup open → suppress reel 3D everywhere.
+  const [modalStates, setModalStates] = useState<Record<number, boolean>>({});
+  const anyModalOpen = Object.values(modalStates).some(Boolean);
+  const handleModalChange = useCallback((i: number, open: boolean) => {
+    setModalStates((s) => (s[i] === open ? s : { ...s, [i]: open }));
+  }, []);
   // Root for the shared 3D Canvas's eventSource (OrbitControls etc. in modals).
   const casesRootRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -296,6 +311,10 @@ export function CasesShell({
                       poolSize={preview?.poolSize ?? 0}
                       onCreditsChange={handleCreditsChange}
                       index={i}
+                      gender={gender}
+                      cfg={cfg}
+                      anyModalOpen={anyModalOpen}
+                      onModalChange={handleModalChange}
                     />
                   </motion.div>
                 );
@@ -306,10 +325,13 @@ export function CasesShell({
       </main>
 
       {/* Shared 3D Canvas — one WebGL context for EVERY CaseItem3D on the page
-          (reel slots, win reveal, batch grid, pool gallery). alpha + fixed +
-          pointer-events:none means it is invisible except where a <View> draws,
-          and never blocks clicks. z-[55] keeps the 3D above the dark batch/
-          reveal overlays so the won items render on top of them. */}
+          (reel slots, win reveal, batch grid, pool popup). alpha + fixed +
+          pointer-events:none means it is invisible except where a <View> draws.
+          DYNAMIC z-index (no remount → no context loss): normally z-40 so reel
+          3D sits UNDER the sticky TopBar (z-50); when a pool/batch modal is open
+          it jumps to z-150 so the pool/batch 3D renders above the modal (z-120)
+          and the TopBar. Reel 3D is suppressed whenever a modal is open, so it
+          never bleeds over the modal. */}
       <Canvas
         style={{
           position: "fixed",
@@ -318,7 +340,7 @@ export function CasesShell({
           width: "100vw",
           height: "100vh",
           pointerEvents: "none",
-          zIndex: 55,
+          zIndex: anyModalOpen ? 150 : 40,
         }}
         gl={{ alpha: true, antialias: true }}
         eventSource={casesRootRef as React.RefObject<HTMLElement>}

@@ -19,6 +19,8 @@ import { getCaseIcon } from "@/lib/case-icons";
 import { NAME_STYLES } from "@/lib/name-styles";
 import { ALL_BADGE_KEYS, getBadgeStyle } from "@/lib/badges";
 import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
+import { getCaseDisplayConfig, updateCaseDisplayConfig } from "@/lib/actions/case-display";
+import { DEFAULT_CASE_DISPLAY_CONFIG, type CaseDisplayConfig } from "@/lib/case-display-config";
 import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -1238,6 +1240,105 @@ interface CasesAdminTabProps {
   items: ItemRow[];
 }
 
+// ─── Display / sizing editor ────────────────────────────────────────────────
+
+const DISPLAY_NUM_FIELDS: { key: keyof CaseDisplayConfig; label: string; hint: string; step: number }[] = [
+  { key: "reelItemWidth",  label: "Reel — Item-Breite (px)",      hint: "Breite einer einzelnen Box in der Spin-Leiste. Größer = größere 3D-Items.", step: 5 },
+  { key: "reelHeight",     label: "Reel — Höhe (px)",             hint: "Gesamthöhe der Spin-Leiste. Größer = mehr Platz für die 3D-Darstellung.", step: 5 },
+  { key: "reelItemScale",  label: "3D-Zoom (überall)",            hint: "Kamera-Zoom für alle 3D-Items (Reel/Gewinn/Pool/Mehrfach). >1 = näher/größer.", step: 0.05 },
+  { key: "revealScale",    label: "Gewinn-Anzeige — Größe",       hint: "Größe der Gewinn-Enthüllung nach dem Spin.", step: 0.05 },
+  { key: "poolCardHeight", label: "Pool — Karten-3D-Höhe (px)",   hint: "Höhe der 3D-Vorschau auf jeder Pool-Karte im Popup.", step: 5 },
+  { key: "poolMinColWidth",label: "Pool — Spaltenbreite (px)",    hint: "Mindestbreite einer Pool-Spalte. Kleiner = mehr Karten pro Reihe.", step: 5 },
+  { key: "batchCardWidth", label: "Mehrfach — Kartenbreite (px)", hint: "Breite der Karten im Mehrfach-Öffnen-Ergebnis.", step: 5 },
+  { key: "batchCardHeight",label: "Mehrfach — Karten-3D-Höhe (px)", hint: "Höhe der 3D-Vorschau auf den Mehrfach-Karten.", step: 5 },
+  { key: "rotateSpeed",    label: "Rotationsgeschwindigkeit",     hint: "Wie schnell sich die 3D-Items drehen (0 = aus über die Auto-Rotation).", step: 0.05 },
+];
+
+function CaseDisplayConfigEditor() {
+  const [cfg, setCfg] = useState<CaseDisplayConfig>(DEFAULT_CASE_DISPLAY_CONFIG);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const sound = useSoundManager();
+
+  useEffect(() => {
+    let active = true;
+    getCaseDisplayConfig().then((c) => { if (active) setCfg(c); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  function setNum(key: keyof CaseDisplayConfig, v: number) {
+    setCfg((c) => ({ ...c, [key]: v }));
+  }
+
+  async function save() {
+    setSaving(true); setStatus("idle");
+    const res = await updateCaseDisplayConfig(cfg);
+    setSaving(false);
+    setStatus(res.success ? "saved" : "error");
+    if (res.success) sound.save(); else sound.error();
+  }
+
+  return (
+    <CollapsibleAdminRow
+      header={
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-[180px]">
+            <p className="font-semibold text-zinc-100">
+              <Settings className="mr-1.5 inline-block h-4 w-4 text-purple-400" />
+              Darstellung & Größen
+            </p>
+            <p className="text-[11px] text-zinc-500">Live für alle Spieler — Reel, Gewinn, Pool, Mehrfach</p>
+          </div>
+          <button
+            onMouseEnter={sound.hover}
+            onClick={(e) => { e.stopPropagation(); save(); }}
+            disabled={saving}
+            className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-semibold text-white shadow-[0_0_10px_rgba(147,51,234,0.4)] transition-colors hover:bg-purple-500 disabled:opacity-50"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saving ? "…" : "Speichern"}
+          </button>
+          {status === "saved" && <span className="text-xs font-medium text-emerald-400">Gespeichert.</span>}
+          {status === "error" && <span className="text-xs font-medium text-red-400">Fehler.</span>}
+        </div>
+      }
+    >
+      <div onClick={(e) => e.stopPropagation()} className="space-y-3">
+        <InfoBox>
+          Alle Größen wirken sofort live auf der Cases-Seite für alle Spieler. „3D-Zoom" macht die Items in allen
+          Ansichten näher/größer. „Auto-Rotation" und „Charakter-Vorschau" steuern, ob sich Items drehen bzw. ob
+          getragene Items (Haare, Gesicht, Helm, Jacke, Hose, Schuhe) auf einem Charakter gezeigt werden.
+        </InfoBox>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {DISPLAY_NUM_FIELDS.map((f) => (
+            <label key={f.key} className="flex flex-col gap-1 text-xs text-zinc-400">
+              <span title={f.hint}>{f.label}</span>
+              <input
+                type="number"
+                step={f.step}
+                value={cfg[f.key] as number}
+                onChange={(e) => setNum(f.key, Number(e.target.value) || 0)}
+                className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+              />
+              <Hint text={f.hint} />
+            </label>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+            <input type="checkbox" checked={cfg.autoRotate} onChange={(e) => setCfg((c) => ({ ...c, autoRotate: e.target.checked }))} className="h-4 w-4 accent-purple-500" />
+            Auto-Rotation der 3D-Items
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+            <input type="checkbox" checked={cfg.useCharacterForWorn} onChange={(e) => setCfg((c) => ({ ...c, useCharacterForWorn: e.target.checked }))} className="h-4 w-4 accent-purple-500" />
+            Getragene Items auf Charakter zeigen (Haare/Gesicht/Kleidung)
+          </label>
+        </div>
+      </div>
+    </CollapsibleAdminRow>
+  );
+}
+
 export function CasesAdminTab({ caseGroups: initialGroups, caseTiers: initialTiers, items }: CasesAdminTabProps) {
   const [groups, setGroups] = useState(initialGroups);
   const [abilities, setAbilities] = useState<AbilityLite[]>([]);
@@ -1298,6 +1399,9 @@ export function CasesAdminTab({ caseGroups: initialGroups, caseTiers: initialTie
 
   return (
     <div className="space-y-4">
+      {/* Display / sizing — live for all players */}
+      <CaseDisplayConfigEditor />
+
       {/* Help overview */}
       <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
         <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">

@@ -1,9 +1,10 @@
 "use client";
 
 import { createElement, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Coins, Zap, Layers, Minus, Plus, Package } from "lucide-react";
+import { Coins, Zap, Layers, Minus, Plus, Package, X, Search } from "lucide-react";
 import { CaseReel, type CaseReelHandle, type ReelEntry } from "@/components/dashboard/case-reel";
 import { ChanceBar } from "@/components/dashboard/chance-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
@@ -12,6 +13,7 @@ import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/univ
 import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { openCase, chargeSkipFee, openCaseBatch, type WonDrop } from "@/lib/actions/cases";
 import { RARITY_ORDER, getTypeLabel, type CaseGroup, type CaseTier, type CaseExtraDrop, type CasePoolEntry, type Rarity } from "@/lib/cases";
+import { needsCharacter, DEFAULT_CASE_DISPLAY_CONFIG, type CaseDisplayConfig } from "@/lib/case-display-config";
 import { getCaseIcon } from "@/lib/case-icons";
 import { useSoundManager } from "@/lib/sound-manager";
 import { debugLog } from "@/lib/debug";
@@ -188,9 +190,17 @@ function QuantitySelector({
 // ---------------------------------------------------------------------------
 
 const RARITY_RANK: Record<Rarity, number> = { normal: 0, selten: 1, mythisch: 2, ultra: 3 };
-const CARD_W = 148;
 
-function BatchResultGrid({ items, onClose, viewBase }: { items: WonDrop[]; onClose: () => void; viewBase: number }) {
+function BatchResultGrid({
+  items, onClose, viewBase, cfg, gender,
+}: {
+  items: WonDrop[];
+  onClose: () => void;
+  viewBase: number;
+  cfg: CaseDisplayConfig;
+  gender: "m" | "w";
+}) {
+  const CARD_W = cfg.batchCardWidth;
   const best = items.reduce((b, i) => RARITY_RANK[i.rarity as Rarity] > RARITY_RANK[b.rarity as Rarity] ? i : b, items[0]);
 
   return (
@@ -198,7 +208,7 @@ function BatchResultGrid({ items, onClose, viewBase }: { items: WonDrop[]; onClo
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-start bg-black/88 px-4 pt-8 pb-4 overflow-y-auto"
+      className="fixed inset-0 z-[120] flex flex-col items-center justify-start bg-black/88 px-4 pt-8 pb-4 overflow-y-auto"
       onClick={onClose}
     >
       <div
@@ -265,12 +275,15 @@ function BatchResultGrid({ items, onClose, viewBase }: { items: WonDrop[]; onClo
                 style={{ background: `radial-gradient(ellipse at 50% 25%, ${RARITY_HEX[drop.rarity as Rarity]} 0%, transparent 72%)` }}
               />
               <div className="relative z-10 flex flex-col items-center gap-1.5">
-                <div className="relative w-full" style={{ height: 96 }}>
+                <div className="relative w-full" style={{ height: cfg.batchCardHeight }}>
                   <CaseDropView
                     subject={dropToSubject(drop)}
                     viewIndex={viewBase + 1 + idx}
-                    rotate
-                    rotateSpeed={0.7}
+                    rotate={cfg.autoRotate}
+                    rotateSpeed={cfg.rotateSpeed}
+                    gender={gender}
+                    character={drop.kind === "item" && needsCharacter(drop.item.type, cfg)}
+                    scale={cfg.reelItemScale}
                   />
                 </div>
                 <p className="w-full text-[11px] font-bold leading-tight text-zinc-100 line-clamp-2 break-words">
@@ -318,17 +331,32 @@ function BatchResultGrid({ items, onClose, viewBase }: { items: WonDrop[]; onClo
 }
 
 // ---------------------------------------------------------------------------
-// Pool gallery — every winnable item in the case, shown in full 3D
+// Pool popup — every winnable entry in the case, in 3D, in a filterable modal
 // ---------------------------------------------------------------------------
 
-const POOL_RENDER_CAP = 60;
-
-function PoolGallery({ pool, viewBase }: { pool: PreviewItem[]; viewBase: number }) {
+function PoolPopup({
+  pool, viewBase, cfg, gender, title, onClose,
+}: {
+  pool: PreviewItem[];
+  viewBase: number;
+  cfg: CaseDisplayConfig;
+  gender: "m" | "w";
+  title: string;
+  onClose: () => void;
+}) {
   const [filter, setFilter] = useState<Rarity | "all">("all");
+  const [search, setSearch] = useState("");
   const [subject, setSubject] = useState<PreviewSubject | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // De-duplicate by rarity+type+name (the server preview pool can repeat) and
-  // sort best-rarity first so the showcase always leads with the rare drops.
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const unique = useMemo(() => {
     const seen = new Set<string>();
     const out: PreviewItem[] = [];
@@ -353,11 +381,14 @@ function PoolGallery({ pool, viewBase }: { pool: PreviewItem[]; viewBase: number
     return c;
   }, [unique]);
 
-  if (unique.length === 0) return null;
+  if (!mounted) return null;
 
-  const filtered = filter === "all" ? unique : unique.filter((p) => p.rarity === filter);
-  const shown = filtered.slice(0, POOL_RENDER_CAP);
-  const hidden = filtered.length - shown.length;
+  const q = search.trim().toLowerCase();
+  const filtered = unique.filter(
+    (p) =>
+      (filter === "all" || p.rarity === filter) &&
+      (!q || p.name.toLowerCase().includes(q) || p.type.toLowerCase().includes(q)),
+  );
 
   const pills: { key: Rarity | "all"; label: string; count: number }[] = [
     { key: "all", label: "Alle", count: unique.length },
@@ -366,80 +397,112 @@ function PoolGallery({ pool, viewBase }: { pool: PreviewItem[]; viewBase: number
       .map((r) => ({ key: r, label: RARITY_LABELS[r], count: counts[r] })),
   ];
 
-  return (
-    <div className="mt-6">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold tracking-wide text-purple-300">
-          IM POOL — {unique.length.toLocaleString("de-DE")} EINTRÄGE IN 3D
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {pills.map((p) => {
-            const active = filter === p.key;
-            const hex = p.key === "all" ? "#a855f7" : RARITY_HEX[p.key as Rarity];
-            return (
-              <button
-                key={p.key}
-                onClick={() => setFilter(p.key)}
-                className="rounded-full border px-2.5 py-0.5 text-[11px] font-bold transition-colors"
-                style={{
-                  borderColor: active ? hex : `${hex}40`,
-                  color: active ? "#fff" : hex,
-                  background: active ? `${hex}28` : "transparent",
-                }}
-              >
-                {p.label} <span className="opacity-60">{p.count}</span>
-              </button>
-            );
-          })}
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4"
+      style={{ background: "rgba(2,2,6,0.85)", backdropFilter: "blur(6px)" }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ type: "spring", damping: 24, stiffness: 280 }}
+        className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b0814] shadow-[0_30px_90px_rgba(0,0,0,0.8)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] px-4 py-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-purple-300">Pool — {title}</p>
+            <p className="text-sm font-extrabold text-zinc-50">
+              {unique.length.toLocaleString("de-DE")} gewinnbare Einträge in 3D
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/40 text-zinc-300 transition-colors hover:bg-white/10"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-      </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-        {shown.map((p, i) => {
-          const hex = RARITY_HEX[p.rarity];
-          return (
-            <button
-              key={`${p.rarity}-${p.type}-${p.name}-${i}`}
-              onClick={() => setSubject(poolEntryToSubject(p))}
-              className="group relative flex flex-col items-center gap-1 overflow-hidden rounded-lg border bg-black/30 p-1.5 text-center transition-all hover:scale-[1.04]"
-              style={{ borderColor: `${hex}40`, boxShadow: `0 0 10px ${hex}14` }}
-            >
-              <div
-                className="pointer-events-none absolute inset-0 opacity-[0.12]"
-                style={{ background: `radial-gradient(ellipse at 50% 25%, ${hex} 0%, transparent 72%)` }}
-              />
-              <div className="relative w-full" style={{ height: 70 }}>
-                <CaseDropView
-                  subject={poolEntryToSubject(p)}
-                  viewIndex={viewBase + i}
-                  rotate
-                  rotateSpeed={0.5}
-                  lazy
-                  fallbackColor={hex}
-                />
-              </div>
-              <span className="relative w-full truncate text-[10px] font-semibold text-zinc-200">
-                {p.name}
-              </span>
-              <span className="relative flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: hex }} />
-                <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: hex }}>
-                  {p.extra ? EXTRA_KIND_LABEL[p.extra.kind] : getTypeLabel(p.type)}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+        {/* Controls */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
+          <div className="flex flex-wrap gap-1.5">
+            {pills.map((p) => {
+              const active = filter === p.key;
+              const hex = p.key === "all" ? "#a855f7" : RARITY_HEX[p.key as Rarity];
+              return (
+                <button
+                  key={p.key}
+                  onClick={() => setFilter(p.key)}
+                  className="rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors"
+                  style={{ borderColor: active ? hex : `${hex}40`, color: active ? "#fff" : hex, background: active ? `${hex}28` : "transparent" }}
+                >
+                  {p.label} <span className="opacity-60">{p.count}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="relative ml-auto min-w-[160px] flex-1 sm:max-w-[240px]">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Im Pool suchen…"
+              className="w-full rounded-lg border border-white/10 bg-black/30 py-1.5 pl-8 pr-3 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+            />
+          </div>
+        </div>
 
-      {hidden > 0 && (
-        <p className="mt-2 text-center text-[11px] text-zinc-500">
-          +{hidden.toLocaleString("de-DE")} weitere im Pool — über die Rarität-Filter eingrenzen.
-        </p>
-      )}
+        {/* Grid */}
+        <div ref={scrollRef} className="grid gap-2.5 overflow-y-auto p-4" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cfg.poolMinColWidth}px, 1fr))` }}>
+          {filtered.length === 0 ? (
+            <p className="col-span-full py-10 text-center text-sm text-zinc-500">Keine Treffer.</p>
+          ) : (
+            filtered.map((p, i) => {
+              const hex = RARITY_HEX[p.rarity];
+              const subj = poolEntryToSubject(p);
+              const character = subj.kind === "item" && needsCharacter(p.type, cfg);
+              return (
+                <button
+                  key={`${p.rarity}-${p.type}-${p.name}-${i}`}
+                  onClick={() => setSubject(subj)}
+                  className="group relative flex flex-col items-center gap-1 overflow-hidden rounded-xl border bg-black/30 p-2 text-center transition-all hover:scale-[1.04]"
+                  style={{ borderColor: `${hex}45`, boxShadow: `0 0 12px ${hex}18` }}
+                >
+                  <div className="pointer-events-none absolute inset-0 opacity-[0.14]" style={{ background: `radial-gradient(ellipse at 50% 25%, ${hex} 0%, transparent 72%)` }} />
+                  <div className="relative w-full" style={{ height: cfg.poolCardHeight }}>
+                    <CaseDropView
+                      subject={subj}
+                      viewIndex={viewBase + (i % 80)}
+                      rotate={cfg.autoRotate}
+                      rotateSpeed={cfg.rotateSpeed}
+                      lazy
+                      rootRef={scrollRef}
+                      gender={gender}
+                      character={character}
+                      scale={cfg.reelItemScale}
+                      fallbackColor={hex}
+                    />
+                  </div>
+                  <span className="relative w-full truncate text-[11px] font-semibold text-zinc-100">{p.name}</span>
+                  <span className="relative flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: hex }} />
+                    <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: hex }}>
+                      {p.extra ? EXTRA_KIND_LABEL[p.extra.kind] : getTypeLabel(p.type)}
+                    </span>
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </motion.div>
 
       {subject && <UniversalPreviewModal subject={subject} onClose={() => setSubject(null)} />}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -455,11 +518,20 @@ interface CaseOpeningSectionProps {
   onCreditsChange: (newCredits: number) => void;
   /** Section position — reserves a unique block of shared-Canvas View indices. */
   index?: number;
+  gender?: "m" | "w";
+  cfg?: CaseDisplayConfig;
+  /** True when any section's modal/popup is open → suppress reel 3D (no bleed). */
+  anyModalOpen?: boolean;
+  /** Report this section's modal/popup open-state up to the shell. */
+  onModalChange?: (index: number, open: boolean) => void;
 }
 
 type Phase = "idle" | "pending" | "spinning" | "result" | "batch_pending" | "batch_result";
 
-export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCreditsChange, index = 0 }: CaseOpeningSectionProps) {
+export function CaseOpeningSection({
+  group, credits, previewPool, poolSize, onCreditsChange, index = 0,
+  gender = "m", cfg = DEFAULT_CASE_DISPLAY_CONFIG, anyModalOpen = false, onModalChange,
+}: CaseOpeningSectionProps) {
   // Reserve a 4000-wide block of View indices for this section so reel slots,
   // the win reveal, the batch grid and the pool gallery never collide with
   // another case group rendering into the same shared Canvas.
@@ -479,6 +551,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   const [batchMode, setBatchMode] = useState(false);
   // sofortQueued: true when SOFORT was clicked during pending — gives visual feedback
   const [sofortQueued, setSofortQueued] = useState(false);
+  const [poolOpen, setPoolOpen] = useState(false);
   const mounted = useRef(false);
   const fetchingRef = useRef(false);
   const caseReelRef = useRef<CaseReelHandle>(null);
@@ -523,6 +596,16 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
     document.documentElement.setAttribute("data-case-spinning", "true");
     return () => document.documentElement.removeAttribute("data-case-spinning");
   }, [phase]);
+
+  // Tell the shell when a full-screen modal/popup is open so reel 3D from every
+  // section can be suppressed (the shared canvas otherwise bleeds over modals).
+  useEffect(() => {
+    onModalChange?.(index, poolOpen || phase === "batch_result");
+  }, [poolOpen, phase, index, onModalChange]);
+
+  // Reel must not draw 3D when a modal is open OR while the win reveal overlay
+  // covers it (otherwise reel items render on top of the overlay).
+  const reelSuppressed = anyModalOpen || phase === "result";
 
   async function handleOpen(tier: CaseTier) {
     if (fetchingRef.current || phase !== "idle") return;
@@ -574,13 +657,16 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
       name: drop.name,
       subject: dropToSubject(drop),
     };
-    // Generous pre-target filler guarantees the winning slot is always far to
-    // the left of wherever the warmup left the strip, so the deceleration is a
-    // long, continuous, same-direction spin no matter when the server responds.
-    const before = buildFiller(55, "before", previewPool, group.itemTypes);
+    // CLEAN, POP-FREE START: prepend the EXACT current idle strip (twice) so the
+    // items already visible during the warmup stay identical at the same indices
+    // when we switch to the spin strip — no content swap, no flicker, no restart.
+    // Then a long filler run + the target guarantees a long continuous spin.
+    const idle = idleReelRef.current;
+    const before = buildFiller(48, "before", previewPool, group.itemTypes);
     const after = buildFiller(8, "after", previewPool, group.itemTypes);
-    setReel([...before, target, ...after]);
-    setTargetIndex(before.length);
+    const spinReel = [...idle, ...idle, ...before, target, ...after];
+    setReel(spinReel);
+    setTargetIndex(idle.length * 2 + before.length);
     sound.caseOpen();
     setPhase("spinning");
     setSpinToken((t) => t + 1);
@@ -746,6 +832,9 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
             warmup={phase === "pending"}
             spinToken={spinToken}
             viewBase={reelViewBase}
+            cfg={cfg}
+            gender={gender}
+            suppressed={reelSuppressed}
             onTick={sound.tick}
             onSpinComplete={() => {
               setPhase((p) => (p === "spinning" ? "result" : p));
@@ -779,13 +868,16 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
                   transition={{ type: "spring", stiffness: 260, damping: 18 }}
                   className="relative z-10 flex flex-col items-center gap-1"
                 >
-                  <div className="relative w-[120px]" style={{ height: 84 }}>
+                  <div className="relative" style={{ width: 180 * cfg.revealScale, height: 150 * cfg.revealScale }}>
                     <CaseDropView
                       subject={dropToSubject(wonDrop)}
                       viewIndex={winViewIndex}
-                      rotate
-                      rotateSpeed={0.85}
+                      rotate={cfg.autoRotate}
+                      rotateSpeed={cfg.rotateSpeed * 1.3}
                       shadow
+                      gender={gender}
+                      character={wonDrop.kind === "item" && needsCharacter(wonDrop.item.type, cfg)}
+                      scale={cfg.reelItemScale}
                     />
                   </div>
                   <span className="glow-text text-lg font-bold text-zinc-50">{wonDrop.name}</span>
@@ -933,6 +1025,8 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
           <BatchResultGrid
             items={batchDrops}
             viewBase={batchViewBase}
+            cfg={cfg}
+            gender={gender}
             onClose={() => {
               setBatchDrops([]);
               setPhase("idle");
@@ -955,8 +1049,29 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
         <ChanceBar weights={group.premium.rarityWeights} />
       </div>
 
-      {/* Full 3D pool gallery — everything winnable from this case */}
-      <PoolGallery pool={poolWithExtras} viewBase={poolViewBase} />
+      {/* Pool — opens a filterable 3D popup (kept off the page so cases stay compact) */}
+      <div className="mt-4 flex justify-center">
+        <button
+          onMouseEnter={sound.hover}
+          onClick={() => { sound.click(); setPoolOpen(true); }}
+          className="flex items-center gap-2 rounded-xl border border-purple-400/40 bg-purple-500/10 px-5 py-2.5 text-sm font-bold text-purple-200 transition-all hover:scale-[1.03] hover:bg-purple-500/20"
+        >
+          <Package className="h-4 w-4" />
+          Pool ansehen
+          <span className="rounded-full bg-purple-500/25 px-2 py-0.5 text-xs">{poolSize.toLocaleString("de-DE")}</span>
+        </button>
+      </div>
+
+      {poolOpen && (
+        <PoolPopup
+          pool={poolWithExtras}
+          viewBase={poolViewBase}
+          cfg={cfg}
+          gender={gender}
+          title={group.title}
+          onClose={() => setPoolOpen(false)}
+        />
+      )}
     </section>
   );
 }

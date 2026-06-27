@@ -11,7 +11,7 @@
 // costs only what is actually visible.
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import * as THREE from "three";
 import { Coins, Sparkles } from "lucide-react";
 import { useFrame } from "@react-three/fiber";
@@ -21,14 +21,59 @@ import {
   ItemLights,
   getCam,
   type ItemForPreview,
+  type CamCfg,
 } from "@/components/shop/shop-character-view";
+import { CharacterModel } from "@/components/world/character-model";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { BadgePill } from "@/components/ui/badge-pill";
 import type { PreviewSubject } from "@/components/ui/universal-preview-modal";
 import { RARITY_HEX } from "@/lib/rarity-colors";
 import type { Rarity } from "@/lib/cases";
+import type { EquippedItem } from "@/lib/rarity-colors";
 
 export type { ItemForPreview };
+
+// ── Character-mode framing (worn items rendered on a body) ───────────────────
+
+const CHAR_GROUP_Y = -0.95;
+const CHAR_CAM: Record<string, CamCfg> = {
+  hat:    { pos: [0, 0.95, 2.3], target: [0, 0.85, 0], fov: 32 },
+  hair:   { pos: [0, 0.95, 2.2], target: [0, 0.85, 0], fov: 32 },
+  face:   { pos: [0, 0.9, 2.0],  target: [0, 0.85, 0], fov: 30 },
+  jacket: { pos: [0, 0.4, 3.0],  target: [0, 0.35, 0], fov: 34 },
+  pants:  { pos: [0, -0.1, 3.0], target: [0, -0.1, 0], fov: 34 },
+  shoes:  { pos: [0, -0.25, 2.6], target: [0, -0.55, 0], fov: 34 },
+};
+const CHAR_CAM_DEFAULT: CamCfg = { pos: [0, 0.4, 3.2], target: [0, 0.3, 0], fov: 34 };
+
+function getCharCam(type: string): CamCfg {
+  return CHAR_CAM[type] ?? CHAR_CAM_DEFAULT;
+}
+
+function toEquipped(item: ItemForPreview): EquippedItem {
+  return {
+    id: item.id,
+    name: item.name,
+    rarity: item.rarity as EquippedItem["rarity"],
+    damage: item.damage,
+    armor: item.armor,
+    perk_type: item.perk_type as EquippedItem["perk_type"],
+    perk_magnitude: item.perk_magnitude,
+    shield_hp: item.shield_hp,
+    shield_regen_cooldown_sec: item.shield_regen_cooldown_sec,
+  };
+}
+
+/** Renders a worn item on an otherwise-empty character so it reads correctly
+ * (e.g. hair needs a head). Gender-aware per the viewing player. */
+function CharacterPreviewScene({ item, gender }: { item: ItemForPreview; gender: "m" | "w" }) {
+  const equipped: Record<string, EquippedItem | undefined> = { [item.type]: toEquipped(item) };
+  return (
+    <group position={[0, CHAR_GROUP_Y, 0]}>
+      <CharacterModel equippedByCategory={equipped} gender={gender} />
+    </group>
+  );
+}
 
 /** Static camera aimed once at the item's type-specific target (no controls). */
 function CameraRig({ cfg }: { cfg: ReturnType<typeof getCam> }) {
@@ -71,6 +116,10 @@ export interface CaseItem3DProps {
   /** Soft contact shadow under the item (hero/reveal only — costs a render). */
   shadow?: boolean;
   gender?: "m" | "w";
+  /** Render the item worn on a character body (hair/face/clothes read better). */
+  character?: boolean;
+  /** Camera zoom multiplier (>1 = closer/bigger). */
+  scale?: number;
 }
 
 export function CaseItem3D({
@@ -81,8 +130,15 @@ export function CaseItem3D({
   rotateSpeed,
   shadow = false,
   gender = "m",
+  character = false,
+  scale = 1,
 }: CaseItem3DProps) {
-  const cfg = getCam(item.type);
+  const baseCfg = character ? getCharCam(item.type) : getCam(item.type);
+  const z = Math.max(0.4, scale || 1);
+  const cfg: CamCfg = {
+    ...baseCfg,
+    pos: [baseCfg.pos[0] / z, baseCfg.pos[1], baseCfg.pos[2] / z],
+  };
 
   return (
     <View
@@ -94,9 +150,13 @@ export function CaseItem3D({
       <ItemLights />
       <Suspense fallback={null}>
         <AutoSpin enabled={rotate} speed={rotateSpeed}>
-          <ItemSceneContent item={item} gender={gender} />
+          {character ? (
+            <CharacterPreviewScene item={item} gender={gender} />
+          ) : (
+            <ItemSceneContent item={item} gender={gender} />
+          )}
         </AutoSpin>
-        {shadow && (
+        {shadow && !character && (
           <ContactShadows
             position={[0, -0.6, 0]}
             opacity={0.28}
@@ -175,6 +235,13 @@ export interface CaseDropViewProps {
   shadow?: boolean;
   lazy?: boolean;
   fallbackColor?: string;
+  gender?: "m" | "w";
+  /** Render worn items on a character body. */
+  character?: boolean;
+  /** Camera zoom multiplier. */
+  scale?: number;
+  /** Scroll container for lazy intersection clipping (pool popup). */
+  rootRef?: RefObject<Element | null>;
 }
 
 /**
@@ -192,6 +259,10 @@ export function CaseDropView({
   shadow = false,
   lazy = false,
   fallbackColor = "#7c3aed",
+  gender = "m",
+  character = false,
+  scale = 1,
+  rootRef,
 }: CaseDropViewProps) {
   if (subject.kind === "item") {
     return lazy ? (
@@ -201,6 +272,10 @@ export function CaseDropView({
         rotate={rotate}
         rotateSpeed={rotateSpeed}
         fallbackColor={fallbackColor}
+        gender={gender}
+        character={character}
+        scale={scale}
+        rootRef={rootRef}
       />
     ) : (
       <CaseItem3D
@@ -210,6 +285,9 @@ export function CaseDropView({
         rotate={rotate}
         rotateSpeed={rotateSpeed}
         shadow={shadow}
+        gender={gender}
+        character={character}
+        scale={scale}
       />
     );
   }
@@ -227,29 +305,27 @@ export function CaseDropView({
  */
 export function LazyCaseItem3D({
   fallbackColor = "#7c3aed",
+  rootRef,
   ...props
-}: CaseItem3DProps & { fallbackColor?: string }) {
+}: CaseItem3DProps & { fallbackColor?: string; rootRef?: RefObject<Element | null> }) {
   const ref = useRef<HTMLDivElement>(null);
   const [show, setShow] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // Continuously mount/unmount so a 900+ item pool only ever holds a handful
+    // of live 3D scenes, and nothing renders outside the scroll container (no
+    // leak). root = the popup scroll area clips it precisely.
     const io = new IntersectionObserver(
       (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            setShow(true);
-            io.disconnect();
-            break;
-          }
-        }
+        for (const e of entries) setShow(e.isIntersecting);
       },
-      { rootMargin: "240px" },
+      { root: rootRef?.current ?? null, rootMargin: "0px" },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, []);
+  }, [rootRef]);
 
   return (
     <div ref={ref} className="absolute inset-0">
@@ -257,9 +333,9 @@ export function LazyCaseItem3D({
         <CaseItem3D {...props} />
       ) : (
         <div
-          className="absolute inset-0 animate-pulse rounded-md"
+          className="absolute inset-0 rounded-md"
           style={{
-            background: `radial-gradient(circle at 50% 45%, ${fallbackColor}33 0%, transparent 70%)`,
+            background: `radial-gradient(circle at 50% 45%, ${fallbackColor}22 0%, transparent 70%)`,
           }}
         />
       )}

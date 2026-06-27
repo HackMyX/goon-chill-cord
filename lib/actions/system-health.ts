@@ -132,6 +132,7 @@ const SINGLETON_CONFIGS: Array<{ id: string; table: string; name: string; catego
   { id: "cfg_game_lb",    table: "game_leaderboard_config", name: "game_leaderboard_config (default)", category: "Spielebestenlisten" },
   { id: "cfg_music",      table: "music_config",            name: "music_config (default)",           category: "Musik-System" },
   { id: "cfg_theme",      table: "theme_config",            name: "theme_config (default)",           category: "Theming-Engine" },
+  { id: "cfg_case_display", table: "case_display_config",   name: "case_display_config (default)",     category: "Cases" },
   { id: "cfg_daily_quest", table: "daily_quest_config",     name: "daily_quest_config (default)",     category: "Daily Quests" },
 ];
 

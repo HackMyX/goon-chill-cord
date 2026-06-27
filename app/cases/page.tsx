@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { createClient } from "@/lib/supabase/server";
 import { CasesShell } from "@/components/cases/cases-shell";
 import { getCaseConfig } from "@/lib/cases-config";
+import { getCaseDisplayConfig } from "@/lib/actions/case-display";
 import { type Rarity } from "@/lib/cases";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { redirect } from "next/navigation";
@@ -15,7 +16,7 @@ export default async function CasesPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("credits, streak_days, username, role")
+    .select("credits, streak_days, username, role, gender")
     .eq("id", user.id)
     .single();
 
@@ -40,7 +41,7 @@ export default async function CasesPage() {
           .from("items")
           .select("rarity, type, name", { count: "exact" })
           .in("id", allIds)
-          .limit(200);
+          .limit(2000);
         pool = data; count = cnt;
       } else {
         const types = Array.from(
@@ -53,7 +54,7 @@ export default async function CasesPage() {
           .from("items")
           .select("rarity, type, name", { count: "exact" })
           .in("type", types)
-          .limit(100);
+          .limit(2000);
         pool = data; count = cnt;
       }
 
@@ -69,6 +70,8 @@ export default async function CasesPage() {
     })
   );
 
+  const gender: "m" | "w" = profile?.gender === "w" ? "w" : "m";
+
   return (
     <CasesShell
       initialCredits={profile?.credits ?? 0}
@@ -76,6 +79,8 @@ export default async function CasesPage() {
       streakDays={profile?.streak_days ?? 0}
       caseGroups={caseGroups}
       caseGroupPreviews={caseGroupPreviews}
+      gender={gender}
+      displayConfig={await getCaseDisplayConfig()}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}
     />
