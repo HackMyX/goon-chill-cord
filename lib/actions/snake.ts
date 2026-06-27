@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
 import { broadcastLive } from "@/lib/realtime-broadcast";
 import {
   DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG, DEFAULT_FARM_CONFIG,
-  type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig, type SnakeMode,
+  DEFAULT_THEME_X1, DEFAULT_THEME_X2, DEFAULT_THEME_GRIND, DEFAULT_THEME_FARM,
+  type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig, type SnakeMode, type SnakeModeTheme,
 } from "@/lib/snake-config";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
@@ -136,7 +138,29 @@ export async function updateSnakeConfig(
     return (v !== null && v !== undefined) ? Math.max(1, Math.round(v)) : null;
   }
 
+  const hexOr = (v: unknown, fallback: string): string =>
+    typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v) ? v : fallback;
+  const sanitizeTheme = (raw: Partial<SnakeModeTheme> | undefined, def: SnakeModeTheme): SnakeModeTheme => {
+    const r = raw ?? {};
+    return {
+      bg: hexOr(r.bg, def.bg),
+      gridColor: hexOr(r.gridColor, def.gridColor),
+      snakeHead: hexOr(r.snakeHead, def.snakeHead),
+      snakeTail: hexOr(r.snakeTail, def.snakeTail),
+      snakeGlow: hexOr(r.snakeGlow, def.snakeGlow),
+      appleColor: hexOr(r.appleColor, def.appleColor),
+      appleGlow: hexOr(r.appleGlow, def.appleGlow),
+      goldenColor: hexOr(r.goldenColor, def.goldenColor),
+      borderColor: hexOr(r.borderColor, def.borderColor),
+    };
+  };
+  const cleanText = (v: unknown, fallback: string, max: number): string =>
+    typeof v === "string" && v.trim() ? v.trim().slice(0, max) : fallback;
+
   const sanitizedX1: SnakeModeConfig = {
+    label: cleanText(input.x1.label, DEFAULT_X1_CONFIG.label, 24),
+    sublabel: cleanText(input.x1.sublabel, DEFAULT_X1_CONFIG.sublabel, 80),
+    theme: sanitizeTheme(input.x1.theme, DEFAULT_THEME_X1),
     enabled: input.x1.enabled,
     boardSize: clamp(input.x1.boardSize, 10, 50),
     creditsPerApple: clamp(input.x1.creditsPerApple, 1, 10000),
@@ -160,6 +184,9 @@ export async function updateSnakeConfig(
   };
 
   const sanitizedX2: SnakeModeConfig = {
+    label: cleanText(input.x2.label, DEFAULT_X2_CONFIG.label, 24),
+    sublabel: cleanText(input.x2.sublabel, DEFAULT_X2_CONFIG.sublabel, 80),
+    theme: sanitizeTheme(input.x2.theme, DEFAULT_THEME_X2),
     enabled: input.x2.enabled,
     boardSize: clamp(input.x2.boardSize, 10, 50),
     creditsPerApple: clamp(input.x2.creditsPerApple, 1, 10000),
@@ -183,6 +210,9 @@ export async function updateSnakeConfig(
   };
 
   const sanitizedGrind: SnakeGrindConfig = {
+    label: cleanText(input.grind.label, DEFAULT_GRIND_CONFIG.label, 24),
+    sublabel: cleanText(input.grind.sublabel, DEFAULT_GRIND_CONFIG.sublabel, 80),
+    theme: sanitizeTheme(input.grind.theme, DEFAULT_THEME_GRIND),
     enabled: input.grind.enabled,
     boardSize: clamp(input.grind.boardSize, 16, 128),
     creditsPerApple: clamp(input.grind.creditsPerApple, 1, 10000),
@@ -209,6 +239,9 @@ export async function updateSnakeConfig(
   };
 
   const sanitizedFarm: SnakeModeConfig = {
+    label: cleanText(input.farm.label, DEFAULT_FARM_CONFIG.label, 24),
+    sublabel: cleanText(input.farm.sublabel, DEFAULT_FARM_CONFIG.sublabel, 80),
+    theme: sanitizeTheme(input.farm.theme, DEFAULT_THEME_FARM),
     enabled: input.farm.enabled,
     boardSize: clamp(input.farm.boardSize, 10, 50),
     creditsPerApple: clamp(input.farm.creditsPerApple, 1, 10000),
@@ -293,8 +326,15 @@ export async function submitSnakeScore(
   const modeCfg = speedMode === "grind" ? config.grind : speedMode === "x2" ? config.x2 : speedMode === "farm" ? config.farm : config.x1;
   if (!modeCfg.enabled) return { success: false, error: `Snake ${speedMode} ist deaktiviert.` };
 
+  // Equipped ability (mutually exclusive): snake_cr_per_apple adds a flat bonus
+  // per apple, credit_bonus multiplies the whole earning. Both are folded into
+  // the base BEFORE the daily/sanity clamps so they still respect the limits.
+  const snakeEff = await getActiveEquippedAbilityEffect(admin, user.id);
+  const abilityFlat = snakeEff?.effectType === "snake_cr_per_apple" ? Math.round(score * snakeEff.effectValue) : 0;
+  const abilityMult = snakeEff?.effectType === "credit_bonus" && snakeEff.effectValue > 0 ? 1 + snakeEff.effectValue : 1;
+
   // Daily CR limit check
-  let actualCredits = creditsEarned;
+  let actualCredits = Math.round((creditsEarned + abilityFlat) * abilityMult);
   if (modeCfg.dailyCrLimit !== null) {
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
@@ -311,7 +351,7 @@ export async function submitSnakeScore(
     }, 0);
 
     const remaining = Math.max(0, modeCfg.dailyCrLimit - earnedToday);
-    actualCredits = Math.min(creditsEarned, remaining);
+    actualCredits = Math.min(actualCredits, remaining);
   }
 
   // Daily game limit check
@@ -342,7 +382,8 @@ export async function submitSnakeScore(
     + (speedMode === "grind"
       ? Math.ceil(score / Math.max(1, (modeCfg as SnakeGrindConfig).shrinkEveryN)) * (modeCfg as SnakeGrindConfig).bonusCrPerShrink
       : 0);
-  actualCredits = Math.min(actualCredits, sanityMax);
+  // Widen the anti-cheat cap by the legit server-side ability bonus.
+  actualCredits = Math.min(actualCredits, Math.round((sanityMax + abilityFlat) * abilityMult));
 
   const { data: current } = await admin
     .from("snake_best_scores")

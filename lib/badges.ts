@@ -39,6 +39,69 @@ export const SYSTEM_BADGE_KEYS: string[] = ["premium", "elite", "mod", "admin"];
 /** Badges auto-awarded by the system based on achievements */
 export const AUTO_BADGE_KEYS: string[] = ["ns_collector", "ns_mythisch", "ns_ultra"];
 
+/**
+ * Canonical prestige order, most important first. Drives the auto-equip
+ * fallback (which of a user's owned badges to pin when they haven't chosen
+ * any themselves) and the single-badge pick in chat — one shared ranking so
+ * every surface agrees on which badge "wins". Anything not listed ranks last
+ * (in its definition order) but is still eligible.
+ */
+export const BADGE_DISPLAY_PRIORITY: string[] = [
+  "admin",
+  "mod",
+  "elite",
+  "premium",
+  "vip",
+  "og",
+  "ns_ultra",
+  "ns_mythisch",
+  "ns_collector",
+  "season_vet",
+  "grinder",
+  "verified",
+  "streaker",
+  "helper",
+];
+
+/** Rank of a badge key in BADGE_DISPLAY_PRIORITY (lower = more important). */
+export function badgeRank(key: string): number {
+  const i = BADGE_DISPLAY_PRIORITY.indexOf(key);
+  return i === -1 ? BADGE_DISPLAY_PRIORITY.length : i;
+}
+
+/**
+ * THE single source of truth for which badges appear next to a username
+ * everywhere except the main profile (which shows every owned badge).
+ *
+ *  - `custom === true`  → show exactly the user's pinned `chosen` keys
+ *    (filtered to ones they still own, capped at `max`). Strict: nothing
+ *    else is ever shown, matching "set Prio-Badges → überall strikt nur diese".
+ *    If their entire pinned set has been revoked, falls back to auto so the
+ *    nametag is never blank.
+ *  - `custom === false` → auto-equip their `max` most prestigious owned
+ *    badges (BADGE_DISPLAY_PRIORITY), matching "stellt der User nichts ein,
+ *    rüsten sich die ersten 2 Badges automatisch aus".
+ *
+ * Pure + deterministic so it can run on both the server (persisting the
+ * result into profiles.prio_badges) and the client.
+ */
+export function resolveDisplayBadges(
+  chosen: string[] | null | undefined,
+  owned: string[] | null | undefined,
+  custom: boolean,
+  max = 2,
+): string[] {
+  const ownedSet = new Set(owned ?? []);
+  const auto = () =>
+    [...ownedSet].sort((a, b) => badgeRank(a) - badgeRank(b)).slice(0, Math.max(0, max));
+
+  if (custom) {
+    const pinned = (chosen ?? []).filter((k) => ownedSet.has(k)).slice(0, Math.max(0, max));
+    return pinned.length > 0 ? pinned : auto();
+  }
+  return auto();
+}
+
 export function getBadgeStyle(key: string): {
   bg: string;
   text: string;

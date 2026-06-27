@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
 import { broadcastLive } from "@/lib/realtime-broadcast";
 import { DEFAULT_PLINKO_CONFIG, type PlinkoConfig, type PlinkoRiskLevel } from "@/lib/plinko-types";
 export type { PlinkoConfig, PlinkoRiskLevel } from "@/lib/plinko-types";
@@ -283,10 +284,28 @@ export async function dropPlinkoBall(input: {
   const multipliers = riskDef.multipliers;
   const bucketCount = multipliers.length;
   const clampedIdx = Math.min(bucketIndex, bucketCount - 1);
-  const multiplier = multipliers[clampedIdx];
+  let multiplier = multipliers[clampedIdx];
+
+  // Equipped ability (mutually exclusive): boost all multipliers, recover part
+  // of a worst-slot loss, or globally boost winnings (credit_bonus).
+  const plinkoEff = await getActiveEquippedAbilityEffect(admin, user.id);
+  if (plinkoEff?.effectType === "plinko_multiplier_boost" && plinkoEff.effectValue > 0) {
+    multiplier = multiplier * (1 + plinkoEff.effectValue);
+  }
 
   let payout = Math.floor(input.betAmount * multiplier);
   if (config.maxWinCr > 0) payout = Math.min(payout, config.maxWinCr);
+
+  // Loss recovery: refund a fraction of the bet when landing on the lowest slot.
+  if (plinkoEff?.effectType === "plinko_loss_recovery" && plinkoEff.effectValue > 0
+      && payout < input.betAmount && multiplier <= Math.min(...multipliers)) {
+    payout = Math.min(input.betAmount, payout + Math.floor(input.betAmount * plinkoEff.effectValue));
+  }
+  // credit_bonus boosts only the winnings (not the staked bet).
+  if (plinkoEff?.effectType === "credit_bonus" && plinkoEff.effectValue > 0 && payout > input.betAmount) {
+    payout = input.betAmount + Math.floor((payout - input.betAmount) * (1 + plinkoEff.effectValue));
+    if (config.maxWinCr > 0) payout = Math.min(payout, config.maxWinCr);
+  }
 
   const netChange = payout - input.betAmount;
   const newCredits = Math.max(0, currentCredits + netChange);

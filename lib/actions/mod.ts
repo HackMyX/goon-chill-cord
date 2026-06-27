@@ -258,7 +258,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, created_at, updated_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending, escalated_to_admin, escalated_to_user_id")
+    .select("id, user_id, subject, description, status, category, priority, created_at, updated_at, closed_at, closed_by, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending, escalated_to_admin, escalated_to_user_id, suggestion_outcome")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -298,6 +298,7 @@ export async function getModTickets(): Promise<ModTicket[]> {
       escalatedToAdmin: ((t as Record<string, unknown>).escalated_to_admin as boolean) ?? false,
       escalatedToUserId,
       escalatedToUsername: escalatedToUserId ? (byId.get(escalatedToUserId)?.username ?? null) : null,
+      suggestionOutcome: ((t as Record<string, unknown>).suggestion_outcome as "accepted" | "declined" | null) ?? null,
     };
   });
 }
@@ -913,6 +914,114 @@ export async function modRemoveTicketReward(
     await syncTicketRewardSummary(admin, (reward as Record<string, unknown>).ticket_id as string, user.id, now);
     return { success: true };
   } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Decide a SUGGESTION ticket: accept (→ resolved, with an optional immediate
+ * auto-reward wired straight into the reward system) or decline (→ closed).
+ * This is the formal "Vorschlag angenommen/abgelehnt" flow — distinct from a
+ * generic status change, and tracked via tickets.suggestion_outcome.
+ */
+export async function modDecideSuggestion(
+  ticketId: string,
+  decision: "accepted" | "declined",
+  opts: { rewardCredits?: number; note?: string } = {}
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser, user.id);
+    if (!perms.canCloseTickets && !perms.canUpdateTicketStatus) {
+      return { success: false, error: "Keine Berechtigung, Vorschläge zu entscheiden." };
+    }
+
+    const admin = createAdminClient();
+    const { data: ticket } = await admin
+      .from("tickets")
+      .select("user_id, subject, category, status")
+      .eq("id", ticketId)
+      .single();
+    if (!ticket) return { success: false, error: "Ticket nicht gefunden." };
+    if ((ticket as Record<string, unknown>).category !== "suggestion") {
+      return { success: false, error: "Nur Vorschläge können angenommen oder abgelehnt werden." };
+    }
+
+    const now = new Date().toISOString();
+    const credits = Math.max(0, Math.floor(opts.rewardCredits ?? 0));
+
+    if (decision === "accepted") {
+      // Auto-reward (immediate) — respects the reward permission + per-ticket limit.
+      if (credits > 0) {
+        if (!perms.canRewardTickets) {
+          return { success: false, error: "Keine Berechtigung für Belohnungen — nimm ohne Belohnung an oder bitte einen Admin." };
+        }
+        if (perms.maxRewardPerTicket > 0) {
+          const { data: existing } = await admin
+            .from("ticket_rewards").select("credits").eq("ticket_id", ticketId).is("paid_at", null);
+          const existingTotal = (existing ?? []).reduce((s, r) => s + ((r as Record<string, unknown>).credits as number), 0);
+          if (existingTotal + credits > perms.maxRewardPerTicket) {
+            const remaining = Math.max(0, perms.maxRewardPerTicket - existingTotal);
+            return { success: false, error: `Belohnungslimit: nur noch ${remaining} Credits verfügbar (max ${perms.maxRewardPerTicket}).` };
+          }
+        }
+        const { error: rErr } = await admin.from("ticket_rewards").insert({
+          ticket_id: ticketId, granted_by: user.id, credits,
+          note: opts.note?.trim() || "Vorschlag angenommen", deferred: false, granted_at: now, paid_at: now,
+        });
+        if (rErr) return { success: false, error: rErr.message };
+        const { data: tp } = await admin.from("profiles").select("credits").eq("id", ticket.user_id).single();
+        await admin.from("profiles").update({ credits: ((tp?.credits as number) ?? 0) + credits }).eq("id", ticket.user_id);
+        await syncTicketRewardSummary(admin, ticketId, user.id, now);
+        try {
+          await admin.from("audit_logs").insert({
+            user_id: user.id, action: "ticket_reward_paid",
+            payload: { ticketId, recipientUserId: ticket.user_id, creditsAwarded: credits, reason: "suggestion_accepted" },
+          });
+        } catch { /* non-fatal */ }
+      }
+
+      await admin.from("tickets").update({
+        status: "resolved", suggestion_outcome: "accepted",
+        updated_at: now, closed_at: now, closed_by: user.id,
+      }).eq("id", ticketId);
+
+      await notifyUser({
+        userId: ticket.user_id,
+        type: "ticket_status",
+        title: "✅ Vorschlag angenommen!",
+        message: credits > 0
+          ? `Dein Vorschlag „${ticket.subject}" wurde angenommen — +${credits} Credits als Dankeschön!`
+          : `Dein Vorschlag „${ticket.subject}" wurde angenommen. Danke!`,
+        link: `/?openTicket=${ticketId}`,
+      });
+    } else {
+      await admin.from("tickets").update({
+        status: "closed", suggestion_outcome: "declined",
+        updated_at: now, closed_at: now, closed_by: user.id,
+      }).eq("id", ticketId);
+
+      await notifyUser({
+        userId: ticket.user_id,
+        type: "ticket_status",
+        title: "Vorschlag abgelehnt",
+        message: opts.note?.trim()
+          ? `Dein Vorschlag „${ticket.subject}" wurde abgelehnt: ${opts.note.trim()}`
+          : `Dein Vorschlag „${ticket.subject}" wurde leider abgelehnt.`,
+        link: `/?openTicket=${ticketId}`,
+      });
+    }
+
+    try {
+      await admin.from("audit_logs").insert({
+        user_id: user.id, action: "suggestion_decided",
+        payload: { ticketId, decision, credits, recipientUserId: ticket.user_id, subject: (ticket as Record<string, unknown>).subject },
+      });
+    } catch { /* non-fatal */ }
+
+    return { success: true };
+  } catch (e) {
+    void logDebugEvent({ level: "error", scope: "mod", message: "modDecideSuggestion fehlgeschlagen", detail: String(e), context: { ticketId, decision } });
     return { success: false, error: String(e) };
   }
 }

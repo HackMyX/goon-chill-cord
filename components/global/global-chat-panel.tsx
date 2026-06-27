@@ -7,6 +7,7 @@ import { getGlobalChatMessages, sendGlobalChatMessage, clearGlobalChat, type Glo
 import { useSoundManager } from "@/lib/sound-manager";
 import { BadgePill } from "@/components/ui/badge-pill";
 import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
+import { badgeRank } from "@/lib/badges";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { useFineConfig } from "@/lib/fine-config-context";
 
@@ -34,19 +35,16 @@ const ROLE_INITIAL_BG: Record<string, string> = {
   user:      "bg-zinc-700 text-zinc-300",
 };
 
-/** Priority order for badge display — higher index = shown first */
-const BADGE_PRIORITY = ["admin", "mod", "elite", "premium", "vip", "og", "verified", "streaker", "helper"];
-
 function pickDisplayBadge(badges: string[], role: string): string | null {
   // If role is admin or moderator, prefer the matching badge regardless
   if (role === "admin" && badges.includes("admin")) return "admin";
   if (role === "moderator" && badges.includes("mod")) return "mod";
 
-  // Return the highest-priority badge the user has
-  for (const key of BADGE_PRIORITY) {
-    if (badges.includes(key)) return key;
-  }
-  return null;
+  // Highest-priority owned badge by the canonical site-wide order (badgeRank),
+  // so this fallback agrees with resolveDisplayBadges everywhere else. Only
+  // used when a user has no prio_badges set at all.
+  if (badges.length === 0) return null;
+  return [...badges].sort((a, b) => badgeRank(a) - badgeRank(b))[0] ?? null;
 }
 
 

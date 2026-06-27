@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
+import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
+import { isAbilityActive } from "@/lib/actions/abilities";
 import { logDebugEvent } from "@/lib/debug-log-server";
 import {
   calculateLevel, buildLevelInfo,
@@ -99,7 +101,7 @@ export async function awardXp(
 
   // Check for XP boost ability
   let xpMultiplier = 1.0;
-  if (equippedKey) {
+  if (equippedKey && await isAbilityActive(admin, userId, equippedKey)) {
     try {
       const { data: abilityDef } = await admin
         .from("ability_definitions")
@@ -212,6 +214,7 @@ async function grantLevelRewards(
           { user_id: userId, badge_key: reward.badgeKey, awarded_at: new Date().toISOString() },
           { onConflict: "user_id,badge_key", ignoreDuplicates: true }
         );
+        await recomputeAutoPrioBadges(userId);
       } else if (reward.type === "name_style" && reward.nameStyleKey) {
         const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
         await ensureStyleInDb(reward.nameStyleKey, admin);

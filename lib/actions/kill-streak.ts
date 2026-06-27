@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { applyCreditBonus } from "@/lib/actions/abilities";
 import { broadcastLive } from "@/lib/realtime-broadcast";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
@@ -257,7 +258,8 @@ export async function commitStreakCr(): Promise<CommitStreakCrResult> {
     .single();
   if (!profile) return { success: false, error: "Profil konnte nicht geladen werden." };
 
-  const committed = profile.pending_streak_cr ?? 0;
+  // credit_bonus ability boosts the secured kill-streak payout.
+  const committed = await applyCreditBonus(admin, user.id, profile.pending_streak_cr ?? 0);
   const newCredits = profile.credits + committed;
 
   const { error } = await admin

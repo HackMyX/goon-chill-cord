@@ -7,7 +7,7 @@ import {
 import { updateSnakeConfig } from "@/lib/actions/snake";
 import {
   DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG, DEFAULT_FARM_CONFIG,
-  type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig,
+  type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig, type SnakeModeTheme,
 } from "@/lib/snake-config";
 import { useSoundManager } from "@/lib/sound-manager";
 import { AdminTooltip } from "@/components/admin/admin-tooltip";
@@ -78,6 +78,38 @@ function NullableNum({
   );
 }
 
+function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 w-10 shrink-0 cursor-pointer rounded border border-white/10 bg-transparent p-0"
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-20 rounded border border-white/10 bg-black/40 px-2 py-1 text-xs font-mono text-zinc-300 outline-none"
+      />
+    </div>
+  );
+}
+
+function TextInput({ value, onChange, maxLength, placeholder }: { value: string; onChange: (v: string) => void; maxLength?: number; placeholder?: string }) {
+  return (
+    <input
+      type="text"
+      value={value}
+      maxLength={maxLength}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full max-w-[260px] rounded border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-purple-400/50"
+    />
+  );
+}
+
 function Section({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-white/8 bg-black/10">
@@ -106,6 +138,9 @@ function ModeEditor<T extends SnakeModeConfig>({
   function set<K extends keyof T>(key: K, value: T[K]) {
     onChange({ ...cfg, [key]: value });
   }
+
+  const colorSet = (key: keyof SnakeModeTheme, v: string) =>
+    set("theme" as keyof T, { ...cfg.theme, [key]: v } as T[keyof T]);
 
   const grind = cfg as unknown as SnakeGrindConfig;
 
@@ -195,6 +230,43 @@ function ModeEditor<T extends SnakeModeConfig>({
       <Section label="Visuals" icon={<Layers className="h-3.5 w-3.5" />}>
         <Row label="Partikeleffekte aktiv">
           <Toggle checked={cfg.particlesEnabled} onChange={(v) => set("particlesEnabled" as keyof T, v as T[keyof T])} />
+        </Row>
+      </Section>
+
+      {/* Optik & Texte — per-mode colours + labels (everything configurable) */}
+      <Section label="Optik & Texte" icon={<span className="text-base">🎨</span>}>
+        <Row label="Modus-Name" hint="Anzeigename auf der Auswahl-Karte (z. B. Turbo)">
+          <TextInput value={cfg.label} maxLength={24} onChange={(v) => set("label" as keyof T, v as T[keyof T])} />
+        </Row>
+        <Row label="Beschreibung" hint="Kurzer Text unter dem Namen auf der Karte (leer = Auto-Statistik)">
+          <TextInput value={cfg.sublabel} maxLength={80} onChange={(v) => set("sublabel" as keyof T, v as T[keyof T])} />
+        </Row>
+        <Row label="Hintergrund" hint="Spielfeld-Hintergrundfarbe">
+          <ColorInput value={cfg.theme.bg} onChange={(v) => colorSet("bg", v)} />
+        </Row>
+        <Row label="Gitterlinien" hint="Grundton der Gitterlinien (Transparenz wird automatisch gesetzt)">
+          <ColorInput value={cfg.theme.gridColor} onChange={(v) => colorSet("gridColor", v)} />
+        </Row>
+        <Row label="Schlangenkopf" hint="Farbe des Schlangenkopfes">
+          <ColorInput value={cfg.theme.snakeHead} onChange={(v) => colorSet("snakeHead", v)} />
+        </Row>
+        <Row label="Schlangenschwanz" hint="Farbverlauf-Ende des Schlangenkörpers">
+          <ColorInput value={cfg.theme.snakeTail} onChange={(v) => colorSet("snakeTail", v)} />
+        </Row>
+        <Row label="Schlangen-Glow" hint="Leucht-Aura der Schlange (färbt auch Ambiente & Partikel)">
+          <ColorInput value={cfg.theme.snakeGlow} onChange={(v) => colorSet("snakeGlow", v)} />
+        </Row>
+        <Row label="Apfel" hint="Farbe des normalen Apfels">
+          <ColorInput value={cfg.theme.appleColor} onChange={(v) => colorSet("appleColor", v)} />
+        </Row>
+        <Row label="Apfel-Glow" hint="Leuchtfarbe des Apfels">
+          <ColorInput value={cfg.theme.appleGlow} onChange={(v) => colorSet("appleGlow", v)} />
+        </Row>
+        <Row label="Goldener Apfel" hint="Farbe des goldenen Apfels">
+          <ColorInput value={cfg.theme.goldenColor} onChange={(v) => colorSet("goldenColor", v)} />
+        </Row>
+        <Row label="Rahmen / Akzent" hint="Akzentfarbe für Rahmen, Glow-Schatten & Highlights">
+          <ColorInput value={cfg.theme.borderColor} onChange={(v) => colorSet("borderColor", v)} />
         </Row>
       </Section>
 

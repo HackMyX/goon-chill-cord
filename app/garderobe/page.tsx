@@ -4,7 +4,7 @@ import { WardrobeShell, type InventoryRow } from "@/components/wardrobe/wardrobe
 import { isAdmin, isModerator } from "@/lib/admin";
 import { getMyAbilities } from "@/lib/actions/abilities";
 import { getMyBadges } from "@/lib/actions/badges";
-import { getMyPrioBadges } from "@/lib/actions/prio-badges";
+import { getMyPrioBadgeState } from "@/lib/actions/prio-badges";
 import { getSiteConfig } from "@/lib/actions/site-config";
 
 export default async function GarderobePage() {
@@ -23,10 +23,10 @@ export default async function GarderobePage() {
     .eq("id", user.id)
     .single();
 
-  const [userAbilities, myBadges, myPrioBadges, siteConfig] = await Promise.all([
+  const [userAbilities, myBadges, prioState, siteConfig] = await Promise.all([
     getMyAbilities().catch(() => []),
     getMyBadges().catch(() => []),
-    getMyPrioBadges().catch(() => []),
+    getMyPrioBadgeState().catch(() => ({ keys: [] as string[], custom: false, locked: false })),
     getSiteConfig(),
   ]);
 
@@ -67,7 +67,8 @@ export default async function GarderobePage() {
       abilities={userAbilities}
       equippedAbilityKey={(profile?.equipped_ability_key as string | null) ?? null}
       initialBadges={myBadges}
-      initialPrioBadges={myPrioBadges}
+      initialPrioBadges={prioState.keys}
+      initialPrioLocked={prioState.locked}
       maxPrioBadges={siteConfig.maxPrioBadges}
     />
   );

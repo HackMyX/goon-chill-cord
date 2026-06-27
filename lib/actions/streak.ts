@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
 import { notifyUser } from "@/lib/notifications-internal";
 import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 import { getSiteConfig } from "@/lib/actions/site-config";
@@ -242,9 +243,21 @@ export async function claimDailyReward(): Promise<ClaimResult> {
     return { success: false, error: "Du hast deinen Reward heute schon abgeholt." };
   }
 
-  const decision = decideStreak(lastClaimDate, profile.streak_days ?? 0, now, config);
+  // Equipped ability (mutually exclusive): streak_grace_hours widens the grace
+  // window before a streak resets; credit_bonus boosts the reward.
+  const streakAdmin = createAdminClient();
+  const streakEff = await getActiveEquippedAbilityEffect(streakAdmin, user.id);
+  const graceBonus = streakEff?.effectType === "streak_grace_hours" ? streakEff.effectValue : 0;
+  const effConfig = graceBonus > 0
+    ? { ...config, gracePeriodHours: config.gracePeriodHours + graceBonus }
+    : config;
+
+  const decision = decideStreak(lastClaimDate, profile.streak_days ?? 0, now, effConfig);
   const result = computeStreakReward(decision.newStreak, config, now);
-  const newCredits = profile.credits + result.totalCredits;
+  const totalCreditsAwarded = streakEff?.effectType === "credit_bonus" && streakEff.effectValue > 0
+    ? Math.floor(result.totalCredits * (1 + streakEff.effectValue))
+    : result.totalCredits;
+  const newCredits = profile.credits + totalCreditsAwarded;
   const newBestStreak = Math.max(profile.best_streak_days ?? 0, decision.newStreak);
 
   // `.eq("last_claim_date", null)` is *not* the same as `IS NULL` in
@@ -285,7 +298,7 @@ export async function claimDailyReward(): Promise<ClaimResult> {
         newStreak: decision.newStreak,
         reward: result.reward,
         milestoneBonus: result.milestoneBonus,
-        totalCredits: result.totalCredits,
+        totalCredits: totalCreditsAwarded,
         newCredits: updatedRows[0].credits,
       },
     });
@@ -324,13 +337,13 @@ export async function claimDailyReward(): Promise<ClaimResult> {
     userId: user.id,
     type: "streak_claim",
     title: result.isMilestone ? "Streak-Meilenstein erreicht!" : "Daily-Reward abgeholt",
-    message: `${decision.newStreak} Tage in Folge — du hast ${result.totalCredits.toLocaleString("de-DE")} ${currencyName} erhalten.`,
+    message: `${decision.newStreak} Tage in Folge — du hast ${totalCreditsAwarded.toLocaleString("de-DE")} ${currencyName} erhalten.`,
     link: "/account",
   });
 
   return {
     success: true,
-    reward: result.totalCredits,
+    reward: totalCreditsAwarded,
     newStreak: decision.newStreak,
     isMilestone: result.isMilestone,
     newCredits: updatedRows[0].credits,

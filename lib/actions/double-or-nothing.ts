@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getDonConfig } from "@/lib/actions/don-config";
+import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
 
 export interface FlipResult {
   success: boolean;
@@ -18,6 +19,8 @@ export interface FlipResult {
   remainingFlips?: number;
   /** How many flips remain in the current hour after this one. */
   remainingHourlyFlips?: number;
+  /** True when the don_daily_shield ability absorbed a loss (no credits lost). */
+  shielded?: boolean;
 }
 
 export async function flipDouble(amount: number): Promise<FlipResult> {
@@ -30,7 +33,7 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   if (!user) return { success: false, error: "Du musst eingeloggt sein." };
 
   const [{ data: profile, error: profileError }, { currencyName }, config] = await Promise.all([
-    supabase.from("profiles").select("credits, don_upgrade_tier").eq("id", user.id).single(),
+    supabase.from("profiles").select("credits, don_upgrade_tier, equipped_ability_key, don_shield_used_at").eq("id", user.id).single(),
     getSiteConfig(),
     getDonConfig(),
   ]);
@@ -40,6 +43,16 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   if (!config.enabled) return { success: false, error: "Double or Nothing ist derzeit deaktiviert." };
 
   const adminClient = createAdminClient();
+
+  // Equipped ability (mutually exclusive): don_bonus_flips raises the daily cap,
+  // don_daily_shield absorbs one loss/day, credit_bonus boosts wins.
+  const donEff = await getActiveEquippedAbilityEffect(adminClient, user.id);
+  const bonusFlips = donEff?.effectType === "don_bonus_flips" ? Math.floor(donEff.effectValue) : 0;
+  const effectiveDailyLimit = config.dailyFlipLimit !== null ? config.dailyFlipLimit + bonusFlips : null;
+  const dayStartUtc = new Date(); dayStartUtc.setUTCHours(0, 0, 0, 0);
+  const shieldUsedAt = (profile as { don_shield_used_at?: string | null }).don_shield_used_at ?? null;
+  const shieldAvailable = !!donEff && donEff.effectType === "don_daily_shield"
+    && (!shieldUsedAt || new Date(shieldUsedAt) < dayStartUtc);
 
   // --- Anti-exploit: cooldown + daily flip limit ---
   try {
@@ -92,7 +105,7 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
       }
     }
 
-    if (config.dailyFlipLimit !== null) {
+    if (effectiveDailyLimit !== null) {
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
       const { count: todayFlips } = await adminClient
@@ -102,10 +115,10 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
         .eq("action", "double_or_nothing")
         .gte("created_at", todayStart.toISOString());
 
-      if ((todayFlips ?? 0) >= config.dailyFlipLimit) {
+      if ((todayFlips ?? 0) >= effectiveDailyLimit) {
         return {
           success: false,
-          error: `Tageslimit von ${config.dailyFlipLimit} Flips erreicht. Komm morgen wieder!`,
+          error: `Tageslimit von ${effectiveDailyLimit} Flips erreicht. Komm morgen wieder!`,
           remainingFlips: 0,
         };
       }
@@ -123,7 +136,16 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   if (stake <= 0) return { success: false, error: `Nicht genug ${currencyName}.` };
 
   const won = Math.random() < config.winChance;
-  const delta = won ? stake : -stake;
+  let delta = won ? stake : -stake;
+  let shielded = false;
+  if (!won && shieldAvailable) {
+    // Daily shield absorbs the loss — no credits lost.
+    delta = 0;
+    shielded = true;
+  } else if (won && donEff?.effectType === "credit_bonus" && donEff.effectValue > 0) {
+    // credit_bonus boosts the winnings.
+    delta = Math.floor(stake * (1 + donEff.effectValue));
+  }
   const newCredits = profile.credits + delta;
 
   const { data: updatedRows, error: updateError } = await supabase
@@ -135,6 +157,11 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
 
   if (updateError || !updatedRows || updatedRows.length === 0) {
     return { success: false, error: `Nicht genug ${currencyName}.` };
+  }
+
+  // Record that the daily shield was consumed (after the credit update succeeds).
+  if (shielded) {
+    await adminClient.from("profiles").update({ don_shield_used_at: new Date().toISOString() }).eq("id", user.id);
   }
 
   let remainingFlips: number | undefined;
@@ -163,9 +190,9 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
     await adminClient.from("audit_logs").insert({
       user_id: user.id,
       action: "double_or_nothing",
-      payload: { stake, won, newCredits: updatedRows[0].credits },
+      payload: { stake, won, shielded, newCredits: updatedRows[0].credits },
     });
-    remainingFlips = config.dailyFlipLimit !== null ? Math.max(0, config.dailyFlipLimit - ((usedAfter ?? 0) + 1)) : undefined;
+    remainingFlips = effectiveDailyLimit !== null ? Math.max(0, effectiveDailyLimit - ((usedAfter ?? 0) + 1)) : undefined;
     if (config.hourlyFlipLimit !== null) {
       const userUpgradeTier2 = (profile as { don_upgrade_tier?: number }).don_upgrade_tier ?? 0;
       let bonusFlips2 = 0;
@@ -183,10 +210,12 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
   await notifyUser({
     userId: user.id,
     type: "double_or_nothing",
-    title: won ? "Double or Nothing gewonnen!" : "Double or Nothing verloren",
+    title: won ? "Double or Nothing gewonnen!" : shielded ? "Schild hat dich gerettet!" : "Double or Nothing verloren",
     message: won
       ? `Du hast deinen Einsatz von ${stake.toLocaleString("de-DE")} ${currencyName} verdoppelt!`
-      : `Du hast deinen Einsatz von ${stake.toLocaleString("de-DE")} ${currencyName} verloren.`,
+      : shielded
+        ? `Dein Tages-Schild hat den Verlust von ${stake.toLocaleString("de-DE")} ${currencyName} abgefangen!`
+        : `Du hast deinen Einsatz von ${stake.toLocaleString("de-DE")} ${currencyName} verloren.`,
     link: "/",
   });
 
@@ -199,5 +228,5 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
     } catch { /* non-fatal */ }
   }
 
-  return { success: true, won, amount: stake, newCredits: updatedRows[0].credits, remainingFlips, remainingHourlyFlips };
+  return { success: true, won, shielded, amount: stake, newCredits: updatedRows[0].credits, remainingFlips, remainingHourlyFlips };
 }

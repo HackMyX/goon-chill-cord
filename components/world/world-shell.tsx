@@ -13,6 +13,7 @@ import { DeathScreen } from "@/components/world/death-screen";
 import { useCameraControls } from "@/components/world/use-camera-controls";
 import type { PlayerStatsSnapshot } from "@/components/world/player";
 import { useSoundManager } from "@/lib/sound-manager";
+import { getClientSettings } from "@/lib/client-settings";
 import { debugLog, debugWarn } from "@/lib/debug";
 import { getEquippedDamage, formatDamage } from "@/lib/combat";
 import {
@@ -522,6 +523,18 @@ export function WorldShell({
     cameraControls.state.current.sensitivityYMult = worldSettings.sensitivityY;
     sound.setVolume(worldSettings.volume);
     setActiveKeybinds(worldSettings.keybinds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The World drives the shared global SoundManager volume with its OWN
+  // world-settings slider while playing. On leaving, restore the user's global
+  // SFX master volume (client-settings) so the world value doesn't leak into
+  // the rest of the site.
+  useEffect(() => {
+    return () => {
+      const cs = getClientSettings();
+      sound.setVolume(cs.sfxMuted ? 0 : cs.sfxVolume);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

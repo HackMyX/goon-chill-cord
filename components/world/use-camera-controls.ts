@@ -143,8 +143,27 @@ export function useCameraControls(
   // mouse's poll rate, not a single event at the start of a session).
   const justLocked = useRef(0);
 
+  // The canvas wrapper this hook binds its listeners to does NOT exist on
+  // the component's first commit: world-shell.tsx gates the whole World
+  // behind a "Sitzung wird geprüft…/blocked" screen (the anti-multi-tab
+  // guard) and only mounts `<div ref={canvasRef}>` once that async check
+  // resolves a few hundred ms later. A ref object has a *stable identity*,
+  // so the setup effect below — if keyed on `[canvasRef]` — would run
+  // exactly once (against `canvasRef.current === null` at that moment) and
+  // never re-run when `.current` later becomes the real element. That left
+  // every listener unregistered, crucially `pointerlockchange`: clicking
+  // "Klicken zum Spielen" engaged the OS pointer lock but `setLocked(true)`
+  // never fired, so the overlay never dismissed (the "button won't go away"
+  // regression the multi-tab gate quietly introduced by delaying the canvas
+  // mount). Mirroring `canvasRef.current` into state — and keying the setup
+  // effect on *that* — re-runs the setup the instant the element mounts.
+  const [lockEl, setLockEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    const el = canvasRef.current;
+    if (canvasRef.current !== lockEl) setLockEl(canvasRef.current);
+  });
+
+  useEffect(() => {
+    const el = lockEl;
     if (!el) return;
 
     const onMouseMove = (e: MouseEvent) => {
@@ -279,7 +298,7 @@ export function useCameraControls(
       document.removeEventListener("pointerlockerror", onLockError);
       window.removeEventListener("blur", onBlur);
     };
-  }, [canvasRef]);
+  }, [lockEl]);
 
   const requestLock = useCallback(() => {
     // requestPointerLock() returns a Promise that rejects with a

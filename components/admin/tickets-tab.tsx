@@ -342,6 +342,15 @@ function TicketRow({
             <div className="flex items-center gap-1.5">
               <p className="break-words text-sm font-semibold text-zinc-200">{ticket.subject}</p>
               {ticket.attachmentUrl && <Paperclip className="h-3 w-3 shrink-0 text-zinc-500" aria-label="Hat Anhang" />}
+              {ticket.suggestionOutcome && (
+                <span className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${
+                  ticket.suggestionOutcome === "accepted"
+                    ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                    : "border-red-500/40 bg-red-500/15 text-red-300"
+                }`}>
+                  {ticket.suggestionOutcome === "accepted" ? "✓ Angenommen" : "✕ Abgelehnt"}
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-zinc-500">
               {ticket.username} ·{" "}

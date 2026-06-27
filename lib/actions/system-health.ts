@@ -79,6 +79,7 @@ const REQUIRED_TABLES = [
   "bp_quest_definitions", "bp_quests", "user_bp_quest_progress",
   // Level & XP system
   "xp_config", "xp_events", "ability_definitions", "user_abilities",
+  "redemption_codes", "redemption_claims",
   // Sound
   "sound_config",
   // Preview Engine config singleton
@@ -150,9 +151,12 @@ const COLUMN_CHECKS: Array<{
   { id: "col_mod_canuseadminai",  category: "Mod-Berechtigungen", table: "mod_permissions",    col: "can_use_admin_ai",        detail: "node scripts/add-can-use-admin-ai.cjs" },
   // Profiles — DON upgrade & verified (2026-06-25)
   { id: "col_profiles_donupgrade",category: "DON-System",         table: "profiles",            col: "don_upgrade_tier",        detail: "ALTER TABLE profiles ADD COLUMN don_upgrade_tier integer NOT NULL DEFAULT 0;" },
+  { id: "col_profiles_donshield", category: "DON-System",         table: "profiles",            col: "don_shield_used_at",      detail: "node scripts/add-don-shield.cjs" },
   { id: "col_profiles_verified",  category: "Battle Pass",        table: "profiles",            col: "verified",                detail: "ALTER TABLE profiles ADD COLUMN verified boolean NOT NULL DEFAULT false;" },
   { id: "col_profiles_tempban",   category: "Mod-Berechtigungen", table: "profiles",            col: "temp_banned_until",       detail: "ALTER TABLE profiles ADD COLUMN temp_banned_until timestamptz;" },
   { id: "col_profiles_modperms",  category: "Mod-Berechtigungen", table: "profiles",            col: "mod_permissions_override",detail: "ALTER TABLE profiles ADD COLUMN mod_permissions_override jsonb;" },
+  { id: "col_profiles_prio_custom",category: "Badges",            table: "profiles",            col: "prio_badges_custom",      detail: "node scripts/add-prio-badges-custom.cjs" },
+  { id: "col_profiles_prio_locked",category: "Badges",            table: "profiles",            col: "prio_badges_locked",      detail: "node scripts/add-prio-badges-locked.cjs" },
   // DON config — upgrade feature (2026-06-25)
   { id: "col_don_upgradeenabled", category: "DON-System",         table: "don_config",          col: "upgrade_enabled",         detail: "ALTER TABLE don_config ADD COLUMN upgrade_enabled boolean NOT NULL DEFAULT false;" },
   { id: "col_don_upgradetiers",   category: "DON-System",         table: "don_config",          col: "upgrade_tiers",           detail: "ALTER TABLE don_config ADD COLUMN upgrade_tiers jsonb NOT NULL DEFAULT '[]'::jsonb;" },
@@ -194,6 +198,7 @@ const COLUMN_CHECKS: Array<{
   { id: "col_tickets_escalated",  category: "Tickets",            table: "tickets",             col: "escalated_to_admin",      detail: "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS escalated_to_admin boolean NOT NULL DEFAULT false;" },
   // Tickets — targeted escalation to specific staff member (2026-06-26)
   { id: "col_tickets_escalated_to_user", category: "Tickets",    table: "tickets",             col: "escalated_to_user_id",    detail: "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS escalated_to_user_id uuid REFERENCES profiles(id) ON DELETE SET NULL;" },
+  { id: "col_tickets_suggestion_outcome", category: "Tickets",   table: "tickets",             col: "suggestion_outcome",      detail: "node scripts/add-suggestion-outcome.cjs" },
   // Battle Pass v2 — theme & visibility (2026-06-25)
   { id: "col_bp_theme",           category: "Battle Pass",        table: "battle_passes",       col: "theme",                   detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS theme text NOT NULL DEFAULT 'default';" },
   { id: "col_bp_accentcolor",     category: "Battle Pass",        table: "battle_passes",       col: "accent_color",            detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS accent_color text NOT NULL DEFAULT '#7c3aed';" },

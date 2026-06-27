@@ -83,10 +83,17 @@ export function WorldChatBubble({ username }: { username: string }) {
         { event: "INSERT", schema: "public", table: "global_chat_messages" },
         (payload) => {
           const row = rawToMsg(payload.new as Record<string, unknown>);
+          let isNew = false;
           setMessages((prev) => {
+            // Dedup by id — the sender's own message already lands via the
+            // optimistic append + eager refetch, so its realtime echo must not
+            // be appended a second time (the duplicate-message bug).
+            if (prev.some((m) => m.id === row.id)) return prev;
+            isNew = true;
             const next = [...prev, row];
             return next.length > MAX_DISPLAY ? next.slice(next.length - MAX_DISPLAY) : next;
           });
+          if (!isNew) return;
           if (!open) {
             setUnread((n) => n + 1);
             sound.tick();
@@ -147,19 +154,36 @@ export function WorldChatBubble({ username }: { username: string }) {
     setSending(true);
     setInput("");
     sound.click();
+
+    // Optimistic: show the sender's own message INSTANTLY (0-latency feedback),
+    // reconciled with the real row on success (and removed on failure).
+    const tempId = "__opt_" + Date.now();
+    const optimistic: GlobalChatMessage = {
+      id: tempId, userId: null, username, role: "user", content: text,
+      isSystem: false, metadata: null, createdAt: new Date().toISOString(),
+      avatarUrl: null, nameStyleKey: undefined,
+    };
+    setMessages((prev) => {
+      const next = [...prev, optimistic];
+      return next.length > MAX_DISPLAY ? next.slice(next.length - MAX_DISPLAY) : next;
+    });
+    scrollToBottom();
+
     const res = await sendGlobalChatMessage(text);
     setSending(false);
     if (!res.success) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setInput(text);
       sound.error();
     } else {
-      // Ensure message is visible immediately — don't wait for realtime alone
+      // Replace the optimistic row with the authoritative server rows
+      // (dedup by id so the realtime echo never doubles it).
       const fresh = await getGlobalChatMessages(MAX_DISPLAY);
       setMessages((prev) => {
-        const existingIds = new Set(prev.map((m) => m.id));
+        const withoutTemp = prev.filter((m) => m.id !== tempId);
+        const existingIds = new Set(withoutTemp.map((m) => m.id));
         const added = fresh.filter((m) => !existingIds.has(m.id));
-        if (added.length === 0) return prev;
-        const next = [...prev, ...added];
+        const next = [...withoutTemp, ...added];
         return next.length > MAX_DISPLAY ? next.slice(next.length - MAX_DISPLAY) : next;
       });
       scrollToBottom();

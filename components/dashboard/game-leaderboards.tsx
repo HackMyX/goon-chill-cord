@@ -129,43 +129,78 @@ function RankDisplay({ rank, vis }: { rank: number; vis: GameVisual }) {
   return <RIcon className={`h-4 w-4 ${color} ${glow}`} />;
 }
 
-// ── Mini podium (top 3 avatars) ───────────────────────────────────────────────
+// ── Fat podium (top 3 with photos, name, badges, value) ───────────────────────
 
-function MiniPodium({ entries, vis }: { entries: { username: string; avatarUrl?: string; userId: string }[]; vis: GameVisual }) {
+type GLEntry = GameLeaderboardSection["entries"][number];
+
+// Podium order: #2 left, #1 center (taller), #3 right.
+const PODIUM_ORDER = [1, 0, 2] as const;
+
+function Podium({
+  entries,
+  vis,
+  format,
+}: {
+  entries: GLEntry[];
+  vis: GameVisual;
+  format: (v: number) => string;
+}) {
   if (entries.length < 2) return null;
-  const [first, second, third] = entries;
-  const podium = [second, first, third].filter(Boolean);
-  const heights = ["h-10", "h-14", "h-8"];
-  const rings = [AVATAR_RING[1], AVATAR_RING[0], AVATAR_RING[2]];
-  const fbs = [AVATAR_FB_BG[1], AVATAR_FB_BG[0], AVATAR_FB_BG[2]];
-  const numbers = [2, 1, 3];
+  const top = entries.slice(0, 3);
 
   return (
-    <div className={`flex items-end justify-center gap-3 px-4 py-3 border-b ${vis.border} ${vis.headerBg}`}>
-      {podium.map((entry, i) => (
-        <div key={entry.userId} className="flex flex-col items-center gap-1">
-          <div className="relative">
-            {entry.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={entry.avatarUrl} alt="" className={`${heights[i]} aspect-square rounded-full object-cover ring-2 ${rings[i]}`} />
-            ) : (
-              <div className={`${heights[i]} aspect-square rounded-full flex items-center justify-center text-xs font-black ring-2 ${rings[i]} ${fbs[i]}`}>
-                {entry.username.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <span className={`absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black ${
-              numbers[i] === 1 ? "bg-amber-500 text-black" :
-              numbers[i] === 2 ? "bg-zinc-600 text-white" :
-              "bg-orange-700 text-white"
-            }`}>
-              {numbers[i]}
+    <div className={`flex items-end justify-center gap-2.5 border-b ${vis.border} ${vis.headerBg} px-4 pb-4 pt-5`}>
+      {PODIUM_ORDER.map((idx) => {
+        const entry = top[idx];
+        if (!entry) return <div key={idx} className="w-24" />;
+        const isFirst = idx === 0;
+        const RIcon = RANK_ICONS[idx];
+        return (
+          <motion.div
+            key={entry.userId}
+            initial={{ opacity: 0, y: 22, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ delay: idx * 0.1, type: "spring", stiffness: 240, damping: 22 }}
+            className={`flex flex-col items-center ${isFirst ? "w-28" : "w-24"}`}
+          >
+            <RIcon
+              className={`mb-1 ${isFirst ? "h-6 w-6 animate-crown-bob" : "h-5 w-5"} ${RANK_ICON_COLORS[idx]} ${RANK_GLOW[idx]}`}
+            />
+            <div className="relative mb-1.5">
+              {entry.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={entry.avatarUrl}
+                  alt=""
+                  className={`${isFirst ? "h-16 w-16" : "h-12 w-12"} rounded-full object-cover ring-2 ${AVATAR_RING[idx]}`}
+                />
+              ) : (
+                <div
+                  className={`${isFirst ? "h-16 w-16 text-lg" : "h-12 w-12 text-base"} flex items-center justify-center rounded-full font-black ring-2 ${AVATAR_RING[idx]} ${AVATAR_FB_BG[idx]}`}
+                >
+                  {entry.username.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span
+                className={`absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#09090f] text-[9px] font-black ${
+                  idx === 0 ? "bg-amber-500 text-black" : idx === 1 ? "bg-zinc-500 text-white" : "bg-orange-600 text-white"
+                }`}
+              >
+                {idx + 1}
+              </span>
+            </div>
+            <span className="max-w-full truncate text-[11px] font-bold text-zinc-100">
+              <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} userId={entry.userId} size="sm" />
             </span>
-          </div>
-          <span className="max-w-[64px] truncate text-[9px] font-semibold text-zinc-500">
-            {entry.username}
-          </span>
-        </div>
-      ))}
+            {entry.prioBadges && entry.prioBadges.length > 0 && (
+              <PrioBadgeRow badgeKeys={entry.prioBadges} size="xs" max={2} className="mt-0.5 justify-center" />
+            )}
+            <span className={`mt-0.5 text-[11px] font-black tabular-nums ${vis.accent}`}>
+              {format(entry.primaryValue)}
+            </span>
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
@@ -186,6 +221,7 @@ function GameLeaderboardCard({
   const vis = GAME_VISUALS[section.item.id];
   const { entries } = section;
   const maxVal = entries[0]?.primaryValue ?? 1;
+  const showPodium = entries.length >= 2;
 
   function formatValue(v: number): string {
     const fmt = vis.metricFormat;
@@ -230,10 +266,11 @@ function GameLeaderboardCard({
         </Link>
       </div>
 
-      {/* Mini podium for top 3 */}
-      {entries.length >= 2 && <MiniPodium entries={entries} vis={vis} />}
+      {/* Fat podium for top 3 (shown when ≥2 entries) */}
+      <Podium entries={entries} vis={vis} format={formatValue} />
 
-      {/* Entries */}
+      {/* Entries — when the podium is shown, the list starts at rank 4 so the
+          Top 3 never appear twice; otherwise it lists everyone. */}
       {entries.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
           <vis.icon className="h-10 w-10 text-zinc-800" />
@@ -241,12 +278,14 @@ function GameLeaderboardCard({
         </div>
       ) : (
         <div className="divide-y divide-white/[0.035]">
-          {entries.map((entry, i) => {
-            const isTop3 = i < 3;
-            const isFirst = i === 0;
+          {(showPodium ? entries.slice(3) : entries).map((entry, li) => {
+            const rank = showPodium ? li + 4 : li + 1;
+            const i = rank - 1;
+            const isTop3 = rank <= 3;
+            const isFirst = rank === 1;
             // Profilbild nur zeigen, wenn der Modus "all" ist ODER es ein Top-3-Platz
             // ist. Ab Platz 4 im "top3"-Modus bewusst der neutrale Initial-Kreis
-            // (= "ohne Profilbild"), damit die Zeilen sauber ausgerichtet bleiben.
+            // (= "nur der Buchstabe"), damit die Zeilen sauber ausgerichtet bleiben.
             const showPhoto = (avatarMode === "all" || isTop3) && !!entry.avatarUrl;
 
             return (
@@ -254,12 +293,12 @@ function GameLeaderboardCard({
                 key={entry.userId}
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: sectionIndex * 0.1 + i * 0.03 }}
+                transition={{ delay: sectionIndex * 0.1 + li * 0.03 }}
                 className={`flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.02] ${isFirst ? vis.rankOneBg : ""}`}
               >
                 {/* Rank icon/number */}
                 <div className="w-7 shrink-0 flex justify-center">
-                  <RankDisplay rank={i + 1} vis={vis} />
+                  <RankDisplay rank={rank} vis={vis} />
                 </div>
 
                 {/* Avatar */}

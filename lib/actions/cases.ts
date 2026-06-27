@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { findCaseTier, pickRarity, RARITY_LABELS, type CaseExtraDrop } from "@/lib/cases";
 import { getCaseConfig } from "@/lib/cases-config";
+import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
+import { applyCreditBonus } from "@/lib/actions/abilities";
 import { notifyUser } from "@/lib/notifications-internal";
 import { broadcastSystemWin } from "@/lib/actions/global-chat";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -140,8 +142,9 @@ async function grantExtraDrop(
 ): Promise<{ ok: true; won: WonDrop } | { ok: false; error: string }> {
   switch (drop.kind) {
     case "credits": {
-      const amount = drop.amount ?? 0;
+      let amount = drop.amount ?? 0;
       if (amount <= 0) return { ok: false, error: "Credits-Drop ohne Betrag." };
+      amount = await applyCreditBonus(admin, userId, amount);
       const { data: prof } = await admin.from("profiles").select("credits").eq("id", userId).single();
       if (!prof) return { ok: false, error: "Profil nicht gefunden." };
       const { error } = await admin.from("profiles").update({ credits: (prof.credits as number) + amount }).eq("id", userId);
@@ -191,6 +194,7 @@ async function grantExtraDrop(
         { onConflict: "user_id,badge_key", ignoreDuplicates: true },
       );
       if (error) return { ok: false, error: "Badge konnte nicht vergeben werden." };
+      await recomputeAutoPrioBadges(userId);
       return { ok: true, won: { kind: "badge", rarity: drop.rarity, name: drop.label || drop.badgeText || badgeKey, badgeKey, badgeText: drop.badgeText || badgeKey } };
     }
   }
@@ -384,71 +388,73 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
     // audit_logs table may not exist yet — never let logging break the flow.
   }
 
-  revalidatePath("/");
+  // ZERO-LATENCY: the drop + new balance are already known. We get the spin
+  // started ASAP and avoid the mid-spin freeze. Crucially we DON'T call
+  // revalidatePath("/") — that re-ran the force-dynamic /cases page right as the
+  // spin started (the multi-second freeze/stutter); the client already reflects
+  // the new balance via setCredits + realtime.
+  //
+  // XP, BP/daily quests and notifications use the ADMIN client internally, so
+  // they're safe to fire-and-forget AFTER returning (they don't depend on the
+  // request-scoped cookie store). The name-style bonus drop + ultra/mythisch
+  // broadcast DO use the request client, so they must run before the action
+  // returns — but both are conditional/rare, so the common path stays instant.
 
-  // Award XP for case opening — fire-and-forget
-  try {
-    const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
-    const xpCfg = await getXpConfig();
-    void awardXp(user.id, xpCfg.sources.case_open ?? 30, "case_open", tier.label);
-  } catch { /* non-fatal */ }
-
-  try {
-    const { incrementBpQuestProgress } = await import("@/lib/actions/bp-quests");
-    void incrementBpQuestProgress(user.id, "case_open", 1);
-  } catch { /* non-fatal */ }
-
-  try {
-    const { incrementDailyQuestProgress } = await import("@/lib/actions/daily-quests");
-    void incrementDailyQuestProgress("case_open", 1);
-  } catch { /* non-fatal */ }
-
-  // ── Name style bonus drop ─────────────────────────────────────────────────
-  // Only runs if this tier has name styles enabled AND the rarity config says drop is active.
+  // Name-style bonus drop (rare, request-scoped) — must finish in-request.
   let wonStyleKey: string | null = null;
   if (tier.nameStylesEligible) {
-    wonStyleKey = await tryDropNameStyle(user.id, won.rarity, supabase);
+    try { wonStyleKey = await tryDropNameStyle(user.id, won.rarity, supabase); } catch { /* non-fatal */ }
   }
 
-  // Every case open gets a notification — full drop history.
-  const rarityLabel = RARITY_LABELS[won.rarity as keyof typeof RARITY_LABELS] ?? won.rarity;
-  const dropLink =
-    won.kind === "name_style" ? "/profil"
-    : won.kind === "badge" ? "/profil"
-    : won.kind === "credits" ? "/"
-    : "/garderobe"; // item, ability
-  await notifyUser({
-    userId: user.id,
-    type: "case_opened",
-    title:
-      won.rarity === "mythisch" || won.rarity === "ultra"
-        ? `${rarityLabel}-Drop!`
-        : "Case geöffnet",
-    message: `Du hast „${won.name}" (${rarityLabel}) gezogen!${wonStyleKey ? ` + Name-Style Bonus!` : ""}`,
-    link: dropLink,
-  });
-
-  if (wonStyleKey) {
-    await notifyUser({
-      userId: user.id,
-      type: "case_opened",
-      title: "🎨 Name-Style gewonnen!",
-      message: `Bonus-Drop: Name-Style „${wonStyleKey}" wurde deiner Sammlung hinzugefügt!`,
-      link: "/profil",
-    });
-  }
-
-  // Broadcast ultra/mythisch wins globally
+  // Ultra/mythisch global broadcast (rare, request-scoped) — also in-request.
   if (won.rarity === "ultra" || won.rarity === "mythisch") {
-    const { data: p } = await (await import("@/lib/supabase/server")).createClient()
-      .then((c) => c.from("profiles").select("username").eq("id", user.id).single());
-    await broadcastSystemWin({
-      username: p?.username ?? "Jemand",
-      itemName: won.name,
-      rarity: won.rarity,
-      caseName: tier.label,
-    });
+    try {
+      const { data: p } = await supabase.from("profiles").select("username").eq("id", user.id).single();
+      await broadcastSystemWin({ username: (p?.username as string) ?? "Jemand", itemName: won.name, rarity: won.rarity, caseName: tier.label });
+    } catch { /* non-fatal */ }
   }
+
+  // Fire-and-forget the admin-client side-effects (XP / quests / notifications).
+  void (async () => {
+    try {
+      const { awardXp, getXpConfig } = await import("@/lib/actions/level-system");
+      const xpCfg = await getXpConfig();
+      void awardXp(user.id, xpCfg.sources.case_open ?? 30, "case_open", tier.label);
+    } catch { /* non-fatal */ }
+    try {
+      const { incrementBpQuestProgress } = await import("@/lib/actions/bp-quests");
+      void incrementBpQuestProgress(user.id, "case_open", 1);
+    } catch { /* non-fatal */ }
+    try {
+      const { incrementDailyQuestProgress } = await import("@/lib/actions/daily-quests");
+      void incrementDailyQuestProgress("case_open", 1);
+    } catch { /* non-fatal */ }
+
+    const rarityLabel = RARITY_LABELS[won.rarity as keyof typeof RARITY_LABELS] ?? won.rarity;
+    const dropLink =
+      won.kind === "name_style" ? "/profil"
+      : won.kind === "badge" ? "/profil"
+      : won.kind === "credits" ? "/"
+      : "/garderobe"; // item, ability
+    try {
+      await notifyUser({
+        userId: user.id,
+        type: "case_opened",
+        title: won.rarity === "mythisch" || won.rarity === "ultra" ? `${rarityLabel}-Drop!` : "Case geöffnet",
+        message: `Du hast „${won.name}" (${rarityLabel}) gezogen!${wonStyleKey ? ` + Name-Style Bonus!` : ""}`,
+        link: dropLink,
+      });
+      if (wonStyleKey) {
+        await notifyUser({
+          userId: user.id,
+          type: "case_opened",
+          title: "🎨 Name-Style gewonnen!",
+          message: `Bonus-Drop: Name-Style „${wonStyleKey}" wurde deiner Sammlung hinzugefügt!`,
+          link: "/profil",
+        });
+      }
+    } catch { /* non-fatal */ }
+  })();
 
   return {
     success: true,

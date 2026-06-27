@@ -13,7 +13,7 @@ import {
   getTicketMessages, modReplyToTicket, modUpdateTicketStatus,
   modSetTicketPriority, modDeleteTicket, modGrantTicketReward,
   modRemoveTicketReward, modPauseTicket, modEscalateTicket,
-  modCloseTicket, getEscalationTargets,
+  modCloseTicket, getEscalationTargets, modDecideSuggestion,
 } from "@/lib/actions/mod";
 import {
   addInternalNote, getInternalNotes, getTicketRewards,
@@ -208,6 +208,12 @@ export function ModTicketDetailModal({ ticket, perms, onClose, onUpdated }: ModT
   const [rewardDeferred, setRewardDeferred] = useState(true);
   const [rewarding, setRewarding] = useState(false);
   const [rewardMsg, setRewardMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  // Suggestion accept/decline
+  const [decideCredits, setDecideCredits] = useState(500);
+  const [decideReason, setDecideReason] = useState("");
+  const [deciding, setDeciding] = useState<"accepted" | "declined" | null>(null);
+  const [decideMsg, setDecideMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [decidedOutcome, setDecidedOutcome] = useState(ticket.suggestionOutcome ?? null);
 
   const sound = useSoundManager();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -407,6 +413,32 @@ export function ModTicketDetailModal({ ticket, perms, onClose, onUpdated }: ModT
     setTimeout(() => setRewardMsg(null), 4000);
   }
 
+  async function handleDecide(decision: "accepted" | "declined") {
+    setDeciding(decision);
+    sound.click();
+    const res = await modDecideSuggestion(ticket.id, decision, {
+      rewardCredits: decision === "accepted" ? decideCredits : 0,
+      note: decideReason.trim() || undefined,
+    });
+    setDeciding(null);
+    if (res.success) {
+      sound.win?.();
+      setDecidedOutcome(decision);
+      setDecideMsg({
+        text: decision === "accepted"
+          ? `Vorschlag angenommen${decideCredits > 0 ? ` (+${decideCredits} CR)` : ""}!`
+          : "Vorschlag abgelehnt.",
+        ok: true,
+      });
+      setDecideReason("");
+      onUpdated();
+    } else {
+      sound.error();
+      setDecideMsg({ text: res.error ?? "Fehler.", ok: false });
+    }
+    setTimeout(() => setDecideMsg(null), 4000);
+  }
+
   if (!mounted) return null;
 
   return createPortal(
@@ -504,6 +536,69 @@ export function ModTicketDetailModal({ ticket, perms, onClose, onUpdated }: ModT
           <div className="flex min-h-0 flex-1 overflow-hidden">
             {/* LEFT SIDEBAR */}
             <div className="flex w-68 shrink-0 flex-col overflow-y-auto border-r border-white/[0.06]" style={{ width: "17rem" }}>
+              {/* Suggestion decision — accept (auto-reward) / decline */}
+              {ticket.category === "suggestion" && (
+                <div className="border-b border-white/[0.06] bg-amber-500/[0.03] px-3 py-3">
+                  <p className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-amber-400">
+                    <Lightbulb className="h-3 w-3" /> Vorschlag entscheiden
+                  </p>
+                  {decidedOutcome ? (
+                    <div className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold ${
+                      decidedOutcome === "accepted"
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                        : "border-red-500/30 bg-red-500/10 text-red-300"
+                    }`}>
+                      {decidedOutcome === "accepted" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                      {decidedOutcome === "accepted" ? "Angenommen" : "Abgelehnt"}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {perms.canRewardTickets && (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min={0}
+                            value={decideCredits}
+                            onChange={(e) => setDecideCredits(Math.max(0, parseInt(e.target.value) || 0))}
+                            className="w-20 rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-emerald-400/50"
+                          />
+                          <span className="text-[10px] text-zinc-500">Credits Belohnung</span>
+                        </div>
+                      )}
+                      <input
+                        type="text"
+                        placeholder="Notiz / Grund (optional)"
+                        value={decideReason}
+                        maxLength={300}
+                        onChange={(e) => setDecideReason(e.target.value)}
+                        className="w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-amber-400/50"
+                      />
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => handleDecide("accepted")}
+                          disabled={!!deciding}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25 disabled:opacity-40"
+                        >
+                          {deciding === "accepted" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                          Annehmen{perms.canRewardTickets && decideCredits > 0 ? ` +${decideCredits}` : ""}
+                        </button>
+                        <button
+                          onClick={() => handleDecide("declined")}
+                          disabled={!!deciding}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-1.5 text-xs font-bold text-red-300 transition-colors hover:bg-red-500/25 disabled:opacity-40"
+                        >
+                          {deciding === "declined" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                          Ablehnen
+                        </button>
+                      </div>
+                      {decideMsg && (
+                        <p className={`text-[11px] ${decideMsg.ok ? "text-emerald-400" : "text-red-400"}`}>{decideMsg.text}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Status controls */}
               {perms.canUpdateTicketStatus && (
                 <div className="border-b border-white/[0.06] px-3 py-3">

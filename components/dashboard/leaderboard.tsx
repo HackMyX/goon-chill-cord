@@ -8,6 +8,7 @@ import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { BadgePill } from "@/components/ui/badge-pill";
 import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
+import { badgeRank } from "@/lib/badges";
 import { useLiveConfig } from "@/lib/use-live-config";
 import { getHomepageAvatarMode } from "@/lib/actions/homepage-leaderboards";
 import type { HomepageAvatarMode } from "@/lib/actions/homepage-leaderboards";
@@ -125,6 +126,12 @@ const STREAK_RANK_CONFIG = [
 
 // Podium order: #2 left, #1 center, #3 right
 const PODIUM_ORDER = [1, 0, 2] as const;
+
+/** Top-2 owned badges by the canonical site-wide priority (fallback when a
+ * user has no prio_badges set — keeps the order consistent with everywhere). */
+function topOwnedBadges(badges: string[]): string[] {
+  return [...badges].sort((a, b) => badgeRank(a) - badgeRank(b)).slice(0, 2);
+}
 
 export function Leaderboard({
   entries: initialEntries,
@@ -389,7 +396,7 @@ export function Leaderboard({
                             ? <PrioBadgeRow badgeKeys={entry.prio_badges} size="xs" max={2} className="justify-center" />
                             : entry.badges && entry.badges.length > 0
                             ? <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
-                                {entry.badges.slice(0, 2).map((bk) => <BadgePill key={bk} badgeKey={bk} />)}
+                                {topOwnedBadges(entry.badges).map((bk) => <BadgePill key={bk} badgeKey={bk} />)}
                               </div>
                             : null
                           }
@@ -423,9 +430,9 @@ export function Leaderboard({
                 {(style === "podium" ? rest : displayEntries).map((entry, rawIdx) => {
                   const i = style === "podium" ? rawIdx + 3 : rawIdx;
                   const isTopThree = i < 3;
-                  // Avatar-Slot in den Listenzeilen nur, wenn "all" ODER Top 3.
-                  // (Im Podium-Stil sind Top 3 oben als Podest → hier nie Top 3.)
-                  const showAvatarSlot = avatarMode === "all" || isTopThree;
+                  // Foto nur bei "all" ODER Top 3; ab Platz 4 (Standardmodus)
+                  // bewusst NUR der Initial-Buchstabe, kein Bild.
+                  const showPhoto = (avatarMode === "all" || isTopThree) && !!entry.avatarUrl;
                   const rankColors = [
                     "text-amber-400",
                     "text-zinc-400",
@@ -464,25 +471,23 @@ export function Leaderboard({
                         )}
                       </div>
 
-                      {/* Avatar (Top 3 immer, ab Platz 4 nur im "all"-Modus) */}
-                      {showAvatarSlot && (
-                        <div className="relative shrink-0">
-                          {entry.avatarUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={entry.avatarUrl}
-                              alt=""
-                              className={`h-8 w-8 rounded-full object-cover ring-1.5 ${isTopThree ? REST_AVATAR_RING[i] : "ring-white/10"}`}
-                            />
-                          ) : (
-                            <div
-                              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ring-1.5 ${isTopThree ? `${REST_AVATAR_RING[i]} ${REST_AVATAR_FB[i]}` : "ring-white/10 bg-white/5 text-zinc-500"}`}
-                            >
-                              {entry.username.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      {/* Avatar: Top 3 (oder "all") = Foto, ab Platz 4 nur der Buchstabe */}
+                      <div className="relative shrink-0">
+                        {showPhoto ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={entry.avatarUrl!}
+                            alt=""
+                            className={`h-8 w-8 rounded-full object-cover ring-1.5 ${isTopThree ? REST_AVATAR_RING[i] : "ring-white/10"}`}
+                          />
+                        ) : (
+                          <div
+                            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ring-1.5 ${isTopThree ? `${REST_AVATAR_RING[i]} ${REST_AVATAR_FB[i]}` : "ring-white/10 bg-white/5 text-zinc-500"}`}
+                          >
+                            {entry.username.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
 
                       {/* Name + badges */}
                       <div className="flex flex-1 min-w-0 items-center gap-1.5 flex-wrap">
@@ -496,7 +501,7 @@ export function Leaderboard({
                         </span>
                         {entry.prio_badges && entry.prio_badges.length > 0
                           ? <PrioBadgeRow badgeKeys={entry.prio_badges} size="xs" max={2} />
-                          : entry.badges && entry.badges.slice(0, 2).map((bk) => <BadgePill key={bk} badgeKey={bk} />)
+                          : entry.badges && topOwnedBadges(entry.badges).map((bk) => <BadgePill key={bk} badgeKey={bk} />)
                         }
                       </div>
 

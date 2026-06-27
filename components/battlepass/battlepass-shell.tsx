@@ -976,8 +976,17 @@ function TrackTileCard({
   const springRotX = useSpring(rotX, { stiffness: 220, damping: 22 });
   const springRotY = useSpring(rotY, { stiffness: 220, damping: 22 });
 
+  // In a horizontal carousel (the Season-Road, where scrollRootRef is set) the
+  // tile must NOT carry a live transform or backdrop-filter: each of those puts
+  // the tile on its own GPU compositor layer, and the fixed full-viewport WebGL
+  // canvas (which scissors each <View> to the tile's rect) cannot stay welded to
+  // a separately-composited layer during fast scroll → the 3D model visibly
+  // drifts/lags out of the tile. The Cases reel avoids this by using no
+  // transform wrapper; we do the same here. The 3D stays welded to the tile.
+  const weldToCanvas = !!scrollRootRef;
+
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!(visualConfig.enableTiltEffect ?? true) || !cardRef.current) return;
+    if (weldToCanvas || !(visualConfig.enableTiltEffect ?? true) || !cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width - 0.5;
     const y = (e.clientY - rect.top) / rect.height - 0.5;
@@ -998,8 +1007,12 @@ function TrackTileCard({
     if (!el || typeof IntersectionObserver === "undefined") return;
     const root = scrollRootRef?.current ?? null;
     const obs = new IntersectionObserver(
-      (entries) => setInView((entries[0]?.intersectionRatio ?? 1) >= 0.5),
-      { root, rootMargin: "0px", threshold: [0, 0.25, 0.5, 0.75, 1] },
+      // Radical clip: 3D renders ONLY when the tile is ≥90% inside the carousel.
+      // A tile crossing the edge stops drawing its 3D entirely (no scissor rect
+      // poking past the carousel) — the opaque edge masks cover the brief
+      // pop-in/out zone, so nothing ever overhangs the box.
+      (entries) => setInView((entries[0]?.intersectionRatio ?? 1) >= 0.9),
+      { root, rootMargin: "0px", threshold: [0, 0.5, 0.85, 0.9, 0.95, 1] },
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -1058,20 +1071,26 @@ function TrackTileCard({
     <motion.div
       ref={cardRef}
       onClick={handleTileClick}
-      whileTap={{ scale: 0.95 }}
+      whileTap={weldToCanvas ? undefined : { scale: 0.95 }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       style={{
-        rotateX: springRotX,
-        rotateY: springRotY,
-        transformPerspective: 900,
+        // Welded mode (carousel): no transform / no backdrop-filter → the tile
+        // stays on the main compositor layer so the WebGL 3D tracks it exactly.
+        ...(weldToCanvas
+          ? {}
+          : {
+              rotateX: springRotX,
+              rotateY: springRotY,
+              transformPerspective: 900,
+              backdropFilter: glassOpacity > 0 ? `blur(${Math.round(glassOpacity * 12)}px)` : undefined,
+              WebkitBackdropFilter: glassOpacity > 0 ? `blur(${Math.round(glassOpacity * 12)}px)` : undefined,
+            }),
         width: fillWidth ? undefined : tileW,
         height: tileH,
         flexShrink: 0,
         ...borderStyle,
         background: bgStyle,
-        backdropFilter: glassOpacity > 0 ? `blur(${Math.round(glassOpacity * 12)}px)` : undefined,
-        WebkitBackdropFilter: glassOpacity > 0 ? `blur(${Math.round(glassOpacity * 12)}px)` : undefined,
       }}
       className={`group/tile relative cursor-pointer rounded-3xl border transition-colors duration-200 ${fillWidth ? "w-full" : ""}`}
     >
@@ -1463,7 +1482,7 @@ function HorizontalTrack({
                 onClick={() => setSelectedTier((prev) => (prev === tier.id ? null : tier.id))}
                 visualConfig={visualConfig}
                 onDirectPreview={setFullPreviewSubject}
-                viewIndex={viewIndexOffset + idx}
+                viewIndex={viewIndexOffset + idx * 2}
                 scrollRootRef={scrollRef}
               />
             );

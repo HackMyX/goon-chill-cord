@@ -44,6 +44,7 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
   // Grant ability form
   const [grantUserId, setGrantUserId] = useState("");
   const [grantAbilityKey, setGrantAbilityKey] = useState("");
+  const [grantDurationHours, setGrantDurationHours] = useState(0);
   const [grantMsg, setGrantMsg] = useState("");
 
   // User inventory modal
@@ -83,8 +84,8 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
 
   async function handleGrant() {
     if (!grantUserId || !grantAbilityKey) return;
-    const res = await adminGrantAbility(grantUserId, grantAbilityKey);
-    setGrantMsg(res.success ? "✅ Vergeben!" : `❌ ${res.error}`);
+    const res = await adminGrantAbility(grantUserId, grantAbilityKey, "admin_grant", grantDurationHours);
+    setGrantMsg(res.success ? (grantDurationHours > 0 ? `✅ Vergeben (${grantDurationHours}h)!` : "✅ Vergeben (permanent)!") : `❌ ${res.error}`);
     setTimeout(() => setGrantMsg(""), 2500);
   }
 
@@ -287,7 +288,7 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
             <select value={grantUserId} onChange={(e) => setGrantUserId(e.target.value)}
               className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none">
               <option value="">Spieler wählen…</option>
-              {profiles.map((p) => <option key={p.id} value={p.id}>{p.username}</option>)}
+              {[...profiles].sort((a, b) => a.username.localeCompare(b.username, "de")).map((p) => <option key={p.id} value={p.id}>{p.username}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">
@@ -298,9 +299,19 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
               {abilities.map((a) => <option key={a.key} value={a.key}>{a.name}</option>)}
             </select>
           </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-zinc-400">Dauer (Std., 0 = permanent)</span>
+            <input
+              type="number"
+              min={0}
+              value={grantDurationHours}
+              onChange={(e) => setGrantDurationHours(Math.max(0, parseInt(e.target.value) || 0))}
+              className="w-32 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none"
+            />
+          </div>
           <button onClick={handleGrant} disabled={!grantUserId || !grantAbilityKey}
             className="rounded-xl bg-purple-600/80 px-4 py-1.5 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50">
-            Vergeben
+            {grantDurationHours > 0 ? `${grantDurationHours}h vergeben` : "Vergeben"}
           </button>
           {grantMsg && <span className={`text-sm ${grantMsg.startsWith("✅") ? "text-emerald-400" : "text-red-400"}`}>{grantMsg}</span>}
         </div>
@@ -318,7 +329,7 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
             <select value={viewUserId} onChange={(e) => setViewUserId(e.target.value)}
               className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none">
               <option value="">Spieler wählen…</option>
-              {profiles.map((p) => <option key={p.id} value={p.id}>{p.username}</option>)}
+              {[...profiles].sort((a, b) => a.username.localeCompare(b.username, "de")).map((p) => <option key={p.id} value={p.id}>{p.username}</option>)}
             </select>
           </div>
           <button onClick={handleLoadInventory} disabled={!viewUserId || inventoryLoading}

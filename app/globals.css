@@ -1153,3 +1153,14 @@
     --glow-2: 56,189,248;
 }
 
+
+/* Reduced-motion (client setting via <html data-reduced-motion="1">):
+   near-instant all CSS animations/transitions site-wide. */
+html[data-reduced-motion="1"] *,
+html[data-reduced-motion="1"] *::before,
+html[data-reduced-motion="1"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}

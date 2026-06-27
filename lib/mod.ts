@@ -141,6 +141,7 @@ export interface ModTicket {
   escalatedToAdmin: boolean;
   escalatedToUserId: string | null;
   escalatedToUsername: string | null;
+  suggestionOutcome?: "accepted" | "declined" | null;
 }
 
 export interface EscalationTarget {

@@ -976,6 +976,15 @@ function TicketItem({ t, perms, onRefresh, defaultOpen, isSelected, onToggleSele
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-semibold text-zinc-100">{t.subject}</span>
+            {t.suggestionOutcome && (
+              <span className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${
+                t.suggestionOutcome === "accepted"
+                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                  : "border-red-500/40 bg-red-500/15 text-red-300"
+              }`}>
+                {t.suggestionOutcome === "accepted" ? "✓ Angenommen" : "✕ Abgelehnt"}
+              </span>
+            )}
             {t.escalatedToAdmin && (
               <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-orange-500/40 bg-orange-500/15 px-1.5 py-0.5 text-[9px] font-bold text-orange-300">
                 <ArrowUpRight className="h-2.5 w-2.5" />Eskaliert

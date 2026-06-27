@@ -6,10 +6,17 @@ import { Music, VolumeX, Volume1, Volume2 } from "lucide-react";
 import { getMusicConfig } from "@/lib/actions/music";
 import { createClient } from "@/lib/supabase/client";
 import { MusicSynth } from "@/lib/music-synth";
-import { resolvePageVolume, clampVolume, type MusicConfig, type MusicPageKey } from "@/lib/music-config";
+import { resolvePageVolume, resolveTrackId, clampVolume, type MusicConfig, type MusicPageKey } from "@/lib/music-config";
+import { setMusicVolume, setMusicMuted, subscribeClientSettings } from "@/lib/client-settings";
+import { subscribeMusicIntensity, getMusicIntensity, getMusicMode, subscribeMusicMode } from "@/lib/music-dynamics";
 
 const LS_VOL   = "gn_music_vol";
 const LS_MUTED = "gn_music_muted";
+
+/** Map a 0–1 game intensity to a playback-tempo multiplier (up to +45%). */
+function intensityToMult(level: number): number {
+  return 1 + Math.max(0, Math.min(1, level)) * 0.45;
+}
 
 function getPageKey(pathname: string): MusicPageKey {
   if (pathname.startsWith("/snake"))      return "snake";
@@ -176,6 +183,7 @@ export function MusicPlayer() {
 
       const targetVol = mutedRef.current ? 0 : volumeRef.current;
       synthRef.current?.start(url, targetVol).then(() => {
+        synthRef.current?.setTempo(intensityToMult(getMusicIntensity()));
         setIsPlaying(true);
       }).catch(() => {
         pendingUrlRef.current = url;
@@ -203,6 +211,7 @@ export function MusicPlayer() {
       audio.volume = 0;
       audio.play()
         .then(() => {
+          audio.playbackRate = intensityToMult(getMusicIntensity());
           fadeIn(audio, mutedRef.current ? 0 : volumeRef.current, cfg.fadeInMs);
           setIsPlaying(true);
         })
@@ -265,7 +274,8 @@ export function MusicPlayer() {
     // Apply this page's exact volume BEFORE (re)starting any track, so the synth
     // and audio element both start at the configured level — never a stale value.
     resolveVolumeForPage(cfg, pageKey);
-    const trackId = cfg.pageAssignments[pageKey] ?? null;
+    // Per-mode override (e.g. "snake:x2") wins over the page-level track.
+    const trackId = resolveTrackId(cfg, pageKey, getMusicMode());
     const track   = trackId ? cfg.tracks.find((t) => t.id === trackId) : null;
 
     if (!track) {
@@ -343,6 +353,51 @@ export function MusicPlayer() {
     }
   }, [volume, muted]);
 
+  // ── Dynamic tempo: a game (Snake) pushes live intensity → speed up the music.
+  //    Applies to both the synth (per-bar) and file audio (instant playbackRate).
+  const applyTempo = useCallback((level: number) => {
+    const mult = intensityToMult(level);
+    if (activeIsSynth.current) {
+      synthRef.current?.setTempo(mult);
+    } else {
+      const audio = audioRef.current;
+      if (audio) audio.playbackRate = mult;
+    }
+  }, []);
+
+  useEffect(() => subscribeMusicIntensity(applyTempo), [applyTempo]);
+
+  // Re-resolve the current page's track whenever the active game mode changes,
+  // so a per-mode track override switches in live (e.g. Snake Classic → Turbo).
+  useEffect(() => {
+    return subscribeMusicMode(() => {
+      if (!configRef.current?.enabled || !interactedRef.current) return;
+      applyRoute(pathname);
+    });
+  }, [pathname, applyRoute]);
+
+  // ── External control: the profile's Client-Settings panel (and the legacy
+  //    floating widget) both drive volume/mute through the shared
+  //    client-settings store. Subscribe so changes there apply live here,
+  //    still respecting the admin gate (volume only honored if userCanAdjustVolume).
+  useEffect(() => {
+    return subscribeClientSettings((s) => {
+      const cfg = configRef.current;
+      if (cfg?.userCanAdjustVolume) {
+        const v = Math.min(s.musicVolume, cfg.maxUserVolume ?? 1);
+        userOverrideRef.current = v;
+        if (v !== volumeRef.current) {
+          volumeRef.current = v;
+          setVolume(v);
+        }
+      }
+      if ((cfg?.userCanMute ?? true) && s.musicMuted !== mutedRef.current) {
+        mutedRef.current = s.musicMuted;
+        setMuted(s.musicMuted);
+      }
+    });
+  }, []);
+
   const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const cfg = configRef.current;
     const max = cfg?.maxUserVolume ?? 1;
@@ -350,11 +405,11 @@ export function MusicPlayer() {
     setVolume(v);
     volumeRef.current = v;
     userOverrideRef.current = v;
-    localStorage.setItem(LS_VOL, String(v));
+    setMusicVolume(v);
     if (v > 0 && muted) {
       setMuted(false);
       mutedRef.current = false;
-      localStorage.setItem(LS_MUTED, "false");
+      setMusicMuted(false);
     }
   }, [muted]);
 
@@ -362,7 +417,7 @@ export function MusicPlayer() {
     setMuted((prev) => {
       const next = !prev;
       mutedRef.current = next;
-      localStorage.setItem(LS_MUTED, String(next));
+      setMusicMuted(next);
       const effectiveVol = next ? 0 : volumeRef.current;
       if (activeIsSynth.current) {
         synthRef.current?.setVolume(effectiveVol);

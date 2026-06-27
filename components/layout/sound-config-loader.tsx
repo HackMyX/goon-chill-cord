@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getSoundConfig } from "@/lib/actions/sound-config";
 import { useSoundManager } from "@/lib/sound-manager";
+import { getClientSettings, subscribeClientSettings } from "@/lib/client-settings";
 import type { SoundConfig } from "@/lib/sound-config";
 
 interface SoundConfigLoaderProps {
@@ -18,6 +19,16 @@ export function SoundConfigLoader({ config }: SoundConfigLoaderProps) {
 
   useEffect(() => {
     sound.loadConfig(config);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Apply the user's per-device SFX master volume to the global SoundManager,
+  // and keep it live when they change it in the profile's Client-Settings.
+  useEffect(() => {
+    const apply = (s: { sfxVolume: number; sfxMuted: boolean }) =>
+      sound.setVolume(s.sfxMuted ? 0 : s.sfxVolume);
+    apply(getClientSettings());
+    return subscribeClientSettings(apply);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -27,6 +27,8 @@ export interface Ticket {
   messageCount: number;
   escalatedToAdmin?: boolean;
   attachmentUrl?: string | null;
+  /** For suggestion tickets: whether it was formally accepted/declined. */
+  suggestionOutcome?: "accepted" | "declined" | null;
 }
 
 export interface TicketMessage {
@@ -198,7 +200,7 @@ export async function getTicketDetail(ticketId: string): Promise<TicketDetail | 
   // Users can only view their own tickets; staff can view all
   const query = admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, attachment_url, reward_credits, reward_note, reward_granted_at, reward_pending, ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, attachment_url, suggestion_outcome, reward_credits, reward_note, reward_granted_at, reward_pending, ticket_messages(count)")
     .eq("id", ticketId);
 
   if (!isModerator(profile)) {
@@ -439,7 +441,7 @@ export async function getAdminTickets(): Promise<Ticket[]> {
 
   const { data } = await admin
     .from("tickets")
-    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, attachment_url, escalated_to_admin, ticket_messages(count)")
+    .select("id, user_id, subject, description, status, category, priority, closed_at, closed_by, created_at, updated_at, attachment_url, escalated_to_admin, suggestion_outcome, ticket_messages(count)")
     .order("updated_at", { ascending: false })
     .limit(100);
 
@@ -863,5 +865,6 @@ function mapTicket(row: any, username?: string, closedByUsername?: string): Tick
     messageCount: typeof msgCountRaw === "number" ? msgCountRaw : Number(msgCountRaw) || 0,
     escalatedToAdmin: (row.escalated_to_admin as boolean) ?? false,
     attachmentUrl: (row.attachment_url as string | null) ?? null,
+    suggestionOutcome: (row.suggestion_outcome as "accepted" | "declined" | null) ?? null,
   };
 }

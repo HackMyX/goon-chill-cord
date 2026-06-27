@@ -8,6 +8,8 @@ import { SiteConfigProvider } from "@/components/layout/site-config-provider";
 import { ProfilePopupProvider } from "@/components/ui/profile-popup-provider";
 import { PetConfigProvider } from "@/lib/pet-config-context";
 import { PresenceHeartbeat } from "@/components/layout/presence-heartbeat";
+import { ScrollRestorer } from "@/components/layout/scroll-restorer";
+import { ClientPrefsApplier } from "@/components/layout/client-prefs-applier";
 import { SupportButton } from "@/components/support/ticket-button";
 import { FpRegistrar } from "@/components/auth/fp-registrar";
 import { getSiteConfig } from "@/lib/actions/site-config";
@@ -80,6 +82,8 @@ export default async function RootLayout({
         <AmbientGlow />
         <PresenceHeartbeat />
         <FpRegistrar />
+        <ScrollRestorer />
+        <ClientPrefsApplier />
         <ThemeProvider initial={themeConfig}>
           <FineConfigProvider initial={fineConfig}>
             <SiteConfigProvider config={siteConfig}>

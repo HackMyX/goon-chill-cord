@@ -17,6 +17,9 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Lock,
+  LockOpen,
+  Pin,
 } from "lucide-react";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -30,6 +33,10 @@ import {
   adminDeleteBadgeDefinition,
   adminGetAllUserBadges,
 } from "@/lib/actions/badges";
+import {
+  adminGetPrioState,
+  adminForceDisplayBadges,
+} from "@/lib/actions/prio-badges";
 import type { BadgeDefinition, UserBadge } from "@/lib/badges";
 import { getBadgeStyle } from "@/lib/badges";
 import { getSiteConfig, updateSiteConfig } from "@/lib/actions/site-config";
@@ -535,10 +542,63 @@ function BadgesVergabeSection({
   const [revoking, setRevoking] = useState<string | null>(null); // badgeKey being revoked
   const [feedback, setFeedback] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
 
-  const filteredProfiles = profiles.filter((p) => {
-    const q = search.toLowerCase();
-    return p.username.toLowerCase().includes(q);
-  });
+  // ── Admin omnipotence: force displayed badges + lock ──
+  const [forceSelected, setForceSelected] = useState<string[]>([]);
+  const [forceLocked, setForceLocked] = useState(false);
+  const [maxSlots, setMaxSlots] = useState(2);
+  const [forcing, setForcing] = useState(false);
+
+  const toggleForce = (key: string) => {
+    setForceSelected((curr) => {
+      if (curr.includes(key)) return curr.filter((k) => k !== key);
+      if (curr.length >= maxSlots) return curr;
+      return [...curr, key];
+    });
+  };
+
+  async function handleForce() {
+    if (!selectedProfile) return;
+    sound.click();
+    setForcing(true);
+    setFeedback(null);
+    const res = await adminForceDisplayBadges(selectedProfile.id, forceSelected, forceLocked);
+    setForcing(false);
+    if (res.success) {
+      sound.save();
+      setFeedback({ type: "ok", msg: forceSelected.length ? "Anzeige erzwungen (fehlende Badges automatisch vergeben)." : "Auf Auto zurückgesetzt." });
+      // Force may have auto-granted badges — refresh the owned list.
+      const badges = await getUserBadges(selectedProfile.id);
+      setUserBadges(badges);
+    } else {
+      sound.error();
+      setFeedback({ type: "err", msg: res.error ?? "Fehler." });
+    }
+  }
+
+  async function handleAutoReset() {
+    if (!selectedProfile) return;
+    sound.click();
+    setForcing(true);
+    setFeedback(null);
+    const res = await adminForceDisplayBadges(selectedProfile.id, [], false);
+    setForcing(false);
+    if (res.success) {
+      sound.save();
+      setForceSelected([]);
+      setForceLocked(false);
+      setFeedback({ type: "ok", msg: "Auf Auto-Modus zurückgesetzt." });
+    } else {
+      sound.error();
+      setFeedback({ type: "err", msg: res.error ?? "Fehler." });
+    }
+  }
+
+  const filteredProfiles = profiles
+    .filter((p) => {
+      const q = search.toLowerCase();
+      return p.username.toLowerCase().includes(q);
+    })
+    .sort((a, b) => a.username.localeCompare(b.username, "de"));
 
   async function selectProfile(p: ProfileRow) {
     sound.click();
@@ -549,6 +609,16 @@ function BadgesVergabeSection({
     const badges = await getUserBadges(p.id);
     setUserBadges(badges);
     setLoadingUserBadges(false);
+    // Load the user's current forced-display state.
+    const ps = await adminGetPrioState(p.id);
+    if (ps) {
+      setForceSelected(ps.keys);
+      setForceLocked(ps.locked);
+      setMaxSlots(ps.max);
+    } else {
+      setForceSelected([]);
+      setForceLocked(false);
+    }
   }
 
   async function handleGrant() {
@@ -691,6 +761,80 @@ function BadgesVergabeSection({
               {granting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
               Vergeben
             </button>
+          </div>
+
+          {/* ── Admin omnipotence: force which badges are shown + lock ──────── */}
+          <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <Pin className="h-3.5 w-3.5 text-amber-400" />
+              <span className="text-xs font-bold text-amber-300">Anzeige-Badges erzwingen</span>
+              {forceLocked && (
+                <span className="flex items-center gap-1 rounded-full border border-red-400/40 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-300">
+                  <Lock className="h-2.5 w-2.5" /> gesperrt
+                </span>
+              )}
+            </div>
+            <p className="mb-2.5 text-[10px] text-zinc-500">
+              Überschreibt die Auswahl des Nutzers (max {maxSlots}) und vergibt fehlende Badges automatisch. Keine Auswahl = Auto-Modus.
+            </p>
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {definitions.map((d) => {
+                const bs = getBadgeStyle(d.key);
+                const sel = forceSelected.includes(d.key);
+                const dis = !sel && forceSelected.length >= maxSlots;
+                return (
+                  <button
+                    key={d.key}
+                    type="button"
+                    disabled={dis}
+                    onClick={() => toggleForce(d.key)}
+                    className="rounded-full border px-2.5 py-1 text-[11px] font-bold transition-all"
+                    style={{
+                      background: sel ? bs.bg : "transparent",
+                      color: sel ? bs.text : "#71717a",
+                      borderColor: sel ? bs.border : "#3f3f46",
+                      opacity: dis ? 0.4 : 1,
+                      cursor: dis ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    <span className="mr-1">{d.icon}</span>
+                    {d.label}
+                    {sel && <Check className="ml-1 inline h-2.5 w-2.5" />}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => { sound.click(); setForceLocked((v) => !v); }}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors min-h-[40px] ${
+                  forceLocked
+                    ? "border-red-400/40 bg-red-500/10 text-red-300"
+                    : "border-white/10 text-zinc-400 hover:bg-white/5"
+                }`}
+              >
+                {forceLocked ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+                {forceLocked ? "Gesperrt" : "Sperren"}
+              </button>
+              <button
+                type="button"
+                onClick={handleForce}
+                disabled={forcing}
+                className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-500 disabled:opacity-40 min-h-[40px]"
+              >
+                {forcing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pin className="h-3.5 w-3.5" />}
+                Anzeige erzwingen
+              </button>
+              <button
+                type="button"
+                onClick={handleAutoReset}
+                disabled={forcing}
+                className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-400 transition-colors hover:bg-white/5 disabled:opacity-40 min-h-[40px]"
+              >
+                Auf Auto zurücksetzen
+              </button>
+            </div>
           </div>
 
           {feedback && (

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getEquippedDamage, isWeaponType, computePvpDamage, capsuleHitTest } from "@/lib/combat";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import { getCharacterConfig } from "@/lib/actions/character-config";
+import { isAbilityActive } from "@/lib/actions/abilities";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 export interface AttemptPvpHitInput {
@@ -124,7 +125,7 @@ export async function attemptPvpHit(input: AttemptPvpHitInput): Promise<AttemptP
 
   // Apply world_damage_boost ability if attacker has one equipped
   const equippedKey = (attackerProfile?.equipped_ability_key as string | null) ?? null;
-  if (equippedKey) {
+  if (equippedKey && await isAbilityActive(admin, user.id, equippedKey)) {
     try {
       const { data: abilityDef } = await admin
         .from("ability_definitions")

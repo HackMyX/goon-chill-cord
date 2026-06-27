@@ -26,7 +26,7 @@ import type { UserAbility } from "@/lib/abilities";
 import { setMyPrioBadges } from "@/lib/actions/prio-badges";
 import { getBadgeStyle } from "@/lib/badges";
 import type { UserBadge } from "@/lib/badges";
-import { Check, Save } from "lucide-react";
+import { Check, Save, Lock } from "lucide-react";
 
 export interface InventoryRow {
   id: string;
@@ -64,6 +64,7 @@ interface WardrobeShellProps {
   equippedAbilityKey?: string | null;
   initialBadges?: UserBadge[];
   initialPrioBadges?: string[];
+  initialPrioLocked?: boolean;
   maxPrioBadges?: number;
 }
 
@@ -73,10 +74,12 @@ function PrioBadgeSelectionSection({
   badges,
   initialSelected,
   maxPrioBadges,
+  locked = false,
 }: {
   badges: UserBadge[];
   initialSelected: string[];
   maxPrioBadges: number;
+  locked?: boolean;
 }) {
   const [selected, setSelected] = useState<string[]>(initialSelected);
   const [saving, setSaving] = useState(false);
@@ -84,6 +87,7 @@ function PrioBadgeSelectionSection({
   const sound = useSoundManager();
 
   const toggle = (key: string) => {
+    if (locked) return;
     setSelected((curr) => {
       if (curr.includes(key)) return curr.filter((k) => k !== key);
       if (curr.length >= maxPrioBadges) return curr;
@@ -118,16 +122,32 @@ function PrioBadgeSelectionSection({
 
   return (
     <div className="space-y-4">
+      {locked && (
+        <p className="flex items-center gap-2 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[11px] font-semibold text-red-300">
+          <Lock className="h-3.5 w-3.5 shrink-0" />
+          Deine Badge-Anzeige wurde von einem Admin festgelegt und ist gesperrt. Änderungen sind aktuell nicht möglich.
+        </p>
+      )}
       <p className="text-xs text-zinc-500">
         Wähle bis zu <span className="font-bold text-purple-300">{maxPrioBadges}</span> Badges als Prio-Badges.
         Sie erscheinen in Chat, Ranglisten und der 3D-Welt neben deinem Namen.
         ({selected.length}/{maxPrioBadges} ausgewählt)
       </p>
+      <p className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] transition-colors ${
+        selected.length === 0
+          ? "border-purple-500/30 bg-purple-500/10 text-purple-300"
+          : "border-white/5 bg-white/[0.02] text-zinc-500"
+      }`}>
+        <Check className="h-3 w-3 shrink-0" />
+        {selected.length === 0
+          ? `Auto-Modus aktiv: Ohne Auswahl werden automatisch deine ${maxPrioBadges} wichtigsten Badges angezeigt.`
+          : `Diese ${selected.length} Badge${selected.length !== 1 ? "s" : ""} werden überall strikt angezeigt. Speichere ohne Auswahl für den Auto-Modus.`}
+      </p>
       <div className="flex flex-wrap gap-2">
         {badges.map((ub) => {
           const bs = getBadgeStyle(ub.badgeKey);
           const isSelected = selected.includes(ub.badgeKey);
-          const isDisabled = !isSelected && selected.length >= maxPrioBadges;
+          const isDisabled = locked || (!isSelected && selected.length >= maxPrioBadges);
           return (
             <button
               key={ub.id}
@@ -158,7 +178,7 @@ function PrioBadgeSelectionSection({
       </div>
       <button
         type="button"
-        disabled={saving}
+        disabled={saving || locked}
         onClick={handleSave}
         className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/15 px-4 py-2 text-sm font-semibold text-purple-300 transition-all hover:bg-purple-500/25 disabled:opacity-50"
       >
@@ -321,6 +341,7 @@ export function WardrobeShell({
   equippedAbilityKey = null,
   initialBadges = [],
   initialPrioBadges = [],
+  initialPrioLocked = false,
   maxPrioBadges = 2,
 }: WardrobeShellProps) {
   const [credits, setCredits] = useState(initialCredits);
@@ -688,6 +709,7 @@ export function WardrobeShell({
               badges={initialBadges}
               initialSelected={initialPrioBadges}
               maxPrioBadges={maxPrioBadges}
+              locked={initialPrioLocked}
             />
           </div>
         )}

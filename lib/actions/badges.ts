@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { logDebugEvent } from "@/lib/debug-log-server";
+import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
 import type { BadgeDefinition, UserBadge } from "@/lib/badges";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -138,6 +139,10 @@ export async function adminGrantBadge(
     context: { userId, badgeKey, adminId: adminUser.id },
   });
 
+  // Keep the user's displayed prio-badges in sync (auto-equip picks up the
+  // new badge; a custom user is left untouched unless this fills an empty set).
+  await recomputeAutoPrioBadges(userId);
+
   revalidatePath("/");
   return { success: true };
 }
@@ -174,6 +179,10 @@ export async function adminRevokeBadge(
     message: `Badge "${badgeKey}" revoked from user ${userId}`,
     context: { userId, badgeKey, adminId: adminUser.id },
   });
+
+  // Drop the revoked badge from the user's displayed set (and re-fill from
+  // auto if that emptied an auto-equip nametag).
+  await recomputeAutoPrioBadges(userId);
 
   revalidatePath("/");
   return { success: true };
@@ -322,6 +331,9 @@ export async function checkAndAwardNameStyleBadges(userId: string): Promise<void
           .upsert({ user_id: userId, badge_key: "ns_ultra" }, { onConflict: "user_id,badge_key" });
       }
     }
+
+    // Reflect any newly-awarded achievement badges in the displayed set.
+    await recomputeAutoPrioBadges(userId);
   } catch {
     // Never block the calling action
   }

@@ -9,6 +9,8 @@ import { updateUsername, updatePlayerSettings, type NotificationPrefs } from "@/
 import { useSoundManager } from "@/lib/sound-manager";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { NotificationPrefsSection } from "@/components/account/notification-prefs-section";
+import { ClientSettingsSection } from "@/components/account/client-settings-section";
+import { RedeemCodeCard } from "@/components/account/redeem-code-card";
 import { LevelBadge } from "@/components/ui/level-badge";
 import { getLevelColor } from "@/lib/level-system";
 
@@ -361,6 +363,10 @@ export function AccountShell({
             </div>
           </div>
         </div>
+
+        <RedeemCodeCard />
+
+        <ClientSettingsSection />
 
         <NotificationPrefsSection initialPrefs={notificationPrefs} role={liveRole} />
       </main>

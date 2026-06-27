@@ -10,11 +10,13 @@ import {
   X, Loader2, ShieldCheck, BadgeCheck, Package,
   Calendar, Coins, Flame, Star, Copy, Check,
   AlertTriangle, Crown, Shield, User, Ban,
+  NotepadText, Ticket, History, Trash2, ChevronDown, ChevronUp, ArrowUpRight,
 } from "lucide-react";
 import {
   modWarnUser, modTempBan, modLiftBan, modAddCredits, getMyEffectivePermissions,
+  modAddNote, modRemoveWarning, getModUserHistory, getPopupModSummary,
 } from "@/lib/actions/mod";
-import type { ModPermissions } from "@/lib/mod";
+import type { ModPermissions, ModActionRow } from "@/lib/mod";
 import { CharacterModel } from "@/components/world/character-model";
 import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, type Rarity } from "@/lib/cases";
 import { RarityChip } from "@/components/ui/rarity-chip";
@@ -47,6 +49,11 @@ const ROLE_COLOR: Record<string, string> = {
   admin:     "text-amber-300 border-amber-500/40 bg-amber-500/10",
   moderator: "text-sky-300   border-sky-500/40   bg-sky-500/10",
   user:      "text-zinc-400  border-zinc-700/40  bg-zinc-800/40",
+};
+
+const MOD_ACTION_LABEL: Record<string, string> = {
+  warning: "Verwarnung", note: "Notiz", tempban: "Temp-Bann", temp_ban: "Temp-Bann",
+  lift_ban: "Bann aufgehoben", credits: "Credits", ban: "Bann", unban: "Entbannt",
 };
 
 // ── Rotating 3D character ──────────────────────────────────────────────────────
@@ -143,6 +150,13 @@ function ModPanel({ profile }: { profile: PublicProfile }) {
   const [creditAmount, setCreditAmount] = useState<number>(0);
   const [creditReason, setCreditReason] = useState("");
   const [localBanUntil, setLocalBanUntil] = useState<string | null | undefined>(undefined);
+  const [noteText, setNoteText] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsLoaded, setDetailsLoaded] = useState(false);
+  const [history, setHistory] = useState<ModActionRow[]>([]);
+  const [ticketCount, setTicketCount] = useState<number | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [removedWarnings, setRemovedWarnings] = useState<Set<string>>(new Set());
 
   const effectiveBanUntil = localBanUntil !== undefined ? localBanUntil : profile.tempBannedUntil;
   const isBanned = !!effectiveBanUntil && new Date(effectiveBanUntil) > new Date();
@@ -167,8 +181,39 @@ function ModPanel({ profile }: { profile: PublicProfile }) {
     }
   }
 
+  async function loadDetails() {
+    setLoadingDetails(true);
+    try {
+      const [hist, summary] = await Promise.all([
+        getModUserHistory(profile.id).catch(() => [] as ModActionRow[]),
+        getPopupModSummary(profile.id).catch(() => null),
+      ]);
+      setHistory(hist);
+      setTicketCount(summary?.openTicketCount ?? null);
+      setDetailsLoaded(true);
+    } finally {
+      setLoadingDetails(false);
+    }
+  }
+
+  function toggleDetails() {
+    const next = !detailsOpen;
+    setDetailsOpen(next);
+    if (next && !detailsLoaded) void loadDetails();
+  }
+
+  async function removeWarning(id: string) {
+    const ok = await doAction(`rmwarn-${id}`, () => modRemoveWarning(id));
+    if (ok) setRemovedWarnings((s) => new Set(s).add(id));
+  }
+
   const availableHours = BAN_HOUR_OPTIONS.filter((h) => !perms || h <= (perms.maxTempBanHours || 24));
-  const hasAnyPerm = perms && (perms.canWarnUsers || perms.canTempBanUsers || perms.canAddCredits);
+  const hasAnyPerm = perms && (
+    perms.canWarnUsers || perms.canTempBanUsers || perms.canAddCredits ||
+    perms.canViewUserDetails || perms.canViewTickets
+  );
+  const warnings = history.filter((a) => a.actionType === "warning" && !removedWarnings.has(a.id));
+  const canSeeDetails = !!perms && (perms.canViewUserDetails || perms.canViewTickets || perms.canWarnUsers);
 
   return (
     <div className="rounded-2xl border border-red-900/40 bg-red-950/15 p-4 space-y-3">
@@ -213,6 +258,36 @@ function ModPanel({ profile }: { profile: PublicProfile }) {
               >
                 {busy === "warn" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <AlertTriangle className="h-3.5 w-3.5" />}
                 Verwarnen
+              </button>
+            </div>
+          )}
+
+          {/* ── Add note (no warning strike) ── */}
+          {perms.canWarnUsers && (
+            <div className="rounded-xl border border-sky-900/30 bg-sky-950/20 p-3 space-y-2">
+              <p className="text-[11px] font-bold text-sky-400 flex items-center gap-1.5">
+                <NotepadText className="h-3.5 w-3.5" />
+                Notiz (ohne Verwarnung)
+              </p>
+              <input
+                type="text"
+                placeholder="Interne Notiz zum Spieler"
+                value={noteText}
+                maxLength={300}
+                onChange={(e) => setNoteText(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-sky-400/50"
+              />
+              <button
+                type="button"
+                disabled={!!busy || !noteText.trim()}
+                onClick={async () => {
+                  const ok = await doAction("note", () => modAddNote(profile.id, noteText.trim()));
+                  if (ok) { setNoteText(""); if (detailsLoaded) void loadDetails(); }
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300 hover:bg-sky-500/20 transition-colors disabled:opacity-40"
+              >
+                {busy === "note" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <NotepadText className="h-3.5 w-3.5" />}
+                Notiz speichern
               </button>
             </div>
           )}
@@ -319,6 +394,85 @@ function ModPanel({ profile }: { profile: PublicProfile }) {
                 {busy === "credits" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Coins className="h-3.5 w-3.5" />}
                 {creditAmount > 0 ? `+${creditAmount}` : creditAmount} Credits
               </button>
+            </div>
+          )}
+
+          {/* ── Verlauf, Verwarnungen & Tickets (lazy) ── */}
+          {canSeeDetails && (
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-2">
+              <button
+                type="button"
+                onClick={toggleDetails}
+                className="flex w-full items-center gap-1.5 text-[11px] font-bold text-zinc-300"
+              >
+                <History className="h-3.5 w-3.5 text-zinc-400" />
+                Verlauf &amp; Tickets
+                {loadingDetails && <Loader2 className="h-3 w-3 animate-spin text-zinc-500" />}
+                <span className="ml-auto">
+                  {detailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </span>
+              </button>
+
+              {detailsOpen && detailsLoaded && (
+                <div className="space-y-2.5 pt-1">
+                  {/* Tickets */}
+                  {perms.canViewTickets && (
+                    <a
+                      href={`/mod?tab=tickets`}
+                      className="flex items-center gap-2 rounded-lg border border-sky-900/30 bg-sky-950/20 px-3 py-2 text-xs text-sky-300 transition-colors hover:bg-sky-950/40"
+                    >
+                      <Ticket className="h-3.5 w-3.5 shrink-0" />
+                      <span className="font-semibold">{ticketCount ?? 0}</span>
+                      <span className="text-zinc-500">offene Tickets</span>
+                      <ArrowUpRight className="ml-auto h-3 w-3" />
+                    </a>
+                  )}
+
+                  {/* Warnings with remove */}
+                  {perms.canWarnUsers && warnings.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-orange-400/70">Verwarnungen ({warnings.length})</p>
+                      {warnings.map((w) => (
+                        <div key={w.id} className="flex items-center gap-1.5 rounded-lg bg-orange-950/20 px-2 py-1.5">
+                          <AlertTriangle className="h-3 w-3 shrink-0 text-orange-400" />
+                          <span className="min-w-0 flex-1 truncate text-[10px] text-zinc-300">{w.reason || "(kein Grund)"}</span>
+                          <button
+                            type="button"
+                            disabled={busy === `rmwarn-${w.id}`}
+                            onClick={() => removeWarning(w.id)}
+                            title="Verwarnung entfernen"
+                            className="shrink-0 rounded p-0.5 text-zinc-600 transition-colors hover:text-red-400 disabled:opacity-40"
+                          >
+                            {busy === `rmwarn-${w.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Recent mod history */}
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Letzte Aktionen</p>
+                    {history.length === 0 ? (
+                      <p className="text-[10px] text-zinc-600">Keine Mod-Aktionen.</p>
+                    ) : (
+                      history.slice(0, 8).map((a) => (
+                        <div key={a.id} className="flex items-start gap-1.5 rounded-lg bg-white/[0.02] px-2 py-1">
+                          <Shield className="mt-0.5 h-2.5 w-2.5 shrink-0 text-zinc-600" />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[10px] font-semibold text-zinc-400">{MOD_ACTION_LABEL[a.actionType] ?? a.actionType}</span>
+                            {a.reason && <span className="ml-1 text-[10px] text-zinc-600">— {a.reason}</span>}
+                            {a.modUsername && <span className="ml-1 text-[9px] text-zinc-700">· {a.modUsername}</span>}
+                          </div>
+                          <span className="shrink-0 text-[9px] text-zinc-700 tabular-nums">
+                            {new Intl.DateTimeFormat("de-DE", { dateStyle: "short" }).format(new Date(a.createdAt))}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

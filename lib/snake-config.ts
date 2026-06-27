@@ -1,6 +1,44 @@
 export type SnakeMode = "x1" | "x2" | "grind" | "farm";
 
+/** Per-mode visual theme — every colour is a hex value so the admin can edit
+ * it with a colour picker. The engine derives grid/glow/particle tints from
+ * these at runtime. */
+export interface SnakeModeTheme {
+  bg: string;          // Spielfeld-Hintergrund
+  gridColor: string;   // Gitterlinien-Grundton
+  snakeHead: string;   // Schlangenkopf
+  snakeTail: string;   // Schlangenschwanz (Verlauf-Ende)
+  snakeGlow: string;   // Schlangen-Glow / Aura
+  appleColor: string;  // normaler Apfel
+  appleGlow: string;   // Apfel-Glow
+  goldenColor: string; // goldener Apfel
+  borderColor: string; // Rahmen / Akzent
+}
+
+export const DEFAULT_THEME_X1: SnakeModeTheme = {
+  bg: "#030a06", gridColor: "#10b981", snakeHead: "#34d399", snakeTail: "#064e3b",
+  snakeGlow: "#10b981", appleColor: "#ef4444", appleGlow: "#ef4444", goldenColor: "#fbbf24", borderColor: "#10b981",
+};
+export const DEFAULT_THEME_X2: SnakeModeTheme = {
+  bg: "#020510", gridColor: "#06b6d4", snakeHead: "#22d3ee", snakeTail: "#0c4a6e",
+  snakeGlow: "#06b6d4", appleColor: "#eab308", appleGlow: "#fbbf24", goldenColor: "#f59e0b", borderColor: "#06b6d4",
+};
+export const DEFAULT_THEME_GRIND: SnakeModeTheme = {
+  bg: "#080503", gridColor: "#78350f", snakeHead: "#fbbf24", snakeTail: "#92400e",
+  snakeGlow: "#f59e0b", appleColor: "#c084fc", appleGlow: "#a855f7", goldenColor: "#f97316", borderColor: "#f59e0b",
+};
+export const DEFAULT_THEME_FARM: SnakeModeTheme = {
+  bg: "#030508", gridColor: "#8b5cf6", snakeHead: "#a78bfa", snakeTail: "#2e1065",
+  snakeGlow: "#8b5cf6", appleColor: "#34d399", appleGlow: "#10b981", goldenColor: "#fbbf24", borderColor: "#8b5cf6",
+};
+
 export interface SnakeModeConfig {
+  /** Mode display name on the selection card (admin-editable). */
+  label: string;
+  /** Short tagline under the name on the card (admin-editable). */
+  sublabel: string;
+  /** Per-mode colours (admin-editable). */
+  theme: SnakeModeTheme;
   enabled: boolean;
   boardSize: number;
   creditsPerApple: number;
@@ -41,6 +79,9 @@ export interface SnakeConfig {
 }
 
 export const DEFAULT_X1_CONFIG: SnakeModeConfig = {
+  label: "Classic",
+  sublabel: "Der Klassiker — ruhiges Tempo, fairer Einstieg.",
+  theme: DEFAULT_THEME_X1,
   enabled: true,
   boardSize: 20,
   creditsPerApple: 12,
@@ -64,6 +105,9 @@ export const DEFAULT_X1_CONFIG: SnakeModeConfig = {
 };
 
 export const DEFAULT_X2_CONFIG: SnakeModeConfig = {
+  label: "Turbo",
+  sublabel: "Doppeltes Tempo, doppelte Credits — für Profis.",
+  theme: DEFAULT_THEME_X2,
   enabled: true,
   boardSize: 20,
   creditsPerApple: 28,
@@ -87,6 +131,9 @@ export const DEFAULT_X2_CONFIG: SnakeModeConfig = {
 };
 
 export const DEFAULT_GRIND_CONFIG: SnakeGrindConfig = {
+  label: "Grind",
+  sublabel: "Die Arena schrumpft mit jedem Apfel. Nervenkrieg.",
+  theme: DEFAULT_THEME_GRIND,
   enabled: true,
   boardSize: 64,
   creditsPerApple: 5,
@@ -113,6 +160,9 @@ export const DEFAULT_GRIND_CONFIG: SnakeGrindConfig = {
 };
 
 export const DEFAULT_FARM_CONFIG: SnakeModeConfig = {
+  label: "Endless",
+  sublabel: "Kein Wachstum, kein Risiko — entspanntes Farmen.",
+  theme: DEFAULT_THEME_FARM,
   enabled: true,
   boardSize: 20,
   creditsPerApple: 4,

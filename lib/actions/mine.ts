@@ -9,6 +9,7 @@ import { DEFAULT_MINE_CONFIG, DEFAULT_MINE_LEVELS, type MineConfig, type MineLev
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { awardXp, getXpConfig } from "@/lib/actions/level-system";
+import { isAbilityActive, applyCreditBonus } from "@/lib/actions/abilities";
 
 export interface MineProgress {
   userId: string;
@@ -150,8 +151,9 @@ export async function collectMineCredits(): Promise<CollectResult> {
   let crBonusMultiplier = 1.0;
   let doubleChance = 0.0;
   let upgradeDiscountRate = 0.0;
+  let speedMultiplier = 1.0;
 
-  if (equippedKey) {
+  if (equippedKey && await isAbilityActive(admin, user.id, equippedKey)) {
     try {
       const { data: abilityDef } = await admin
         .from("ability_definitions")
@@ -176,22 +178,30 @@ export async function collectMineCredits(): Promise<CollectResult> {
           storageHoursBonus = ev;
         } else if (et === "mine_upgrade_discount") {
           upgradeDiscountRate = ev;
+        } else if (et === "mine_speed") {
+          // Faster effective mining: scale credits-per-hour AND the storage cap
+          // so a full mine actually yields more (not just fills sooner).
+          speedMultiplier = 1 + ev;
         }
       }
     } catch { /* non-fatal */ }
   }
 
   const effectiveMaxStorageHours = levelCfg.maxStorageHours + storageHoursBonus;
+  const effectiveRate = levelCfg.crPerHour * speedMultiplier;
   const elapsedMs = Date.now() - new Date(mineProgress.lastCollectedAt).getTime();
   const elapsedHours = elapsedMs / 3600000;
-  const maxStorage = levelCfg.crPerHour * effectiveMaxStorageHours;
-  const rawEarned = levelCfg.crPerHour * elapsedHours;
+  const maxStorage = effectiveRate * effectiveMaxStorageHours;
+  const rawEarned = effectiveRate * elapsedHours;
   let earned = Math.floor(Math.min(rawEarned, maxStorage) * crBonusMultiplier);
 
   // Double chance roll
   if (doubleChance > 0 && Math.random() < doubleChance) {
     earned *= 2;
   }
+
+  // Global credit_bonus ability (no-op unless that's the equipped ability).
+  earned = await applyCreditBonus(admin, user.id, earned);
 
   if (earned <= 0) return { success: false, error: "Noch nichts zu schürfen — warte ein bisschen!" };
 
@@ -276,7 +286,7 @@ export async function upgradeMine(): Promise<UpgradeResult> {
   // Apply upgrade discount ability
   let cost = currentLevelCfg.upgradeCost;
   const equippedKeyUpgrade = ((profile as Record<string, unknown>).equipped_ability_key) as string | null;
-  if (equippedKeyUpgrade) {
+  if (equippedKeyUpgrade && await isAbilityActive(admin, user.id, equippedKeyUpgrade)) {
     try {
       const { data: abilityDefUpgrade } = await admin
         .from("ability_definitions")

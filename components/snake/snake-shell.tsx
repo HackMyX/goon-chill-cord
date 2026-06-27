@@ -6,13 +6,14 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Zap, Crown, Trophy, Medal, Star, Coins, Skull,
   RotateCcw, ChevronDown, ShieldAlert, Sparkles, Gift, Flame,
-  ChevronUp,
+  ChevronUp, X,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { useSoundManager } from "@/lib/sound-manager";
+import { setMusicIntensity, resetMusicIntensity, setMusicMode } from "@/lib/music-dynamics";
 import { submitSnakeScore, getSnakeConfig } from "@/lib/actions/snake";
 import { useLiveConfig } from "@/lib/use-live-config";
-import type { SnakeConfig, SnakeMode, SnakeModeConfig, SnakeGrindConfig } from "@/lib/snake-config";
+import type { SnakeConfig, SnakeMode, SnakeModeConfig, SnakeGrindConfig, SnakeModeTheme } from "@/lib/snake-config";
 import type { SnakeLeaderboardEntry } from "@/lib/actions/snake";
 import { StyledUsername } from "@/components/ui/styled-username";
 
@@ -81,68 +82,26 @@ interface ModeTheme {
   borderColor: string;
 }
 
-const THEMES: Record<SnakeMode, ModeTheme> = {
-  farm: {
-    bg: "#030508",
-    gridColor: "rgba(139,92,246,0.045)",
-    snakeHead: "#a78bfa",
-    snakeTail: "#2e1065",
-    snakeGlow: "#8b5cf6",
-    appleColor: "#34d399",
-    appleGlow: "#10b981",
-    goldenColor: "#fbbf24",
-    ambientColors: ["rgba(139,92,246,0.5)", "rgba(109,40,217,0.4)", "rgba(167,139,250,0.3)"],
-    particleColors: ["#a78bfa", "#c4b5fd", "#8b5cf6", "#ffffff", "#34d399"],
-    cornerGlow1: "rgba(139,92,246,0.07)",
-    cornerGlow2: "rgba(52,211,153,0.04)",
-    borderColor: "#8b5cf6",
-  },
-  x1: {
-    bg: "#030a06",
-    gridColor: "rgba(16,185,129,0.045)",
-    snakeHead: "#34d399",
-    snakeTail: "#064e3b",
-    snakeGlow: "#10b981",
-    appleColor: "#ef4444",
-    appleGlow: "#ef4444",
-    goldenColor: "#fbbf24",
-    ambientColors: ["rgba(16,185,129,0.55)", "rgba(5,150,105,0.45)", "rgba(52,211,153,0.35)"],
-    particleColors: ["#34d399", "#6ee7b7", "#10b981", "#ffffff"],
-    cornerGlow1: "rgba(16,185,129,0.06)",
-    cornerGlow2: "rgba(6,182,212,0.04)",
-    borderColor: "#10b981",
-  },
-  x2: {
-    bg: "#020510",
-    gridColor: "rgba(6,182,212,0.055)",
-    snakeHead: "#22d3ee",
-    snakeTail: "#0c4a6e",
-    snakeGlow: "#06b6d4",
-    appleColor: "#eab308",
-    appleGlow: "#fbbf24",
-    goldenColor: "#f59e0b",
-    ambientColors: ["rgba(6,182,212,0.55)", "rgba(14,165,233,0.45)", "rgba(34,211,238,0.35)"],
-    particleColors: ["#22d3ee", "#67e8f9", "#06b6d4", "#ffffff", "#fbbf24"],
-    cornerGlow1: "rgba(6,182,212,0.08)",
-    cornerGlow2: "rgba(139,92,246,0.05)",
-    borderColor: "#06b6d4",
-  },
-  grind: {
-    bg: "#080503",
-    gridColor: "rgba(120,53,15,0.07)",
-    snakeHead: "#fbbf24",
-    snakeTail: "#92400e",
-    snakeGlow: "#f59e0b",
-    appleColor: "#c084fc",
-    appleGlow: "#a855f7",
-    goldenColor: "#f97316",
-    ambientColors: ["rgba(245,158,11,0.45)", "rgba(217,119,6,0.35)", "rgba(251,191,36,0.25)"],
-    particleColors: ["#fbbf24", "#f97316", "#ef4444", "#ffffff", "#c084fc"],
-    cornerGlow1: "rgba(245,158,11,0.07)",
-    cornerGlow2: "rgba(239,68,68,0.04)",
-    borderColor: "#f59e0b",
-  },
-};
+/** Build the full runtime theme from an admin-configured per-mode colour set.
+ * Grid/ambient/particle/corner-glow tints are derived from the picked colours
+ * so the admin only manages a handful of hex values. */
+function resolveTheme(t: SnakeModeTheme): ModeTheme {
+  return {
+    bg: t.bg,
+    gridColor: hexToRgba(t.gridColor, 0.05),
+    snakeHead: t.snakeHead,
+    snakeTail: t.snakeTail,
+    snakeGlow: t.snakeGlow,
+    appleColor: t.appleColor,
+    appleGlow: t.appleGlow,
+    goldenColor: t.goldenColor,
+    ambientColors: [hexToRgba(t.snakeGlow, 0.5), hexToRgba(t.snakeHead, 0.4), hexToRgba(t.appleGlow, 0.3)],
+    particleColors: [t.snakeHead, t.snakeGlow, "#ffffff", t.appleColor, t.goldenColor],
+    cornerGlow1: hexToRgba(t.snakeGlow, 0.07),
+    cornerGlow2: hexToRgba(t.appleGlow, 0.04),
+    borderColor: t.borderColor,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -224,7 +183,7 @@ function drawFrame(
   const BOARD = modeCfg.boardSize;
   const cell = W / BOARD;
   const t = g.frameCount;
-  const theme = THEMES[g.mode];
+  const theme = resolveTheme(modeCfg.theme);
 
   // Smooth movement progress (0→1 within current tick)
   const speedMs = getSpeedMs(g.score, modeCfg, g.speedBonusMs);
@@ -706,11 +665,10 @@ function spawnShrinkBurst(g: GameState, W: number, theme: ModeTheme) {
   }
 }
 
-function initAmbientParticles(W: number, mode: SnakeMode): Particle[] {
-  const theme = THEMES[mode];
+function initAmbientParticles(W: number, mode: SnakeMode, ambientColors: string[]): Particle[] {
   const result: Particle[] = [];
   for (let i = 0; i < 28; i++) {
-    const color = theme.ambientColors[Math.floor(Math.random() * theme.ambientColors.length)];
+    const color = ambientColors[Math.floor(Math.random() * ambientColors.length)];
     result.push({
       x: Math.random() * W, y: Math.random() * W,
       vx: (Math.random() - 0.5) * (mode === "x2" ? 0.6 : 0.25),
@@ -842,12 +800,12 @@ function ModeCard({
       )}
       <div className="flex items-center gap-2">
         <span className="text-2xl">{m.emoji}</span>
-        <span className="text-base font-extrabold text-zinc-50">{m.label}</span>
+        <span className="text-base font-extrabold text-zinc-50">{modeCfg.label?.trim() || m.label}</span>
         <span className={`ml-auto rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${m.badge}`}>
           {mode.toUpperCase()}
         </span>
       </div>
-      <p className="text-[11px] leading-snug text-zinc-500">{m.desc}</p>
+      <p className="text-[11px] leading-snug text-zinc-500">{modeCfg.sublabel?.trim() || m.desc}</p>
       {mode === "grind" && (
         <div className="flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2 py-1">
           <Flame className="h-3 w-3 text-amber-400" />
@@ -872,6 +830,8 @@ interface SnakeShellProps {
   myBestX1: number; myBestX2: number; myBestGrind: number; myBestFarm: number;
   dailyCrEarned: number;
   dailyGamesX1?: number; dailyGamesX2?: number; dailyGamesGrind?: number; dailyGamesFarm?: number;
+  /** snake_gold_apple_rate ability effect value (0 = none) — more golden apples. */
+  goldAppleRate?: number;
 }
 
 export function SnakeShell({
@@ -879,6 +839,7 @@ export function SnakeShell({
   config: initialConfig, leaderboardX1, leaderboardX2, leaderboardGrind, leaderboardFarm,
   myBestX1, myBestX2, myBestGrind, myBestFarm, dailyCrEarned: initDaily,
   dailyGamesX1 = 0, dailyGamesX2 = 0, dailyGamesGrind = 0, dailyGamesFarm = 0,
+  goldAppleRate = 0,
 }: SnakeShellProps) {
   const [config, setConfig] = useState(initialConfig);
   useLiveConfig("snake-config-live", getSnakeConfig, setConfig);
@@ -930,6 +891,12 @@ export function SnakeShell({
 
   // Keep configRef current so the RAF loop always sees the latest config
   configRef.current = config;
+  // Equipped golden-apple-rate ability, read by the RAF loop via a ref.
+  const goldAppleRateRef = useRef(goldAppleRate);
+  goldAppleRateRef.current = goldAppleRate;
+  // Timestamp until which a temporary music-intensity spike is active (set on
+  // golden-apple / bonus events) — the music surges then settles back.
+  const audioPulseRef = useRef(0);
 
   // Canvas size depends on mode
   const CANVAS_SIZE = activeMode === "grind" ? 640 : 560;
@@ -938,8 +905,13 @@ export function SnakeShell({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    gameRef.current.ambientParticles = initAmbientParticles(canvas.width, activeMode);
+    gameRef.current.ambientParticles = initAmbientParticles(canvas.width, activeMode, resolveTheme(config[activeMode].theme).ambientColors);
   }, [activeMode]);
+
+  // Tell the music player which Snake mode is active → per-mode track selection.
+  useEffect(() => { setMusicMode(activeMode); }, [activeMode]);
+  // Hand control back to the page-level track when leaving Snake.
+  useEffect(() => () => setMusicMode(null), []);
 
   // RAF game loop — mount-only, reads configRef/gameRef to avoid stale closures
   useEffect(() => {
@@ -956,6 +928,7 @@ export function SnakeShell({
       g.deathFlashFrames = 30;
       setPhase("dead");
       setShrinkWarning(false);
+      resetMusicIntensity(); // music back to calm tempo on death
       const finalScore = g.score;
       const finalCredits = g.creditsEarned;
       const finalMode = g.mode;
@@ -1012,14 +985,17 @@ export function SnakeShell({
         if (ateGolden) {
           crBase = Math.round(crBase * modeCfg.goldenAppleCrMultiplier);
           g.goldenApple = null;
-          // Tail loss: remove N blocks from the back
-          if (modeCfg.goldenAppleTailLoss > 0 && g.snake.length > modeCfg.goldenAppleTailLoss + 1) {
-            g.snake = g.snake.slice(0, g.snake.length - modeCfg.goldenAppleTailLoss);
-          }
-          // Speed reduction bonus persists until end of game
+          // Tail loss is applied below in the body-growth step so it actually
+          // NETS −goldenAppleTailLoss segments (the normal head-grow would
+          // otherwise add one back, cancelling a tail-loss of 1 entirely).
+          //
+          // Speed reduction: persists until end of game. Each golden makes the
+          // snake noticeably slower (the configured ms is ADDED per pickup so
+          // repeated goldens compound the slowdown, capped to stay playable).
           if (modeCfg.goldenAppleSpeedReduction > 0) {
-            g.speedBonusMs = modeCfg.goldenAppleSpeedReduction;
+            g.speedBonusMs = Math.min(g.speedBonusMs + modeCfg.goldenAppleSpeedReduction, modeCfg.goldenAppleSpeedReduction * 4);
           }
+          audioPulseRef.current = now + 700; // music surge on golden pickup
         }
         if (g.comboMultLeft > 0) { crBase *= 2; g.comboMultLeft--; if (g.comboMultLeft === 0) setComboActive(false); }
         g.creditsEarned += crBase;
@@ -1032,6 +1008,7 @@ export function SnakeShell({
         if (modeCfg.bonusEveryN > 0 && g.score % modeCfg.bonusEveryN === 0) {
           g.creditsEarned += modeCfg.bonusCrFlat;
           g.bonusFlashFrames = 40;
+          audioPulseRef.current = now + 700; // music surge on bonus
           if (modeCfg.bonusMultiplierApples > 0) { g.comboMultLeft = modeCfg.bonusMultiplierApples; setComboActive(true); }
           if (modeCfg.particlesEnabled) spawnBonusBurst(g, W / 2, W / 2, theme);
           g.floatingTexts.push({ x: W / 2, y: W * 0.35, vy: -0.5, text: `BONUS! +${modeCfg.bonusCrFlat}`, life: 1, decay: 0.011, color: "#fbbf24", size: Math.max(12, cell * 0.65) });
@@ -1068,9 +1045,11 @@ export function SnakeShell({
 
         if (g.phase !== "playing") return;
 
+        const goldRate = goldAppleRateRef.current;
         if (modeCfg.goldenAppleEnabled && !g.goldenApple
-          && g.score % Math.max(1, Math.floor(modeCfg.bonusEveryN / 2)) === 0
-          && g.score % modeCfg.bonusEveryN !== 0) {
+          && g.score % modeCfg.bonusEveryN !== 0
+          && (g.score % Math.max(1, Math.floor(modeCfg.bonusEveryN / 2)) === 0
+              || (goldRate > 0 && Math.random() < goldRate))) {
           const gMin = g.mode === "grind" ? g.shrinkCount : 0;
           const gMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
           const gMargin = (g.mode === "grind" && g.applesUntilShrink === 1) ? 1 : 0;
@@ -1084,9 +1063,14 @@ export function SnakeShell({
           g.goldenAppleMovesLeft = modeCfg.goldenAppleLifeApples;
         }
 
-        // Farm mode: snake never grows — remove tail segment on eat
+        // Body growth. Farm never grows. A golden apple with tail-loss NET
+        // shrinks the snake by exactly goldenAppleTailLoss (prepend head, then
+        // drop tailLoss+1 from the tail). Otherwise the snake grows by one.
         if (g.mode === "farm") {
           g.snake = [newHead, ...g.snake.slice(0, -1)];
+        } else if (ateGolden && modeCfg.goldenAppleTailLoss > 0) {
+          const keep = Math.max(1, g.snake.length - modeCfg.goldenAppleTailLoss - 1);
+          g.snake = [newHead, ...g.snake.slice(0, keep)];
         } else {
           g.snake = [newHead, ...g.snake];
         }
@@ -1112,7 +1096,7 @@ export function SnakeShell({
       const modeCfg = getModeCfgLocal(mode);
       const W = canvas.width;
       const cell = W / modeCfg.boardSize;
-      const theme = THEMES[mode];
+      const theme = resolveTheme(modeCfg.theme);
 
       for (const p of g.ambientParticles) {
         p.x += p.vx; p.y += p.vy;
@@ -1135,6 +1119,13 @@ export function SnakeShell({
 
       if (g.phase === "playing") {
         const speedMs = getSpeedMs(g.score, modeCfg, g.speedBonusMs);
+        // Feed the live speed to the music engine so the track accelerates with
+        // the game (deduped internally → safe to call every frame).
+        const range = modeCfg.initialSpeedMs - modeCfg.minSpeedMs;
+        const baseIntensity = range > 0 ? (modeCfg.initialSpeedMs - speedMs) / range : 0;
+        // Event spike (golden apple / bonus): surge then ease back.
+        const pulse = now < audioPulseRef.current ? 0.35 * ((audioPulseRef.current - now) / 700) : 0;
+        setMusicIntensity(Math.min(1, baseIntensity + pulse));
         if (now - g.lastMoveTime >= speedMs) {
           doTick(g, modeCfg, W, cell, theme, now);
         }
@@ -1146,7 +1137,7 @@ export function SnakeShell({
     };
 
     rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
+    return () => { cancelAnimationFrame(rafRef.current); resetMusicIntensity(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Mount-only: reads configRef for fresh config, gameRef for mutable state
 
@@ -1245,10 +1236,11 @@ export function SnakeShell({
   }
 
   function startGame() {
-    inputQueueRef.current = []; // flush any buffered inputs from prev game
     const mode = activeModeRef.current;
     const cfg = configRef.current;
     const modeCfg = mode === "grind" ? cfg.grind : mode === "x2" ? cfg.x2 : mode === "farm" ? cfg.farm : cfg.x1;
+    if (!modeCfg.enabled) { sound.error(); return; } // disabled mode can't be started
+    inputQueueRef.current = []; // flush any buffered inputs from prev game
     const BOARD = modeCfg.boardSize;
     const startX = Math.floor(BOARD / 2);
     const startY = Math.floor(BOARD / 2);
@@ -1273,11 +1265,28 @@ export function SnakeShell({
     g.applesUntilShrink = (modeCfg as SnakeGrindConfig).shrinkEveryN ?? 10;
     g.shrinkFlashFrames = 0;
     g.speedTrails = [];
-    g.ambientParticles = initAmbientParticles(canvasRef.current?.width ?? 560, mode);
+    g.ambientParticles = initAmbientParticles(canvasRef.current?.width ?? 560, mode, resolveTheme(configRef.current[mode].theme).ambientColors);
 
     setScore(0); setCreditsEarned(0); setPhase("playing");
     setLastResult(null); setBonusBannerText(null); setComboActive(false); setShrinkWarning(false);
     sound.click();
+  }
+
+  // Abort the current run and drop straight back to mode selection — no score
+  // submitted (the run is abandoned), nothing to clean up server-side since a
+  // Snake game only ever persists on death/submit. Instant, no reload.
+  function abortGame() {
+    sound.click();
+    const g = gameRef.current;
+    g.phase = "idle";
+    g.goldenApple = null;
+    g.particles = []; g.floatingTexts = []; g.speedTrails = [];
+    inputQueueRef.current = [];
+    resetMusicIntensity();
+    setPhase("idle");
+    setScore(0); setCreditsEarned(0);
+    setShrinkWarning(false); setComboActive(false); setBonusBannerText(null);
+    setLastResult(null);
   }
 
   const modeCfg = activeMode === "grind" ? config.grind : activeMode === "x2" ? config.x2 : activeMode === "farm" ? config.farm : config.x1;
@@ -1370,9 +1379,10 @@ export function SnakeShell({
                   key={m}
                   mode={m}
                   selected={activeMode === m}
-                  disabled={false}
+                  disabled={!config[m === "grind" ? "grind" : m === "x2" ? "x2" : m === "farm" ? "farm" : "x1"].enabled}
                   modeCfg={config[m === "grind" ? "grind" : m === "x2" ? "x2" : m === "farm" ? "farm" : "x1"]}
                   onClick={() => {
+                    if (!config[m === "grind" ? "grind" : m === "x2" ? "x2" : m === "farm" ? "farm" : "x1"].enabled) return;
                     setActiveMode(m);
                     activeModeRef.current = m;
                     setLbTab(m);
@@ -1442,6 +1452,17 @@ export function SnakeShell({
                   </p>
                 )}
               </div>
+            )}
+            {phase === "playing" && (
+              <button
+                onClick={abortGame}
+                onMouseEnter={sound.hover}
+                title="Runde abbrechen & Modus wechseln"
+                className="ml-auto flex shrink-0 items-center gap-1.5 self-center rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition-all hover:border-red-400/60 hover:bg-red-500/20 hover:shadow-[0_0_14px_rgba(239,68,68,0.3)]"
+              >
+                <X className="h-3.5 w-3.5" />
+                Abbrechen
+              </button>
             )}
             {dailyRemaining === null && dailyGamesRemaining !== null && (
               <div className="ml-auto text-right">

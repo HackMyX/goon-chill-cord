@@ -294,6 +294,19 @@ export function Player({
           .single();
         const key = (p?.equipped_ability_key as string | null) ?? null;
         if (!key) return;
+        // Only honour the ability if the player still holds a LIVE (non-expired)
+        // grant — a time-limited ability must stop working once it lapses. Fail
+        // OPEN on a read error (RLS/infra) so a valid ability never silently
+        // breaks; only skip when we can definitively confirm no live grant.
+        const { data: liveGrant, error: grantErr } = await supabase
+          .from("user_abilities")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("ability_key", key)
+          .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+          .limit(1)
+          .maybeSingle();
+        if (!grantErr && !liveGrant) return;
         const { data: def } = await supabase
           .from("ability_definitions")
           .select("effect_type, effect_value")

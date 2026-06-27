@@ -390,8 +390,16 @@ export class MusicSynth {
   private patternStartTime = 0;
   private patternDuration = 0; // seconds
   private loopTimer: ReturnType<typeof setTimeout> | null = null;
+  // Dynamic tempo multiplier (1 = normal). Applied to each newly-scheduled bar,
+  // so changes take effect at the next loop boundary — smooth, never a glitch.
+  private tempoMult = 1;
 
   get playing() { return this.isRunning; }
+
+  /** Scale playback tempo (e.g. 1.3 = 30% faster). Clamped to a musical range. */
+  setTempo(mult: number) {
+    this.tempoMult = Math.max(0.5, Math.min(2, Number.isFinite(mult) ? mult : 1));
+  }
 
   /** Parse a synth:// URL into vibe and variant */
   static parseSynthUrl(url: string): { vibe: VibeKey; variant: number } | null {
@@ -415,7 +423,10 @@ export class MusicSynth {
   }
 
   private schedulePattern(ctx: AudioContext, pattern: TrackPattern, startTime: number) {
-    const secPerBeat = 60 / pattern.bpm;
+    // Tempo multiplier folds into the bar's effective BPM, so the whole bar
+    // (melody/bass/pads/percussion + the loop delay derived from its duration)
+    // scales together and stays in time.
+    const secPerBeat = 60 / (pattern.bpm * this.tempoMult);
     const secPer16th = secPerBeat / 4;
     const totalSteps = pattern.melody.length;
     const scale = buildScale(pattern.rootMidi, pattern.scaleIntervals, 4);
@@ -494,6 +505,11 @@ export class MusicSynth {
     }
 
     const gain = this.masterGain!;
+    // Wipe any leftover automation (e.g. a still-running fade-out ramp from
+    // the track we're switching away from) before starting the new fade-in,
+    // so transitions are deterministic instead of two competing ramps
+    // fighting over the same param — the "unsaubere Übergänge" symptom.
+    gain.gain.cancelScheduledValues(ctx.currentTime);
     gain.gain.setValueAtTime(0, ctx.currentTime);
     gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + 1.2);
 
@@ -513,7 +529,28 @@ export class MusicSynth {
       if (!this.isRunning || !this.ctx || !this.currentVibe) return;
       const ctx = this.ctx;
       const pattern = getPattern(this.currentVibe, this.currentVariant);
-      this.patternStartTime += this.patternDuration;
+
+      // Reconcile the hand-advanced audio-clock pointer against the real
+      // audio clock before scheduling the next bar. `setTimeout` is
+      // wall-clock and only ever fires *late* (it's throttled hard when the
+      // tab is backgrounded, and the AudioContext can auto-suspend), so
+      // `patternStartTime` — which we advance by a fixed `patternDuration`
+      // each loop regardless of how much real time actually passed — drifts
+      // out of step with `ctx.currentTime`. Left unchecked it eventually
+      // lands in the *past*, and Web Audio fires an entire pattern's worth
+      // of notes simultaneously the instant they're scheduled: the
+      // crackling/clipping "music crashes after a while" symptom, getting
+      // worse the longer the page stays open. Snapping back whenever it has
+      // drifted outside a tight window around `now` keeps every note
+      // scheduled slightly in the future (clean playback) and caps recovery
+      // at a single seam instead of an ever-growing pile-up.
+      let nextStart = this.patternStartTime + this.patternDuration;
+      const minStart = ctx.currentTime + 0.05;
+      const maxStart = ctx.currentTime + this.patternDuration + 1;
+      if (nextStart < minStart || nextStart > maxStart) {
+        nextStart = minStart;
+      }
+      this.patternStartTime = nextStart;
       const nextDur = this.schedulePattern(ctx, pattern, this.patternStartTime);
       this.patternDuration = nextDur;
       this.scheduleLoop(nextDur);
@@ -525,6 +562,7 @@ export class MusicSynth {
     if (this.loopTimer) { clearTimeout(this.loopTimer); this.loopTimer = null; }
     if (this.masterGain) {
       const now = this.ctx?.currentTime ?? 0;
+      this.masterGain.gain.cancelScheduledValues(now);
       this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
       this.masterGain.gain.linearRampToValueAtTime(0, now + 0.4);
     }
@@ -534,6 +572,7 @@ export class MusicSynth {
     if (!this.masterGain || !this.ctx) return;
     const now = this.ctx.currentTime;
     const dur = durationMs / 1000;
+    this.masterGain.gain.cancelScheduledValues(now);
     this.masterGain.gain.setValueAtTime(0, now);
     this.masterGain.gain.linearRampToValueAtTime(volume, now + dur);
   }
@@ -543,6 +582,7 @@ export class MusicSynth {
       if (!this.masterGain || !this.ctx) { resolve(); return; }
       const now = this.ctx.currentTime;
       const dur = durationMs / 1000;
+      this.masterGain.gain.cancelScheduledValues(now);
       this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
       this.masterGain.gain.linearRampToValueAtTime(0, now + dur);
       setTimeout(() => { this.stop(); resolve(); }, durationMs + 50);
@@ -551,6 +591,9 @@ export class MusicSynth {
 
   setVolume(volume: number) {
     if (!this.masterGain || !this.ctx) return;
+    // Clear any in-flight fade so a live volume change snaps cleanly to the
+    // new level instead of being overridden a frame later by a leftover ramp.
+    this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
     this.masterGain.gain.setValueAtTime(volume, this.ctx.currentTime);
   }
 

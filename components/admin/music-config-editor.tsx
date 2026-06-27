@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { getMusicConfig, saveMusicConfig } from "@/lib/actions/music";
 import {
-  DEFAULT_MUSIC_CONFIG, PAGE_LABELS, PAGE_ROUTES, VIBE_LABELS,
+  DEFAULT_MUSIC_CONFIG, PAGE_LABELS, PAGE_ROUTES, VIBE_LABELS, MUSIC_PAGE_MODES, modeAssignKey,
   type MusicConfig, type MusicTrack, type MusicPageKey, type MusicVibe,
 } from "@/lib/music-config";
 import { MusicSynth } from "@/lib/music-synth";
@@ -357,7 +357,11 @@ export function MusicConfigEditor() {
       for (const k of Object.keys(pageAssignments) as MusicPageKey[]) {
         if (pageAssignments[k] === deletedId) pageAssignments[k] = null;
       }
-      return { ...c, tracks, pageAssignments };
+      const modeAssignments = { ...(c.modeAssignments ?? {}) };
+      for (const k of Object.keys(modeAssignments)) {
+        if (modeAssignments[k] === deletedId) modeAssignments[k] = null;
+      }
+      return { ...c, tracks, pageAssignments, modeAssignments };
     });
   }, []);
 
@@ -654,6 +658,37 @@ export function MusicConfigEditor() {
                     </span>
                   )}
                 </div>
+
+                {/* Per-mode track overrides (games with modes, e.g. Snake) */}
+                {MUSIC_PAGE_MODES[pageKey] && (
+                  <div className="mt-1 flex flex-col gap-1.5 rounded-lg border border-white/6 bg-black/20 px-2.5 py-2 pl-[26px]">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-600">Pro Modus (überschreibt Seite)</span>
+                    {MUSIC_PAGE_MODES[pageKey]!.map((m) => {
+                      const mKey = modeAssignKey(pageKey, m.key);
+                      const mId = config.modeAssignments?.[mKey] ?? "";
+                      return (
+                        <div key={m.key} className="flex items-center gap-2">
+                          <span className="w-20 shrink-0 text-[10px] font-semibold text-zinc-400">{m.label}</span>
+                          <select
+                            value={mId}
+                            onChange={(e) =>
+                              setConfig((c) => ({
+                                ...c,
+                                modeAssignments: { ...(c.modeAssignments ?? {}), [mKey]: e.target.value || null },
+                              }))
+                            }
+                            className="flex-1 min-w-0 rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-[11px] text-zinc-100 outline-none focus:border-purple-400/60"
+                          >
+                            <option value="">— wie Seite —</option>
+                            {config.tracks.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}

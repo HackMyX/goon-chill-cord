@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Zap, Check, ShieldOff, Info, RefreshCw } from "lucide-react";
+import { Zap, Check, ShieldOff, Info, RefreshCw, Clock } from "lucide-react";
 import type { UserAbility } from "@/lib/abilities";
 import {
   ABILITY_CATEGORY_COLORS, ABILITY_CATEGORY_LABELS,
@@ -13,6 +13,33 @@ import { useSoundManager } from "@/lib/sound-manager";
 interface AbilitiesSectionProps {
   abilities: UserAbility[];
   equippedKey: string | null;
+}
+
+/** Human-readable remaining time for a time-limited ability (null = permanent). */
+function timeLeftLabel(expiresAt: string | null | undefined): { text: string; urgent: boolean } | null {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return { text: "abgelaufen", urgent: true };
+  const h = ms / 3_600_000;
+  if (h >= 48) return { text: `${Math.floor(h / 24)}d`, urgent: false };
+  if (h >= 1) return { text: `${Math.floor(h)}h`, urgent: h < 6 };
+  return { text: `${Math.max(1, Math.floor(ms / 60_000))}min`, urgent: true };
+}
+
+function TimeBadge({ expiresAt }: { expiresAt: string | null | undefined }) {
+  const t = timeLeftLabel(expiresAt);
+  if (!t) return null;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${
+        t.urgent ? "border-red-500/40 bg-red-500/10 text-red-300" : "border-sky-500/40 bg-sky-500/10 text-sky-300"
+      }`}
+      title={expiresAt ? `Läuft ab: ${new Date(expiresAt).toLocaleString("de-DE")}` : undefined}
+    >
+      <Clock className="h-2.5 w-2.5" />
+      {t.text}
+    </span>
+  );
 }
 
 export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: AbilitiesSectionProps) {
@@ -67,6 +94,7 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
                 <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${ABILITY_RARITY_COLORS[equippedAbility.definition.rarity]}`}>
                   {ABILITY_RARITY_LABELS[equippedAbility.definition.rarity]}
                 </span>
+                <TimeBadge expiresAt={equippedAbility.expiresAt} />
               </div>
               <p className="mt-0.5 text-xs text-zinc-400">{equippedAbility.definition.description}</p>
             </div>
@@ -118,6 +146,7 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
                     <span className={`rounded-md border px-1.5 py-0.5 text-[10px] ${ABILITY_CATEGORY_COLORS[def.category]}`}>
                       {ABILITY_CATEGORY_LABELS[def.category]}
                     </span>
+                    <TimeBadge expiresAt={ua.expiresAt} />
                   </div>
                   <p className="mt-1 text-xs text-zinc-400">{def.description}</p>
                 </div>

@@ -48,6 +48,12 @@ export interface MusicConfig {
   tracks: MusicTrack[];
   pageAssignments: Partial<Record<MusicPageKey, string | null>>;
   /**
+   * Optional per-GAME-MODE track override, keyed `"<page>:<mode>"` (e.g.
+   * "snake:x2"). A non-empty entry wins over the page-level assignment; an
+   * empty/missing entry falls back to the page track. See MUSIC_PAGE_MODES.
+   */
+  modeAssignments?: Record<string, string | null>;
+  /**
    * Optional exact background-music volume per page/game (0–1). When a page has
    * no entry here, `defaultVolume` is used. In dictator mode (userCanAdjustVolume
    * = false) this value is applied to the player EXACTLY — no localStorage, no
@@ -70,6 +76,36 @@ export function resolvePageVolume(config: MusicConfig, page: MusicPageKey): numb
   const perPage = config.pageVolumes?.[page];
   const v = typeof perPage === "number" ? perPage : config.defaultVolume;
   return clampVolume(v);
+}
+
+/**
+ * Games that have distinct modes which can carry their own music track.
+ * Extend this to add per-mode music for more games (DON, Plinko, …).
+ */
+export const MUSIC_PAGE_MODES: Partial<Record<MusicPageKey, { key: string; label: string }[]>> = {
+  snake: [
+    { key: "x1", label: "Classic ×1" },
+    { key: "x2", label: "Turbo ×2" },
+    { key: "grind", label: "Grind" },
+    { key: "farm", label: "Endless" },
+  ],
+};
+
+/** Build the modeAssignments key for a page+mode. */
+export function modeAssignKey(page: MusicPageKey, mode: string): string {
+  return `${page}:${mode}`;
+}
+
+/**
+ * Resolve which track id should play for a page, honouring a per-mode override
+ * when one is configured (non-empty). Falls back to the page-level assignment.
+ */
+export function resolveTrackId(config: MusicConfig, page: MusicPageKey, mode?: string | null): string | null {
+  if (mode) {
+    const override = config.modeAssignments?.[modeAssignKey(page, mode)];
+    if (override) return override;
+  }
+  return config.pageAssignments[page] ?? null;
 }
 
 export const PAGE_LABELS: Record<MusicPageKey, string> = {

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
+import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
 import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
 import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize, BpAutoFillConfig, BpVisualConfig } from "@/lib/battle-pass";
 import { DEFAULT_BP_VISUAL_CONFIG } from "@/lib/battle-pass";
@@ -580,6 +581,7 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
       void logDebugEvent({ level: "error", scope: "battlepass:claim", message: "BP Badge-Grant fehlgeschlagen", detail: badgeErr.message, context: { userId: user.id, tierId, badgeKey } });
       return { success: false, error: "Das Badge konnte nicht vergeben werden. Bitte erneut versuchen — der Tier wurde NICHT abgeholt." };
     }
+    await recomputeAutoPrioBadges(user.id);
     rewardMsg = `Badge: ${badgeText}`;
   } else if (rewardType === "xp_boost") {
     const days = (t.reward_xp_boost as number | null) ?? 1;
