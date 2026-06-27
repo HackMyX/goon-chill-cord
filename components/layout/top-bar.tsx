@@ -41,6 +41,7 @@ interface TopBarProps {
   userId?: string;
   pendingTradesCount?: number;
   level?: number;
+  avatarUrl?: string | null;
 }
 
 export function TopBar({
@@ -53,6 +54,7 @@ export function TopBar({
   userId,
   pendingTradesCount = 0,
   level,
+  avatarUrl,
 }: TopBarProps) {
   const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
@@ -71,8 +73,10 @@ export function TopBar({
   const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [liveLevel, setLiveLevel] = useState(level ?? 0);
+  const [liveAvatarUrl, setLiveAvatarUrl] = useState<string | null>(avatarUrl ?? null);
   useEffect(() => { setLiveInventoryCount(inventoryCount); }, [inventoryCount]);
   useEffect(() => { if (level !== undefined) setLiveLevel(level); }, [level]);
+  useEffect(() => { if (avatarUrl !== undefined) setLiveAvatarUrl(avatarUrl); }, [avatarUrl]);
 
   useEffect(() => {
     if (userId) { setResolvedUserId(userId); return; }
@@ -85,11 +89,13 @@ export function TopBar({
   useEffect(() => {
     if (!resolvedUserId) return;
     const supabase = createClient();
-    // Fetch initial level if not passed as prop
-    if (!level) {
-      supabase.from("profiles").select("level").eq("id", resolvedUserId).single()
-        .then(({ data }) => { if (data?.level) setLiveLevel(data.level as number); });
-    }
+    // Fetch initial level + avatar (avatar is needed for the avatar-profile slot;
+    // level for the level / profile_avatar slots).
+    supabase.from("profiles").select("level, avatar_url").eq("id", resolvedUserId).single()
+      .then(({ data }) => {
+        if (data?.level && level === undefined) setLiveLevel(data.level as number);
+        if (avatarUrl === undefined) setLiveAvatarUrl(((data?.avatar_url as string | null) ?? null));
+      });
     const channel = supabase
       .channel(`topbar-inventory-${resolvedUserId}`)
       .on(
@@ -108,6 +114,7 @@ export function TopBar({
         (payload) => {
           const row = payload.new as Record<string, unknown>;
           if (typeof row.level === "number") setLiveLevel(row.level);
+          if ("avatar_url" in row) setLiveAvatarUrl((row.avatar_url as string | null) ?? null);
         }
       )
       .subscribe();
@@ -215,6 +222,40 @@ export function TopBar({
             className="hidden xl:flex"
           />
         );
+      case "level":
+        return liveLevel > 0 ? (
+          <LevelMenuTrigger key="level" level={liveLevel}>
+            <div onMouseEnter={sound.hover} className="hidden cursor-pointer items-center xl:flex [@media(max-height:600px)]:hidden">
+              <LevelBadge level={liveLevel} size="xs" />
+            </div>
+          </LevelMenuTrigger>
+        ) : null;
+      case "profile_avatar":
+        return (
+          <div key="profile_avatar" className="hidden flex-col items-center gap-0.5 xl:flex [@media(max-height:600px)]:hidden">
+            <Link
+              href="/account"
+              onMouseEnter={sound.hover}
+              onClick={sound.click}
+              title="Profil"
+              className="group relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-purple-500/10 ring-1 ring-purple-400/40 transition-all hover:scale-105 hover:ring-purple-300/80"
+            >
+              {liveAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={liveAvatarUrl} alt="Profil" className="h-full w-full object-cover" />
+              ) : (
+                <UserRound className="h-4.5 w-4.5 text-purple-300" />
+              )}
+            </Link>
+            {liveLevel > 0 && (
+              <LevelMenuTrigger level={liveLevel}>
+                <div onMouseEnter={sound.hover} className="cursor-pointer leading-none">
+                  <LevelBadge level={liveLevel} size="xs" />
+                </div>
+              </LevelMenuTrigger>
+            )}
+          </div>
+        );
       case "logout":
         return (
           <span key="logout" className="hidden xl:flex">
@@ -243,6 +284,27 @@ export function TopBar({
         >
           {siteVersion}
         </Link>
+
+        {/* Mod / Admin panels — far left next to the version, ICON-ONLY (no text) */}
+        {isAdmin && (
+          <IconButton
+            icon={ShieldAlert}
+            label="Admin-Panel"
+            href="/admin"
+            showLabel={false}
+            className="hidden h-8 w-8 xl:flex [@media(max-height:600px)]:hidden bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border-0"
+          />
+        )}
+        {(isAdmin || isModerator) && (
+          <IconButton
+            icon={Shield}
+            label="Mod-Panel"
+            href="/mod"
+            showLabel={false}
+            className="hidden h-8 w-8 xl:flex [@media(max-height:600px)]:hidden bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
+          />
+        )}
+
         <Link
           href="/"
           onMouseEnter={sound.hover}
@@ -278,42 +340,13 @@ export function TopBar({
           <span className="hidden text-xs text-purple-200/70 sm:inline [@media(max-height:600px)]:hidden">{currencyName}</span>
         </motion.div>
 
-        {liveLevel > 0 && (
-          <LevelMenuTrigger level={liveLevel}>
-            {/* Always visible — including mobile — top-left next to credits.
-                Tapping opens the level progress popup (portaled to <body>). */}
-            <div onMouseEnter={sound.hover} className="block [@media(max-height:600px)]:hidden cursor-pointer">
-              <LevelBadge level={liveLevel} size="xs" />
-            </div>
-          </LevelMenuTrigger>
-        )}
-
-        {isAdmin && (
-          <>
-            <IconButton
-              icon={ShieldAlert}
-              label="Admin-Panel"
-              href="/admin"
-              showLabel={topbarShowLabels}
-              className="hidden xl:flex [@media(max-height:600px)]:hidden bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border-0"
-            />
-            <IconButton
-              icon={Shield}
-              label="Mod-Panel"
-              href="/mod"
-              showLabel={topbarShowLabels}
-              className="hidden xl:flex [@media(max-height:600px)]:hidden bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
-            />
-          </>
-        )}
-        {isModerator && !isAdmin && (
-          <IconButton
-            icon={Shield}
-            label="Mod-Panel"
-            href="/mod"
-            showLabel={topbarShowLabels}
-            className="hidden xl:flex [@media(max-height:600px)]:hidden bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
-          />
+        {/* Daily Quests — right next to the credits, opens the quests menu.
+            (The level badge is now a movable TopBar slot: "level" or shown under
+            the avatar via the "profile_avatar" slot.) */}
+        {resolvedUserId && (
+          <div className="[@media(max-height:600px)]:hidden">
+            <DailyQuestsTrigger userId={resolvedUserId} />
+          </div>
         )}
       </div>
 

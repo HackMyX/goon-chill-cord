@@ -7,8 +7,9 @@ import {
   X, Star, Zap, Trophy, Package, Palette, Crown, Lock,
   ChevronUp, ChevronDown, TrendingUp, Gift, Info,
 } from "lucide-react";
-import { getLevelColor, getLevelBgColor, LEVEL_TITLES, type UserLevelInfo, type LevelDefinition } from "@/lib/level-system";
+import { getLevelColor, getLevelBgColor, LEVEL_TITLES, DEFAULT_LEVEL_ROAD_CONFIG, type UserLevelInfo, type LevelDefinition, type LevelRewardDisplay, type LevelRoadConfig } from "@/lib/level-system";
 import { getXpConfig, getMyLevelInfo } from "@/lib/actions/level-system";
+import { LevelRoad } from "@/components/ui/level-road";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -220,8 +221,10 @@ export function LevelMenuModal({
 }) {
   const [levels, setLevels] = useState<LevelDefinition[]>([]);
   const [xpSources, setXpSources] = useState<Record<string, number>>({});
+  const [rewardDisplay, setRewardDisplay] = useState<LevelRewardDisplay>("3d");
+  const [roadConfig, setRoadConfig] = useState<LevelRoadConfig>(DEFAULT_LEVEL_ROAD_CONFIG);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"progress" | "levels" | "sources">("progress");
+  const [tab, setTab] = useState<"road" | "progress" | "levels" | "sources">("road");
   const listRef = useRef<HTMLDivElement>(null);
 
   const accent = levelAccent(levelInfo.level);
@@ -232,6 +235,8 @@ export function LevelMenuModal({
     getXpConfig().then((cfg) => {
       setLevels(cfg.levels);
       setXpSources(cfg.sources as unknown as Record<string, number>);
+      setRewardDisplay(cfg.levelRewardDisplay ?? "3d");
+      setRoadConfig(cfg.levelRoadConfig ?? DEFAULT_LEVEL_ROAD_CONFIG);
       setLoading(false);
       // Scroll to current level after render
       setTimeout(() => {
@@ -345,7 +350,7 @@ export function LevelMenuModal({
 
           {/* Tabs */}
           <div className="flex border-b border-white/[0.06] px-4">
-            {(["progress", "levels", "sources"] as const).map((t) => (
+            {(["road", "progress", "levels", "sources"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -357,7 +362,7 @@ export function LevelMenuModal({
                 }`}
                 style={tab === t ? { borderColor: accent, color: accent } : undefined}
               >
-                {t === "progress" ? "📊 Fortschritt" : t === "levels" ? "🏆 Alle Level" : "⚡ XP-Quellen"}
+                {t === "road" ? "🛣️ Road" : t === "progress" ? "📊 Fortschritt" : t === "levels" ? "🏆 Alle Level" : "⚡ XP-Quellen"}
               </button>
             ))}
           </div>
@@ -368,6 +373,26 @@ export function LevelMenuModal({
             className="overflow-y-auto p-4"
             style={{ maxHeight: "calc(90vh - 280px)", scrollbarWidth: "none" }}
           >
+            {/* Level Road tab */}
+            {tab === "road" && (
+              loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+                </div>
+              ) : (
+                <LevelRoad
+                  levels={levels}
+                  currentLevel={levelInfo.level}
+                  defaultDisplay={rewardDisplay}
+                  roadConfig={roadConfig}
+                  onOpenDailyQuests={() => {
+                    onClose();
+                    window.dispatchEvent(new CustomEvent("gn:open-daily-quests"));
+                  }}
+                />
+              )
+            )}
+
             {/* Progress tab */}
             {tab === "progress" && (
               <div className="flex flex-col gap-4">
@@ -532,6 +557,17 @@ export function LevelMenuTrigger({
       }).catch(() => setFetching(false));
     }
   }
+
+  // Cross-link: another panel (e.g. Daily Quests) can open the level menu by
+  // dispatching `gn:open-level`. Self-contained so there's no stale-closure issue.
+  useEffect(() => {
+    const onOpen = () => {
+      setOpen(true);
+      getMyLevelInfo().then(setLevelInfo).catch(() => {});
+    };
+    window.addEventListener("gn:open-level", onOpen);
+    return () => window.removeEventListener("gn:open-level", onOpen);
+  }, []);
 
   const fallbackLevelInfo: UserLevelInfo = {
     xp: 0,

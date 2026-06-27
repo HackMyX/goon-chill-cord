@@ -478,8 +478,24 @@ export function MusicConfigEditor() {
           <p className="text-[10px] text-zinc-600">Basis-Lautstärke für Seiten ohne eigene Einstellung. Im Diktator-Modus exakt übernommen; nur bei erlaubter User-Steuerung überschreibbar.</p>
         </div>
 
+        {/* Fades master switch */}
+        <div className="mt-5 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5">
+          <span className="flex items-center gap-1.5 text-sm text-zinc-300">
+            Fades aktiviert
+            <AdminTooltip text="AUS = Tracks wechseln hart/sofort ohne Ein-/Ausblenden (Fade-In/Out unten werden ignoriert). AN = sanftes Überblenden mit den Zeiten unten." />
+          </span>
+          <button
+            type="button"
+            aria-pressed={config.fadesEnabled}
+            onClick={() => setConfig((c) => ({ ...c, fadesEnabled: !c.fadesEnabled }))}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${config.fadesEnabled ? "bg-purple-500" : "bg-zinc-700"}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${config.fadesEnabled ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+          </button>
+        </div>
+
         {/* Fade times */}
-        <div className="mt-5 grid grid-cols-2 gap-4">
+        <div className={`mt-5 grid grid-cols-2 gap-4 transition-opacity ${config.fadesEnabled ? "" : "pointer-events-none opacity-40"}`}>
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-sm text-zinc-300">

@@ -209,7 +209,14 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Feintuning", tab: "fine_config", keywords: ["feintuning", "fine", "nametag", "lerp", "sync", "blut", "partikel", "chat", "polling", "badges", "limit", "höhe", "geschwindigkeit", "multiplayer", "dead reckoning", "swing"], description: "Alle feingranularen konfigurierbaren Werte: Nametag, MP-Sync, Hit-Effekte, Chat" },
 ];
 
-const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
+// ⚠️ KONVENTION FÜR ALLE KIs / ENTWICKLER: Die Admin-Tabs werden IMMER automatisch
+// alphabetisch (de) sortiert — siehe `.sort(...)` am Ende dieses Arrays. Neue Tabs
+// einfach IRGENDWO in dieses Array einfügen; sie ordnen sich von selbst korrekt ein.
+// Führende Emojis/Symbole im Label werden beim Sortieren ignoriert (z. B. „⚡ Balance
+// Studio" einsortiert unter „B"). NICHT manuell umsortieren — die Sortierung erledigt das.
+const tabSortKey = (label: string) => label.replace(/^[^\p{L}\p{N}]+/u, "").trim();
+
+const TABS = ([
   { id: "audit",          label: "Audit-Log",           icon: ScrollText },
   { id: "backup",         label: "Backup",               icon: Database },
   { id: "badges",         label: "Badges",               icon: Crown },
@@ -242,7 +249,7 @@ const TABS: { id: Tab; label: string; icon: typeof Coins }[] = [
   { id: "users",          label: "User-Management",      icon: Users },
   { id: "cleanup",        label: "Verlaufs-Bereinigung", icon: Trash2 },
   { id: "daily_quests",  label: "Daily Quests",          icon: ListChecks },
-];
+] as { id: Tab; label: string; icon: typeof Coins }[]).sort((a, b) => tabSortKey(a.label).localeCompare(tabSortKey(b.label), "de"));
 
 export function AdminShell({
   credits: initialCredits,

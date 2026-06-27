@@ -490,7 +490,7 @@ export class MusicSynth {
     return totalSteps * secPer16th;
   }
 
-  async start(synthUrl: string, volume: number) {
+  async start(synthUrl: string, volume: number, fadeInMs = 1200) {
     const parsed = MusicSynth.parseSynthUrl(synthUrl);
     if (!parsed) return;
 
@@ -511,7 +511,8 @@ export class MusicSynth {
     // fighting over the same param — the "unsaubere Übergänge" symptom.
     gain.gain.cancelScheduledValues(ctx.currentTime);
     gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + 1.2);
+    // fadeInMs = 0 → instant (no fade), used when the admin disables fades.
+    gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + Math.max(0, fadeInMs) / 1000);
 
     const pattern = getPattern(parsed.vibe, parsed.variant);
     this.patternStartTime = ctx.currentTime + 0.1;

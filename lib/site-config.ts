@@ -85,7 +85,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   armorLabel: "AP",
   rarityLabels: { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" },
   perkLabels: { speed: "Tempo", jump: "Sprung", regen: "Regen" },
-  topbarRightSlots: ["games", "shop", "auctions", "trading", "community", "wardrobe", "notifications", "profile", "logout"],
+  topbarRightSlots: ["games", "shop", "auctions", "trading", "community", "wardrobe", "notifications", "profile_avatar"],
   siteVersion: "v1.0.0",
   topbarShowLabels: false,
   topbarButtonStyle: "icon",
@@ -93,8 +93,16 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   maxPrioBadges: 2,
 };
 
+// All selectable TopBar slot keys (the admin arranges a subset, in any order):
+//   quests          — Daily-Quests button (also shown next to credits by default)
+//   level           — standalone level badge (click → level popup)
+//   profile         — classic profile icon button → /account
+//   profile_avatar  — the player's AVATAR as the profile button, with their level
+//                     shown underneath (click avatar → /account, click level → popup)
+//   logout          — sign-out button (off by default; logout also lives at the
+//                     bottom of /account)
 export const DEFAULT_TOPBAR_RIGHT_SLOTS = [
-  "games", "shop", "auctions", "trading", "community", "surveys", "wardrobe", "notifications", "profile", "logout",
+  "games", "shop", "auctions", "trading", "community", "surveys", "quests", "wardrobe", "notifications", "level", "profile", "profile_avatar", "logout",
 ] as const;
 
 export type TopbarSlotKey = typeof DEFAULT_TOPBAR_RIGHT_SLOTS[number];

@@ -405,6 +405,23 @@ export async function modReplyToTicket(
 // Actions: warn, note, temp ban, close ticket, credits
 // ---------------------------------------------------------------------------
 
+/**
+ * Hierarchy guard: a non-admin moderator may NOT sanction another moderator or an
+ * admin (warn / note / temp-ban / credits). Returns an error string when blocked,
+ * or null when the action is allowed. Admins can target anyone.
+ */
+async function blockIfProtectedTarget(
+  admin: ReturnType<typeof createAdminClient>,
+  isAdminUser: boolean,
+  targetUserId: string,
+): Promise<string | null> {
+  if (isAdminUser) return null;
+  const { data: tgt } = await admin.from("profiles").select("role, username").eq("id", targetUserId).single();
+  // isModerator(tgt) is true for BOTH moderators and admins → mods can't touch either.
+  if (isModerator(tgt)) return "Du kannst keine Moderatoren oder Admins sanktionieren.";
+  return null;
+}
+
 export async function modWarnUser(
   targetUserId: string,
   reason: string
@@ -415,6 +432,8 @@ export async function modWarnUser(
     if (!perms.canWarnUsers) return { success: false, error: "Keine Berechtigung zum Verwarnen." };
     if (perms.warnRequiresReason && !reason.trim()) return { success: false, error: "Begründung erforderlich." };
     const admin = createAdminClient();
+    const guardErr = await blockIfProtectedTarget(admin, isAdminUser, targetUserId);
+    if (guardErr) return { success: false, error: guardErr };
     const { error } = await admin.from("mod_actions").insert({
       mod_id: user.id, target_user_id: targetUserId,
       action_type: "warning", reason: reason.trim() || null,
@@ -444,6 +463,8 @@ export async function modAddNote(
     const perms = await effectivePerms(isAdminUser, user.id);
     if (!perms.canWarnUsers) return { success: false, error: "Keine Berechtigung." };
     const admin = createAdminClient();
+    const guardErr = await blockIfProtectedTarget(admin, isAdminUser, targetUserId);
+    if (guardErr) return { success: false, error: guardErr };
     const { error } = await admin.from("mod_actions").insert({
       mod_id: user.id, target_user_id: targetUserId,
       action_type: "note", reason: note.trim() || null,
@@ -465,6 +486,8 @@ export async function modTempBan(
     const cappedHours = Math.min(hours, perms.maxTempBanHours);
     const expiresAt = new Date(Date.now() + cappedHours * 3_600_000).toISOString();
     const admin = createAdminClient();
+    const guardErr = await blockIfProtectedTarget(admin, isAdminUser, targetUserId);
+    if (guardErr) return { success: false, error: guardErr };
     const [actionRes, banRes] = await Promise.all([
       admin.from("mod_actions").insert({
         mod_id: user.id, target_user_id: targetUserId,
@@ -683,6 +706,8 @@ export async function modAddCredits(
       }
     }
     const admin = createAdminClient();
+    const guardErr = await blockIfProtectedTarget(admin, isAdminUser, targetUserId);
+    if (guardErr) return { success: false, error: guardErr };
     const { data: target } = await admin.from("profiles").select("credits").eq("id", targetUserId).single();
     if (!target) return { success: false, error: "Nutzer nicht gefunden." };
     const newCredits = Math.max(0, (target.credits ?? 0) + amount);

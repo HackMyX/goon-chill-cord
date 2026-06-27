@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { Save, RefreshCw, AlertTriangle, CheckCircle2, TrendingUp, Zap, Star, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { AdminTooltip } from "@/components/admin/admin-tooltip";
-import type { XpConfig, LevelDefinition, XpSourceConfig, LevelReward } from "@/lib/level-system";
+import { DEFAULT_LEVEL_ROAD_CONFIG } from "@/lib/level-system";
+import type { XpConfig, LevelDefinition, XpSourceConfig, LevelReward, LevelRoadConfig, LevelRoadTier } from "@/lib/level-system";
 import { getXpConfig, updateXpConfig, adminGrantXp } from "@/lib/actions/level-system";
 
 interface LevelConfigEditorProps {
@@ -46,6 +47,21 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
 
   function setSources(patch: Partial<XpSourceConfig>) {
     setConfig((c) => ({ ...c, sources: { ...c.sources, ...patch } }));
+  }
+
+  // ── Level Road appearance ──────────────────────────────────────────────────
+  const road = config.levelRoadConfig ?? DEFAULT_LEVEL_ROAD_CONFIG;
+  function setRoad(patch: Partial<LevelRoadConfig>) {
+    setConfig((c) => ({ ...c, levelRoadConfig: { ...(c.levelRoadConfig ?? DEFAULT_LEVEL_ROAD_CONFIG), ...patch } }));
+  }
+  function setRoadTier(i: number, patch: Partial<LevelRoadTier>) {
+    setRoad({ tiers: road.tiers.map((t, idx) => (idx === i ? { ...t, ...patch } : t)) });
+  }
+  function hexToGlow(hex: string): string {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+    if (!m) return "rgba(148,163,184,0.45)";
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},0.45)`;
   }
 
   function setLevelField(level: number, patch: Partial<LevelDefinition>) {
@@ -164,6 +180,79 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
             onChange={(v) => setConfig((c) => ({ ...c, abilitySlotCount: Math.max(1, Math.min(5, v)) }))}
             min={1}
           />
+        </div>
+      </div>
+
+      {/* Level Road appearance */}
+      <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+          <Star className="h-3.5 w-3.5 text-violet-400" />
+          Level-Road
+          <AdminTooltip text="Aussehen der Level-Road im Level-Menü: 3D- vs Icon-Darstellung der Belohnungen (global), sichtbare Infos und die Akzentfarben pro Level-Stufe." />
+        </h3>
+
+        {/* 3D / Icon (global default) */}
+        <div className="mb-4">
+          <span className="mb-1.5 block text-xs text-zinc-400">Belohnungs-Darstellung (global)</span>
+          <div className="inline-flex rounded-lg border border-white/10 bg-black/30 p-0.5">
+            {(["3d", "icon"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setConfig((c) => ({ ...c, levelRewardDisplay: m }))}
+                className={`rounded-md px-4 py-1.5 text-xs font-bold transition-colors ${config.levelRewardDisplay === m ? "bg-violet-500/25 text-violet-200" : "text-zinc-500 hover:text-zinc-300"}`}
+              >
+                {m === "3d" ? "3D (Standard)" : "Icons"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Toggles */}
+        <div className="mb-4 flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-xs text-zinc-300">
+            <input type="checkbox" checked={road.showXp} onChange={(e) => setRoad({ showXp: e.target.checked })} className="accent-violet-500" />
+            XP-Anforderung anzeigen
+          </label>
+          <label className="flex items-center gap-2 text-xs text-zinc-300">
+            <input type="checkbox" checked={road.showTitles} onChange={(e) => setRoad({ showTitles: e.target.checked })} className="accent-violet-500" />
+            Level-Titel anzeigen
+          </label>
+        </div>
+
+        {/* Tier colours */}
+        <span className="mb-1.5 block text-xs text-zinc-400">Farb-Stufen (ab Level → Akzentfarbe)</span>
+        <div className="flex flex-col gap-2">
+          {road.tiers.map((t, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-[11px] text-zinc-500">ab Lv.</span>
+              <input
+                type="number" min={1} value={t.minLevel}
+                onChange={(e) => setRoadTier(i, { minLevel: Math.max(1, Number(e.target.value)) })}
+                className="w-16 rounded-md border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <input
+                type="color" value={t.accent}
+                onChange={(e) => setRoadTier(i, { accent: e.target.value, glow: hexToGlow(e.target.value) })}
+                className="h-7 w-10 cursor-pointer rounded border border-white/10 bg-transparent"
+              />
+              <span className="text-[11px] tabular-nums text-zinc-600">{t.accent}</span>
+              <button
+                type="button"
+                onClick={() => setRoad({ tiers: road.tiers.filter((_, idx) => idx !== i) })}
+                className="ml-auto rounded p-1 text-zinc-600 hover:text-red-400"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setRoad({ tiers: [...road.tiers, { minLevel: 1, accent: "#94a3b8", glow: hexToGlow("#94a3b8") }] })}
+            className="mt-1 inline-flex w-fit items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-white/[0.06]"
+          >
+            <Plus className="h-3.5 w-3.5" /> Stufe hinzufügen
+          </button>
         </div>
       </div>
 

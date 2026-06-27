@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { useSoundManager } from "@/lib/sound-manager";
-import { setMusicIntensity, resetMusicIntensity, setMusicMode } from "@/lib/music-dynamics";
+import { setMusicIntensity, resetMusicIntensity, setMusicMode, setMusicTempoBoost, resetMusicTempoBoost } from "@/lib/music-dynamics";
 import { submitSnakeScore, getSnakeConfig } from "@/lib/actions/snake";
 import { useLiveConfig } from "@/lib/use-live-config";
 import type { SnakeConfig, SnakeMode, SnakeModeConfig, SnakeGrindConfig, SnakeModeTheme } from "@/lib/snake-config";
@@ -276,10 +276,18 @@ function drawFrame(
   // ── Grind: danger zone border ───────────────────────────────────────────────
   if (g.mode === "grind") {
     const sc = g.shrinkCount;
-    const danger = g.applesUntilShrink <= 3 && (g.phase === "playing");
     const grindCfg = modeCfg as SnakeGrindConfig;
+    // Two independent, admin-configurable thresholds:
+    //  • borderWarn → STATIC red warning border appears (no blink)
+    //  • blink      → border + counter start PULSING (blinking)
+    // e.g. borderWarn=3, blink=1 ⇒ static warning at 3/2 apples left, blinking at 1.
+    const playing = g.phase === "playing";
+    const blink = playing && g.applesUntilShrink > 0 && g.applesUntilShrink <= grindCfg.shrinkBlinkApples;
+    const borderWarn = playing && g.applesUntilShrink > 0 && g.applesUntilShrink <= grindCfg.shrinkBorderWarnApples;
     const arenaMin = sc;
     const arenaMax = BOARD - 1 - sc;
+    const bx = arenaMin * cell, by = arenaMin * cell;
+    const bw = (arenaMax - arenaMin + 1) * cell;
 
     // Shrink flash overlay — 20 frames (≈ 3s at default speed), fades to zero
     if (g.shrinkFlashFrames > 0) {
@@ -288,29 +296,28 @@ function drawFrame(
       ctx.fillRect(0, 0, W, W);
     }
 
-    // Danger ring pulsing
-    if (danger || g.shrinkFlashFrames > 0) {
-      const pAlpha = danger ? 0.3 + Math.sin(t * 0.2) * 0.25 : (g.shrinkFlashFrames / 20) * 0.9;
-      const bx = arenaMin * cell;
-      const by = arenaMin * cell;
-      const bw = (arenaMax - arenaMin + 1) * cell;
-      const bh = bw;
+    if (blink || g.shrinkFlashFrames > 0) {
+      // Pulsing (blinking) red danger ring
+      const pAlpha = blink ? 0.3 + Math.sin(t * 0.2) * 0.25 : (g.shrinkFlashFrames / 20) * 0.9;
       ctx.strokeStyle = `rgba(239,68,68,${pAlpha})`;
       ctx.lineWidth = cell * 0.4;
-      ctx.strokeRect(bx - cell * 0.2, by - cell * 0.2, bw + cell * 0.4, bh + cell * 0.4);
-    } else if (g.phase === "playing") {
+      ctx.strokeRect(bx - cell * 0.2, by - cell * 0.2, bw + cell * 0.4, bw + cell * 0.4);
+    } else if (borderWarn) {
+      // Static (non-blinking) red warning border
+      ctx.strokeStyle = "rgba(239,68,68,0.55)";
+      ctx.lineWidth = cell * 0.32;
+      ctx.strokeRect(bx - cell * 0.2, by - cell * 0.2, bw + cell * 0.4, bw + cell * 0.4);
+    } else if (playing) {
       // Normal amber arena border
       const aPulse = 0.2 + Math.sin(t * 0.04) * 0.08;
       ctx.strokeStyle = hexToRgba(theme.borderColor, aPulse);
       ctx.lineWidth = cell * 0.25;
-      const bx = arenaMin * cell, by = arenaMin * cell;
-      const bw = (arenaMax - arenaMin + 1) * cell;
       ctx.strokeRect(bx, by, bw, bw);
     }
 
-    // Show "next shrink at" counter if close
-    if (danger && g.phase === "playing") {
-      const pulseT = 0.7 + Math.sin(t * 0.25) * 0.3;
+    // "next shrink" counter — shown whenever a warning is active; pulses only when blinking
+    if (borderWarn) {
+      const pulseT = blink ? 0.7 + Math.sin(t * 0.25) * 0.3 : 0.95;
       ctx.globalAlpha = pulseT;
       ctx.fillStyle = "#ef4444";
       ctx.shadowColor = "#ef4444";
@@ -928,7 +935,7 @@ export function SnakeShell({
       g.deathFlashFrames = 30;
       setPhase("dead");
       setShrinkWarning(false);
-      resetMusicIntensity(); // music back to calm tempo on death
+      resetMusicIntensity(); resetMusicTempoBoost(); // music back to calm tempo on death
       const finalScore = g.score;
       const finalCredits = g.creditsEarned;
       const finalMode = g.mode;
@@ -995,7 +1002,7 @@ export function SnakeShell({
           if (modeCfg.goldenAppleSpeedReduction > 0) {
             g.speedBonusMs = Math.min(g.speedBonusMs + modeCfg.goldenAppleSpeedReduction, modeCfg.goldenAppleSpeedReduction * 4);
           }
-          audioPulseRef.current = now + 700; // music surge on golden pickup
+          audioPulseRef.current = now + modeCfg.musicEventSpikeMs; // music surge on golden pickup
         }
         if (g.comboMultLeft > 0) { crBase *= 2; g.comboMultLeft--; if (g.comboMultLeft === 0) setComboActive(false); }
         g.creditsEarned += crBase;
@@ -1004,11 +1011,20 @@ export function SnakeShell({
         const px = (eatPos.x + 0.5) * cell, py = (eatPos.y + 0.5) * cell;
         if (modeCfg.particlesEnabled) spawnAppleBurst(g, px, py, ateGolden, theme);
         g.floatingTexts.push({ x: px, y: py - cell * 0.3, vy: -1.2, text: `+${crBase} CR`, life: 1, decay: 0.022, color: ateGolden ? theme.goldenColor : "#34d399", size: Math.max(9, cell * 0.45) });
+        // Visible confirmation of the golden-apple effects so the configured values are
+        // unmistakably observable in-game (the tail loss itself is applied in the body-
+        // growth step below; the speed reduction in the golden block above).
+        if (ateGolden && modeCfg.goldenAppleTailLoss > 0) {
+          g.floatingTexts.push({ x: px, y: py - cell * 0.9, vy: -1.0, text: `−${modeCfg.goldenAppleTailLoss} Länge`, life: 1, decay: 0.018, color: "#f87171", size: Math.max(9, cell * 0.42) });
+        }
+        if (ateGolden && modeCfg.goldenAppleSpeedReduction > 0) {
+          g.floatingTexts.push({ x: px, y: py - cell * 1.5, vy: -0.85, text: `🐌 langsamer`, life: 1, decay: 0.016, color: "#fbbf24", size: Math.max(9, cell * 0.4) });
+        }
 
         if (modeCfg.bonusEveryN > 0 && g.score % modeCfg.bonusEveryN === 0) {
           g.creditsEarned += modeCfg.bonusCrFlat;
           g.bonusFlashFrames = 40;
-          audioPulseRef.current = now + 700; // music surge on bonus
+          audioPulseRef.current = now + modeCfg.musicEventSpikeMs; // music surge on bonus
           if (modeCfg.bonusMultiplierApples > 0) { g.comboMultLeft = modeCfg.bonusMultiplierApples; setComboActive(true); }
           if (modeCfg.particlesEnabled) spawnBonusBurst(g, W / 2, W / 2, theme);
           g.floatingTexts.push({ x: W / 2, y: W * 0.35, vy: -0.5, text: `BONUS! +${modeCfg.bonusCrFlat}`, life: 1, decay: 0.011, color: "#fbbf24", size: Math.max(12, cell * 0.65) });
@@ -1019,8 +1035,9 @@ export function SnakeShell({
         if (g.mode === "grind") {
           const grindCfg = modeCfg as unknown as SnakeGrindConfig;
           g.applesUntilShrink--;
-          setShrinkWarning(g.applesUntilShrink <= 3 && g.applesUntilShrink > 0);
-          setShrinkLastApple(g.applesUntilShrink === 1);
+          // Static border warning vs. blinking — both admin-configurable thresholds.
+          setShrinkWarning(g.applesUntilShrink > 0 && g.applesUntilShrink <= grindCfg.shrinkBorderWarnApples);
+          setShrinkLastApple(g.applesUntilShrink > 0 && g.applesUntilShrink <= grindCfg.shrinkBlinkApples);
           if (g.applesUntilShrink <= 0) {
             const nMin = g.shrinkCount + 1, nMax = BOARD - 2 - g.shrinkCount;
             if (nMin >= nMax || (nMax - nMin + 1) < grindCfg.minBoardSize) { doEndGame(g); return; }
@@ -1119,13 +1136,26 @@ export function SnakeShell({
 
       if (g.phase === "playing") {
         const speedMs = getSpeedMs(g.score, modeCfg, g.speedBonusMs);
-        // Feed the live speed to the music engine so the track accelerates with
-        // the game (deduped internally → safe to call every frame).
-        const range = modeCfg.initialSpeedMs - modeCfg.minSpeedMs;
-        const baseIntensity = range > 0 ? (modeCfg.initialSpeedMs - speedMs) / range : 0;
-        // Event spike (golden apple / bonus): surge then ease back.
-        const pulse = now < audioPulseRef.current ? 0.35 * ((audioPulseRef.current - now) / 700) : 0;
-        setMusicIntensity(Math.min(1, baseIntensity + pulse));
+        // Feed the live intensity to the music engine so the track accelerates with the
+        // game (deduped internally → safe to call every frame). FULLY per-mode configurable:
+        //  • musicDynamicsEnabled  — turn the whole effect off for this mode
+        //  • musicTempoMax         — how fast the music can get (boost at full intensity)
+        //  • musicIntensityPerApple— >0 drives intensity strictly per apple eaten,
+        //                            otherwise the speed-curve is used
+        //  • musicEventSpike/Ms    — height + length of the golden/bonus surge
+        if (!modeCfg.musicDynamicsEnabled) {
+          setMusicIntensity(0);
+        } else {
+          setMusicTempoBoost(Math.max(0, modeCfg.musicTempoMax - 1));
+          const base = modeCfg.musicIntensityPerApple > 0
+            ? Math.min(1, g.score * modeCfg.musicIntensityPerApple)
+            : (modeCfg.initialSpeedMs - modeCfg.minSpeedMs > 0
+                ? (modeCfg.initialSpeedMs - speedMs) / (modeCfg.initialSpeedMs - modeCfg.minSpeedMs)
+                : 0);
+          const spikeMs = Math.max(1, modeCfg.musicEventSpikeMs);
+          const spike = now < audioPulseRef.current ? modeCfg.musicEventSpike * ((audioPulseRef.current - now) / spikeMs) : 0;
+          setMusicIntensity(Math.min(1, base + spike));
+        }
         if (now - g.lastMoveTime >= speedMs) {
           doTick(g, modeCfg, W, cell, theme, now);
         }
@@ -1137,7 +1167,7 @@ export function SnakeShell({
     };
 
     rafRef.current = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(rafRef.current); resetMusicIntensity(); };
+    return () => { cancelAnimationFrame(rafRef.current); resetMusicIntensity(); resetMusicTempoBoost(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Mount-only: reads configRef for fresh config, gameRef for mutable state
 
@@ -1282,7 +1312,7 @@ export function SnakeShell({
     g.goldenApple = null;
     g.particles = []; g.floatingTexts = []; g.speedTrails = [];
     inputQueueRef.current = [];
-    resetMusicIntensity();
+    resetMusicIntensity(); resetMusicTempoBoost();
     setPhase("idle");
     setScore(0); setCreditsEarned(0);
     setShrinkWarning(false); setComboActive(false); setBonusBannerText(null);

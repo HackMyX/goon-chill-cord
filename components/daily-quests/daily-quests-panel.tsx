@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ListChecks, X, RotateCcw, CheckCircle2, Circle, Coins, Sparkles, Package,
+  ListChecks, X, RotateCcw, CheckCircle2, Coins, Sparkles, Package,
   Star, Trophy, ChevronRight, Lock, Zap, Calendar, Gift, Joystick, CircleDot,
-  Pickaxe, Skull, Crown, Swords,
+  Pickaxe, Skull, Crown, Swords, CheckCheck, Clock, Flame, Dices, Target,
 } from "lucide-react";
 import { getMyDailyQuests, claimDailyQuestReward } from "@/lib/actions/daily-quests";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -16,13 +16,43 @@ import { DIFFICULTY_LABELS, DIFFICULTY_COLORS, DIFFICULTY_BG, REWARD_TYPE_LABELS
 
 const ICON_MAP: Record<string, typeof Star> = {
   Calendar, Star, Trophy, Crown, Gift, Joystick, CircleDot, Pickaxe, Skull, Swords,
-  Zap, Coins, Package, CheckCircle2, Sparkles,
+  Zap, Coins, Package, CheckCircle2, Sparkles, Flame, Dices, Target,
 };
 
 function QuestIcon({ name, className }: { name: string; className?: string }) {
   const Icon = ICON_MAP[name] ?? Star;
   return <Icon className={className} />;
 }
+
+/** Pick a thematic icon from the quest's targetAction (case_open, monster_kill, …). */
+function targetActionIcon(action: string): string {
+  const a = (action ?? "").toLowerCase();
+  if (a.includes("case")) return "Package";
+  if (a.includes("pvp")) return "Swords";
+  if (a.includes("monster") || a.includes("kill")) return "Skull";
+  if (a.includes("login") || a.includes("daily")) return "Calendar";
+  if (a.includes("snake")) return "Joystick";
+  if (a.includes("plinko")) return "Dices";
+  if (a.includes("mine")) return "Pickaxe";
+  if (a.includes("streak")) return "Flame";
+  if (a.includes("trade") || a.includes("shop") || a.includes("buy") || a.includes("credit")) return "Coins";
+  if (a.includes("quest")) return "Target";
+  return "Star";
+}
+
+// Difficulty-coloured accents (left bar + icon ring) for each quest card.
+const DIFFICULTY_ACCENT: Record<string, string> = {
+  easy: "from-emerald-500 to-emerald-400",
+  medium: "from-sky-500 to-sky-400",
+  hard: "from-amber-500 to-amber-400",
+  legendary: "from-fuchsia-500 to-fuchsia-400",
+};
+const DIFFICULTY_ICON_RING: Record<string, string> = {
+  easy: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
+  medium: "bg-sky-500/15 text-sky-300 ring-sky-500/30",
+  hard: "bg-amber-500/15 text-amber-300 ring-amber-500/30",
+  legendary: "bg-fuchsia-500/15 text-fuchsia-300 ring-fuchsia-500/30",
+};
 
 // ── Reward summary ────────────────────────────────────────────────────────────
 
@@ -74,14 +104,20 @@ function QuestCard({
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`relative overflow-hidden rounded-xl border p-4 transition-colors ${
+      className={`relative overflow-hidden rounded-xl border p-4 pl-5 transition-colors ${
         quest.rewardClaimed
           ? "bg-zinc-900/40 border-white/[0.05] opacity-60"
           : quest.completed
-          ? "bg-emerald-950/30 border-emerald-500/30"
+          ? "bg-emerald-950/30 border-emerald-500/30 shadow-[0_0_20px_-6px_rgba(52,211,153,0.4)]"
           : "bg-zinc-900/60 border-white/[0.08] hover:border-white/[0.12]"
       }`}
     >
+      {/* Difficulty-coloured left accent */}
+      <span
+        aria-hidden
+        className={`absolute inset-y-0 left-0 w-1 bg-gradient-to-b ${DIFFICULTY_ACCENT[quest.difficulty] ?? "from-zinc-600 to-zinc-500"} ${quest.rewardClaimed ? "opacity-30" : ""}`}
+      />
+
       {/* Completion shimmer overlay */}
       {quest.completed && !quest.rewardClaimed && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
@@ -94,16 +130,19 @@ function QuestCard({
       )}
 
       <div className="flex items-start gap-3">
-        {/* Status indicator */}
-        <div className="mt-0.5 shrink-0">
-          {quest.rewardClaimed ? (
-            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-          ) : quest.completed ? (
-            <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 0.6, repeat: Infinity, repeatDelay: 1.5 }}>
-              <CheckCircle2 className="h-5 w-5 text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
-            </motion.div>
-          ) : (
-            <Circle className="h-5 w-5 text-zinc-700" />
+        {/* Themed quest icon with status badge */}
+        <div className="relative mt-0.5 shrink-0">
+          <motion.div
+            animate={quest.completed && !quest.rewardClaimed ? { scale: [1, 1.08, 1] } : {}}
+            transition={{ duration: 1.2, repeat: Infinity }}
+            className={`flex h-9 w-9 items-center justify-center rounded-xl ring-1 ${DIFFICULTY_ICON_RING[quest.difficulty] ?? "bg-zinc-500/15 text-zinc-300 ring-zinc-500/30"} ${quest.rewardClaimed ? "opacity-50" : ""}`}
+          >
+            <QuestIcon name={targetActionIcon(quest.targetAction)} className="h-4.5 w-4.5" />
+          </motion.div>
+          {(quest.completed || quest.rewardClaimed) && (
+            <span className={`absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full ring-2 ring-zinc-950 ${quest.rewardClaimed ? "bg-zinc-600" : "bg-emerald-500"}`}>
+              <CheckCircle2 className="h-3 w-3 text-white" />
+            </span>
           )}
         </div>
 
@@ -156,8 +195,9 @@ function QuestCard({
           <button
             onClick={handleClaim}
             disabled={claiming}
-            className="shrink-0 flex items-center gap-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+            className="group/claim relative shrink-0 flex items-center gap-1.5 overflow-hidden rounded-lg bg-gradient-to-r from-emerald-500 to-teal-400 px-3.5 py-2 text-xs font-black text-emerald-950 shadow-[0_0_16px_-2px_rgba(52,211,153,0.5)] transition-all hover:scale-105 hover:shadow-[0_0_22px_0px_rgba(52,211,153,0.7)] disabled:opacity-50 disabled:hover:scale-100"
           >
+            <span aria-hidden className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover/claim:translate-x-full" />
             {claiming ? (
               <RotateCcw className="h-3.5 w-3.5 animate-spin" />
             ) : (
@@ -199,12 +239,77 @@ function ClaimToast({ result, currencyName, onDone }: { result: ClaimResult; cur
   );
 }
 
+// ── Claim confetti burst ──────────────────────────────────────────────────────
+
+const CONFETTI_COLORS = ["#fbbf24", "#34d399", "#a78bfa", "#e879f9", "#38bdf8", "#f472b6"];
+
+function ClaimConfetti({ trigger }: { trigger: number }) {
+  if (trigger === 0) return null;
+  return (
+    // keyed by `trigger` → remounts (replays) on every claim
+    <div key={trigger} aria-hidden className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
+      {Array.from({ length: 30 }).map((_, i) => {
+        const left = (i * 37) % 100;
+        const dx = ((i * 53) % 90) - 45;
+        const delay = (i % 6) * 0.035;
+        const size = 5 + (i % 3) * 2;
+        return (
+          <motion.span
+            key={i}
+            initial={{ opacity: 1, y: -8, x: 0, rotate: 0 }}
+            animate={{ opacity: [1, 1, 0], y: 360, x: dx, rotate: (i % 2 ? 1 : -1) * 420 }}
+            transition={{ duration: 1.5 + (i % 4) * 0.15, delay, ease: "easeIn" }}
+            style={{ left: `${left}%`, width: size, height: size, background: CONFETTI_COLORS[i % CONFETTI_COLORS.length] }}
+            className="absolute top-14 rounded-[1px]"
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Live countdown to the next daily reset (UTC midnight) ──────────────────────
+
+function ResetCountdown() {
+  const [label, setLabel] = useState("");
+  useEffect(() => {
+    function tick() {
+      const now = new Date();
+      const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+      const ms = Math.max(0, next.getTime() - now.getTime());
+      const h = Math.floor(ms / 3_600_000);
+      const m = Math.floor((ms % 3_600_000) / 60_000);
+      const s = Math.floor((ms % 60_000) / 1000);
+      setLabel(`${h}h ${m}m ${s}s`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="inline-flex items-center gap-1 tabular-nums">
+      <Clock className="h-3 w-3" />
+      Neue Quests in {label}
+    </span>
+  );
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
+
+const FILTER_DEFS: { key: "all" | "claimable" | "open" | "done"; label: string }[] = [
+  { key: "all", label: "Alle" },
+  { key: "claimable", label: "Abholbar" },
+  { key: "open", label: "Offen" },
+  { key: "done", label: "Fertig" },
+];
 
 export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
   const [quests, setQuests] = useState<UserDailyQuest[]>([]);
   const [loading, setLoading] = useState(true);
   const [claimToast, setClaimToast] = useState<ClaimResult | null>(null);
+  const [filter, setFilter] = useState<"all" | "claimable" | "open" | "done">("all");
+  const [confettiKey, setConfettiKey] = useState(0);
+  const [claimingAll, setClaimingAll] = useState(false);
   const sound = useSoundManager();
   const { currencyName } = useSiteConfig();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -212,6 +317,18 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
   const completed = quests.filter(q => q.completed).length;
   const total = quests.length;
   const claimed = quests.filter(q => q.rewardClaimed).length;
+  const openCount = quests.filter(q => !q.completed).length;
+  const claimableQuests = quests.filter(q => q.completed && !q.rewardClaimed);
+  const claimableCount = claimableQuests.length;
+  const totalClaimable = claimableQuests.reduce(
+    (acc, q) => ({
+      credits: acc.credits + (q.rewardCredits || 0),
+      xp: acc.xp + (q.rewardXp || 0),
+      bpXp: acc.bpXp + (q.rewardBpXp || 0),
+    }),
+    { credits: 0, xp: 0, bpXp: 0 },
+  );
+  const filterCounts: Record<string, number> = { all: total, claimable: claimableCount, open: openCount, done: claimed };
 
   async function load() {
     setLoading(true);
@@ -239,13 +356,50 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
     if (result.success && result.reward) {
       sound.win?.();
       setClaimToast(result.reward);
+      setConfettiKey(k => k + 1);
       setQuests(prev => prev.map(q => q.id === questId ? { ...q, rewardClaimed: true } : q));
     } else {
       sound.error?.();
     }
   }
 
+  async function claimAll() {
+    if (claimingAll) return;
+    setClaimingAll(true);
+    const agg: ClaimResult = { credits: 0, xp: 0, bpXp: 0, itemRarity: null };
+    let any = false;
+    for (const q of quests.filter(x => x.completed && !x.rewardClaimed)) {
+      const result = await claimDailyQuestReward(q.id);
+      if (result.success && result.reward) {
+        any = true;
+        agg.credits += result.reward.credits;
+        agg.xp += result.reward.xp;
+        agg.bpXp += result.reward.bpXp;
+        if (result.reward.itemRarity) agg.itemRarity = result.reward.itemRarity;
+        setQuests(prev => prev.map(x => x.id === q.id ? { ...x, rewardClaimed: true } : x));
+      }
+    }
+    if (any) { sound.win?.(); setClaimToast(agg); setConfettiKey(k => k + 1); }
+    else sound.error?.();
+    setClaimingAll(false);
+  }
+
   const allDone = total > 0 && claimed === total;
+
+  // Sort (claimable → open → claimed) then apply the active filter.
+  const sortedQuests = quests.slice().sort((a, b) => {
+    if (a.rewardClaimed && !b.rewardClaimed) return 1;
+    if (!a.rewardClaimed && b.rewardClaimed) return -1;
+    if (a.completed && !b.completed) return -1;
+    if (!a.completed && b.completed) return 1;
+    return 0;
+  });
+  const visibleQuests = sortedQuests.filter(q => {
+    if (filter === "claimable") return q.completed && !q.rewardClaimed;
+    if (filter === "open") return !q.completed;
+    if (filter === "done") return q.rewardClaimed;
+    return true;
+  });
 
   return (
     <div
@@ -262,20 +416,57 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
         </AnimatePresence>
       </div>
 
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] bg-violet-950/40 px-5 py-4">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/20 border border-violet-500/30">
-            <ListChecks className="h-4 w-4 text-violet-400" />
-          </div>
-          <div>
-            <h2 className="text-sm font-black text-zinc-100">Tägliche Quests</h2>
-            <p className="text-[10px] text-zinc-500">
-              {loading ? "Lade…" : total === 0 ? "Heute keine Quests" : `${completed}/${total} abgeschlossen · ${claimed} eingelöst`}
-            </p>
+      {/* Aurora glow at the top of the panel */}
+      <div aria-hidden className="pointer-events-none absolute -top-16 left-1/2 h-32 w-72 -translate-x-1/2 rounded-full bg-violet-600/25 blur-3xl" />
+
+      {/* Confetti burst on claim */}
+      <ClaimConfetti trigger={confettiKey} />
+
+      {/* Header with circular progress ring */}
+      <div className="relative flex items-center gap-3 border-b border-white/[0.06] bg-gradient-to-br from-violet-950/60 via-zinc-950/30 to-fuchsia-950/30 px-5 py-4">
+        <div className="relative h-12 w-12 shrink-0">
+          <svg className="h-12 w-12 -rotate-90" viewBox="0 0 48 48">
+            <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="4" />
+            <motion.circle
+              cx="24" cy="24" r="20" fill="none" stroke="url(#dq-ring)" strokeWidth="4" strokeLinecap="round"
+              strokeDasharray={2 * Math.PI * 20}
+              initial={{ strokeDashoffset: 2 * Math.PI * 20 }}
+              animate={{ strokeDashoffset: 2 * Math.PI * 20 * (1 - (total > 0 ? claimed / total : 0)) }}
+              transition={{ duration: 0.9, ease: "easeOut" }}
+              style={{ filter: "drop-shadow(0 0 4px rgba(167,139,250,0.6))" }}
+            />
+            <defs>
+              <linearGradient id="dq-ring" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#a78bfa" />
+                <stop offset="100%" stopColor="#e879f9" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            {allDone ? (
+              <Trophy className="h-5 w-5 text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]" />
+            ) : (
+              <span className="text-[11px] font-black tabular-nums text-violet-200">{total > 0 ? Math.round((claimed / total) * 100) : 0}%</span>
+            )}
           </div>
         </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="flex items-center gap-1.5 text-sm font-black text-zinc-100">
+            <ListChecks className="h-4 w-4 text-violet-400" />
+            Tägliche Quests
+          </h2>
+          <p className="mt-0.5 text-[10px] text-zinc-500">
+            {loading ? "Lade…" : total === 0 ? "Heute keine Quests" : `${completed}/${total} abgeschlossen · ${claimed} eingelöst`}
+          </p>
+        </div>
         <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("gn:open-level")); }}
+            title="Level & XP öffnen"
+            className="rounded-full p-1.5 text-zinc-600 transition-colors hover:bg-white/[0.06] hover:text-violet-300"
+          >
+            <Zap className="h-4 w-4" />
+          </button>
           <button onClick={load} className="rounded-full p-1.5 text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.06] transition-colors">
             <RotateCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </button>
@@ -285,26 +476,71 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {/* Progress overview */}
-      {!loading && total > 0 && (
-        <div className="px-5 pt-3 pb-2 border-b border-white/[0.04]">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Tagesfortschritt</span>
-            <span className="text-[10px] font-black text-violet-400">{Math.round((claimed / total) * 100)}%</span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.05]">
+      {/* All-done celebration banner */}
+      <AnimatePresence>
+        {allDone && !loading && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="relative overflow-hidden border-b border-emerald-500/20 bg-gradient-to-r from-emerald-950/50 via-emerald-900/30 to-emerald-950/50 px-5 py-2 text-center"
+          >
             <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${(claimed / total) * 100}%` }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-              className="h-full rounded-full bg-gradient-to-r from-violet-700 to-violet-500"
+              animate={{ x: ["-100%", "200%"] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              className="pointer-events-none absolute inset-y-0 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-emerald-400/15 to-transparent"
             />
-          </div>
-          {allDone && (
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-center text-xs font-bold text-emerald-400">
-              🎉 Alle Quests des Tages abgeschlossen!
-            </motion.p>
-          )}
+            <p className="relative text-xs font-bold text-emerald-300">🎉 Alle Quests des Tages abgeschlossen!</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Claimable summary + "claim all" */}
+      <AnimatePresence>
+        {!loading && claimableCount > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex items-center justify-between gap-2 overflow-hidden border-b border-emerald-500/15 bg-emerald-950/20 px-4 py-2.5"
+          >
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400/80">{claimableCount} bereit zum Abholen</p>
+              <p className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] font-bold">
+                {totalClaimable.credits > 0 && <span className="text-amber-300">+{totalClaimable.credits.toLocaleString("de-DE")} {currencyName}</span>}
+                {totalClaimable.xp > 0 && <span className="text-sky-300">+{totalClaimable.xp} XP</span>}
+                {totalClaimable.bpXp > 0 && <span className="text-violet-300">+{totalClaimable.bpXp} BP-XP</span>}
+              </p>
+            </div>
+            <button
+              onClick={claimAll}
+              disabled={claimingAll}
+              className="group/all relative shrink-0 flex items-center gap-1.5 overflow-hidden rounded-lg bg-gradient-to-r from-emerald-500 to-teal-400 px-3 py-2 text-xs font-black text-emerald-950 shadow-[0_0_16px_-2px_rgba(52,211,153,0.5)] transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+            >
+              <span aria-hidden className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover/all:translate-x-full" />
+              {claimingAll ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
+              Alles abholen
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Filter pills */}
+      {!loading && total > 0 && (
+        <div className="flex items-center gap-1.5 border-b border-white/[0.04] px-4 py-2">
+          {FILTER_DEFS.map(f => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition-colors ${
+                filter === f.key
+                  ? "bg-violet-500/25 text-violet-200 ring-1 ring-violet-500/40"
+                  : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
+              }`}
+            >
+              {f.label} <span className="tabular-nums opacity-70">{filterCounts[f.key] ?? 0}</span>
+            </button>
+          ))}
         </div>
       )}
 
@@ -320,27 +556,23 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
             <p className="text-sm font-semibold text-zinc-600">Keine Quests verfügbar</p>
             <p className="text-xs text-zinc-700">Quests werden täglich automatisch generiert.</p>
           </div>
+        ) : visibleQuests.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-10 text-center">
+            <Target className="h-8 w-8 text-zinc-800" />
+            <p className="text-xs font-semibold text-zinc-600">Keine Quests in diesem Filter</p>
+          </div>
         ) : (
           <AnimatePresence mode="popLayout">
-            {quests
-              .slice()
-              .sort((a, b) => {
-                if (a.rewardClaimed && !b.rewardClaimed) return 1;
-                if (!a.rewardClaimed && b.rewardClaimed) return -1;
-                if (a.completed && !b.completed) return -1;
-                if (!a.completed && b.completed) return 1;
-                return 0;
-              })
-              .map(q => (
-                <QuestCard key={q.id} quest={q} onClaim={handleClaim} currencyName={currencyName} />
-              ))}
+            {visibleQuests.map(q => (
+              <QuestCard key={q.id} quest={q} onClaim={handleClaim} currencyName={currencyName} />
+            ))}
           </AnimatePresence>
         )}
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-white/[0.04] px-5 py-3 text-center">
-        <p className="text-[10px] text-zinc-700">Quests erneuern sich täglich um Mitternacht UTC</p>
+      {/* Footer — live countdown to the next daily reset */}
+      <div className="border-t border-white/[0.04] px-5 py-2.5 text-center text-[10px] text-zinc-600">
+        <ResetCountdown />
       </div>
     </div>
   );
@@ -366,6 +598,13 @@ export function DailyQuestsTrigger({ userId }: { userId?: string }) {
     return () => clearInterval(interval);
   }, [userId]);
 
+  // Cross-link: the Level menu can open this panel by dispatching the event.
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener("gn:open-daily-quests", onOpen);
+    return () => window.removeEventListener("gn:open-daily-quests", onOpen);
+  }, []);
+
   if (!userId) return null;
 
   return (
@@ -374,18 +613,25 @@ export function DailyQuestsTrigger({ userId }: { userId?: string }) {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-zinc-900/80 text-zinc-400 hover:text-violet-400 hover:border-violet-500/40 hover:bg-violet-500/10 transition-all"
+          className={`relative flex h-9 w-9 items-center justify-center rounded-full border transition-all ${
+            badge > 0
+              ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300 shadow-[0_0_14px_-2px_rgba(52,211,153,0.6)]"
+              : "border-white/[0.08] bg-zinc-900/80 text-zinc-400 hover:border-violet-500/40 hover:bg-violet-500/10 hover:text-violet-400"
+          }`}
           title="Tägliche Quests"
         >
           <ListChecks className="h-4.5 w-4.5" />
           {badge > 0 && (
-            <motion.span
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[9px] font-black text-white"
-            >
-              {badge}
-            </motion.span>
+            <>
+              <span aria-hidden className="absolute -top-1 -right-1 inline-flex h-4 w-4 animate-ping rounded-full bg-emerald-500/60" />
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[9px] font-black text-white"
+              >
+                {badge}
+              </motion.span>
+            </>
           )}
         </button>
       )}

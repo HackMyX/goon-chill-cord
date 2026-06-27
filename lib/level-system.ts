@@ -41,10 +41,49 @@ export interface XpSourceConfig {
   pvp_kill: number;
 }
 
+export type LevelRewardDisplay = "3d" | "icon";
+
+/** One colour tier on the Level Road (admin-editable). Levels ≥ minLevel use this
+ *  tier's accent/glow; the highest matching tier wins. */
+export interface LevelRoadTier {
+  minLevel: number;
+  accent: string; // hex, e.g. "#f59e0b"
+  glow: string;   // rgba, e.g. "rgba(245,158,11,0.45)"
+}
+
+export interface LevelRoadConfig {
+  tiers: LevelRoadTier[];
+  showXp: boolean;
+  showTitles: boolean;
+}
+
+export const DEFAULT_LEVEL_ROAD_CONFIG: LevelRoadConfig = {
+  tiers: [
+    { minLevel: 50, accent: "#f59e0b", glow: "rgba(245,158,11,0.45)" },
+    { minLevel: 40, accent: "#a78bfa", glow: "rgba(167,139,250,0.45)" },
+    { minLevel: 30, accent: "#67e8f9", glow: "rgba(103,232,249,0.45)" },
+    { minLevel: 20, accent: "#34d399", glow: "rgba(52,211,153,0.45)" },
+    { minLevel: 10, accent: "#60a5fa", glow: "rgba(96,165,250,0.45)" },
+    { minLevel: 1,  accent: "#94a3b8", glow: "rgba(148,163,184,0.35)" },
+  ],
+  showXp: true,
+  showTitles: true,
+};
+
+/** Resolve a level's accent/glow from the road config (highest matching tier wins). */
+export function resolveLevelRoadTier(level: number, cfg: LevelRoadConfig): LevelRoadTier {
+  const sorted = [...cfg.tiers].sort((a, b) => b.minLevel - a.minLevel);
+  return sorted.find((t) => level >= t.minLevel) ?? sorted[sorted.length - 1] ?? DEFAULT_LEVEL_ROAD_CONFIG.tiers[5];
+}
+
 export interface XpConfig {
   levels: LevelDefinition[];
   sources: XpSourceConfig;
   abilitySlotCount: number;
+  /** How level rewards render on the Level Road (admin-global default). */
+  levelRewardDisplay: LevelRewardDisplay;
+  /** Per-tier colours + layout toggles for the Level Road. */
+  levelRoadConfig: LevelRoadConfig;
 }
 
 export interface XpEvent {

@@ -157,6 +157,9 @@ const COLUMN_CHECKS: Array<{
   { id: "col_profiles_modperms",  category: "Mod-Berechtigungen", table: "profiles",            col: "mod_permissions_override",detail: "ALTER TABLE profiles ADD COLUMN mod_permissions_override jsonb;" },
   { id: "col_profiles_prio_custom",category: "Badges",            table: "profiles",            col: "prio_badges_custom",      detail: "node scripts/add-prio-badges-custom.cjs" },
   { id: "col_profiles_prio_locked",category: "Badges",            table: "profiles",            col: "prio_badges_locked",      detail: "node scripts/add-prio-badges-locked.cjs" },
+  // XP config — Level Road appearance (2026-06-28)
+  { id: "col_xp_reward_display",  category: "Level & XP",         table: "xp_config",           col: "level_reward_display",    detail: "node scripts/add-level-road-config.cjs" },
+  { id: "col_xp_road_config",     category: "Level & XP",         table: "xp_config",           col: "level_road_config",       detail: "node scripts/add-level-road-config.cjs" },
   // DON config — upgrade feature (2026-06-25)
   { id: "col_don_upgradeenabled", category: "DON-System",         table: "don_config",          col: "upgrade_enabled",         detail: "ALTER TABLE don_config ADD COLUMN upgrade_enabled boolean NOT NULL DEFAULT false;" },
   { id: "col_don_upgradetiers",   category: "DON-System",         table: "don_config",          col: "upgrade_tiers",           detail: "ALTER TABLE don_config ADD COLUMN upgrade_tiers jsonb NOT NULL DEFAULT '[]'::jsonb;" },
@@ -1131,6 +1134,24 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
           "Atomare, race-sichere Credit-Verbuchung verfügbar."));
   } catch (e) {
     results.push(err("rpc_apply_bet_result", "Economy", "apply_bet_result RPC", String(e)));
+  }
+
+  // ── 36. Atomare XP-RPC (increment_xp) — race-sichere XP/Level-Vergabe ─────
+  // awardXp wird projektweit als `void awardXp(...)` parallel gefeuert; ohne die
+  // RPC fällt es auf read-modify-write zurück → verlorene XP + doppelte Level-
+  // Rewards. Migration: scripts/add-increment-xp-rpc.cjs
+  try {
+    const { error: xpErr } = await admin.rpc("increment_xp", {
+      p_user_id: "00000000-0000-0000-0000-000000000000",
+      p_amount: 0,
+    });
+    results.push(xpErr
+      ? err("rpc_increment_xp", "Level & XP", "increment_xp RPC",
+          `Atomare XP-RPC fehlt/fehlerhaft: ${xpErr.message} — scripts/add-increment-xp-rpc.cjs ausführen.`)
+      : ok("rpc_increment_xp", "Level & XP", "increment_xp RPC",
+          "Atomare, race-sichere XP-Verbuchung verfügbar."));
+  } catch (e) {
+    results.push(err("rpc_increment_xp", "Level & XP", "increment_xp RPC", String(e)));
   }
 
   return results;

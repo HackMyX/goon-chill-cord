@@ -66,3 +66,11 @@ Die Datei `lib/actions/system-health.ts` ist der zentrale System-Prüfbericht de
 - Keine XSS: kein `dangerouslySetInnerHTML` ohne Sanitization.
 - Admin-Prüfung: `isAdmin(profile)` vor jeder sensiblen Operation.
 - Mod-Prüfung: `requireMod()` vor jeder Mod-Operation.
+
+## 7. Admin-Tabs IMMER alphabetisch
+
+- Die Tab-Buttons im Admin-Panel (`components/admin/admin-shell.tsx`, `const TABS`) werden
+  AUTOMATISCH alphabetisch (de) sortiert — das `.sort(...)` am Ende des Arrays erledigt das.
+- Neue Tabs einfach IRGENDWO ins `TABS`-Array einfügen; sie ordnen sich von selbst ein.
+  NIE manuell umsortieren und die `.sort(...)`-Zeile NICHT entfernen.
+- Führende Emojis/Symbole im Label werden beim Sortieren ignoriert (`tabSortKey`).

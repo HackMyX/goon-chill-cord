@@ -27,9 +27,12 @@ const SLOT_LABELS: Record<string, string> = {
   trading: "Trading",
   community: "Community",
   surveys: "Umfragen",
+  quests: "Daily Quests",
   wardrobe: "Garderobe",
   notifications: "Benachrichtigungen",
-  profile: "Profil",
+  level: "Level-Abzeichen",
+  profile: "Profil (Icon)",
+  profile_avatar: "Profil (Avatar + Level)",
   logout: "Abmelden",
 };
 

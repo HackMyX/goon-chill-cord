@@ -10,9 +10,10 @@ import { isAbilityActive } from "@/lib/actions/abilities";
 import { logDebugEvent } from "@/lib/debug-log-server";
 import {
   calculateLevel, buildLevelInfo,
-  DEFAULT_XP_SOURCES,
+  DEFAULT_XP_SOURCES, DEFAULT_LEVEL_ROAD_CONFIG,
   type XpConfig, type XpSourceConfig, type LevelDefinition,
   type LevelReward, type AwardXpResult, type UserLevelInfo, type XpEvent,
+  type LevelRewardDisplay, type LevelRoadConfig,
 } from "@/lib/level-system";
 
 // ─── Config ────────────────────────────────────────────────────────────────────
@@ -22,24 +23,31 @@ export async function getXpConfig(): Promise<XpConfig> {
     const admin = createAdminClient();
     const { data } = await admin
       .from("xp_config")
-      .select("levels, sources, ability_slot_count")
+      .select("levels, sources, ability_slot_count, level_reward_display, level_road_config")
       .eq("id", "default")
       .maybeSingle();
 
     if (!data) {
-      return { levels: [], sources: DEFAULT_XP_SOURCES, abilitySlotCount: 1 };
+      return { levels: [], sources: DEFAULT_XP_SOURCES, abilitySlotCount: 1, levelRewardDisplay: "3d", levelRoadConfig: DEFAULT_LEVEL_ROAD_CONFIG };
     }
 
     const levels = (Array.isArray(data.levels) ? data.levels : []) as LevelDefinition[];
     const sources = ((data.sources as unknown) ?? DEFAULT_XP_SOURCES) as XpSourceConfig;
+    const display = (data.level_reward_display === "icon" ? "icon" : "3d") as LevelRewardDisplay;
+    const roadRaw = (data.level_road_config as Partial<LevelRoadConfig> | null) ?? null;
+    const levelRoadConfig: LevelRoadConfig = roadRaw && Array.isArray(roadRaw.tiers) && roadRaw.tiers.length
+      ? { tiers: roadRaw.tiers, showXp: roadRaw.showXp ?? true, showTitles: roadRaw.showTitles ?? true }
+      : DEFAULT_LEVEL_ROAD_CONFIG;
 
     return {
       levels,
       sources: { ...DEFAULT_XP_SOURCES, ...sources },
       abilitySlotCount: (data.ability_slot_count as number) ?? 1,
+      levelRewardDisplay: display,
+      levelRoadConfig,
     };
   } catch {
-    return { levels: [], sources: DEFAULT_XP_SOURCES, abilitySlotCount: 1 };
+    return { levels: [], sources: DEFAULT_XP_SOURCES, abilitySlotCount: 1, levelRewardDisplay: "3d", levelRoadConfig: DEFAULT_LEVEL_ROAD_CONFIG };
   }
 }
 
@@ -59,6 +67,8 @@ export async function updateXpConfig(
     levels: config.levels,
     sources: config.sources,
     ability_slot_count: config.abilitySlotCount,
+    level_reward_display: config.levelRewardDisplay === "icon" ? "icon" : "3d",
+    level_road_config: config.levelRoadConfig ?? DEFAULT_LEVEL_ROAD_CONFIG,
     updated_at: new Date().toISOString(),
   });
 
@@ -96,7 +106,6 @@ export async function awardXp(
   }
 
   const currentXp = (profile.xp as number) ?? 0;
-  const currentLevel = (profile.level as number) ?? 1;
   const equippedKey = profile.equipped_ability_key as string | null;
 
   // Check for XP boost ability
@@ -116,22 +125,40 @@ export async function awardXp(
   }
 
   const amount = Math.max(1, Math.round(rawAmount * xpMultiplier));
-  const newXp = currentXp + amount;
+
+  // Atomic XP increment — prevents lost updates AND double level-reward grants when
+  // many `void awardXp(...)` run concurrently. The RPC serialises the increment under
+  // the row lock and RETURNs the true new total; we derive THIS call's contiguous
+  // [oldXp, newXp] window from it, so every level boundary is owned by exactly one
+  // increment. Falls back to read-modify-write only if the RPC is missing.
+  let newXp: number;
+  const incRes = await admin.rpc("increment_xp", { p_user_id: userId, p_amount: amount });
+  if (incRes.error || incRes.data == null) {
+    newXp = currentXp + amount;
+    await admin.from("profiles").update({ xp: newXp }).eq("id", userId);
+  } else {
+    newXp = Number(incRes.data);
+  }
+  const oldXp = Math.max(0, newXp - amount);
+  const oldLevel = calculateLevel(oldXp, config.levels);
   const newLevel = calculateLevel(newXp, config.levels);
 
-  // Collect all rewards for levels crossed
+  // Monotonic level write — the .lt guard means a slower concurrent call can never
+  // downgrade the level a faster one already set.
+  if (newLevel > oldLevel) {
+    await admin.from("profiles").update({ level: newLevel }).eq("id", userId).lt("level", newLevel);
+  }
+
+  // Collect rewards for the levels crossed in THIS increment's [oldXp, newXp] window.
   const collectedRewards: LevelReward[] = [];
-  if (newLevel > currentLevel) {
-    for (let lvl = currentLevel + 1; lvl <= newLevel; lvl++) {
+  if (newLevel > oldLevel) {
+    for (let lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
       const def = config.levels.find((l) => l.level === lvl);
       if (def?.rewards?.length) {
         collectedRewards.push(...def.rewards);
       }
     }
   }
-
-  // Update XP + level
-  await admin.from("profiles").update({ xp: newXp, level: newLevel }).eq("id", userId);
 
   // Log XP event
   try {
@@ -163,15 +190,15 @@ export async function awardXp(
       level: "info",
       scope: "level_system",
       message: `Level-Up: User ${userId} → Level ${newLevel}`,
-      context: { userId, oldLevel: currentLevel, newLevel, xpGained: amount, totalXp: newXp, source, rewards: collectedRewards.length },
+      context: { userId, oldLevel, newLevel, xpGained: amount, totalXp: newXp, source, rewards: collectedRewards.length },
     });
   }
 
   return {
     newXp,
     newLevel,
-    leveledUp: newLevel > currentLevel,
-    levelsGained: newLevel - currentLevel,
+    leveledUp: newLevel > oldLevel,
+    levelsGained: newLevel - oldLevel,
     rewards: collectedRewards,
   };
 }

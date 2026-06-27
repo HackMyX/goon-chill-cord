@@ -8,14 +8,15 @@ import { createClient } from "@/lib/supabase/client";
 import { MusicSynth } from "@/lib/music-synth";
 import { resolvePageVolume, resolveTrackId, clampVolume, type MusicConfig, type MusicPageKey } from "@/lib/music-config";
 import { setMusicVolume, setMusicMuted, subscribeClientSettings } from "@/lib/client-settings";
-import { subscribeMusicIntensity, getMusicIntensity, getMusicMode, subscribeMusicMode } from "@/lib/music-dynamics";
+import { subscribeMusicIntensity, getMusicIntensity, getMusicMode, subscribeMusicMode, getMusicTempoBoost, subscribeMusicTempoBoost } from "@/lib/music-dynamics";
 
 const LS_VOL   = "gn_music_vol";
 const LS_MUTED = "gn_music_muted";
 
-/** Map a 0–1 game intensity to a playback-tempo multiplier (up to +45%). */
-function intensityToMult(level: number): number {
-  return 1 + Math.max(0, Math.min(1, level)) * 0.45;
+/** Map a 0–1 game intensity to a playback-tempo multiplier. `boost` is the max
+ *  acceleration at full intensity (0.45 = +45%, set per game mode). */
+function intensityToMult(level: number, boost: number): number {
+  return 1 + Math.max(0, Math.min(1, level)) * Math.max(0, boost);
 }
 
 function getPageKey(pathname: string): MusicPageKey {
@@ -45,6 +46,7 @@ export function MusicPlayer() {
   // ── File-based audio (non-synth:// tracks) ─────────────────────────────────
   const audioRef       = useRef<HTMLAudioElement | null>(null);
   const fadeRef        = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tempoBoostRef  = useRef(getMusicTempoBoost());
 
   // ── Synth tracks ────────────────────────────────────────────────────────────
   const synthRef       = useRef<MusicSynth | null>(null);
@@ -182,8 +184,8 @@ export function MusicPlayer() {
       if (audio && !audio.paused) { clearFade(); audio.pause(); audio.src = ""; }
 
       const targetVol = mutedRef.current ? 0 : volumeRef.current;
-      synthRef.current?.start(url, targetVol).then(() => {
-        synthRef.current?.setTempo(intensityToMult(getMusicIntensity()));
+      synthRef.current?.start(url, targetVol, cfg.fadesEnabled ? cfg.fadeInMs : 0).then(() => {
+        synthRef.current?.setTempo(intensityToMult(getMusicIntensity(), tempoBoostRef.current));
         setIsPlaying(true);
       }).catch(() => {
         pendingUrlRef.current = url;
@@ -211,8 +213,8 @@ export function MusicPlayer() {
       audio.volume = 0;
       audio.play()
         .then(() => {
-          audio.playbackRate = intensityToMult(getMusicIntensity());
-          fadeIn(audio, mutedRef.current ? 0 : volumeRef.current, cfg.fadeInMs);
+          audio.playbackRate = intensityToMult(getMusicIntensity(), tempoBoostRef.current);
+          fadeIn(audio, mutedRef.current ? 0 : volumeRef.current, cfg.fadesEnabled ? cfg.fadeInMs : 0);
           setIsPlaying(true);
         })
         .catch(() => {
@@ -293,7 +295,7 @@ export function MusicPlayer() {
     }
 
     if (activeUrlRef.current && activeUrlRef.current !== track.url) {
-      stopCurrent(cfg.fadeOutMs, () => loadAndPlay(track.url));
+      stopCurrent(cfg.fadesEnabled ? cfg.fadeOutMs : 0, () => loadAndPlay(track.url));
     } else {
       loadAndPlay(track.url);
     }
@@ -356,7 +358,7 @@ export function MusicPlayer() {
   // ── Dynamic tempo: a game (Snake) pushes live intensity → speed up the music.
   //    Applies to both the synth (per-bar) and file audio (instant playbackRate).
   const applyTempo = useCallback((level: number) => {
-    const mult = intensityToMult(level);
+    const mult = intensityToMult(level, tempoBoostRef.current);
     if (activeIsSynth.current) {
       synthRef.current?.setTempo(mult);
     } else {
@@ -366,6 +368,9 @@ export function MusicPlayer() {
   }, []);
 
   useEffect(() => subscribeMusicIntensity(applyTempo), [applyTempo]);
+  // The active game can change the MAX tempo boost per mode (e.g. Snake Turbo is
+  // wilder than Classic) → re-apply the current intensity with the new ceiling.
+  useEffect(() => subscribeMusicTempoBoost((b) => { tempoBoostRef.current = b; applyTempo(getMusicIntensity()); }), [applyTempo]);
 
   // Re-resolve the current page's track whenever the active game mode changes,
   // so a per-mode track override switches in live (e.g. Snake Classic → Turbo).

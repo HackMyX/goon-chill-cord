@@ -60,12 +60,30 @@ export interface SnakeModeConfig {
   startLength: number;
   particlesEnabled: boolean;
   leaderboardSize: number;
+  // ── Music dynamics (per mode) ──────────────────────────────────────────────
+  /** Master switch: does this mode drive the background-music tempo at all? */
+  musicDynamicsEnabled: boolean;
+  /** Max tempo multiplier at full intensity (e.g. 1.45 = up to +45% speed, 2 = 2×). */
+  musicTempoMax: number;
+  /** Intensity gained PER APPLE eaten (0 = use the speed-based curve instead). e.g.
+   *  0.02 → music reaches full intensity at 50 apples. This is the "pro Apfel" control. */
+  musicIntensityPerApple: number;
+  /** Extra intensity spike when a golden apple / bonus is collected (0–1). */
+  musicEventSpike: number;
+  /** How long (ms) the event spike takes to fade back out. */
+  musicEventSpikeMs: number;
 }
 
 export interface SnakeGrindConfig extends SnakeModeConfig {
   shrinkEveryN: number;
   minBoardSize: number;
   bonusCrPerShrink: number;
+  /** Static red warning border appears when this many apples remain before the next
+   *  shrink (no blinking). 0 = never show the static warning border. */
+  shrinkBorderWarnApples: number;
+  /** Border + counter start PULSING (blinking) when this many apples remain before the
+   *  next shrink. Should be ≤ shrinkBorderWarnApples. 0 = never blink. */
+  shrinkBlinkApples: number;
 }
 
 export interface SnakeConfig {
@@ -102,6 +120,11 @@ export const DEFAULT_X1_CONFIG: SnakeModeConfig = {
   startLength: 3,
   particlesEnabled: true,
   leaderboardSize: 20,
+  musicDynamicsEnabled: true,
+  musicTempoMax: 1.45,
+  musicIntensityPerApple: 0,
+  musicEventSpike: 0.35,
+  musicEventSpikeMs: 700,
 };
 
 export const DEFAULT_X2_CONFIG: SnakeModeConfig = {
@@ -128,6 +151,11 @@ export const DEFAULT_X2_CONFIG: SnakeModeConfig = {
   startLength: 3,
   particlesEnabled: true,
   leaderboardSize: 20,
+  musicDynamicsEnabled: true,
+  musicTempoMax: 1.6,
+  musicIntensityPerApple: 0,
+  musicEventSpike: 0.4,
+  musicEventSpikeMs: 800,
 };
 
 export const DEFAULT_GRIND_CONFIG: SnakeGrindConfig = {
@@ -154,9 +182,16 @@ export const DEFAULT_GRIND_CONFIG: SnakeGrindConfig = {
   startLength: 3,
   particlesEnabled: true,
   leaderboardSize: 20,
+  musicDynamicsEnabled: true,
+  musicTempoMax: 1.5,
+  musicIntensityPerApple: 0,
+  musicEventSpike: 0.35,
+  musicEventSpikeMs: 700,
   shrinkEveryN: 10,
   minBoardSize: 8,
   bonusCrPerShrink: 50,
+  shrinkBorderWarnApples: 3,
+  shrinkBlinkApples: 1,
 };
 
 export const DEFAULT_FARM_CONFIG: SnakeModeConfig = {
@@ -183,6 +218,11 @@ export const DEFAULT_FARM_CONFIG: SnakeModeConfig = {
   startLength: 5,
   particlesEnabled: true,
   leaderboardSize: 20,
+  musicDynamicsEnabled: false,
+  musicTempoMax: 1.0,
+  musicIntensityPerApple: 0,
+  musicEventSpike: 0,
+  musicEventSpikeMs: 700,
 };
 
 export const DEFAULT_SNAKE_CONFIG: SnakeConfig = {

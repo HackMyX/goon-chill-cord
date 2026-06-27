@@ -471,23 +471,27 @@ export function Leaderboard({
                         )}
                       </div>
 
-                      {/* Avatar: Top 3 (oder "all") = Foto, ab Platz 4 nur der Buchstabe */}
-                      <div className="relative shrink-0">
-                        {showPhoto ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={entry.avatarUrl!}
-                            alt=""
-                            className={`h-8 w-8 rounded-full object-cover ring-1.5 ${isTopThree ? REST_AVATAR_RING[i] : "ring-white/10"}`}
-                          />
-                        ) : (
-                          <div
-                            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ring-1.5 ${isTopThree ? `${REST_AVATAR_RING[i]} ${REST_AVATAR_FB[i]}` : "ring-white/10 bg-white/5 text-zinc-500"}`}
-                          >
-                            {entry.username.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
+                      {/* Avatar: NUR die ersten 3 Plätze zeigen ein Bild (oder Initial
+                          als Fallback). Ab Platz 4 bewusst GAR NICHTS — kein Foto UND
+                          kein Anfangsbuchstabe. */}
+                      {isTopThree && (
+                        <div className="relative shrink-0">
+                          {showPhoto ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={entry.avatarUrl!}
+                              alt=""
+                              className={`h-8 w-8 rounded-full object-cover ring-1.5 ${REST_AVATAR_RING[i]}`}
+                            />
+                          ) : (
+                            <div
+                              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ring-1.5 ${REST_AVATAR_RING[i]} ${REST_AVATAR_FB[i]}`}
+                            >
+                              {entry.username.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Name + badges */}
                       <div className="flex flex-1 min-w-0 items-center gap-1.5 flex-wrap">

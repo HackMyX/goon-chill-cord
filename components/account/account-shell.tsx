@@ -11,6 +11,7 @@ import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { NotificationPrefsSection } from "@/components/account/notification-prefs-section";
 import { ClientSettingsSection } from "@/components/account/client-settings-section";
 import { RedeemCodeCard } from "@/components/account/redeem-code-card";
+import { LogoutButton } from "@/components/auth/logout-button";
 import { LevelBadge } from "@/components/ui/level-badge";
 import { getLevelColor } from "@/lib/level-system";
 
@@ -369,6 +370,11 @@ export function AccountShell({
         <ClientSettingsSection />
 
         <NotificationPrefsSection initialPrefs={notificationPrefs} role={liveRole} />
+
+        {/* Prominent sign-out at the very bottom of the profile. */}
+        <div className="mt-8 border-t border-white/10 pt-6">
+          <LogoutButton variant="full" />
+        </div>
       </main>
     </div>
   );

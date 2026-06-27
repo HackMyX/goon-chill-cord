@@ -301,23 +301,27 @@ function GameLeaderboardCard({
                   <RankDisplay rank={rank} vis={vis} />
                 </div>
 
-                {/* Avatar */}
-                <div className="relative shrink-0">
-                  {showPhoto ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={entry.avatarUrl}
-                      alt=""
-                      className={`h-8 w-8 rounded-full object-cover ring-1.5 ${isTop3 ? AVATAR_RING[i] : "ring-white/10"}`}
-                    />
-                  ) : (
-                    <div
-                      className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ring-1.5 ${isTop3 ? `${AVATAR_RING[i]} ${AVATAR_FB_BG[i]}` : "ring-white/10 bg-white/5 text-zinc-500"}`}
-                    >
-                      {entry.username.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
+                {/* Avatar: NUR die ersten 3 Plätze zeigen ein Bild (oder Initial als
+                    Fallback). Ab Platz 4 bewusst GAR NICHTS — kein Foto UND kein
+                    Anfangsbuchstabe. */}
+                {isTop3 && (
+                  <div className="relative shrink-0">
+                    {showPhoto ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={entry.avatarUrl}
+                        alt=""
+                        className={`h-8 w-8 rounded-full object-cover ring-1.5 ${AVATAR_RING[i]}`}
+                      />
+                    ) : (
+                      <div
+                        className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ring-1.5 ${AVATAR_RING[i]} ${AVATAR_FB_BG[i]}`}
+                      >
+                        {entry.username.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Name + prio badges */}
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">

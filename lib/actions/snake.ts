@@ -181,6 +181,11 @@ export async function updateSnakeConfig(
     startLength: clamp(input.x1.startLength, 1, 15),
     particlesEnabled: input.x1.particlesEnabled,
     leaderboardSize: clamp(input.x1.leaderboardSize, 5, 100),
+    musicDynamicsEnabled: input.x1.musicDynamicsEnabled ?? true,
+    musicTempoMax: Math.max(1, Math.min(3, input.x1.musicTempoMax ?? 1.45)),
+    musicIntensityPerApple: Math.max(0, Math.min(1, input.x1.musicIntensityPerApple ?? 0)),
+    musicEventSpike: Math.max(0, Math.min(1, input.x1.musicEventSpike ?? 0.35)),
+    musicEventSpikeMs: clamp(input.x1.musicEventSpikeMs ?? 700, 50, 5000),
   };
 
   const sanitizedX2: SnakeModeConfig = {
@@ -207,6 +212,11 @@ export async function updateSnakeConfig(
     startLength: clamp(input.x2.startLength, 1, 15),
     particlesEnabled: input.x2.particlesEnabled,
     leaderboardSize: clamp(input.x2.leaderboardSize, 5, 100),
+    musicDynamicsEnabled: input.x2.musicDynamicsEnabled ?? true,
+    musicTempoMax: Math.max(1, Math.min(3, input.x2.musicTempoMax ?? 1.6)),
+    musicIntensityPerApple: Math.max(0, Math.min(1, input.x2.musicIntensityPerApple ?? 0)),
+    musicEventSpike: Math.max(0, Math.min(1, input.x2.musicEventSpike ?? 0.4)),
+    musicEventSpikeMs: clamp(input.x2.musicEventSpikeMs ?? 800, 50, 5000),
   };
 
   const sanitizedGrind: SnakeGrindConfig = {
@@ -233,9 +243,16 @@ export async function updateSnakeConfig(
     startLength: clamp(input.grind.startLength, 1, 15),
     particlesEnabled: input.grind.particlesEnabled,
     leaderboardSize: clamp(input.grind.leaderboardSize, 5, 100),
+    musicDynamicsEnabled: input.grind.musicDynamicsEnabled ?? true,
+    musicTempoMax: Math.max(1, Math.min(3, input.grind.musicTempoMax ?? 1.5)),
+    musicIntensityPerApple: Math.max(0, Math.min(1, input.grind.musicIntensityPerApple ?? 0)),
+    musicEventSpike: Math.max(0, Math.min(1, input.grind.musicEventSpike ?? 0.35)),
+    musicEventSpikeMs: clamp(input.grind.musicEventSpikeMs ?? 700, 50, 5000),
     shrinkEveryN: clamp(input.grind.shrinkEveryN, 1, 100),
     minBoardSize: clamp(input.grind.minBoardSize, 4, 32),
     bonusCrPerShrink: Math.max(0, Math.round(input.grind.bonusCrPerShrink)),
+    shrinkBorderWarnApples: clamp(input.grind.shrinkBorderWarnApples ?? 3, 0, 50),
+    shrinkBlinkApples: clamp(input.grind.shrinkBlinkApples ?? 1, 0, 50),
   };
 
   const sanitizedFarm: SnakeModeConfig = {
@@ -262,6 +279,11 @@ export async function updateSnakeConfig(
     startLength: clamp(input.farm.startLength, 1, 15),
     particlesEnabled: input.farm.particlesEnabled,
     leaderboardSize: clamp(input.farm.leaderboardSize, 5, 100),
+    musicDynamicsEnabled: input.farm.musicDynamicsEnabled ?? false,
+    musicTempoMax: Math.max(1, Math.min(3, input.farm.musicTempoMax ?? 1.0)),
+    musicIntensityPerApple: Math.max(0, Math.min(1, input.farm.musicIntensityPerApple ?? 0)),
+    musicEventSpike: Math.max(0, Math.min(1, input.farm.musicEventSpike ?? 0)),
+    musicEventSpikeMs: clamp(input.farm.musicEventSpikeMs ?? 700, 50, 5000),
   };
 
   const admin = createAdminClient();

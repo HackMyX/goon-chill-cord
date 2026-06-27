@@ -33,6 +33,9 @@ export type MusicPageKey =
 export interface MusicConfig {
   enabled: boolean;
   defaultVolume: number;
+  /** Master switch for fade in/out on track changes. When false, tracks switch
+   *  INSTANTLY (no fade), regardless of fadeInMs/fadeOutMs. */
+  fadesEnabled: boolean;
   fadeInMs: number;
   fadeOutMs: number;
   /** Show the floating player widget to users */
@@ -195,6 +198,7 @@ export const BUILT_IN_TRACKS: MusicTrack[] = [
 export const DEFAULT_MUSIC_CONFIG: MusicConfig = {
   enabled:             true,
   defaultVolume:       0.12,
+  fadesEnabled:        true,
   fadeInMs:            1200,
   fadeOutMs:           500,
   showPlayerUI:        true,

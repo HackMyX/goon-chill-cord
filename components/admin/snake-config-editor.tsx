@@ -233,6 +233,25 @@ function ModeEditor<T extends SnakeModeConfig>({
         </Row>
       </Section>
 
+      {/* Music dynamics — per mode, drives the background music tempo */}
+      <Section label="Musik-Dynamik" icon={<span className="text-base">🎵</span>}>
+        <Row label="Tempo-Dynamik aktiv" hint="Musik beschleunigt mit dem Spieltempo in diesem Modus (aus = konstantes Tempo)">
+          <Toggle checked={cfg.musicDynamicsEnabled} onChange={(v) => set("musicDynamicsEnabled" as keyof T, v as T[keyof T])} />
+        </Row>
+        <Row label="Max. Tempo-Faktor" hint="Maximale Musik-Geschwindigkeit bei voller Intensität: 1.0 = keine Beschleunigung, 1.45 = +45 %, 2.0 = doppelt so schnell">
+          <Num value={cfg.musicTempoMax} min={1} max={3} step={0.05} onChange={(v) => set("musicTempoMax" as keyof T, v as T[keyof T])} />
+        </Row>
+        <Row label="Intensität pro Apfel" hint="0 = Intensität folgt der Spielgeschwindigkeit. >0 = exakt PRO gegessenem Apfel (z. B. 0.02 = volle Intensität nach 50 Äpfeln)">
+          <Num value={cfg.musicIntensityPerApple} min={0} max={1} step={0.01} onChange={(v) => set("musicIntensityPerApple" as keyof T, v as T[keyof T])} />
+        </Row>
+        <Row label="Event-Spike-Höhe" hint="Zusätzlicher Intensitäts-Schub bei goldenem Apfel / Bonus (0 = aus, 1 = maximal)">
+          <Num value={cfg.musicEventSpike} min={0} max={1} step={0.05} onChange={(v) => set("musicEventSpike" as keyof T, v as T[keyof T])} />
+        </Row>
+        <Row label="Event-Spike-Dauer (ms)" hint="Wie lange ein Spike braucht, um wieder abzuklingen">
+          <Num value={cfg.musicEventSpikeMs} min={50} max={5000} step={50} onChange={(v) => set("musicEventSpikeMs" as keyof T, v as T[keyof T])} />
+        </Row>
+      </Section>
+
       {/* Optik & Texte — per-mode colours + labels (everything configurable) */}
       <Section label="Optik & Texte" icon={<span className="text-base">🎨</span>}>
         <Row label="Modus-Name" hint="Anzeigename auf der Auswahl-Karte (z. B. Turbo)">
@@ -281,6 +300,12 @@ function ModeEditor<T extends SnakeModeConfig>({
           </Row>
           <Row label="Bonus-CR pro Shrink" hint="Wird beim erfolgreichen Shrink-Überleben vergeben">
             <Num value={grind.bonusCrPerShrink} min={0} onChange={(v) => onChange({ ...cfg, bonusCrPerShrink: v } as T)} />
+          </Row>
+          <Row label="Rand-Warnung ab N Äpfeln" hint="Statische rote Umrandung erscheint, sobald noch N Äpfel bis zum Shrink fehlen — OHNE Blinken (z. B. 3)">
+            <Num value={grind.shrinkBorderWarnApples} min={0} max={50} onChange={(v) => onChange({ ...cfg, shrinkBorderWarnApples: v } as T)} />
+          </Row>
+          <Row label="Blinken ab N Äpfeln" hint="Ab so vielen Äpfeln vor dem Shrink fängt die Umrandung + Banner an zu BLINKEN (z. B. 1 = erst beim letzten Apfel). Sollte ≤ Rand-Warnung sein.">
+            <Num value={grind.shrinkBlinkApples} min={0} max={50} onChange={(v) => onChange({ ...cfg, shrinkBlinkApples: v } as T)} />
           </Row>
         </Section>
       )}
