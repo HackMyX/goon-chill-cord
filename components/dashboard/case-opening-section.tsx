@@ -7,11 +7,11 @@ import { Coins, Zap, Layers, Minus, Plus, Package } from "lucide-react";
 import { CaseReel, type CaseReelHandle, type ReelEntry } from "@/components/dashboard/case-reel";
 import { ChanceBar } from "@/components/dashboard/chance-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
-import { CaseItem3D, LazyCaseItem3D, type ItemForPreview } from "@/components/cases/case-item-3d";
+import { CaseDropView } from "@/components/cases/case-item-3d";
 import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
 import { ItemStatBadges } from "@/components/items/item-stat-badges";
-import { openCase, chargeSkipFee, openCaseBatch, type WonItem } from "@/lib/actions/cases";
-import { RARITY_ORDER, getTypeLabel, type CaseGroup, type CaseTier, type Rarity } from "@/lib/cases";
+import { openCase, chargeSkipFee, openCaseBatch, type WonDrop } from "@/lib/actions/cases";
+import { RARITY_ORDER, getTypeLabel, type CaseGroup, type CaseTier, type CaseExtraDrop, type CasePoolEntry, type Rarity } from "@/lib/cases";
 import { getCaseIcon } from "@/lib/case-icons";
 import { useSoundManager } from "@/lib/sound-manager";
 import { debugLog } from "@/lib/debug";
@@ -39,19 +39,76 @@ const CONFETTI_BY_RARITY: Record<Rarity, () => void> = {
 
 function fireWinCelebration(rarity: Rarity) { CONFETTI_BY_RARITY[rarity](); }
 
-/** WonItem → the 3D preview shape consumed by CaseItem3D / ItemSceneContent. */
-function wonToPreview(item: WonItem): ItemForPreview {
+/** A won drop → the universal preview subject used by every case visual. */
+function dropToSubject(d: WonDrop): PreviewSubject {
+  switch (d.kind) {
+    case "item":
+      return {
+        kind: "item",
+        item: {
+          id: d.item.id,
+          name: d.item.name,
+          rarity: d.item.rarity as Rarity,
+          type: d.item.type,
+          damage: d.item.damage,
+          armor: d.item.armor,
+          perk_type: d.item.perk_type,
+          perk_magnitude: d.item.perk_magnitude,
+          shield_hp: d.item.shield_hp,
+          shield_regen_cooldown_sec: d.item.shield_regen_cooldown_sec,
+        },
+      };
+    case "credits":    return { kind: "credits", amount: d.amount };
+    case "name_style": return { kind: "name_style", styleKey: d.styleKey };
+    case "ability":    return { kind: "ability", abilityKey: d.abilityKey, name: d.name, icon: d.icon, rarity: d.rarity };
+    case "badge":      return { kind: "badge", badgeKey: d.badgeKey, badgeText: d.badgeText };
+  }
+}
+
+/** A pool-gallery entry (item or extra) → the universal preview subject. */
+function poolEntryToSubject(e: CasePoolEntry): PreviewSubject {
+  if (!e.extra) {
+    return { kind: "item", item: { id: `${e.type}-${e.name}`, name: e.name, rarity: e.rarity, type: e.type } };
+  }
+  const x = e.extra;
+  switch (x.kind) {
+    case "credits":    return { kind: "credits", amount: x.amount ?? 0 };
+    case "name_style": return { kind: "name_style", styleKey: x.styleKey ?? "default" };
+    case "ability":    return { kind: "ability", abilityKey: x.abilityKey ?? "", name: e.name, icon: x.abilityIcon, rarity: e.rarity };
+    case "badge":      return { kind: "badge", badgeKey: x.badgeKey ?? "", badgeText: x.badgeText ?? e.name };
+  }
+}
+
+const EXTRA_KIND_LABEL: Record<CaseExtraDrop["kind"], string> = {
+  credits: "Credits",
+  name_style: "Name-Style",
+  ability: "Fähigkeit",
+  badge: "Badge",
+};
+
+/** A tier's configured extra drop → a pool-gallery entry. */
+function extraToPoolEntry(d: CaseExtraDrop): CasePoolEntry {
+  const name =
+    d.label ||
+    (d.kind === "credits"
+      ? `${(d.amount ?? 0).toLocaleString("de-DE")} Credits`
+      : d.kind === "name_style"
+      ? d.styleKey ?? "Name-Style"
+      : d.kind === "ability"
+      ? d.abilityKey ?? "Fähigkeit"
+      : d.badgeText || d.badgeKey || "Badge");
   return {
-    id: item.id,
-    name: item.name,
-    rarity: item.rarity,
-    type: item.type,
-    damage: item.damage,
-    armor: item.armor,
-    perk_type: item.perk_type,
-    perk_magnitude: item.perk_magnitude,
-    shield_hp: item.shield_hp,
-    shield_regen_cooldown_sec: item.shield_regen_cooldown_sec,
+    rarity: d.rarity,
+    type: d.kind,
+    name,
+    extra: {
+      kind: d.kind,
+      styleKey: d.styleKey,
+      abilityKey: d.abilityKey,
+      badgeKey: d.badgeKey,
+      badgeText: d.badgeText,
+      amount: d.amount,
+    },
   };
 }
 
@@ -59,7 +116,7 @@ function wonToPreview(item: WonItem): ItemForPreview {
 // Reel helpers
 // ---------------------------------------------------------------------------
 
-interface PreviewItem { rarity: Rarity; type: string; name: string }
+type PreviewItem = CasePoolEntry;
 
 const PLACEHOLDER_COUNT = 13;
 
@@ -71,8 +128,10 @@ function buildPlaceholderReel(types: string[]): ReelEntry[] {
 function randomFrom<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function buildFiller(count: number, prefix: string, pool: PreviewItem[], types: string[]): ReelEntry[] {
+  // Filler is purely decorative — only real catalogue items, never extra drops.
+  const itemPool = pool.filter((p) => !p.extra);
   return Array.from({ length: count }, (_, i) => {
-    if (pool.length > 0) { const p = randomFrom(pool); return { key: `${prefix}-${i}`, rarity: p.rarity, type: p.type, name: p.name }; }
+    if (itemPool.length > 0) { const p = randomFrom(itemPool); return { key: `${prefix}-${i}`, rarity: p.rarity, type: p.type, name: p.name }; }
     return { key: `${prefix}-${i}`, rarity: randomFrom(RARITY_ORDER), type: randomFrom(types) };
   });
 }
@@ -131,7 +190,7 @@ function QuantitySelector({
 const RARITY_RANK: Record<Rarity, number> = { normal: 0, selten: 1, mythisch: 2, ultra: 3 };
 const CARD_W = 148;
 
-function BatchResultGrid({ items, onClose, viewBase }: { items: WonItem[]; onClose: () => void; viewBase: number }) {
+function BatchResultGrid({ items, onClose, viewBase }: { items: WonDrop[]; onClose: () => void; viewBase: number }) {
   const best = items.reduce((b, i) => RARITY_RANK[i.rarity as Rarity] > RARITY_RANK[b.rarity as Rarity] ? i : b, items[0]);
 
   return (
@@ -188,36 +247,36 @@ function BatchResultGrid({ items, onClose, viewBase }: { items: WonItem[]; onClo
         </div>
 
         <div className="flex flex-wrap items-start justify-center gap-3">
-          {items.map((item, idx) => (
+          {items.map((drop, idx) => (
             <motion.div
-              key={`${item.id}-${idx}`}
+              key={`${drop.name}-${idx}`}
               initial={{ rotateY: 90, opacity: 0, scale: 0.75 }}
               animate={{ rotateY: 0, opacity: 1, scale: 1 }}
               transition={{ delay: 0.1 + idx * 0.055, type: "spring", stiffness: 320, damping: 24 }}
               className="relative flex flex-col items-center gap-1.5 rounded-xl border bg-black/70 p-3 text-center"
               style={{
                 width: CARD_W,
-                borderColor: `${RARITY_HEX[item.rarity as Rarity]}55`,
-                boxShadow: `0 0 14px ${RARITY_HEX[item.rarity as Rarity]}22`,
+                borderColor: `${RARITY_HEX[drop.rarity as Rarity]}55`,
+                boxShadow: `0 0 14px ${RARITY_HEX[drop.rarity as Rarity]}22`,
               }}
             >
               <div
                 className="pointer-events-none absolute inset-0 rounded-xl opacity-[0.18]"
-                style={{ background: `radial-gradient(ellipse at 50% 25%, ${RARITY_HEX[item.rarity as Rarity]} 0%, transparent 72%)` }}
+                style={{ background: `radial-gradient(ellipse at 50% 25%, ${RARITY_HEX[drop.rarity as Rarity]} 0%, transparent 72%)` }}
               />
               <div className="relative z-10 flex flex-col items-center gap-1.5">
                 <div className="relative w-full" style={{ height: 96 }}>
-                  <CaseItem3D
-                    item={wonToPreview(item)}
+                  <CaseDropView
+                    subject={dropToSubject(drop)}
                     viewIndex={viewBase + 1 + idx}
                     rotate
                     rotateSpeed={0.7}
                   />
                 </div>
                 <p className="w-full text-[11px] font-bold leading-tight text-zinc-100 line-clamp-2 break-words">
-                  {item.name}
+                  {drop.name}
                 </p>
-                <RarityBadge rarity={item.rarity as Rarity} />
+                <RarityBadge rarity={drop.rarity as Rarity} />
               </div>
             </motion.div>
           ))}
@@ -274,7 +333,7 @@ function PoolGallery({ pool, viewBase }: { pool: PreviewItem[]; viewBase: number
     const seen = new Set<string>();
     const out: PreviewItem[] = [];
     for (const p of pool) {
-      const k = `${p.rarity}|${p.type}|${p.name}`;
+      const k = `${p.rarity}|${p.type}|${p.name}|${p.extra?.kind ?? ""}`;
       if (seen.has(k)) continue;
       seen.add(k);
       out.push(p);
@@ -311,7 +370,7 @@ function PoolGallery({ pool, viewBase }: { pool: PreviewItem[]; viewBase: number
     <div className="mt-6">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold tracking-wide text-purple-300">
-          IM POOL — {unique.length.toLocaleString("de-DE")} ITEMS IN 3D
+          IM POOL — {unique.length.toLocaleString("de-DE")} EINTRÄGE IN 3D
         </p>
         <div className="flex flex-wrap gap-1.5">
           {pills.map((p) => {
@@ -341,12 +400,7 @@ function PoolGallery({ pool, viewBase }: { pool: PreviewItem[]; viewBase: number
           return (
             <button
               key={`${p.rarity}-${p.type}-${p.name}-${i}`}
-              onClick={() =>
-                setSubject({
-                  kind: "item",
-                  item: { id: `${p.type}-${p.name}`, name: p.name, rarity: p.rarity, type: p.type },
-                })
-              }
+              onClick={() => setSubject(poolEntryToSubject(p))}
               className="group relative flex flex-col items-center gap-1 overflow-hidden rounded-lg border bg-black/30 p-1.5 text-center transition-all hover:scale-[1.04]"
               style={{ borderColor: `${hex}40`, boxShadow: `0 0 10px ${hex}14` }}
             >
@@ -355,11 +409,12 @@ function PoolGallery({ pool, viewBase }: { pool: PreviewItem[]; viewBase: number
                 style={{ background: `radial-gradient(ellipse at 50% 25%, ${hex} 0%, transparent 72%)` }}
               />
               <div className="relative w-full" style={{ height: 70 }}>
-                <LazyCaseItem3D
-                  item={{ id: `${p.type}-${p.name}`, name: p.name, rarity: p.rarity, type: p.type }}
+                <CaseDropView
+                  subject={poolEntryToSubject(p)}
                   viewIndex={viewBase + i}
                   rotate
                   rotateSpeed={0.5}
+                  lazy
                   fallbackColor={hex}
                 />
               </div>
@@ -369,7 +424,7 @@ function PoolGallery({ pool, viewBase }: { pool: PreviewItem[]; viewBase: number
               <span className="relative flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full" style={{ background: hex }} />
                 <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: hex }}>
-                  {getTypeLabel(p.type)}
+                  {p.extra ? EXTRA_KIND_LABEL[p.extra.kind] : getTypeLabel(p.type)}
                 </span>
               </span>
             </button>
@@ -416,8 +471,8 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   const Icon = getCaseIcon(group.iconName);
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [wonItem, setWonItem] = useState<WonItem | null>(null);
-  const [batchItems, setBatchItems] = useState<WonItem[]>([]);
+  const [wonDrop, setWonDrop] = useState<WonDrop | null>(null);
+  const [batchDrops, setBatchDrops] = useState<WonDrop[]>([]);
   const [spinToken, setSpinToken] = useState(0);
   const [activeTier, setActiveTier] = useState<CaseTier | null>(null);
   const [batchCount, setBatchCount] = useState(2);
@@ -434,6 +489,21 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
   const sofortFiredRef = useRef(false);
   const { currencyName } = useSiteConfig();
   const sound = useSoundManager();
+
+  // Pool gallery = catalogue items + every configured extra drop (deduped).
+  const poolWithExtras = useMemo(() => {
+    const seen = new Set<string>();
+    const extraEntries: CasePoolEntry[] = [];
+    for (const tier of group.tiers) {
+      for (const d of tier.extraDrops ?? []) {
+        const k = `${d.kind}|${d.rarity}|${d.styleKey ?? ""}|${d.abilityKey ?? ""}|${d.badgeKey ?? ""}|${d.amount ?? ""}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        extraEntries.push(extraToPoolEntry(d));
+      }
+    }
+    return [...previewPool, ...extraEntries];
+  }, [previewPool, group.tiers]);
 
   const placeholderReel = useMemo(() => buildPlaceholderReel(group.itemTypes), [group.itemTypes]);
   const [reel, setReel] = useState<ReelEntry[]>(placeholderReel);
@@ -460,21 +530,22 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
     setActiveTier(tier);
     setPhase("pending");   // → warmup kicks in immediately in CaseReel
     setError(null);
-    setWonItem(null);
+    setWonDrop(null);
     sound.click();
 
     const result = await openCase(tier.id);
     fetchingRef.current = false;
     debugLog("CaseOpening", `server result for tier "${tier.id}"`, result);
 
-    if (!result.success || !result.item) {
+    if (!result.success || !result.drop) {
       setError(result.error ?? "Unbekannter Fehler.");
       sound.error();
       setPhase("idle");
       return;
     }
 
-    setWonItem(result.item);
+    const drop = result.drop;
+    setWonDrop(drop);
     onCreditsChange(result.newCredits!);
 
     // User clicked SOFORT while server was in-flight — skip spin entirely and
@@ -489,14 +560,20 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
         const feeRes = await chargeSkipFee(tier.id);
         if (feeRes.success && feeRes.newCredits !== undefined) onCreditsChange(feeRes.newCredits);
       }
-      const r = result.item.rarity as Rarity;
+      const r = drop.rarity as Rarity;
       if (r === "ultra") sound.ultraWin?.(); else sound.win?.();
       fireWinCelebration(r);
       setPhase("result");
       return;
     }
 
-    const target: ReelEntry = { key: "target", rarity: result.item.rarity as Rarity, type: result.item.type, name: result.item.name };
+    const target: ReelEntry = {
+      key: "target",
+      rarity: drop.rarity as Rarity,
+      type: drop.kind === "item" ? drop.item.type : drop.kind,
+      name: drop.name,
+      subject: dropToSubject(drop),
+    };
     // Generous pre-target filler guarantees the winning slot is always far to
     // the left of wherever the warmup left the strip, so the deceleration is a
     // long, continuous, same-direction spin no matter when the server responds.
@@ -515,25 +592,25 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
     setActiveTier(tier);
     setPhase("batch_pending");
     setError(null);
-    setBatchItems([]);
+    setBatchDrops([]);
     sound.click();
 
     const result = await openCaseBatch(tier.id, batchCount);
     fetchingRef.current = false;
 
-    if (!result.success || !result.items) {
+    if (!result.success || !result.drops) {
       setError(result.error ?? "Unbekannter Fehler.");
       sound.error();
       setPhase("idle");
       return;
     }
 
-    setBatchItems(result.items);
+    setBatchDrops(result.drops);
     setPhase("batch_result");
     onCreditsChange(result.newCredits!);
 
     const bestRarity = (["ultra", "mythisch", "selten", "normal"] as Rarity[]).find(
-      (r) => result.items!.some((i) => i.rarity === r)
+      (r) => result.drops!.some((d) => d.rarity === r)
     ) ?? "normal";
     fireWinCelebration(bestRarity);
     if (bestRarity === "ultra") sound.ultraWin?.();
@@ -575,7 +652,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
     setSofortQueued(false);
     setReel(idleReelRef.current);
     setTargetIndex(Math.floor(PLACEHOLDER_COUNT / 2));
-    setWonItem(null);
+    setWonDrop(null);
     setPhase("idle");
     setActiveTier(null);
   }
@@ -672,16 +749,16 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
             onTick={sound.tick}
             onSpinComplete={() => {
               setPhase((p) => (p === "spinning" ? "result" : p));
-              if (!wonItem) return;
+              if (!wonDrop) return;
               sound.caseReveal();
-              if (wonItem.rarity === "ultra") sound.ultraWin?.();
+              if (wonDrop.rarity === "ultra") sound.ultraWin?.();
               else sound.win?.();
-              fireWinCelebration(wonItem.rarity as Rarity);
+              fireWinCelebration(wonDrop.rarity as Rarity);
             }}
           />
 
           <AnimatePresence>
-            {phase === "result" && wonItem && (
+            {phase === "result" && wonDrop && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -694,7 +771,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
                   animate={{ opacity: 0, scale: 1.8 }}
                   transition={{ duration: 0.7, ease: "easeOut" }}
                   className="pointer-events-none absolute inset-0"
-                  style={{ background: `radial-gradient(circle, ${RARITY_HEX[wonItem.rarity as Rarity]} 0%, transparent 65%)` }}
+                  style={{ background: `radial-gradient(circle, ${RARITY_HEX[wonDrop.rarity as Rarity]} 0%, transparent 65%)` }}
                 />
                 <motion.div
                   initial={{ scale: 0.7, y: 10 }}
@@ -703,28 +780,32 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
                   className="relative z-10 flex flex-col items-center gap-1"
                 >
                   <div className="relative w-[120px]" style={{ height: 84 }}>
-                    <CaseItem3D
-                      item={wonToPreview(wonItem)}
+                    <CaseDropView
+                      subject={dropToSubject(wonDrop)}
                       viewIndex={winViewIndex}
                       rotate
                       rotateSpeed={0.85}
                       shadow
                     />
                   </div>
-                  <span className="glow-text text-lg font-bold text-zinc-50">{wonItem.name}</span>
-                  <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">{getTypeLabel(wonItem.type)}</span>
+                  <span className="glow-text text-lg font-bold text-zinc-50">{wonDrop.name}</span>
+                  <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                    {wonDrop.kind === "item" ? getTypeLabel(wonDrop.item.type) : EXTRA_KIND_LABEL[wonDrop.kind]}
+                  </span>
                   <div className="flex flex-wrap items-center justify-center gap-1.5">
-                    <RarityBadge rarity={wonItem.rarity as Rarity} />
-                    <ItemStatBadges
-                      damage={wonItem.damage}
-                      armor={wonItem.armor}
-                      perk_type={wonItem.perk_type}
-                      perk_magnitude={wonItem.perk_magnitude}
-                      shield_hp={wonItem.shield_hp}
-                      shield_regen_cooldown_sec={wonItem.shield_regen_cooldown_sec}
-                      itemName={wonItem.name}
-                      itemType={wonItem.type}
-                    />
+                    <RarityBadge rarity={wonDrop.rarity as Rarity} />
+                    {wonDrop.kind === "item" && (
+                      <ItemStatBadges
+                        damage={wonDrop.item.damage}
+                        armor={wonDrop.item.armor}
+                        perk_type={wonDrop.item.perk_type}
+                        perk_magnitude={wonDrop.item.perk_magnitude}
+                        shield_hp={wonDrop.item.shield_hp}
+                        shield_regen_cooldown_sec={wonDrop.item.shield_regen_cooldown_sec}
+                        itemName={wonDrop.item.name}
+                        itemType={wonDrop.item.type}
+                      />
+                    )}
                   </div>
                 </motion.div>
               </motion.div>
@@ -848,12 +929,12 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
 
       {/* Batch result modal */}
       <AnimatePresence>
-        {phase === "batch_result" && batchItems.length > 0 && (
+        {phase === "batch_result" && batchDrops.length > 0 && (
           <BatchResultGrid
-            items={batchItems}
+            items={batchDrops}
             viewBase={batchViewBase}
             onClose={() => {
-              setBatchItems([]);
+              setBatchDrops([]);
               setPhase("idle");
               setActiveTier(null);
             }}
@@ -875,7 +956,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
       </div>
 
       {/* Full 3D pool gallery — everything winnable from this case */}
-      <PoolGallery pool={previewPool} viewBase={poolViewBase} />
+      <PoolGallery pool={poolWithExtras} viewBase={poolViewBase} />
     </section>
   );
 }

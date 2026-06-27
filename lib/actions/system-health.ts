@@ -178,6 +178,7 @@ const COLUMN_CHECKS: Array<{
   { id: "col_case_perrarity",     category: "Cases",              table: "case_tiers",          col: "per_rarity_item_ids",     detail: "node scripts/add-case-groups.cjs" },
   { id: "col_case_nsstyles",      category: "Cases",              table: "case_tiers",          col: "name_styles_eligible",    detail: "node scripts/add-case-groups.cjs" },
   { id: "col_case_tiersublabel",  category: "Cases",              table: "case_tiers",          col: "tier_sublabel",           detail: "node scripts/add-case-groups.cjs" },
+  { id: "col_case_extra_drops",   category: "Cases",              table: "case_tiers",          col: "extra_drops",             detail: "node scripts/add-case-extra-drops.cjs" },
   // Shop settings — MOTD
   { id: "col_shop_motd",          category: "Shop",               table: "shop_settings",       col: "motd",                    detail: "ALTER TABLE shop_settings ADD COLUMN motd text;" },
   { id: "col_shop_motdenabled",   category: "Shop",               table: "shop_settings",       col: "motd_enabled",            detail: "ALTER TABLE shop_settings ADD COLUMN motd_enabled boolean DEFAULT false;" },

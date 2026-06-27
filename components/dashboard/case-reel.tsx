@@ -3,7 +3,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { motion, useMotionValue, animate } from "framer-motion";
 import { RARITY_STYLES, type Rarity } from "@/lib/cases";
-import { CaseItem3D } from "@/components/cases/case-item-3d";
+import { CaseDropView } from "@/components/cases/case-item-3d";
+import type { PreviewSubject } from "@/components/ui/universal-preview-modal";
 import { debugLog } from "@/lib/debug";
 
 export const ITEM_WIDTH = 116;
@@ -20,6 +21,8 @@ export interface ReelEntry {
   rarity: Rarity;
   type: string;
   name?: string;
+  /** Non-item drops carry an explicit preview subject (name style, ability, …). */
+  subject?: PreviewSubject;
 }
 
 export interface CaseReelHandle {
@@ -40,13 +43,13 @@ interface CaseReelProps {
   onSpinComplete?: () => void;
 }
 
-function toPreview(entry: ReelEntry) {
-  return {
-    id: entry.key,
-    name: entry.name ?? "",
-    rarity: entry.rarity as string,
-    type: entry.type,
-  };
+function entrySubject(entry: ReelEntry): PreviewSubject {
+  return (
+    entry.subject ?? {
+      kind: "item",
+      item: { id: entry.key, name: entry.name ?? "", rarity: entry.rarity, type: entry.type },
+    }
+  );
 }
 
 export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseReel(
@@ -274,10 +277,10 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
                 )}
                 {style.rainbow && <span aria-hidden className="rainbow-border" />}
 
-                {/* 3D item — renders into the shared Canvas mounted in cases-shell */}
+                {/* Item → 3D (shared Canvas); non-item drop → DOM hero */}
                 <div className="relative w-full" style={{ height: 76 }}>
-                  <CaseItem3D
-                    item={toPreview(entry)}
+                  <CaseDropView
+                    subject={entrySubject(entry)}
                     viewIndex={viewBase + i}
                     rotate={!spinning || isTarget}
                     rotateSpeed={isTarget ? 0.9 : 0.5}

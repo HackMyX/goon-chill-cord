@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   Save, Plus, Trash2, ChevronUp, ChevronDown, Info, Search, X,
-  Star, Settings, Package, Wand2, ArrowUpDown, AlertTriangle,
+  Star, Settings, Package, Wand2, ArrowUpDown, AlertTriangle, Eye, Gift,
 } from "lucide-react";
 import { updateCaseTier, type UpdateCaseTierInput } from "@/lib/actions/admin";
 import {
@@ -12,13 +12,22 @@ import {
 } from "@/lib/actions/cases-admin";
 import {
   RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, ALL_ITEM_TYPES,
-  CASE_ICON_OPTIONS, type Rarity, type CaseIconName,
+  CASE_ICON_OPTIONS, normalizeExtraDrops,
+  type Rarity, type CaseIconName, type CaseExtraDrop, type CaseExtraDropKind,
 } from "@/lib/cases";
 import { getCaseIcon } from "@/lib/case-icons";
+import { NAME_STYLES } from "@/lib/name-styles";
+import { ALL_BADGE_KEYS, getBadgeStyle } from "@/lib/badges";
+import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
+import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { RARITY_HEX } from "@/lib/rarity-colors";
 import type { CaseTierRow, CaseGroupRow, ItemRow } from "@/components/admin/admin-shell";
+
+/** Lightweight ability catalog entry used by the extra-drop picker. */
+export interface AbilityLite { key: string; name: string; icon: string; rarity: string }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +50,283 @@ function InfoBox({ children }: { children: React.ReactNode }) {
     <div className="flex gap-2 rounded-lg border border-blue-400/20 bg-blue-500/5 px-3 py-2 text-[11px] leading-relaxed text-blue-200/80">
       <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-blue-400/60" />
       <div>{children}</div>
+    </div>
+  );
+}
+
+// ─── Extra (non-item) drops ─────────────────────────────────────────────────────
+
+const EXTRA_KIND_OPTIONS: { value: CaseExtraDropKind; label: string }[] = [
+  { value: "credits", label: "Credits" },
+  { value: "name_style", label: "Name-Style" },
+  { value: "ability", label: "Fähigkeit" },
+  { value: "badge", label: "Badge" },
+];
+const EXTRA_KIND_LABEL: Record<CaseExtraDropKind, string> = {
+  credits: "Credits", name_style: "Name-Style", ability: "Fähigkeit", badge: "Badge",
+};
+
+const NAME_STYLE_OPTIONS = Object.values(NAME_STYLES)
+  .map((s) => ({ key: s.key, label: s.label, rarity: s.rarity }))
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+function extraDropToSubject(d: CaseExtraDrop, abilities: AbilityLite[]): PreviewSubject {
+  switch (d.kind) {
+    case "credits":    return { kind: "credits", amount: d.amount ?? 0 };
+    case "name_style": return { kind: "name_style", styleKey: d.styleKey ?? "default" };
+    case "ability": {
+      const a = abilities.find((x) => x.key === d.abilityKey);
+      return { kind: "ability", abilityKey: d.abilityKey ?? "", name: d.label || a?.name || d.abilityKey || "Fähigkeit", icon: a?.icon, rarity: d.rarity };
+    }
+    case "badge":      return { kind: "badge", badgeKey: d.badgeKey ?? "", badgeText: d.badgeText || d.badgeKey || "" };
+  }
+}
+
+function extraDropDisplay(d: CaseExtraDrop, abilities: AbilityLite[]): string {
+  if (d.label) return d.label;
+  switch (d.kind) {
+    case "credits":    return `${(d.amount ?? 0).toLocaleString("de-DE")} Credits`;
+    case "name_style": return NAME_STYLES[d.styleKey ?? ""]?.label ?? d.styleKey ?? "Name-Style";
+    case "ability":    return abilities.find((a) => a.key === d.abilityKey)?.name ?? d.abilityKey ?? "Fähigkeit";
+    case "badge":      return d.badgeText || d.badgeKey || "Badge";
+  }
+}
+
+function newDropId(): string {
+  try { return crypto.randomUUID(); } catch { return `drop-${Date.now()}-${Math.floor(Math.random() * 1e6)}`; }
+}
+
+function ExtraDropsEditor({
+  drops, setDrops, abilities,
+}: {
+  drops: CaseExtraDrop[];
+  setDrops: (d: CaseExtraDrop[]) => void;
+  abilities: AbilityLite[];
+}) {
+  const sound = useSoundManager();
+  const [kind, setKind] = useState<CaseExtraDropKind>("credits");
+  const [rarity, setRarity] = useState<Rarity>("selten");
+  const [weight, setWeight] = useState(1);
+  const [amount, setAmount] = useState(50000);
+  const [styleKey, setStyleKey] = useState(NAME_STYLE_OPTIONS[0]?.key ?? "default");
+  const [abilityKey, setAbilityKey] = useState("");
+  const [badgeKey, setBadgeKey] = useState(ALL_BADGE_KEYS[0] ?? "");
+  const [badgeText, setBadgeText] = useState("");
+  const [label, setLabel] = useState("");
+  const [preview, setPreview] = useState<PreviewSubject | null>(null);
+
+  function addDrop() {
+    const base: CaseExtraDrop = { id: newDropId(), kind, rarity, weight: Math.max(1, weight) };
+    if (label.trim()) base.label = label.trim();
+    if (kind === "credits") {
+      if (amount <= 0) return;
+      base.amount = Math.round(amount);
+    } else if (kind === "name_style") {
+      if (!styleKey) return;
+      base.styleKey = styleKey;
+    } else if (kind === "ability") {
+      if (!abilityKey) return;
+      base.abilityKey = abilityKey;
+    } else if (kind === "badge") {
+      if (!badgeKey) return;
+      base.badgeKey = badgeKey;
+      if (badgeText.trim()) base.badgeText = badgeText.trim();
+    }
+    setDrops([...drops, base]);
+    setLabel("");
+    sound.click();
+  }
+
+  function removeDrop(id: string) {
+    setDrops(drops.filter((d) => d.id !== id));
+    sound.click();
+  }
+
+  function setDropWeight(id: string, w: number) {
+    setDrops(drops.map((d) => (d.id === id ? { ...d, weight: Math.max(1, w) } : d)));
+  }
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <p className="text-[11px] font-semibold tracking-wide text-zinc-400">
+          <Gift className="mr-1 inline-block h-3.5 w-3.5 text-fuchsia-400" />
+          EXTRA-DROPS — Nicht-Item-Belohnungen (Credits, Name-Styles, Fähigkeiten, Badges)
+        </p>
+        <span className="rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] text-fuchsia-300">Neu</span>
+      </div>
+      <InfoBox>
+        Extra-Drops mischen sich in den passenden <strong>Rarität-Topf</strong>. Das <strong>Gewicht</strong> ist die
+        Anzahl „Lose": jedes Pool-Item zählt als 1 Los. Gewicht 1 = gleiche Chance wie ein einzelnes Item dieser
+        Rarität; höheres Gewicht = häufiger. Die Rarität-Chance selbst steuerst du oben unter CHANCEN. Klicke auf
+        das Auge für eine 3D-/Hero-Vorschau.
+      </InfoBox>
+
+      {/* Existing drops */}
+      {drops.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {drops.map((d) => {
+            const hex = RARITY_HEX[d.rarity];
+            return (
+              <div
+                key={d.id}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5"
+              >
+                <span className="rounded-full border px-2 py-0.5 text-[10px] font-bold" style={{ borderColor: `${hex}55`, color: hex }}>
+                  {EXTRA_KIND_LABEL[d.kind]}
+                </span>
+                <span className="flex-1 truncate text-xs text-zinc-200">{extraDropDisplay(d, abilities)}</span>
+                <span className="text-[10px] font-semibold" style={{ color: hex }}>{RARITY_LABELS[d.rarity]}</span>
+                <label className="flex items-center gap-1 text-[10px] text-zinc-500" title="Gewicht (Lose im Rarität-Topf)">
+                  ×
+                  <input
+                    type="number"
+                    min={1}
+                    value={d.weight}
+                    onChange={(e) => setDropWeight(d.id, Number(e.target.value) || 1)}
+                    className="w-12 rounded border border-white/10 bg-black/30 px-1 py-0.5 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60"
+                  />
+                </label>
+                <button
+                  onMouseEnter={sound.hover}
+                  onClick={() => { sound.click(); setPreview(extraDropToSubject(d, abilities)); }}
+                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-500 hover:text-fuchsia-300"
+                  title="3D-/Hero-Vorschau"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onMouseEnter={sound.hover}
+                  onClick={() => removeDrop(d.id)}
+                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-600 hover:text-red-400"
+                  title="Entfernen"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add new drop */}
+      <div className="mt-3 rounded-lg border border-fuchsia-400/20 bg-fuchsia-500/[0.04] p-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+            Typ
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as CaseExtraDropKind)}
+              className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60"
+            >
+              {EXTRA_KIND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+            Rarität-Topf
+            <select
+              value={rarity}
+              onChange={(e) => setRarity(e.target.value as Rarity)}
+              className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60"
+            >
+              {RARITY_ORDER.map((r) => <option key={r} value={r}>{RARITY_LABELS[r]}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[10px] text-zinc-400" title="Lose im Rarität-Topf (Item = 1 Los)">
+            Gewicht
+            <input
+              type="number"
+              min={1}
+              value={weight}
+              onChange={(e) => setWeight(Math.max(1, Number(e.target.value) || 1))}
+              className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60"
+            />
+          </label>
+
+          {/* Kind-specific target */}
+          {kind === "credits" && (
+            <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+              Betrag
+              <input
+                type="number"
+                min={1}
+                value={amount}
+                onChange={(e) => setAmount(Math.max(0, Number(e.target.value) || 0))}
+                className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/60"
+              />
+            </label>
+          )}
+          {kind === "name_style" && (
+            <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+              Name-Style
+              <select
+                value={styleKey}
+                onChange={(e) => setStyleKey(e.target.value)}
+                className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60"
+              >
+                {NAME_STYLE_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label} ({RARITY_LABELS[s.rarity as Rarity] ?? s.rarity})</option>)}
+              </select>
+            </label>
+          )}
+          {kind === "ability" && (
+            <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+              Fähigkeit
+              <select
+                value={abilityKey}
+                onChange={(e) => setAbilityKey(e.target.value)}
+                className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60"
+              >
+                <option value="">— wählen —</option>
+                {abilities.map((a) => <option key={a.key} value={a.key}>{a.icon} {a.name}</option>)}
+              </select>
+            </label>
+          )}
+          {kind === "badge" && (
+            <>
+              <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                Badge
+                <select
+                  value={badgeKey}
+                  onChange={(e) => setBadgeKey(e.target.value)}
+                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60"
+                >
+                  {ALL_BADGE_KEYS.map((k) => <option key={k} value={k}>{k}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                Badge-Text (optional)
+                <input
+                  type="text"
+                  value={badgeText}
+                  onChange={(e) => setBadgeText(e.target.value)}
+                  placeholder="Anzeigetext"
+                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60"
+                />
+              </label>
+            </>
+          )}
+
+          <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+            Anzeige-Name (optional)
+            <input
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="leer = automatisch"
+              className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60"
+            />
+          </label>
+        </div>
+        <button
+          onMouseEnter={sound.hover}
+          onClick={addDrop}
+          className="mt-2 flex items-center gap-1.5 rounded-lg border border-fuchsia-400/40 bg-fuchsia-500/15 px-3 py-1.5 text-xs font-semibold text-fuchsia-200 transition-colors hover:bg-fuchsia-500/25"
+        >
+          <Plus className="h-3.5 w-3.5" /> Extra-Drop hinzufügen
+        </button>
+      </div>
+
+      {preview && <UniversalPreviewModal subject={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }
@@ -158,10 +444,11 @@ interface TierEditorProps {
   groupItemTypes: string[];
   isStandard: boolean;
   isCustomGroup: boolean;
+  abilities: AbilityLite[];
   onDeleted?: () => void;
 }
 
-function TierEditor({ tier, items, groupItemTypes, isStandard, isCustomGroup, onDeleted }: TierEditorProps) {
+function TierEditor({ tier, items, groupItemTypes, isStandard, isCustomGroup, abilities, onDeleted }: TierEditorProps) {
   const [price, setPrice] = useState(tier.price);
   const [weights, setWeights] = useState<Partial<Record<Rarity, number>>>(tier.rarity_weights);
   const [enabled, setEnabled] = useState(tier.enabled);
@@ -185,6 +472,7 @@ function TierEditor({ tier, items, groupItemTypes, isStandard, isCustomGroup, on
   const [previewCost, setPreviewCost] = useState(tier.preview_cost ?? 0);
   const [multiOpenMax, setMultiOpenMax] = useState(tier.multi_open_max ?? 10);
   const [nameStylesEligible, setNameStylesEligible] = useState(tier.name_styles_eligible ?? false);
+  const [extraDrops, setExtraDrops] = useState<CaseExtraDrop[]>(() => normalizeExtraDrops(tier.extra_drops));
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [deleting, setDeleting] = useState(false);
@@ -232,6 +520,7 @@ function TierEditor({ tier, items, groupItemTypes, isStandard, isCustomGroup, on
       previewCost: Math.max(0, previewCost),
       multiOpenMax: Math.min(10, Math.max(2, multiOpenMax)),
       nameStylesEligible,
+      extraDrops,
     };
     const res = await updateCaseTier(input);
     setSaving(false);
@@ -507,6 +796,9 @@ function TierEditor({ tier, items, groupItemTypes, isStandard, isCustomGroup, on
           </div>
         </div>
 
+        {/* Extra (non-item) drops */}
+        <ExtraDropsEditor drops={extraDrops} setDrops={setExtraDrops} abilities={abilities} />
+
         {/* Legacy global pin */}
         {itemIds.length > 0 && (
           <div className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3">
@@ -539,6 +831,7 @@ interface GroupEditorProps {
   group: CaseGroupRow;
   tiers: CaseTierRow[];
   items: ItemRow[];
+  abilities: AbilityLite[];
   isFirst: boolean;
   isLast: boolean;
   onMoveUp: () => void;
@@ -548,7 +841,7 @@ interface GroupEditorProps {
 }
 
 function GroupEditor({
-  group, tiers, items, isFirst, isLast, onMoveUp, onMoveDown, onDeleted, onTierCreated,
+  group, tiers, items, abilities, isFirst, isLast, onMoveUp, onMoveDown, onDeleted, onTierCreated,
 }: GroupEditorProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [title, setTitle] = useState(group.title);
@@ -760,6 +1053,7 @@ function GroupEditor({
               groupItemTypes={group.item_types ?? []}
               isStandard={idx === 0}
               isCustomGroup={group.is_custom}
+              abilities={abilities}
               onDeleted={onTierCreated}
             />
           </div>
@@ -946,8 +1240,21 @@ interface CasesAdminTabProps {
 
 export function CasesAdminTab({ caseGroups: initialGroups, caseTiers: initialTiers, items }: CasesAdminTabProps) {
   const [groups, setGroups] = useState(initialGroups);
+  const [abilities, setAbilities] = useState<AbilityLite[]>([]);
   const [, startTransition] = useTransition();
   const sound = useSoundManager();
+
+  // Load the ability catalog once for the extra-drop picker (best-effort).
+  useEffect(() => {
+    let active = true;
+    getAllAbilityDefinitions()
+      .then((defs) => {
+        if (!active) return;
+        setAbilities(defs.map((d) => ({ key: d.key, name: d.name, icon: d.icon, rarity: d.rarity })));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   // We need a refresh mechanism: after any CRUD, re-fetch via router.refresh or
   // just reload the page. For simplicity, we trigger a page reload signal via
@@ -1039,6 +1346,7 @@ export function CasesAdminTab({ caseGroups: initialGroups, caseTiers: initialTie
               groupItemTypes={[]}
               isStandard={tier.id.endsWith("-standard")}
               isCustomGroup={false}
+              abilities={abilities}
             />
           ))}
         </div>
@@ -1053,6 +1361,7 @@ export function CasesAdminTab({ caseGroups: initialGroups, caseTiers: initialTie
               group={group}
               tiers={initialTiers}
               items={items}
+              abilities={abilities}
               isFirst={idx === 0}
               isLast={idx === groups.length - 1}
               onMoveUp={() => handleReorder(idx, "up")}

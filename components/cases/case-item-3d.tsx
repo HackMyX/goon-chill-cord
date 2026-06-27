@@ -13,6 +13,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import * as THREE from "three";
+import { Coins, Sparkles } from "lucide-react";
 import { useFrame } from "@react-three/fiber";
 import { View, PerspectiveCamera, ContactShadows } from "@react-three/drei";
 import {
@@ -21,6 +22,11 @@ import {
   getCam,
   type ItemForPreview,
 } from "@/components/shop/shop-character-view";
+import { StyledUsername } from "@/components/ui/styled-username";
+import { BadgePill } from "@/components/ui/badge-pill";
+import type { PreviewSubject } from "@/components/ui/universal-preview-modal";
+import { RARITY_HEX } from "@/lib/rarity-colors";
+import type { Rarity } from "@/lib/cases";
 
 export type { ItemForPreview };
 
@@ -101,6 +107,116 @@ export function CaseItem3D({
         )}
       </Suspense>
     </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Non-item drop heroes (DOM) + unified CaseDropView
+// ─────────────────────────────────────────────────────────────────────────────
+
+function rarityHex(r?: string): string {
+  return RARITY_HEX[(r as Rarity)] ?? "#a855f7";
+}
+
+/** Compact DOM hero for a non-item drop (name style, ability, badge, credits). */
+function NonItemHero({ subject }: { subject: Exclude<PreviewSubject, { kind: "item" }> }) {
+  switch (subject.kind) {
+    case "name_style":
+      return (
+        <StyledUsername
+          name={subject.displayName ?? "DeinName"}
+          styleKey={subject.styleKey}
+          size="md"
+          staticMode={false}
+        />
+      );
+    case "ability": {
+      const hex = rarityHex(subject.rarity);
+      return (
+        <div
+          className="flex h-[58px] w-[58px] items-center justify-center rounded-2xl border-2 text-3xl"
+          style={{ borderColor: `${hex}66`, background: `radial-gradient(circle, ${hex}22 0%, transparent 70%)` }}
+        >
+          {subject.icon ?? "⚡"}
+        </div>
+      );
+    }
+    case "badge":
+      return <BadgePill badgeKey={subject.badgeKey} label={subject.badgeText} size="sm" />;
+    case "credits":
+      return (
+        <div className="flex flex-col items-center gap-0.5">
+          <Coins className="h-7 w-7 text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.7)]" />
+          <span className="text-xs font-black tabular-nums text-amber-200">
+            {subject.amount.toLocaleString("de-DE")}
+          </span>
+        </div>
+      );
+    case "xp_boost":
+      return (
+        <div className="flex flex-col items-center gap-0.5 text-sky-300">
+          <Sparkles className="h-7 w-7 drop-shadow-[0_0_8px_rgba(56,189,248,0.7)]" />
+          <span className="text-xs font-black">+{subject.days}</span>
+        </div>
+      );
+    case "random_item":
+      return <span className="text-3xl">🎲</span>;
+    case "generic":
+      return <span className="text-3xl">{subject.icon}</span>;
+  }
+}
+
+export interface CaseDropViewProps {
+  subject: PreviewSubject;
+  viewIndex: number;
+  visible?: boolean;
+  rotate?: boolean;
+  rotateSpeed?: number;
+  shadow?: boolean;
+  lazy?: boolean;
+  fallbackColor?: string;
+}
+
+/**
+ * Unified drop renderer used everywhere in the case flow. Items render as real
+ * 3D (into the shared Canvas); non-item drops render as a centered DOM hero
+ * (the shared Canvas is transparent where no 3D View is drawn, so they show
+ * through cleanly at the same z-layer).
+ */
+export function CaseDropView({
+  subject,
+  viewIndex,
+  visible = true,
+  rotate = true,
+  rotateSpeed,
+  shadow = false,
+  lazy = false,
+  fallbackColor = "#7c3aed",
+}: CaseDropViewProps) {
+  if (subject.kind === "item") {
+    return lazy ? (
+      <LazyCaseItem3D
+        item={subject.item}
+        viewIndex={viewIndex}
+        rotate={rotate}
+        rotateSpeed={rotateSpeed}
+        fallbackColor={fallbackColor}
+      />
+    ) : (
+      <CaseItem3D
+        item={subject.item}
+        viewIndex={viewIndex}
+        visible={visible}
+        rotate={rotate}
+        rotateSpeed={rotateSpeed}
+        shadow={shadow}
+      />
+    );
+  }
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-1 text-center">
+      <NonItemHero subject={subject} />
+    </div>
   );
 }
 

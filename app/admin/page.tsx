@@ -58,7 +58,7 @@ export default async function AdminPage() {
     // Try with all columns (including the new ones from add-case-groups.cjs)
     const withAll = await admin
       .from("case_tiers")
-      .select("id, group_id, label, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, preview_cost, multi_open_max, sort_order, per_rarity_item_ids, name_styles_eligible, tier_sublabel, updated_at")
+      .select("id, group_id, label, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, preview_cost, multi_open_max, sort_order, per_rarity_item_ids, name_styles_eligible, tier_sublabel, extra_drops, updated_at")
       .order("sort_order", { ascending: true });
     if (!withAll.error) return withAll.data;
 
@@ -69,7 +69,7 @@ export default async function AdminPage() {
       .order("group_id", { ascending: true });
     if (!withOldFull.error) {
       return (withOldFull.data ?? []).map((row) => ({
-        ...row, sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null,
+        ...row, sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null, extra_drops: [],
       }));
     }
 
@@ -79,7 +79,7 @@ export default async function AdminPage() {
       .order("group_id", { ascending: true });
     if (!withOld.error) {
       return (withOld.data ?? []).map((row) => ({
-        ...row, preview_cost: 0, multi_open_max: 10, sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null,
+        ...row, preview_cost: 0, multi_open_max: 10, sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null, extra_drops: [],
       }));
     }
 
@@ -90,7 +90,7 @@ export default async function AdminPage() {
     if (!withTypes.error) {
       return (withTypes.data ?? []).map((row) => ({
         ...row, item_ids: null, group_label: null, group_subtitle: null, preview_cost: 0, multi_open_max: 10,
-        sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null,
+        sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null, extra_drops: [],
       }));
     }
 
@@ -100,7 +100,7 @@ export default async function AdminPage() {
       .order("group_id", { ascending: true });
     return (withoutTypes.data ?? []).map((row) => ({
       ...row, item_types: null, item_ids: null, group_label: null, group_subtitle: null, preview_cost: 0, multi_open_max: 10,
-      sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null,
+      sort_order: null, per_rarity_item_ids: null, name_styles_eligible: null, tier_sublabel: null, extra_drops: [],
     }));
   }
 

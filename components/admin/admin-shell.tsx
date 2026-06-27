@@ -89,6 +89,7 @@ export interface CaseTierRow {
   per_rarity_item_ids: Partial<Record<Rarity, string[] | null>> | null;
   name_styles_eligible: boolean | null;
   tier_sublabel: string | null;
+  extra_drops: unknown;
   updated_at: string;
 }
 

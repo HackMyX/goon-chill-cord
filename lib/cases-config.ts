@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { CASE_GROUPS, type CaseGroup, type CaseTier, type CaseIconName, type Rarity } from "@/lib/cases";
+import { CASE_GROUPS, normalizeExtraDrops, type CaseGroup, type CaseTier, type CaseIconName, type Rarity } from "@/lib/cases";
 
 interface CaseGroupDbRow {
   id: string;
@@ -30,6 +30,7 @@ interface CaseTierDbRow {
   per_rarity_item_ids: Partial<Record<Rarity, string[] | null>> | null;
   name_styles_eligible: boolean | null;
   tier_sublabel: string | null;
+  extra_drops: unknown;
 }
 
 function tierRowToTier(row: CaseTierDbRow, fallbackItemTypes?: string[]): CaseTier {
@@ -44,6 +45,7 @@ function tierRowToTier(row: CaseTierDbRow, fallbackItemTypes?: string[]): CaseTi
     itemIds: row.item_ids?.length ? row.item_ids : undefined,
     perRarityItemIds: row.per_rarity_item_ids ?? undefined,
     nameStylesEligible: row.name_styles_eligible ?? false,
+    extraDrops: normalizeExtraDrops(row.extra_drops),
     sortOrder: row.sort_order ?? 0,
     groupLabel: row.group_label ?? undefined,
     groupSubtitle: row.group_subtitle ?? undefined,
@@ -117,7 +119,7 @@ export async function getCaseConfig(): Promise<CaseGroup[]> {
     const { data: tierRows } = await supabase
       .from("case_tiers")
       .select(
-        "id, group_id, label, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, preview_cost, multi_open_max, sort_order, per_rarity_item_ids, name_styles_eligible, tier_sublabel"
+        "id, group_id, label, price, rarity_weights, enabled, item_types, item_ids, group_label, group_subtitle, preview_cost, multi_open_max, sort_order, per_rarity_item_ids, name_styles_eligible, tier_sublabel, extra_drops"
       )
       .in("group_id", groupIds)
       .order("sort_order", { ascending: true });

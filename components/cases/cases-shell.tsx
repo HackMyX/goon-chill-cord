@@ -10,13 +10,13 @@ import { TopBar } from "@/components/layout/top-bar";
 import { CaseOpeningSection } from "@/components/dashboard/case-opening-section";
 import { createClient } from "@/lib/supabase/client";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
-import type { CaseGroup, Rarity } from "@/lib/cases";
+import type { CaseGroup, Rarity, CasePoolEntry } from "@/lib/cases";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 
 interface CaseGroupPreview {
   groupId: string;
   poolSize: number;
-  previewPool: { rarity: Rarity; type: string; name: string }[];
+  previewPool: CasePoolEntry[];
 }
 
 interface CasesShellProps {

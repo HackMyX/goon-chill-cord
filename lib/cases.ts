@@ -123,6 +123,63 @@ export function rarityBarBgClass(rarity: Rarity): string {
   return RARITY_STYLES[rarity].rainbow ? "rainbow-fill" : RARITY_STYLES[rarity].barBg;
 }
 
+/** Non-item things a case can drop alongside its item pool. The visual /
+ * granting infrastructure already exists app-wide (UniversalPreviewModal,
+ * Battle-Pass grant logic), so cases reuse it. */
+export type CaseExtraDropKind = "credits" | "name_style" | "ability" | "badge";
+
+export interface CaseExtraDrop {
+  /** Stable local id (for admin editing + React keys). */
+  id: string;
+  kind: CaseExtraDropKind;
+  /** Which rarity bucket this drop competes in (uses the tier's rarityWeights). */
+  rarity: Rarity;
+  /** Drop weight = number of "tickets" in that rarity bucket; each pool item = 1 ticket. */
+  weight: number;
+  amount?: number;     // credits
+  styleKey?: string;   // name_style
+  abilityKey?: string; // ability
+  badgeKey?: string;   // badge
+  badgeText?: string;  // badge display text
+  /** Optional display-name override (falls back to a sensible per-kind default). */
+  label?: string;
+}
+
+const EXTRA_DROP_KINDS: CaseExtraDropKind[] = ["credits", "name_style", "ability", "badge"];
+
+/** Validates/normalizes a raw jsonb value into a clean CaseExtraDrop[]. Never throws. */
+export function normalizeExtraDrops(raw: unknown): CaseExtraDrop[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CaseExtraDrop[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    const kind = o.kind as CaseExtraDropKind;
+    const rarity = o.rarity as Rarity;
+    if (!EXTRA_DROP_KINDS.includes(kind)) continue;
+    if (!RARITY_ORDER.includes(rarity)) continue;
+    const drop: CaseExtraDrop = {
+      id: typeof o.id === "string" && o.id ? o.id : `${kind}-${out.length}`,
+      kind,
+      rarity,
+      weight: Math.max(0, Number(o.weight) || 0),
+    };
+    if (typeof o.amount === "number") drop.amount = Math.max(0, Math.round(o.amount));
+    if (typeof o.styleKey === "string") drop.styleKey = o.styleKey;
+    if (typeof o.abilityKey === "string") drop.abilityKey = o.abilityKey;
+    if (typeof o.badgeKey === "string") drop.badgeKey = o.badgeKey;
+    if (typeof o.badgeText === "string") drop.badgeText = o.badgeText;
+    if (typeof o.label === "string") drop.label = o.label;
+    // Drop entries that are missing their required target are ignored entirely.
+    if (drop.kind === "credits" && !drop.amount) continue;
+    if (drop.kind === "name_style" && !drop.styleKey) continue;
+    if (drop.kind === "ability" && !drop.abilityKey) continue;
+    if (drop.kind === "badge" && !drop.badgeKey) continue;
+    out.push(drop);
+  }
+  return out;
+}
+
 export interface CaseTier {
   id: string;
   label: string;
@@ -141,6 +198,8 @@ export interface CaseTier {
   perRarityItemIds?: Partial<Record<Rarity, string[] | null>>;
   /** Whether this case tier can also drop name styles (configured via Name-Styles → Rarität-Konfiguration). */
   nameStylesEligible?: boolean;
+  /** Configurable non-item drops (credits, name styles, abilities, badges) mixed into the rarity buckets. */
+  extraDrops?: CaseExtraDrop[];
   /** Sort position within the group (0 = standard/first, 1 = premium/second, etc.) */
   sortOrder?: number;
   /** Group-level display label stored on the standard tier row. */
@@ -194,6 +253,23 @@ const TYPE_LABELS: Record<string, string> = {
 
 export function getTypeLabel(type: string): string {
   return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+/** A single entry shown in the case "pool" gallery — an item OR an extra drop. */
+export interface CasePoolEntry {
+  rarity: Rarity;
+  type: string;
+  name: string;
+  /** Present when this entry is a non-item extra drop. */
+  extra?: {
+    kind: CaseExtraDropKind;
+    styleKey?: string;
+    abilityKey?: string;
+    abilityIcon?: string;
+    badgeKey?: string;
+    badgeText?: string;
+    amount?: number;
+  };
 }
 
 export interface CaseGroup {

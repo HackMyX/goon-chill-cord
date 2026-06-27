@@ -7,7 +7,7 @@ import { isAdmin, type ProfileRole } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { banDevicesForUser, unbanDevicesForUser } from "@/lib/actions/fingerprint";
-import type { Rarity } from "@/lib/cases";
+import type { Rarity, CaseExtraDrop } from "@/lib/cases";
 import { roundToNicePrice } from "@/lib/shop";
 
 export interface AdminActionResult {
@@ -62,6 +62,8 @@ export interface UpdateCaseTierInput {
   multiOpenMax?: number;
   /** Whether this case tier can drop name styles (probability set in Name-Styles tab). */
   nameStylesEligible?: boolean;
+  /** Configurable non-item drops (credits / name styles / abilities / badges). */
+  extraDrops?: CaseExtraDrop[];
 }
 
 export async function updateCaseTier(input: UpdateCaseTierInput): Promise<AdminActionResult> {
@@ -91,13 +93,14 @@ export async function updateCaseTier(input: UpdateCaseTierInput): Promise<AdminA
       preview_cost: input.previewCost ?? 0,
       multi_open_max: Math.min(10, Math.max(2, input.multiOpenMax ?? 10)),
       name_styles_eligible: input.nameStylesEligible ?? false,
+      extra_drops: input.extraDrops ?? [],
     })
     .eq("id", input.tierId)
     .select("id");
 
   // Graceful degradation: retry without newer columns if they don't exist yet
   if (error?.message) {
-    const newCols = ["per_rarity_item_ids", "name_styles_eligible", "tier_sublabel"];
+    const newCols = ["per_rarity_item_ids", "name_styles_eligible", "tier_sublabel", "extra_drops"];
     if (newCols.some((c) => error!.message.includes(c))) {
       const retry = await admin
         .from("case_tiers")
