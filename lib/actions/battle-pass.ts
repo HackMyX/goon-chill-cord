@@ -1202,98 +1202,114 @@ export async function adminAutoFillBpTiers(
 
   const tierCount = passRow.tier_count as number;
 
-  // Determine track boundaries
-  const freeCount = Math.ceil(tierCount * config.freeRatio / 100);
-  const eliteCount = Math.ceil(tierCount * config.eliteRatio / 100);
-  const premiumCount = tierCount - freeCount - eliteCount;
+  // ── Echte Items laden → der Generator vergibt KONKRETE Items (reward_item_id), damit die
+  //    3D-Modelle in den Kacheln erscheinen (statt generischer Würfel). Gruppiert nach Seltenheit.
+  const RAMP: Rarity[] = ["normal", "selten", "mythisch", "ultra"];
+  const byRarity: Record<string, { id: string; type: string | null }[]> = { normal: [], selten: [], mythisch: [], ultra: [] };
+  try {
+    const { data: itemRows } = await admin.from("items").select("id, type, rarity");
+    for (const it of (itemRows ?? []) as { id: string; type: string | null; rarity: string }[]) {
+      if (byRarity[it.rarity]) byRarity[it.rarity].push({ id: it.id, type: it.type });
+    }
+  } catch { /* keine Items → Fallback auf Credits unten */ }
+  const hasAnyItems = RAMP.some((r) => byRarity[r].length > 0);
+  const pickIdx: Record<string, number> = { normal: 0, selten: 0, mythisch: 0, ultra: 0 };
+  const pickItem = (rarity: Rarity): { id: string; type: string | null } | null => {
+    // bevorzugte Seltenheit, dann nächstbeste mit Bestand
+    for (const r of [rarity, ...RAMP.filter((x) => x !== rarity)]) {
+      const pool = byRarity[r];
+      if (pool && pool.length) { const it = pool[pickIdx[r] % pool.length]; pickIdx[r]++; return it; }
+    }
+    return null;
+  };
+  const rarityForTier = (tierNumber: number): Rarity => {
+    if (!config.rarityProgression) return "selten";
+    const pct = (tierNumber / tierCount) * 100;
+    if (pct <= 25) return "normal";
+    if (pct <= 60) return "selten";
+    if (pct <= 85) return "mythisch";
+    return "ultra";
+  };
+
+  // ── Track-Grenzen robust (Summe == tierCount, nie negativ) ──
+  let freeCount = Math.round(tierCount * config.freeRatio / 100);
+  let eliteCount = Math.round(tierCount * config.eliteRatio / 100);
+  if (freeCount + eliteCount > tierCount) {
+    eliteCount = Math.max(0, tierCount - freeCount);
+    if (freeCount > tierCount) freeCount = tierCount;
+  }
+  const premiumCount = Math.max(0, tierCount - freeCount - eliteCount);
+
+  // ── Mix EXAKT auf tierCount verteilen (echte 100%): Kontingente + greedy-Verteilung ──
+  const quota: Record<string, number> = {
+    item: Math.round(tierCount * config.rewardMixRandomItem / 100),
+    credits: Math.round(tierCount * config.rewardMixCredits / 100),
+    xp_boost: Math.round(tierCount * config.rewardMixXpBoost / 100),
+    badge: Math.round(tierCount * config.rewardMixBadge / 100),
+  };
+  const quotaSum = quota.item + quota.credits + quota.xp_boost + quota.badge;
+  quota.credits = Math.max(0, quota.credits + (tierCount - quotaSum)); // Rundungsrest auf Credits
 
   // Build all tier upsert rows
   const rows: Record<string, unknown>[] = [];
 
   for (let tierNumber = 1; tierNumber <= tierCount; tierNumber++) {
-    const isMilestone = tierNumber % config.milestoneTierInterval === 0;
+    const isMilestone = config.milestoneTierInterval > 0 && tierNumber % config.milestoneTierInterval === 0;
 
-    // Determine track
+    // Track
     let isPremium = false;
     let isElite = false;
-    if (tierNumber <= freeCount) {
-      // free track
-    } else if (tierNumber <= freeCount + premiumCount) {
-      isPremium = true;
-    } else {
-      isElite = true;
-    }
+    if (tierNumber <= freeCount) { /* free */ }
+    else if (tierNumber <= freeCount + premiumCount) isPremium = true;
+    else isElite = true;
 
-    // Determine reward type via deterministic hash
-    const hash = (tierNumber * 2654435761) % 100;
+    // Reward-Typ: Meilensteine = fettes 3D-Item; sonst greedy nach größtem Restkontingent
     let rewardType: BpRewardType;
-    if (hash < config.rewardMixCredits) {
-      rewardType = "credits";
-    } else if (hash < config.rewardMixCredits + config.rewardMixRandomItem) {
-      rewardType = "random_item";
-    } else if (hash < config.rewardMixCredits + config.rewardMixRandomItem + config.rewardMixXpBoost) {
-      rewardType = "xp_boost";
+    if (isMilestone && hasAnyItems) {
+      rewardType = "item";
     } else {
-      rewardType = "badge";
+      const order: BpRewardType[] = ["item", "credits", "xp_boost", "badge"];
+      let best: BpRewardType = "credits";
+      let bestN = -1;
+      for (const t of order) { if (quota[t] > bestN) { bestN = quota[t]; best = t; } }
+      rewardType = bestN > 0 ? best : "credits";
+    }
+    if (quota[rewardType] !== undefined && quota[rewardType] > 0) quota[rewardType]--;
+
+    // Item-Reward → echtes Item nach Seltenheit (Meilenstein = Top-Seltenheit)
+    let reward_item_id: string | null = null;
+    let reward_item_type: string | null = null;
+    let reward_item_rarity: Rarity | null = null;
+    if (rewardType === "item") {
+      const rar: Rarity = isMilestone ? "ultra" : rarityForTier(tierNumber);
+      const it = pickItem(rar);
+      if (it) { reward_item_id = it.id; reward_item_type = it.type; reward_item_rarity = rar; }
+      else { rewardType = "credits"; } // keine Items vorhanden
     }
 
-    // Credit amount
-    let rewardCredits: number | null = null;
+    // Credits (progressiv, Meilenstein verdoppelt)
+    let reward_credits: number | null = null;
     if (rewardType === "credits") {
-      if (config.creditProgression) {
-        rewardCredits = Math.round(config.creditMin + (config.creditMax - config.creditMin) * (tierNumber / tierCount));
-      } else {
-        const range = config.creditMax - config.creditMin;
-        rewardCredits = config.creditMin + ((tierNumber * 1234567) % (range + 1));
-      }
+      reward_credits = config.creditProgression
+        ? Math.round(config.creditMin + (config.creditMax - config.creditMin) * ((tierNumber - 1) / Math.max(1, tierCount - 1)))
+        : Math.round((config.creditMin + config.creditMax) / 2);
+      if (isMilestone) reward_credits = Math.round(reward_credits * 2);
     }
 
-    // Rarity for random_item
-    let rewardItemRarity: Rarity | null = null;
-    if (rewardType === "random_item") {
-      if (config.rarityProgression) {
-        const pct = (tierNumber / tierCount) * 100;
-        if (pct <= 25) {
-          rewardItemRarity = "normal" as Rarity;
-        } else if (pct <= 60) {
-          rewardItemRarity = "selten" as Rarity;
-        } else if (pct <= 85) {
-          rewardItemRarity = "mythisch" as Rarity;
-        } else {
-          rewardItemRarity = "ultra" as Rarity;
-        }
-      } else {
-        rewardItemRarity = "selten" as Rarity;
-      }
-    }
+    // XP-Boost (1–3 Tage, steigend)
+    const reward_xp_boost = rewardType === "xp_boost" ? (1 + Math.floor((tierNumber / Math.max(1, tierCount)) * 3)) : null;
 
-    // XP boost amount
-    const rewardXpBoost = rewardType === "xp_boost"
-      ? 1 + Math.floor(tierNumber / (tierCount / 3))
-      : null;
+    // Badge — IMMER gültiger Key (nur bp_milestone ist geseedet) → nie leer/kaputt
+    const reward_badge_key = rewardType === "badge" ? "bp_milestone" : null;
+    const reward_badge_text = rewardType === "badge" ? (isMilestone ? `Meilenstein ${tierNumber}` : "Season Badge") : null;
 
-    // Badge fields
-    const rewardBadgeKey = isMilestone ? "bp_milestone" : null;
-    const rewardBadgeText = (rewardType === "badge" && isMilestone) ? `Tier ${tierNumber} Meister` : null;
-
-    // Icon
-    let icon: string;
-    if (isMilestone) {
-      icon = "⭐";
-    } else if (rewardType === "credits") {
-      icon = "💰";
-    } else if (rewardType === "random_item") {
-      icon = "🎁";
-    } else if (rewardType === "xp_boost") {
-      icon = "⚡";
-    } else {
-      icon = "🏆";
-    }
-
+    // Icon + Name
+    const icon = isMilestone ? "⭐"
+      : rewardType === "credits" ? "💰"
+      : rewardType === "item" ? "📦"
+      : rewardType === "xp_boost" ? "⚡" : "🏆";
     const name = isMilestone ? `Meilenstein ${tierNumber}` : `Tier ${tierNumber}`;
-
-    const tierDisplayMode =
-      (config.milestoneAlways3D && isMilestone) ? "3d" : (config.defaultDisplayMode ?? "3d");
+    const tierDisplayMode = (config.milestoneAlways3D && isMilestone) ? "3d" : (config.defaultDisplayMode ?? "3d");
 
     rows.push({
       pass_id: passId,
@@ -1302,12 +1318,15 @@ export async function adminAutoFillBpTiers(
       is_premium: isPremium,
       is_elite: isElite,
       reward_type: rewardType,
-      reward_credits: rewardType === "credits" ? rewardCredits : null,
-      reward_item_id: null,
-      reward_badge_key: rewardBadgeKey,
-      reward_badge_text: rewardType === "badge" ? (rewardBadgeText ?? `Tier ${tierNumber} Meister`) : null,
-      reward_item_rarity: rewardType === "random_item" ? rewardItemRarity : null,
-      reward_xp_boost: rewardType === "xp_boost" ? rewardXpBoost : null,
+      reward_credits,
+      reward_item_id,
+      reward_item_type,
+      reward_badge_key,
+      reward_badge_text,
+      reward_item_rarity,
+      reward_xp_boost,
+      reward_name_style_key: null,
+      reward_ability_key: null,
       reward_quantity: 1,
       highlight_tier: isMilestone,
       description: null,
