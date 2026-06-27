@@ -985,6 +985,23 @@ function TrackTileCard({
   };
   const handleMouseLeave = () => { rotX.set(0); rotY.set(0); };
 
+  // Cull off-screen tiles: the shared full-viewport Canvas scissors each <View> to the
+  // tile's DOM rect and ignores the carousel's overflow clip → tiles scrolled out of the
+  // carousel would otherwise render their 3D across the whole page. CaseDropView self-culls
+  // (lazy + rootRef); BpRewardView3D (coins/dice/etc.) did NOT → leaked. Gate it on view.
+  const [inView, setInView] = useState(true);
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const root = scrollRootRef?.current ?? null;
+    const obs = new IntersectionObserver(
+      (entries) => setInView(entries[0]?.isIntersecting ?? true),
+      { root, rootMargin: "48px", threshold: 0.01 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [scrollRootRef]);
+
   // Track type detection for richer visual treatment
   const isPremiumTier = tier.isPremium && !tier.isElite;
   const isEliteTier = tier.isElite;
@@ -1215,7 +1232,7 @@ function TrackTileCard({
                     rarity={tier.rewardItemRarity ?? "normal"}
                     creditsAmount={(tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1)}
                     viewIndex={viewIndex}
-                    visible={true}
+                    visible={inView}
                   />
                 )}
               </div>
