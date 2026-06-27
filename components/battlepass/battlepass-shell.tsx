@@ -19,6 +19,7 @@ import { Canvas } from "@react-three/fiber";
 import { View } from "@react-three/drei";
 import { ItemStandaloneCanvas, type ItemForPreview } from "@/components/shop/shop-character-view";
 import { BpRewardView3D } from "@/components/battlepass/bp-reward-3d";
+import { PodiumShowcase } from "@/components/battlepass/podium-showcase";
 import { CaseDropView } from "@/components/cases/case-item-3d";
 import { WORN_TYPES } from "@/lib/case-display-config";
 import type { Rarity } from "@/lib/cases";
@@ -2267,6 +2268,18 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
           </div>
         </div>
       </div>
+
+      {/* ══ 3D PODIUM SHOWCASE — große Live-Bühne, läuft durch alle Rewards ══ */}
+      {pass.tiers.length > 0 && (
+        <div className="mx-auto w-full max-w-5xl px-3 pt-6 sm:px-5 sm:pt-8">
+          <PodiumShowcase
+            tiers={[...pass.tiers].sort((a, b) => a.tierNumber - b.tierNumber)}
+            accent={accent}
+            glow={glow}
+            userStatus={userStatus}
+          />
+        </div>
+      )}
 
       {/* ══ MAIN CONTENT ══════════════════════════════════════════════════ */}
       <div className="mx-auto w-full max-w-7xl px-3 sm:px-5 py-6 sm:py-10">

@@ -1287,9 +1287,16 @@ export async function adminAutoFillBpTiers(
     let reward_item_rarity: Rarity | null = null;
     if (rewardType === "item") {
       const rar: Rarity = isMilestone ? "ultra" : rarityForTier(tierNumber);
-      const it = pickItem(rar);
-      if (it) { reward_item_id = it.id; reward_item_type = it.type; reward_item_rarity = rar; }
-      else { rewardType = "credits"; } // keine Items vorhanden
+      if (config.resolveRandomItems !== false) {
+        // Konkretes Item schon jetzt auswürfeln → echtes 3D-Modell in der Kachel
+        const it = pickItem(rar);
+        if (it) { reward_item_id = it.id; reward_item_type = it.type; reward_item_rarity = rar; }
+        else { rewardType = "credits"; } // keine Items vorhanden
+      } else {
+        // Als Überraschungs-Drop belassen — Item wird erst beim Claim gewürfelt
+        rewardType = "random_item";
+        reward_item_rarity = rar;
+      }
     }
 
     // Credits (progressiv, Meilenstein verdoppelt)

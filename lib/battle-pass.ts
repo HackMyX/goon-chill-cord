@@ -234,6 +234,9 @@ export interface BpAutoFillConfig {
   defaultDisplayMode: BpTileDisplayMode;
   /** Whether milestone tiers (every N) get 3D display mode regardless of defaultDisplayMode. */
   milestoneAlways3D: boolean;
+  /** Resolve "random item" slots to a CONCRETE item already at generation time (shows the real
+   *  3D model). When false, slots stay as random_item type (item is rolled at claim — surprise). */
+  resolveRandomItems: boolean;
 }
 
 export const DEFAULT_AUTOFILL_CONFIG: BpAutoFillConfig = {
@@ -250,4 +253,5 @@ export const DEFAULT_AUTOFILL_CONFIG: BpAutoFillConfig = {
   creditProgression: true,
   defaultDisplayMode: "3d",
   milestoneAlways3D: true,
+  resolveRandomItems: true,
 };

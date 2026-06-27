@@ -462,6 +462,18 @@ function AutoFillModal({
               <Sparkles className="h-3.5 w-3.5" />
               Meilenstein immer 3D
             </button>
+            <button
+              onClick={() => setField("resolveRandomItems", !config.resolveRandomItems)}
+              title="AN: Zufalls-Items werden schon jetzt als konkretes Item ausgewürfelt → echtes 3D-Modell sichtbar. AUS: bleibt Überraschung (Item wird erst beim Abholen gewürfelt)."
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                config.resolveRandomItems
+                  ? "border-cyan-400/60 bg-cyan-500/20 text-cyan-200"
+                  : "border-white/10 text-zinc-400 hover:border-white/30"
+              }`}
+            >
+              <Package className="h-3.5 w-3.5" />
+              Zufalls-Item auswürfeln
+            </button>
           </div>
 
           {/* Default display mode */}
