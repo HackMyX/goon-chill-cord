@@ -6,7 +6,7 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { resolveSiteLogoIcon } from "@/lib/site-logo-icons";
-import { fetchGameLeaderboards } from "@/lib/actions/homepage-leaderboards";
+import { fetchGameLeaderboards, getHomepageAvatarMode } from "@/lib/actions/homepage-leaderboards";
 import { getHomepageChatConfig } from "@/lib/actions/homepage-chat-config";
 
 export default async function Home() {
@@ -44,6 +44,7 @@ export default async function Home() {
     siteConfig,
     gameLeaderboards,
     chatSidebarConfig,
+    homepageAvatarMode,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -73,6 +74,7 @@ export default async function Home() {
     getSiteConfig(),
     fetchGameLeaderboards(),
     getHomepageChatConfig(),
+    getHomepageAvatarMode(),
   ]);
 
   // Fetch badges for all leaderboard users (silently skip if table missing)
@@ -129,6 +131,7 @@ export default async function Home() {
       homepageConfig={siteConfig.homepageConfig}
       chatSidebarConfig={chatSidebarConfig}
       gameLeaderboards={gameLeaderboards}
+      homepageAvatarMode={homepageAvatarMode}
     />
   );
 }

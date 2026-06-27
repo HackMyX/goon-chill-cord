@@ -7,7 +7,8 @@ import { Coins, Zap, Layers, Minus, Plus, Package } from "lucide-react";
 import { CaseReel, type CaseReelHandle, type ReelEntry } from "@/components/dashboard/case-reel";
 import { ChanceBar } from "@/components/dashboard/chance-bar";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
-import { ItemRenderer } from "@/components/items/item-renderer";
+import { CaseItem3D, LazyCaseItem3D, type ItemForPreview } from "@/components/cases/case-item-3d";
+import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
 import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { openCase, chargeSkipFee, openCaseBatch, type WonItem } from "@/lib/actions/cases";
 import { RARITY_ORDER, getTypeLabel, type CaseGroup, type CaseTier, type Rarity } from "@/lib/cases";
@@ -37,6 +38,22 @@ const CONFETTI_BY_RARITY: Record<Rarity, () => void> = {
 };
 
 function fireWinCelebration(rarity: Rarity) { CONFETTI_BY_RARITY[rarity](); }
+
+/** WonItem → the 3D preview shape consumed by CaseItem3D / ItemSceneContent. */
+function wonToPreview(item: WonItem): ItemForPreview {
+  return {
+    id: item.id,
+    name: item.name,
+    rarity: item.rarity,
+    type: item.type,
+    damage: item.damage,
+    armor: item.armor,
+    perk_type: item.perk_type,
+    perk_magnitude: item.perk_magnitude,
+    shield_hp: item.shield_hp,
+    shield_regen_cooldown_sec: item.shield_regen_cooldown_sec,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Reel helpers
@@ -114,7 +131,7 @@ function QuantitySelector({
 const RARITY_RANK: Record<Rarity, number> = { normal: 0, selten: 1, mythisch: 2, ultra: 3 };
 const CARD_W = 148;
 
-function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => void }) {
+function BatchResultGrid({ items, onClose, viewBase }: { items: WonItem[]; onClose: () => void; viewBase: number }) {
   const best = items.reduce((b, i) => RARITY_RANK[i.rarity as Rarity] > RARITY_RANK[b.rarity as Rarity] ? i : b, items[0]);
 
   return (
@@ -189,7 +206,14 @@ function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => 
                 style={{ background: `radial-gradient(ellipse at 50% 25%, ${RARITY_HEX[item.rarity as Rarity]} 0%, transparent 72%)` }}
               />
               <div className="relative z-10 flex flex-col items-center gap-1.5">
-                <ItemRenderer type={item.type} rarity={item.rarity as Rarity} size="md" />
+                <div className="relative w-full" style={{ height: 96 }}>
+                  <CaseItem3D
+                    item={wonToPreview(item)}
+                    viewIndex={viewBase + 1 + idx}
+                    rotate
+                    rotateSpeed={0.7}
+                  />
+                </div>
                 <p className="w-full text-[11px] font-bold leading-tight text-zinc-100 line-clamp-2 break-words">
                   {item.name}
                 </p>
@@ -235,6 +259,136 @@ function BatchResultGrid({ items, onClose }: { items: WonItem[]; onClose: () => 
 }
 
 // ---------------------------------------------------------------------------
+// Pool gallery — every winnable item in the case, shown in full 3D
+// ---------------------------------------------------------------------------
+
+const POOL_RENDER_CAP = 60;
+
+function PoolGallery({ pool, viewBase }: { pool: PreviewItem[]; viewBase: number }) {
+  const [filter, setFilter] = useState<Rarity | "all">("all");
+  const [subject, setSubject] = useState<PreviewSubject | null>(null);
+
+  // De-duplicate by rarity+type+name (the server preview pool can repeat) and
+  // sort best-rarity first so the showcase always leads with the rare drops.
+  const unique = useMemo(() => {
+    const seen = new Set<string>();
+    const out: PreviewItem[] = [];
+    for (const p of pool) {
+      const k = `${p.rarity}|${p.type}|${p.name}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(p);
+    }
+    out.sort(
+      (a, b) =>
+        RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] ||
+        a.type.localeCompare(b.type) ||
+        a.name.localeCompare(b.name),
+    );
+    return out;
+  }, [pool]);
+
+  const counts = useMemo(() => {
+    const c: Record<Rarity, number> = { normal: 0, selten: 0, mythisch: 0, ultra: 0 };
+    for (const p of unique) c[p.rarity]++;
+    return c;
+  }, [unique]);
+
+  if (unique.length === 0) return null;
+
+  const filtered = filter === "all" ? unique : unique.filter((p) => p.rarity === filter);
+  const shown = filtered.slice(0, POOL_RENDER_CAP);
+  const hidden = filtered.length - shown.length;
+
+  const pills: { key: Rarity | "all"; label: string; count: number }[] = [
+    { key: "all", label: "Alle", count: unique.length },
+    ...(["ultra", "mythisch", "selten", "normal"] as Rarity[])
+      .filter((r) => counts[r] > 0)
+      .map((r) => ({ key: r, label: RARITY_LABELS[r], count: counts[r] })),
+  ];
+
+  return (
+    <div className="mt-6">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold tracking-wide text-purple-300">
+          IM POOL — {unique.length.toLocaleString("de-DE")} ITEMS IN 3D
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {pills.map((p) => {
+            const active = filter === p.key;
+            const hex = p.key === "all" ? "#a855f7" : RARITY_HEX[p.key as Rarity];
+            return (
+              <button
+                key={p.key}
+                onClick={() => setFilter(p.key)}
+                className="rounded-full border px-2.5 py-0.5 text-[11px] font-bold transition-colors"
+                style={{
+                  borderColor: active ? hex : `${hex}40`,
+                  color: active ? "#fff" : hex,
+                  background: active ? `${hex}28` : "transparent",
+                }}
+              >
+                {p.label} <span className="opacity-60">{p.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+        {shown.map((p, i) => {
+          const hex = RARITY_HEX[p.rarity];
+          return (
+            <button
+              key={`${p.rarity}-${p.type}-${p.name}-${i}`}
+              onClick={() =>
+                setSubject({
+                  kind: "item",
+                  item: { id: `${p.type}-${p.name}`, name: p.name, rarity: p.rarity, type: p.type },
+                })
+              }
+              className="group relative flex flex-col items-center gap-1 overflow-hidden rounded-lg border bg-black/30 p-1.5 text-center transition-all hover:scale-[1.04]"
+              style={{ borderColor: `${hex}40`, boxShadow: `0 0 10px ${hex}14` }}
+            >
+              <div
+                className="pointer-events-none absolute inset-0 opacity-[0.12]"
+                style={{ background: `radial-gradient(ellipse at 50% 25%, ${hex} 0%, transparent 72%)` }}
+              />
+              <div className="relative w-full" style={{ height: 70 }}>
+                <LazyCaseItem3D
+                  item={{ id: `${p.type}-${p.name}`, name: p.name, rarity: p.rarity, type: p.type }}
+                  viewIndex={viewBase + i}
+                  rotate
+                  rotateSpeed={0.5}
+                  fallbackColor={hex}
+                />
+              </div>
+              <span className="relative w-full truncate text-[10px] font-semibold text-zinc-200">
+                {p.name}
+              </span>
+              <span className="relative flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: hex }} />
+                <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: hex }}>
+                  {getTypeLabel(p.type)}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {hidden > 0 && (
+        <p className="mt-2 text-center text-[11px] text-zinc-500">
+          +{hidden.toLocaleString("de-DE")} weitere im Pool — über die Rarität-Filter eingrenzen.
+        </p>
+      )}
+
+      {subject && <UniversalPreviewModal subject={subject} onClose={() => setSubject(null)} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -244,11 +398,21 @@ interface CaseOpeningSectionProps {
   previewPool: PreviewItem[];
   poolSize: number;
   onCreditsChange: (newCredits: number) => void;
+  /** Section position — reserves a unique block of shared-Canvas View indices. */
+  index?: number;
 }
 
 type Phase = "idle" | "pending" | "spinning" | "result" | "batch_pending" | "batch_result";
 
-export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCreditsChange }: CaseOpeningSectionProps) {
+export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCreditsChange, index = 0 }: CaseOpeningSectionProps) {
+  // Reserve a 4000-wide block of View indices for this section so reel slots,
+  // the win reveal, the batch grid and the pool gallery never collide with
+  // another case group rendering into the same shared Canvas.
+  const viewBase = 2000 + index * 4000;
+  const reelViewBase = viewBase;        // slots: reelViewBase + slotIndex  (0..~200)
+  const winViewIndex = viewBase + 3000; // single win reveal
+  const batchViewBase = viewBase + 3100; // + 1 + idx  (up to 10)
+  const poolViewBase = viewBase + 3200;  // + idx      (pool gallery)
   const Icon = getCaseIcon(group.iconName);
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -333,7 +497,10 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
     }
 
     const target: ReelEntry = { key: "target", rarity: result.item.rarity as Rarity, type: result.item.type, name: result.item.name };
-    const before = buildFiller(40, "before", previewPool, group.itemTypes);
+    // Generous pre-target filler guarantees the winning slot is always far to
+    // the left of wherever the warmup left the strip, so the deceleration is a
+    // long, continuous, same-direction spin no matter when the server responds.
+    const before = buildFiller(55, "before", previewPool, group.itemTypes);
     const after = buildFiller(8, "after", previewPool, group.itemTypes);
     setReel([...before, target, ...after]);
     setTargetIndex(before.length);
@@ -501,6 +668,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
             spinning={isSpinning}
             warmup={phase === "pending"}
             spinToken={spinToken}
+            viewBase={reelViewBase}
             onTick={sound.tick}
             onSpinComplete={() => {
               setPhase((p) => (p === "spinning" ? "result" : p));
@@ -532,9 +700,17 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
                   initial={{ scale: 0.7, y: 10 }}
                   animate={{ scale: 1, y: 0 }}
                   transition={{ type: "spring", stiffness: 260, damping: 18 }}
-                  className="relative z-10 flex flex-col items-center gap-2"
+                  className="relative z-10 flex flex-col items-center gap-1"
                 >
-                  <ItemRenderer type={wonItem.type} rarity={wonItem.rarity as Rarity} size="lg" />
+                  <div className="relative w-[120px]" style={{ height: 84 }}>
+                    <CaseItem3D
+                      item={wonToPreview(wonItem)}
+                      viewIndex={winViewIndex}
+                      rotate
+                      rotateSpeed={0.85}
+                      shadow
+                    />
+                  </div>
                   <span className="glow-text text-lg font-bold text-zinc-50">{wonItem.name}</span>
                   <span className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">{getTypeLabel(wonItem.type)}</span>
                   <div className="flex flex-wrap items-center justify-center gap-1.5">
@@ -675,6 +851,7 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
         {phase === "batch_result" && batchItems.length > 0 && (
           <BatchResultGrid
             items={batchItems}
+            viewBase={batchViewBase}
             onClose={() => {
               setBatchItems([]);
               setPhase("idle");
@@ -696,6 +873,9 @@ export function CaseOpeningSection({ group, credits, previewPool, poolSize, onCr
         </p>
         <ChanceBar weights={group.premium.rarityWeights} />
       </div>
+
+      {/* Full 3D pool gallery — everything winnable from this case */}
+      <PoolGallery pool={previewPool} viewBase={poolViewBase} />
     </section>
   );
 }

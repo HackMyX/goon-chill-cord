@@ -4,14 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Box, Joystick, Pickaxe, Trophy, Coins, Dices, CircleDot,
   Loader2, Save, Check, LayoutList, ChevronUp, ChevronDown, Eye, EyeOff,
-  ShieldOff, CheckCircle2, AlertTriangle,
+  ShieldOff, CheckCircle2, AlertTriangle, ImageIcon, Users,
 } from "lucide-react";
 import { adminResetAllWorldSessions } from "@/lib/actions/session";
 import {
   getGameLeaderboardConfig,
+  getHomepageAvatarMode,
   updateGameLeaderboardConfig,
   type GameLeaderboardItem,
+  type HomepageAvatarMode,
 } from "@/lib/actions/homepage-leaderboards";
+import { AdminTooltip } from "@/components/admin/admin-tooltip";
 import { WorldSessionConfigEditor } from "@/components/admin/world-session-config-editor";
 import { WorldSpawnConfigEditor } from "@/components/admin/world-spawn-editor";
 import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
@@ -118,15 +121,19 @@ const LIMIT_OPTIONS = [5, 10, 20] as const;
 
 function HomepageLeaderboardsSection() {
   const [items, setItems] = useState<GameLeaderboardItem[]>([]);
+  const [avatarMode, setAvatarMode] = useState<HomepageAvatarMode>("top3");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    getGameLeaderboardConfig().then((cfg) => {
-      setItems([...cfg].sort((a, b) => a.sort - b.sort));
-      setLoading(false);
-    });
+    Promise.all([getGameLeaderboardConfig(), getHomepageAvatarMode()]).then(
+      ([cfg, mode]) => {
+        setItems([...cfg].sort((a, b) => a.sort - b.sort));
+        setAvatarMode(mode);
+        setLoading(false);
+      }
+    );
   }, []);
 
   const move = useCallback((idx: number, dir: -1 | 1) => {
@@ -153,7 +160,7 @@ function HomepageLeaderboardsSection() {
 
   async function handleSave() {
     setSaving(true);
-    await updateGameLeaderboardConfig(items);
+    await updateGameLeaderboardConfig(items, avatarMode);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -194,6 +201,46 @@ function HomepageLeaderboardsSection() {
           Lade Konfiguration...
         </div>
       ) : (
+        <>
+        {/* ── Profilbild-Modus (gilt für ALLE Startseiten-Bestenlisten) ── */}
+        <div className="flex flex-col gap-2.5 border-b border-white/[0.06] bg-black/20 px-5 py-4">
+          <div className="flex items-center gap-1.5">
+            <ImageIcon className="h-4 w-4 text-violet-400" />
+            <span className="text-xs font-bold text-zinc-200">Profilbilder auf der Startseite</span>
+            <AdminTooltip text="Legt fest, welche Plätze auf der STARTSEITE ein Profilbild bekommen — gilt für ALLE Bestenlisten dort (Credits, Streak und alle Spielelisten). 'Nur Top 3': Plätze 1–3 zeigen das Profilbild, ab Platz 4 erscheint stattdessen der neutrale Initial-Kreis (ohne Foto). 'Alle Plätze': jeder Rang bekommt sein Profilbild. Hinweis: Die Bestenlisten INNERHALB der Spiele zeigen grundsätzlich nie Profilbilder — diese Einstellung betrifft ausschließlich die Startseite. Änderung wird sofort live für alle Besucher übernommen (kein Reload)." />
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setAvatarMode("top3")}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
+                avatarMode === "top3"
+                  ? "border-violet-500/40 bg-violet-500/15 text-violet-200"
+                  : "border-white/[0.08] bg-white/[0.02] text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <Trophy className="h-3.5 w-3.5" />
+              Nur Top 3
+            </button>
+            <button
+              type="button"
+              onClick={() => setAvatarMode("all")}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
+                avatarMode === "all"
+                  ? "border-violet-500/40 bg-violet-500/15 text-violet-200"
+                  : "border-white/[0.08] bg-white/[0.02] text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <Users className="h-3.5 w-3.5" />
+              Alle Plätze
+            </button>
+          </div>
+          <p className="text-[11px] leading-relaxed text-zinc-600">
+            {avatarMode === "top3"
+              ? "Plätze 1–3 zeigen ein Profilbild, ab Platz 4 ohne (neutraler Initial-Kreis)."
+              : "Jeder Platz zeigt sein Profilbild."}
+          </p>
+        </div>
         <div className="divide-y divide-white/[0.04]">
           {items.map((item, idx) => (
             <div key={item.id} className="flex items-center gap-3 px-5 py-3.5">
@@ -256,6 +303,7 @@ function HomepageLeaderboardsSection() {
             </div>
           ))}
         </div>
+        </>
       )}
     </div>
   );

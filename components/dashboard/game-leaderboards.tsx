@@ -7,8 +7,8 @@ import { Crown, Trophy, Medal, ChevronRight, Gamepad2, Joystick, Pickaxe, Zap, C
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
-import type { GameLeaderboardSection, GameLeaderboardListId } from "@/lib/actions/homepage-leaderboards";
-import { fetchGameLeaderboards } from "@/lib/actions/homepage-leaderboards";
+import type { GameLeaderboardSection, GameLeaderboardListId, HomepageAvatarMode } from "@/lib/actions/homepage-leaderboards";
+import { fetchHomepageLeaderboardData } from "@/lib/actions/homepage-leaderboards";
 import { useLiveConfig } from "@/lib/use-live-config";
 
 export type { GameLeaderboardSection };
@@ -176,10 +176,12 @@ function GameLeaderboardCard({
   section,
   sectionIndex,
   currencyName,
+  avatarMode,
 }: {
   section: GameLeaderboardSection;
   sectionIndex: number;
   currencyName: string;
+  avatarMode: HomepageAvatarMode;
 }) {
   const vis = GAME_VISUALS[section.item.id];
   const { entries } = section;
@@ -242,6 +244,10 @@ function GameLeaderboardCard({
           {entries.map((entry, i) => {
             const isTop3 = i < 3;
             const isFirst = i === 0;
+            // Profilbild nur zeigen, wenn der Modus "all" ist ODER es ein Top-3-Platz
+            // ist. Ab Platz 4 im "top3"-Modus bewusst der neutrale Initial-Kreis
+            // (= "ohne Profilbild"), damit die Zeilen sauber ausgerichtet bleiben.
+            const showPhoto = (avatarMode === "all" || isTop3) && !!entry.avatarUrl;
 
             return (
               <motion.div
@@ -258,7 +264,7 @@ function GameLeaderboardCard({
 
                 {/* Avatar */}
                 <div className="relative shrink-0">
-                  {entry.avatarUrl ? (
+                  {showPhoto ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={entry.avatarUrl}
@@ -339,10 +345,22 @@ function GameLeaderboardCard({
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function GameLeaderboards({ sections: initialSections }: { sections: GameLeaderboardSection[] }) {
+export function GameLeaderboards({
+  sections: initialSections,
+  avatarMode: initialAvatarMode = "top3",
+}: {
+  sections: GameLeaderboardSection[];
+  avatarMode?: HomepageAvatarMode;
+}) {
   const { currencyName } = useSiteConfig();
-  const [sections, setSections] = useState(initialSections);
-  useLiveConfig("game-leaderboard-live", fetchGameLeaderboards, setSections);
+  const [data, setData] = useState<{ sections: GameLeaderboardSection[]; avatarMode: HomepageAvatarMode }>({
+    sections: initialSections,
+    avatarMode: initialAvatarMode,
+  });
+  // Ein Admin-Save broadcastet "game-leaderboard-live" → Sektionen UND
+  // Profilbild-Modus werden live ohne Reload neu geladen (AGENTS §3).
+  useLiveConfig("game-leaderboard-live", fetchHomepageLeaderboardData, setData);
+  const { sections, avatarMode } = data;
 
   if (sections.length === 0) return null;
 
@@ -371,6 +389,7 @@ export function GameLeaderboards({ sections: initialSections }: { sections: Game
             section={section}
             sectionIndex={i}
             currencyName={currencyName}
+            avatarMode={avatarMode}
           />
         ))}
       </div>

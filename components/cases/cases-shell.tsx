@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Package, Coins, Sparkles, Star, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Canvas } from "@react-three/fiber";
+import { View } from "@react-three/drei";
 import { TopBar } from "@/components/layout/top-bar";
 import { CaseOpeningSection } from "@/components/dashboard/case-opening-section";
 import { createClient } from "@/lib/supabase/client";
@@ -104,6 +106,8 @@ export function CasesShell({
   useRealtimeProfile((row) => {
     if (typeof row.credits === "number") setCredits(row.credits);
   });
+  // Root for the shared 3D Canvas's eventSource (OrbitControls etc. in modals).
+  const casesRootRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { currencyName, rarityLabels } = useSiteConfig();
 
@@ -133,7 +137,7 @@ export function CasesShell({
   }));
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div ref={casesRootRef} className="flex flex-1 flex-col">
       <TopBar
         credits={credits}
         inventoryCount={inventoryCount}
@@ -291,6 +295,7 @@ export function CasesShell({
                       previewPool={preview?.previewPool ?? []}
                       poolSize={preview?.poolSize ?? 0}
                       onCreditsChange={handleCreditsChange}
+                      index={i}
                     />
                   </motion.div>
                 );
@@ -299,6 +304,43 @@ export function CasesShell({
           </AnimatePresence>
         )}
       </main>
+
+      {/* Shared 3D Canvas — one WebGL context for EVERY CaseItem3D on the page
+          (reel slots, win reveal, batch grid, pool gallery). alpha + fixed +
+          pointer-events:none means it is invisible except where a <View> draws,
+          and never blocks clicks. z-[55] keeps the 3D above the dark batch/
+          reveal overlays so the won items render on top of them. */}
+      <Canvas
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          pointerEvents: "none",
+          zIndex: 55,
+        }}
+        gl={{ alpha: true, antialias: true }}
+        eventSource={casesRootRef as React.RefObject<HTMLElement>}
+        onCreated={({ gl, scene }) => {
+          const renderer = gl;
+          const rootScene = scene;
+          return () => {
+            rootScene.traverse((obj) => {
+              const mesh = obj as import("three").Mesh;
+              mesh.geometry?.dispose();
+              if (Array.isArray(mesh.material)) {
+                mesh.material.forEach((m) => m.dispose());
+              } else {
+                (mesh.material as import("three").Material | undefined)?.dispose();
+              }
+            });
+            renderer.dispose();
+          };
+        }}
+      >
+        <View.Port />
+      </Canvas>
     </div>
   );
 }

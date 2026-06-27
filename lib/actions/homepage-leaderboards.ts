@@ -8,10 +8,13 @@ import { broadcastLive } from "@/lib/realtime-broadcast";
 import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
 import {
   DEFAULT_GAME_LEADERBOARD_CONFIG,
+  DEFAULT_HOMEPAGE_AVATAR_MODE,
+  isHomepageAvatarMode,
   type GameLeaderboardListId,
   type GameLeaderboardItem,
   type UnifiedGameEntry,
   type GameLeaderboardSection,
+  type HomepageAvatarMode,
 } from "@/lib/game-leaderboard-types";
 
 // Types re-exported for consumers — "export type" is erased at runtime so it's safe in a "use server" file
@@ -20,6 +23,7 @@ export type {
   GameLeaderboardItem,
   UnifiedGameEntry,
   GameLeaderboardSection,
+  HomepageAvatarMode,
 } from "@/lib/game-leaderboard-types";
 
 // ── Config read/write ─────────────────────────────────────────────────────────
@@ -73,8 +77,46 @@ export async function getGameLeaderboardConfig(): Promise<GameLeaderboardItem[]>
   }
 }
 
+/**
+ * Liest den Profilbild-Modus der Startseiten-Bestenlisten. Steuert, ob ALLE
+ * Plätze oder nur die ersten 3 ein Profilbild bekommen (Default: "top3").
+ * Robust gegen fehlende Spalte/Zeile → fällt auf den Default zurück.
+ */
+export async function getHomepageAvatarMode(): Promise<HomepageAvatarMode> {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("game_leaderboard_config")
+      .select("avatar_mode")
+      .eq("id", "default")
+      .maybeSingle();
+    if (error || !data) return DEFAULT_HOMEPAGE_AVATAR_MODE;
+    const raw = (data as { avatar_mode?: unknown }).avatar_mode;
+    return isHomepageAvatarMode(raw) ? raw : DEFAULT_HOMEPAGE_AVATAR_MODE;
+  } catch {
+    return DEFAULT_HOMEPAGE_AVATAR_MODE;
+  }
+}
+
+/**
+ * Kombinierter Loader für das Live-Update der Startseite: liefert die aktuellen
+ * Sektionen UND den Profilbild-Modus in einem Rutsch, damit ein Admin-Save
+ * beides ohne Reload aktualisiert (AGENTS §3).
+ */
+export async function fetchHomepageLeaderboardData(): Promise<{
+  sections: GameLeaderboardSection[];
+  avatarMode: HomepageAvatarMode;
+}> {
+  const [sections, avatarMode] = await Promise.all([
+    fetchGameLeaderboards(),
+    getHomepageAvatarMode(),
+  ]);
+  return { sections, avatarMode };
+}
+
 export async function updateGameLeaderboardConfig(
-  items: GameLeaderboardItem[]
+  items: GameLeaderboardItem[],
+  avatarMode?: HomepageAvatarMode
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -87,10 +129,23 @@ export async function updateGameLeaderboardConfig(
     .single();
   if (!isAdmin(profile)) return { success: false, error: "Kein Admin-Zugriff." };
 
+  // Nur gesetzte Spalten werden überschrieben — avatar_mode bleibt erhalten,
+  // wenn der Aufrufer keinen Wert übergibt.
+  const payload: Record<string, unknown> = {
+    id: "default",
+    items,
+    updated_at: new Date().toISOString(),
+  };
+  if (avatarMode !== undefined) {
+    payload.avatar_mode = isHomepageAvatarMode(avatarMode)
+      ? avatarMode
+      : DEFAULT_HOMEPAGE_AVATAR_MODE;
+  }
+
   const admin = createAdminClient();
   const { error } = await admin
     .from("game_leaderboard_config")
-    .upsert({ id: "default", items, updated_at: new Date().toISOString() });
+    .upsert(payload);
 
   if (error) {
     void logDebugEvent({
@@ -105,7 +160,11 @@ export async function updateGameLeaderboardConfig(
   void logActivity(
     "admin:game-leaderboard-config:update",
     `Leaderboard-Konfig gespeichert von ${user.id}`,
-    { count: items.length, enabled: items.filter((i) => i.enabled).length }
+    {
+      count: items.length,
+      enabled: items.filter((i) => i.enabled).length,
+      avatarMode: avatarMode ?? "(unverändert)",
+    }
   );
   await broadcastLive("game-leaderboard-live");
   revalidatePath("/");

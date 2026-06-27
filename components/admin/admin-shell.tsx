@@ -173,6 +173,7 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Shop MOTD", tab: "shop", keywords: ["shop", "motd", "banner", "listing", "verkauf"], description: "Shop-Artikel und Tages-Rotation" },
   { label: "Monster-Konfiguration", tab: "monsters", keywords: ["monster", "zombie", "hp", "schaden", "spawn", "belohnung"], description: "Monster-HP, Schaden, Belohnungen" },
   { label: "Kill-Streak", tab: "monsters", keywords: ["killstreak", "streak", "kills", "multiplikator", "welt"], description: "Kill-Streak Multiplikator und Cap" },
+  { label: "Startseiten-Bestenlisten", tab: "games", keywords: ["bestenliste", "bestenlisten", "leaderboard", "startseite", "homepage", "profilbild", "profilbilder", "avatar", "top 3", "top3", "spielelisten", "rangliste", "platzierung"], description: "Spielelisten auf der Startseite: Reihenfolge, Limit, Profilbilder (nur Top 3 oder alle Plätze)" },
   { label: "Snake Speed & Credits", tab: "games", keywords: ["snake", "geschwindigkeit", "credits", "mode", "apfel"], description: "Snake-Spielmodi und Credit-Limits" },
   { label: "Plinko Einsatz & Limits", tab: "games", keywords: ["plinko", "einsatz", "kugel", "risk", "multiplier", "limit"], description: "Plinko-Konfiguration und Multiplikatoren" },
   { label: "Mine Levels", tab: "games", keywords: ["mine", "level", "upgrade", "abbau", "lager"], description: "Mine-Konfiguration und Level-Kosten" },

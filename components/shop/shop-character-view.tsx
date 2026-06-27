@@ -41,7 +41,7 @@ export interface ItemForPreview {
 
 // ── Camera presets per item type ─────────────────────────────────────────────
 
-type CamCfg = {
+export type CamCfg = {
   pos: [number, number, number];
   target: [number, number, number];
   fov: number;
@@ -65,7 +65,7 @@ const CAM_MAP: Record<string, CamCfg> = {
 };
 const CAM_DEFAULT: CamCfg = { pos: [0, 0.2, 2.5], target: [0, 0, 0], fov: 42 };
 
-function getCam(type: string): CamCfg {
+export function getCam(type: string): CamCfg {
   return CAM_MAP[type] ?? CAM_DEFAULT;
 }
 
@@ -234,7 +234,7 @@ export function ItemSceneContent({
 
 // ── Shared lighting ───────────────────────────────────────────────────────────
 
-function ItemLights() {
+export function ItemLights() {
   return (
     <>
       <ambientLight intensity={0.75} color="#c4b5fd" />

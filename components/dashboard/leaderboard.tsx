@@ -8,6 +8,9 @@ import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { BadgePill } from "@/components/ui/badge-pill";
 import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
+import { useLiveConfig } from "@/lib/use-live-config";
+import { getHomepageAvatarMode } from "@/lib/actions/homepage-leaderboards";
+import type { HomepageAvatarMode } from "@/lib/actions/homepage-leaderboards";
 
 export interface LeaderboardEntry {
   id: string;
@@ -35,7 +38,21 @@ interface LeaderboardProps {
   streakEntries?: StreakEntry[];
   showStreakTab?: boolean;
   style?: "podium" | "list";
+  /** Profilbild-Modus der Startseite: "top3" = nur Top 3, "all" = alle Plätze. */
+  avatarMode?: HomepageAvatarMode;
 }
+
+// Ränge/Fallbacks für Avatare in den Listen-Zeilen (Plätze 1–3 farbcodiert).
+const REST_AVATAR_RING = [
+  "ring-amber-400/70 shadow-[0_0_14px_rgba(245,158,11,0.4)]",
+  "ring-zinc-400/50",
+  "ring-orange-500/50",
+] as const;
+const REST_AVATAR_FB = [
+  "bg-amber-500/20 text-amber-200",
+  "bg-zinc-500/20 text-zinc-300",
+  "bg-orange-500/20 text-orange-300",
+] as const;
 
 const RANK_CONFIG = [
   {
@@ -114,11 +131,16 @@ export function Leaderboard({
   streakEntries: initialStreakEntries = [],
   showStreakTab = true,
   style = "podium",
+  avatarMode: initialAvatarMode = "top3",
 }: LeaderboardProps) {
   const [creditEntries, setCreditEntries] = useState(initialEntries);
   const [streakEntries, setStreakEntries] = useState(initialStreakEntries);
   const [activeTab, setActiveTab] = useState<"credits" | "streak">("credits");
+  const [avatarMode, setAvatarMode] = useState<HomepageAvatarMode>(initialAvatarMode);
   const { currencyName } = useSiteConfig();
+
+  // Live: Admin ändert den Profilbild-Modus → sofort ohne Reload übernehmen.
+  useLiveConfig("game-leaderboard-live", getHomepageAvatarMode, setAvatarMode);
 
   useRealtimeAllProfiles((row) => {
     if (typeof row.id !== "string" || typeof row.username !== "string") return;
@@ -401,6 +423,9 @@ export function Leaderboard({
                 {(style === "podium" ? rest : displayEntries).map((entry, rawIdx) => {
                   const i = style === "podium" ? rawIdx + 3 : rawIdx;
                   const isTopThree = i < 3;
+                  // Avatar-Slot in den Listenzeilen nur, wenn "all" ODER Top 3.
+                  // (Im Podium-Stil sind Top 3 oben als Podest → hier nie Top 3.)
+                  const showAvatarSlot = avatarMode === "all" || isTopThree;
                   const rankColors = [
                     "text-amber-400",
                     "text-zinc-400",
@@ -438,6 +463,26 @@ export function Leaderboard({
                           `#${i + 1}`
                         )}
                       </div>
+
+                      {/* Avatar (Top 3 immer, ab Platz 4 nur im "all"-Modus) */}
+                      {showAvatarSlot && (
+                        <div className="relative shrink-0">
+                          {entry.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={entry.avatarUrl}
+                              alt=""
+                              className={`h-8 w-8 rounded-full object-cover ring-1.5 ${isTopThree ? REST_AVATAR_RING[i] : "ring-white/10"}`}
+                            />
+                          ) : (
+                            <div
+                              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ring-1.5 ${isTopThree ? `${REST_AVATAR_RING[i]} ${REST_AVATAR_FB[i]}` : "ring-white/10 bg-white/5 text-zinc-500"}`}
+                            >
+                              {entry.username.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Name + badges */}
                       <div className="flex flex-1 min-w-0 items-center gap-1.5 flex-wrap">

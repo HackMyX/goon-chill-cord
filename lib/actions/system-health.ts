@@ -168,6 +168,8 @@ const COLUMN_CHECKS: Array<{
   { id: "col_site_version",         category: "Konfiguration", table: "site_config", col: "site_version",            detail: "node scripts/db-audit-fix.cjs" },
   // Patch notes — popup toggle
   { id: "col_patch_popup",        category: "Patch Notes",        table: "patch_notes",         col: "show_popup",              detail: "ALTER TABLE patch_notes ADD COLUMN show_popup boolean NOT NULL DEFAULT false;" },
+  // Startseiten-Bestenlisten — Profilbild-Modus (Top 3 vs. alle Plätze)
+  { id: "col_game_lb_avatarmode", category: "Spielebestenlisten", table: "game_leaderboard_config", col: "avatar_mode",          detail: "node scripts/add-leaderboard-avatar-mode.cjs" },
   // Case tiers — extended
   { id: "col_case_preview",       category: "Cases",              table: "case_tiers",          col: "preview_cost",            detail: "ALTER TABLE case_tiers ADD COLUMN preview_cost integer DEFAULT 0;" },
   { id: "col_case_multimax",      category: "Cases",              table: "case_tiers",          col: "multi_open_max",          detail: "ALTER TABLE case_tiers ADD COLUMN multi_open_max integer DEFAULT 10;" },

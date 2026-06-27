@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { motion, useMotionValue, animate } from "framer-motion";
 import { RARITY_STYLES, type Rarity } from "@/lib/cases";
-import { ItemRenderer } from "@/components/items/item-renderer";
+import { CaseItem3D } from "@/components/cases/case-item-3d";
 import { debugLog } from "@/lib/debug";
 
 export const ITEM_WIDTH = 116;
@@ -34,12 +34,23 @@ interface CaseReelProps {
    *  it feels like the machine is "charging up" before the real spin lands. */
   warmup?: boolean;
   spinToken?: number;
+  /** Base offset for the shared-Canvas View indices (unique per case group). */
+  viewBase?: number;
   onTick?: () => void;
   onSpinComplete?: () => void;
 }
 
+function toPreview(entry: ReelEntry) {
+  return {
+    id: entry.key,
+    name: entry.name ?? "",
+    rarity: entry.rarity as string,
+    type: entry.type,
+  };
+}
+
 export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseReel(
-  { items, targetIndex, spinning, warmup = false, spinToken = 0, onTick, onSpinComplete },
+  { items, targetIndex, spinning, warmup = false, spinToken = 0, viewBase = 1, onTick, onSpinComplete },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -85,18 +96,28 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
     let cancelled = false;
     const loopDist = items.length * STEP;
 
+    // Always kill whatever was driving x before — idle, warmup and spin must
+    // never run two competing tweens on the same motion value (that overlap is
+    // exactly what made the warmup→spin handoff stutter / jump).
+    activeControlsRef.current?.stop();
+
     if (spinning) {
       // ── Spin animation ────────────────────────────────────────────────────
-      // Backtrack a little so every spin visually "starts" from the left even
-      // if the target is close to where we are now.
-      const BACKTRACK_ITEMS = 18 + Math.floor(Math.random() * 6);
-      x.set(translateX + BACKTRACK_ITEMS * STEP);
+      // SEAMLESS HANDOFF: do NOT reset x. We continue from wherever the warmup
+      // left the strip and simply decelerate into the winning slot. The parent
+      // always puts ~40 filler items BEFORE the target, so translateX is always
+      // well to the left of the current position — the motion is one continuous
+      // leftward spin with no teleport, no restart and no pause, and it always
+      // lands exactly on items[targetIndex] (the real server result).
+      const xNow = x.get();
+      const dest = translateX;
 
       debugLog("CaseReel", "spin start", {
         targetIndex,
         itemAtTarget: items[targetIndex]?.name,
+        xNow,
         translateX,
-        backtrackItems: BACKTRACK_ITEMS,
+        dest,
         containerWidth,
         reelLength: items.length,
       });
@@ -107,18 +128,20 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
         if (idx !== lastTickIndex) { lastTickIndex = idx; onTick?.(); }
       };
 
+      // Single continuous deceleration: a strong ease-out carries the bulk of
+      // the distance, a soft spring settles the final fraction onto the slot.
       const SNAP_DISTANCE = STEP * 0.12;
-      const bulkTarget = translateX + SNAP_DISTANCE;
+      const bulkTarget = dest + SNAP_DISTANCE;
 
       activeControlsRef.current = animate(x, bulkTarget, {
-        duration: 2.2,
-        ease: [0.12, 1, 0.28, 1],
+        duration: 4.0,
+        ease: [0.16, 0.84, 0.24, 1],
         onUpdate: trackTicks,
         onComplete: () => {
           if (cancelled) return;
-          activeControlsRef.current = animate(x, translateX, {
+          activeControlsRef.current = animate(x, dest, {
             type: "spring",
-            stiffness: 260,
+            stiffness: 240,
             damping: 30,
             mass: 1,
             onUpdate: trackTicks,
@@ -128,7 +151,7 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
                 targetIndex,
                 itemAtTarget: items[targetIndex]?.name,
                 finalX: x.get(),
-                expectedX: translateX,
+                expectedX: dest,
               });
               setJustLanded(true);
               onSpinComplete?.();
@@ -145,14 +168,15 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
     }
 
     if (warmup) {
-      // ── Warmup: fast scroll from current x position (no jarring reset) ───
-      // displayItems is doubled so wrapping just means setting x += loopDist.
+      // ── Warmup: fast scroll continuing from the current x position ──────────
+      // displayItems is doubled, so wrapping just means resetting x by loopDist
+      // to the visually identical spot. The spin above then picks up from here.
       let fromX = x.get();
 
       function loopFast() {
         if (cancelled) return;
         const toX = fromX - loopDist;
-        animate(x, toX, {
+        activeControlsRef.current = animate(x, toX, {
           duration: items.length * WARMUP_SEC_PER_ITEM,
           ease: "linear",
           onComplete: () => {
@@ -165,14 +189,17 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
       }
       loopFast();
 
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+        activeControlsRef.current?.stop();
+      };
     }
 
     // ── Normal idle scroll ────────────────────────────────────────────────
     x.set(0);
     function loopIdle() {
       if (cancelled) return;
-      animate(x, -loopDist, {
+      activeControlsRef.current = animate(x, -loopDist, {
         duration: items.length * IDLE_SEC_PER_ITEM,
         ease: "linear",
         onComplete: () => {
@@ -184,7 +211,10 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
     }
     loopIdle();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      activeControlsRef.current?.stop();
+    };
     // items.length is in deps so the idle loop resets with correct loopDist
     // after a spin (when the spin reel is swapped back to the idle reel).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -197,13 +227,13 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
         justLanded ? "animate-case-shake" : ""
       }`}
     >
-      {/* amber focus window */}
+      {/* amber focus window — kept above the shared 3D canvas (z-[60]) */}
       <div
-        className="pointer-events-none absolute top-0 bottom-0 left-1/2 z-20 -translate-x-1/2 border-x-2 border-amber-400/60 bg-amber-400/[0.06] shadow-[inset_0_4px_10px_rgba(0,0,0,0.45)]"
+        className="pointer-events-none absolute top-0 bottom-0 left-1/2 z-[60] -translate-x-1/2 border-x-2 border-amber-400/70 bg-amber-400/[0.05] shadow-[inset_0_4px_10px_rgba(0,0,0,0.45)]"
         style={{ width: ITEM_WIDTH }}
       />
-      <div className="pointer-events-none absolute -top-[2px] left-1/2 z-20 h-0 w-0 -translate-x-1/2 border-x-[8px] border-t-[10px] border-x-transparent border-t-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
-      <div className="pointer-events-none absolute -bottom-[2px] left-1/2 z-20 h-0 w-0 -translate-x-1/2 border-x-[8px] border-b-[10px] border-x-transparent border-b-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
+      <div className="pointer-events-none absolute -top-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[8px] border-t-[10px] border-x-transparent border-t-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
+      <div className="pointer-events-none absolute -bottom-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[8px] border-b-[10px] border-x-transparent border-b-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
 
       {/* vignette fades */}
       <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-[#030305] to-transparent" />
@@ -212,8 +242,8 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
       {/* warmup glow pulse — amber scanline that signals "charging" */}
       {warmup && (
         <div
-          className="pointer-events-none absolute inset-0 z-25 animate-pulse rounded-xl"
-          style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(245,158,11,0.18) 0%, transparent 70%)" }}
+          className="pointer-events-none absolute inset-0 z-[60] animate-pulse rounded-xl"
+          style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(245,158,11,0.16) 0%, transparent 70%)" }}
         />
       )}
 
@@ -229,23 +259,33 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
               className="flex h-full shrink-0 items-center justify-center"
             >
               <div
-                className={`relative flex h-[112px] w-full flex-col items-center justify-center gap-1.5 overflow-hidden rounded-lg border bg-black/25 backdrop-blur-[2px] transition-all duration-300 ${
+                className={`relative flex h-[112px] w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-lg border bg-black/25 backdrop-blur-[2px] transition-all duration-300 ${
                   style.rainbow ? "border-transparent" : style.border
                 } ${
                   spinning
                     ? isTarget
                       ? `opacity-100 ${justLanded ? "scale-[1.18]" : "scale-[1.06]"}`
-                      : "opacity-55"
-                    : "opacity-80 scale-100"
+                      : "opacity-60"
+                    : "opacity-90 scale-100"
                 }`}
               >
                 {isTarget && justLanded && style.pulseGlow && (
                   <span aria-hidden className={`absolute inset-0 rounded-lg ${style.pulseGlow}`} />
                 )}
                 {style.rainbow && <span aria-hidden className="rainbow-border" />}
-                <ItemRenderer type={entry.type} rarity={entry.rarity} size="md" />
+
+                {/* 3D item — renders into the shared Canvas mounted in cases-shell */}
+                <div className="relative w-full" style={{ height: 76 }}>
+                  <CaseItem3D
+                    item={toPreview(entry)}
+                    viewIndex={viewBase + i}
+                    rotate={!spinning || isTarget}
+                    rotateSpeed={isTarget ? 0.9 : 0.5}
+                  />
+                </div>
+
                 <span
-                  className={`px-1 text-center text-[10px] font-semibold leading-tight ${
+                  className={`px-1 text-center text-[10px] font-semibold leading-tight line-clamp-2 ${
                     style.rainbow ? "rainbow-text" : style.text
                   }`}
                 >

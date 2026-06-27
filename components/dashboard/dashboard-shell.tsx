@@ -12,7 +12,7 @@ import {
 import { TopBar } from "@/components/layout/top-bar";
 import { Leaderboard, type LeaderboardEntry, type StreakEntry } from "@/components/dashboard/leaderboard";
 import { GameLeaderboards } from "@/components/dashboard/game-leaderboards";
-import type { GameLeaderboardSection } from "@/lib/actions/homepage-leaderboards";
+import type { GameLeaderboardSection, HomepageAvatarMode } from "@/lib/actions/homepage-leaderboards";
 import { subscribeToPresence } from "@/lib/presence-client";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
@@ -176,6 +176,7 @@ interface DashboardShellProps {
   homepageConfig?: HomepageConfig;
   chatSidebarConfig?: HomepageChatConfig;
   gameLeaderboards?: GameLeaderboardSection[];
+  homepageAvatarMode?: HomepageAvatarMode;
 }
 
 export function DashboardShell({
@@ -192,6 +193,7 @@ export function DashboardShell({
   homepageConfig,
   chatSidebarConfig,
   gameLeaderboards = [],
+  homepageAvatarMode = "top3",
 }: DashboardShellProps) {
   const cfg = homepageConfig ?? DEFAULT_HOMEPAGE_CONFIG;
   const [credits, setCredits] = useState(initialCredits);
@@ -509,6 +511,7 @@ export function DashboardShell({
               streakEntries={streakLeaderboard}
               showStreakTab={cfg.showStreakLeaderboard}
               style={cfg.leaderboardStyle}
+              avatarMode={homepageAvatarMode}
             />
           </div>
         )}
@@ -522,7 +525,7 @@ export function DashboardShell({
                 <div className="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent" />
               </div>
             </div>
-            <GameLeaderboards sections={gameLeaderboards} />
+            <GameLeaderboards sections={gameLeaderboards} avatarMode={homepageAvatarMode} />
           </>
         )}
       </main>
