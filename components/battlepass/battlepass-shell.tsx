@@ -17,8 +17,11 @@ import { StyledUsername } from "@/components/ui/styled-username";
 import { useSoundManager } from "@/lib/sound-manager";
 import { Canvas } from "@react-three/fiber";
 import { View } from "@react-three/drei";
-import { ItemStandaloneCanvas, ItemIsolatedPreview, type ItemForPreview } from "@/components/shop/shop-character-view";
+import { ItemStandaloneCanvas, type ItemForPreview } from "@/components/shop/shop-character-view";
 import { BpRewardView3D } from "@/components/battlepass/bp-reward-3d";
+import { CaseDropView } from "@/components/cases/case-item-3d";
+import { WORN_TYPES } from "@/lib/case-display-config";
+import type { Rarity } from "@/lib/cases";
 import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
 import { getBadgeStyle } from "@/lib/badges";
 
@@ -929,7 +932,7 @@ function ParticleField({ accent, count = 40 }: { accent: string; count?: number 
 
 function TrackTileCard({
   tier, state, accent, glow, trackColor, onClaim, claiming, isSelected, onClick,
-  visualConfig, onDirectPreview, fillWidth, viewIndex,
+  visualConfig, onDirectPreview, fillWidth, viewIndex, scrollRootRef,
 }: {
   tier: BattlePassTier;
   state: TierState;
@@ -944,6 +947,8 @@ function TrackTileCard({
   onDirectPreview?: (subject: PreviewSubject) => void;
   fillWidth?: boolean;
   viewIndex: number;
+  /** Scroll container — only tiles inside it render live 3D (perf + no overflow). */
+  scrollRootRef?: React.RefObject<HTMLElement | null>;
 }) {
   const isClaimed = state === "claimed";
   const isAvailable = state === "available";
@@ -1187,15 +1192,22 @@ function TrackTileCard({
                 style={{ height: previewH, minHeight: previewH }}
               >
                 {hasItemFor3D ? (
-                  <ItemIsolatedPreview
-                    item={{
-                      id: tier.rewardItemId ?? tier.id,
-                      name: tier.rewardItemName!,
-                      rarity: tier.rewardItemRarity ?? "normal",
-                      type: tier.rewardItemType!,
+                  <CaseDropView
+                    subject={{
+                      kind: "item",
+                      item: {
+                        id: tier.rewardItemId ?? tier.id,
+                        name: tier.rewardItemName!,
+                        rarity: (tier.rewardItemRarity ?? "normal") as Rarity,
+                        type: tier.rewardItemType!,
+                      },
                     }}
                     viewIndex={viewIndex}
                     visible={true}
+                    character={WORN_TYPES.has(tier.rewardItemType!)}
+                    lazy
+                    rootRef={scrollRootRef}
+                    fallbackColor={effectiveTrackColor}
                   />
                 ) : (
                   <BpRewardView3D
@@ -1204,7 +1216,6 @@ function TrackTileCard({
                     creditsAmount={(tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1)}
                     viewIndex={viewIndex}
                     visible={true}
-                    lightColor={effectiveTrackColor}
                   />
                 )}
               </div>
@@ -1409,6 +1420,7 @@ function HorizontalTrack({
                 visualConfig={visualConfig}
                 onDirectPreview={setFullPreviewSubject}
                 viewIndex={viewIndexOffset + idx}
+                scrollRootRef={scrollRef}
               />
             );
           })}
@@ -2499,9 +2511,9 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
           pointerEvents: "none",
           zIndex: 10,
         }}
-        gl={{ antialias: true, alpha: true }}
+        gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
         eventSource={shellRef as React.RefObject<HTMLElement>}
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
       >
         <View.Port />
       </Canvas>

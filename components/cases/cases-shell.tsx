@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Package, Coins, Sparkles, Star, Zap } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Canvas } from "@react-three/fiber";
 import { View } from "@react-three/drei";
 import { TopBar } from "@/components/layout/top-bar";
@@ -138,8 +138,11 @@ export function CasesShell({
   }, [router]);
 
   function handleCreditsChange(newCredits: number) {
+    // Update credits locally only. Do NOT router.refresh() here — that re-runs
+    // the entire force-dynamic Cases page (heavy item queries) on EVERY open and
+    // was the cause of the multi-second freeze + WebGL context loss right as the
+    // spin started. The balance is already correct via setCredits + realtime.
     setCredits(newCredits);
-    router.refresh();
   }
 
   // Map rarity keys to admin-configured labels
@@ -293,34 +296,31 @@ export function CasesShell({
             <p className="mt-1 text-sm text-zinc-600">Admins können Cases im Admin-Panel einrichten.</p>
           </div>
         ) : (
-          <AnimatePresence>
-            <div className="pb-10">
-              {caseGroups.map((group, i) => {
-                const preview = caseGroupPreviews.find((p) => p.groupId === group.id);
-                return (
-                  <motion.div
-                    key={group.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.12 + i * 0.09, duration: 0.4 }}
-                  >
-                    <CaseOpeningSection
-                      group={group}
-                      credits={credits}
-                      previewPool={preview?.previewPool ?? []}
-                      poolSize={preview?.poolSize ?? 0}
-                      onCreditsChange={handleCreditsChange}
-                      index={i}
-                      gender={gender}
-                      cfg={cfg}
-                      anyModalOpen={anyModalOpen}
-                      onModalChange={handleModalChange}
-                    />
-                  </motion.div>
-                );
-              })}
-            </div>
-          </AnimatePresence>
+          // Plain divs (NO framer transform/opacity wrapper) — a transform/opacity
+          // stacking context here would trap the reel's edge masks BELOW the fixed
+          // 3D canvas, letting items bleed outside the reel. Keeping it a plain div
+          // guarantees the masks sit above the canvas and clip the overflow.
+          <div className="pb-10">
+            {caseGroups.map((group, i) => {
+              const preview = caseGroupPreviews.find((p) => p.groupId === group.id);
+              return (
+                <div key={group.id}>
+                  <CaseOpeningSection
+                    group={group}
+                    credits={credits}
+                    previewPool={preview?.previewPool ?? []}
+                    poolSize={preview?.poolSize ?? 0}
+                    onCreditsChange={handleCreditsChange}
+                    index={i}
+                    gender={gender}
+                    cfg={cfg}
+                    anyModalOpen={anyModalOpen}
+                    onModalChange={handleModalChange}
+                  />
+                </div>
+              );
+            })}
+          </div>
         )}
       </main>
 
@@ -342,7 +342,8 @@ export function CasesShell({
           pointerEvents: "none",
           zIndex: anyModalOpen ? 150 : 40,
         }}
-        gl={{ alpha: true, antialias: true }}
+        dpr={[1, 1.5]}
+        gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
         eventSource={casesRootRef as React.RefObject<HTMLElement>}
         onCreated={({ gl, scene }) => {
           const renderer = gl;

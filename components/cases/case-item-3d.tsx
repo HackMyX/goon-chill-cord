@@ -13,7 +13,6 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import * as THREE from "three";
-import { Coins, Sparkles } from "lucide-react";
 import { useFrame } from "@react-three/fiber";
 import { View, PerspectiveCamera, ContactShadows } from "@react-three/drei";
 import {
@@ -24,11 +23,8 @@ import {
   type CamCfg,
 } from "@/components/shop/shop-character-view";
 import { CharacterModel } from "@/components/world/character-model";
-import { StyledUsername } from "@/components/ui/styled-username";
-import { BadgePill } from "@/components/ui/badge-pill";
+import { BpRewardView3D } from "@/components/battlepass/bp-reward-3d";
 import type { PreviewSubject } from "@/components/ui/universal-preview-modal";
-import { RARITY_HEX } from "@/lib/rarity-colors";
-import type { Rarity } from "@/lib/cases";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 export type { ItemForPreview };
@@ -171,59 +167,53 @@ export function CaseItem3D({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Non-item drop heroes (DOM) + unified CaseDropView
+// Non-item drops → real 3D geometry (reuses the Battle-Pass fallback meshes) +
+// unified CaseDropView + a generic lazy-mount wrapper.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function rarityHex(r?: string): string {
-  return RARITY_HEX[(r as Rarity)] ?? "#a855f7";
+/** Maps a non-item PreviewSubject to the Battle-Pass reward geometry props. */
+function subjectToReward(subject: Exclude<PreviewSubject, { kind: "item" }>): {
+  rewardType: string; rarity: string; creditsAmount?: number;
+} {
+  switch (subject.kind) {
+    case "credits":     return { rewardType: "credits", rarity: "mythisch", creditsAmount: subject.amount };
+    case "name_style":  return { rewardType: "name_style", rarity: "selten" };
+    case "ability":     return { rewardType: "ability", rarity: subject.rarity ?? "mythisch" };
+    case "badge":       return { rewardType: "badge", rarity: "mythisch" };
+    case "xp_boost":    return { rewardType: "xp_boost", rarity: "selten" };
+    case "random_item": return { rewardType: "random_item", rarity: subject.rarity ?? "normal" };
+    case "generic":     return { rewardType: "default", rarity: "normal" };
+  }
 }
 
-/** Compact DOM hero for a non-item drop (name style, ability, badge, credits). */
-function NonItemHero({ subject }: { subject: Exclude<PreviewSubject, { kind: "item" }> }) {
-  switch (subject.kind) {
-    case "name_style":
-      return (
-        <StyledUsername
-          name={subject.displayName ?? "DeinName"}
-          styleKey={subject.styleKey}
-          size="md"
-          staticMode={false}
-        />
-      );
-    case "ability": {
-      const hex = rarityHex(subject.rarity);
-      return (
-        <div
-          className="flex h-[58px] w-[58px] items-center justify-center rounded-2xl border-2 text-3xl"
-          style={{ borderColor: `${hex}66`, background: `radial-gradient(circle, ${hex}22 0%, transparent 70%)` }}
-        >
-          {subject.icon ?? "⚡"}
-        </div>
-      );
-    }
-    case "badge":
-      return <BadgePill badgeKey={subject.badgeKey} label={subject.badgeText} size="sm" />;
-    case "credits":
-      return (
-        <div className="flex flex-col items-center gap-0.5">
-          <Coins className="h-7 w-7 text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.7)]" />
-          <span className="text-xs font-black tabular-nums text-amber-200">
-            {subject.amount.toLocaleString("de-DE")}
-          </span>
-        </div>
-      );
-    case "xp_boost":
-      return (
-        <div className="flex flex-col items-center gap-0.5 text-sky-300">
-          <Sparkles className="h-7 w-7 drop-shadow-[0_0_8px_rgba(56,189,248,0.7)]" />
-          <span className="text-xs font-black">+{subject.days}</span>
-        </div>
-      );
-    case "random_item":
-      return <span className="text-3xl">🎲</span>;
-    case "generic":
-      return <span className="text-3xl">{subject.icon}</span>;
-  }
+/** Generic on-screen-only mount wrapper for pool cards (caps live 3D scenes,
+ *  clips to the scroll container — nothing renders outside it). */
+function LazyView({
+  rootRef, fallbackColor = "#7c3aed", children,
+}: {
+  rootRef?: RefObject<Element | null>;
+  fallbackColor?: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => { for (const e of entries) setShow(e.isIntersecting); },
+      { root: rootRef?.current ?? null, rootMargin: "0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rootRef]);
+  return (
+    <div ref={ref} className="absolute inset-0">
+      {show ? children : (
+        <div className="absolute inset-0 rounded-md" style={{ background: `radial-gradient(circle at 50% 45%, ${fallbackColor}22 0%, transparent 70%)` }} />
+      )}
+    </div>
+  );
 }
 
 export interface CaseDropViewProps {
@@ -245,10 +235,11 @@ export interface CaseDropViewProps {
 }
 
 /**
- * Unified drop renderer used everywhere in the case flow. Items render as real
- * 3D (into the shared Canvas); non-item drops render as a centered DOM hero
- * (the shared Canvas is transparent where no 3D View is drawn, so they show
- * through cleanly at the same z-layer).
+ * Unified drop renderer used everywhere in the case flow. Catalogue items render
+ * via ItemSceneContent / CharacterModel; every NON-item drop renders as a real
+ * spinning 3D geometry from the Battle-Pass set (coin, orb, trophy, bolt, gem)
+ * so the roulette is 100% gap-free and consistent. All render into the shared
+ * <View.Port/> canvas.
  */
 export function CaseDropView({
   subject,
@@ -264,20 +255,9 @@ export function CaseDropView({
   scale = 1,
   rootRef,
 }: CaseDropViewProps) {
+  let node: ReactNode;
   if (subject.kind === "item") {
-    return lazy ? (
-      <LazyCaseItem3D
-        item={subject.item}
-        viewIndex={viewIndex}
-        rotate={rotate}
-        rotateSpeed={rotateSpeed}
-        fallbackColor={fallbackColor}
-        gender={gender}
-        character={character}
-        scale={scale}
-        rootRef={rootRef}
-      />
-    ) : (
+    node = (
       <CaseItem3D
         item={subject.item}
         viewIndex={viewIndex}
@@ -290,55 +270,17 @@ export function CaseDropView({
         scale={scale}
       />
     );
-  }
-  return (
-    <div className="absolute inset-0 flex items-center justify-center p-1 text-center">
-      <NonItemHero subject={subject} />
-    </div>
-  );
-}
-
-/**
- * Pool-gallery variant: only mounts the (relatively heavy) 3D View once the
- * card scrolls near the viewport, so a 100-item pool doesn't spin up 100 scene
- * graphs at once. Until then it shows a soft rarity-tinted placeholder.
- */
-export function LazyCaseItem3D({
-  fallbackColor = "#7c3aed",
-  rootRef,
-  ...props
-}: CaseItem3DProps & { fallbackColor?: string; rootRef?: RefObject<Element | null> }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [show, setShow] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    // Continuously mount/unmount so a 900+ item pool only ever holds a handful
-    // of live 3D scenes, and nothing renders outside the scroll container (no
-    // leak). root = the popup scroll area clips it precisely.
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) setShow(e.isIntersecting);
-      },
-      { root: rootRef?.current ?? null, rootMargin: "0px" },
+  } else {
+    const r = subjectToReward(subject);
+    node = (
+      <BpRewardView3D
+        rewardType={r.rewardType}
+        rarity={r.rarity}
+        creditsAmount={r.creditsAmount}
+        viewIndex={viewIndex}
+        visible={visible}
+      />
     );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [rootRef]);
-
-  return (
-    <div ref={ref} className="absolute inset-0">
-      {show ? (
-        <CaseItem3D {...props} />
-      ) : (
-        <div
-          className="absolute inset-0 rounded-md"
-          style={{
-            background: `radial-gradient(circle at 50% 45%, ${fallbackColor}22 0%, transparent 70%)`,
-          }}
-        />
-      )}
-    </div>
-  );
+  }
+  return lazy ? <LazyView rootRef={rootRef} fallbackColor={fallbackColor}>{node}</LazyView> : node;
 }
