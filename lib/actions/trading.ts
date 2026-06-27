@@ -342,33 +342,68 @@ export async function respondToTrade(
     return { success: false, error: "Du hast nicht genug Credits für diesen Trade." };
   }
 
-  // Item ownership swap — reassign inventory.user_id both ways.
+  // Item ownership swap — scoped to the CURRENT owner and verified by row count.
+  // Without .eq(user_id) a concurrent trade could be exploited to STEAL an item;
+  // without the count check a vanished item would silently "transfer" 0 rows
+  // (= item LOSS) while the trade still got marked accepted. On any mismatch we
+  // abort and roll back so the swap is strictly all-or-nothing.
   if (trade.offered_item_ids.length > 0) {
-    const { error } = await admin
+    const { data: moved, error } = await admin
       .from("inventory")
       .update({ user_id: user.id, equipped: false })
-      .in("id", trade.offered_item_ids);
-    if (error) return { success: false, error: "Item-Transfer fehlgeschlagen." };
+      .eq("user_id", trade.sender_id)
+      .in("id", trade.offered_item_ids)
+      .select("id");
+    if (error || !moved || moved.length !== trade.offered_item_ids.length) {
+      logServerError("Trading", "offered-item transfer failed/partial", error?.message);
+      return { success: false, error: "Item-Transfer fehlgeschlagen — Trade abgebrochen (keine Änderung)." };
+    }
   }
   if (trade.requested_item_ids.length > 0) {
-    const { error } = await admin
+    const { data: moved, error } = await admin
       .from("inventory")
       .update({ user_id: trade.sender_id, equipped: false })
-      .in("id", trade.requested_item_ids);
-    if (error) return { success: false, error: "Item-Transfer fehlgeschlagen." };
+      .eq("user_id", user.id)
+      .in("id", trade.requested_item_ids)
+      .select("id");
+    if (error || !moved || moved.length !== trade.requested_item_ids.length) {
+      logServerError("Trading", "requested-item transfer failed/partial", error?.message);
+      // Roll back the offered items so nothing is half-swapped.
+      if (trade.offered_item_ids.length > 0) {
+        await admin.from("inventory").update({ user_id: trade.sender_id })
+          .eq("user_id", user.id).in("id", trade.offered_item_ids);
+      }
+      return { success: false, error: "Item-Transfer fehlgeschlagen — Trade abgebrochen." };
+    }
   }
 
-  // Credits swap.
+  // Credits swap — errors checked; on failure roll the items back (all-or-nothing).
   const netForSender = trade.requested_credits - trade.offered_credits;
   const netForReceiver = -netForSender;
-  await admin
+  const { error: credErrSender } = await admin
     .from("profiles")
     .update({ credits: senderProfile.credits + netForSender })
     .eq("id", trade.sender_id);
-  await admin
-    .from("profiles")
-    .update({ credits: receiverProfile.credits + netForReceiver })
-    .eq("id", user.id);
+  let credErrReceiver: { message: string } | null = null;
+  if (!credErrSender) {
+    const res = await admin
+      .from("profiles")
+      .update({ credits: receiverProfile.credits + netForReceiver })
+      .eq("id", user.id);
+    credErrReceiver = res.error;
+  }
+  if (credErrSender || credErrReceiver) {
+    logServerError("Trading", "credit transfer failed", (credErrSender ?? credErrReceiver)?.message);
+    if (trade.offered_item_ids.length > 0) {
+      await admin.from("inventory").update({ user_id: trade.sender_id })
+        .eq("user_id", user.id).in("id", trade.offered_item_ids);
+    }
+    if (trade.requested_item_ids.length > 0) {
+      await admin.from("inventory").update({ user_id: user.id })
+        .eq("user_id", trade.sender_id).in("id", trade.requested_item_ids);
+    }
+    return { success: false, error: "Credit-Transfer fehlgeschlagen — Trade abgebrochen." };
+  }
 
   await admin
     .from("trades")

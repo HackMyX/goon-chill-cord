@@ -152,7 +152,11 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
       level: Number((profile as unknown as Record<string, unknown>).level ?? 1),
       xp: Number((profile as unknown as Record<string, unknown>).xp ?? 0),
       viewerIsElevated,
-      tempBannedUntil: ((profile as unknown as Record<string, unknown>).temp_banned_until as string | null) ?? null,
+      // Ban status is moderation-only — never expose it to non-elevated viewers
+      // (a non-mod could otherwise read it from the network response).
+      tempBannedUntil: viewerIsElevated
+        ? (((profile as unknown as Record<string, unknown>).temp_banned_until as string | null) ?? null)
+        : null,
       equippedByCategory,
       rarityCounts,
       badges,

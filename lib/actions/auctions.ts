@@ -108,18 +108,28 @@ export async function sweepExpiredAuctions(): Promise<void> {
       continue;
     }
 
-    await admin
+    const { error: itemErr } = await admin
       .from("inventory")
       .update({ user_id: auction.current_bidder_id, equipped: false })
       .eq("id", auction.inventory_id);
-    await admin
+    if (itemErr) {
+      logServerError("Auctions", "sweep item transfer failed", itemErr.message);
+      continue; // leave auction active — retried on the next sweep, no half-sale
+    }
+    const { error: chargeErr } = await admin
       .from("profiles")
       .update({ credits: bidderProfile.credits - auction.current_bid })
       .eq("id", auction.current_bidder_id);
-    await admin
+    if (chargeErr) {
+      logServerError("Auctions", "sweep buyer charge failed — rolling item back", chargeErr.message);
+      await admin.from("inventory").update({ user_id: auction.seller_id }).eq("id", auction.inventory_id);
+      continue;
+    }
+    const { error: payErr } = await admin
       .from("profiles")
       .update({ credits: sellerProfile.credits + auction.current_bid })
       .eq("id", auction.seller_id);
+    if (payErr) logServerError("Auctions", "sweep seller payout failed (item+charge already done)", payErr.message);
     await admin
       .from("auctions")
       .update({ status: "sold", resolved_at: new Date().toISOString() })
@@ -350,8 +360,21 @@ async function finalizeBuyout(
     return { success: false, error: "Item-Transfer fehlgeschlagen — bitte erneut versuchen." };
   }
 
-  await admin.from("profiles").update({ credits: buyerProfile.credits - price }).eq("id", buyerId);
-  await admin.from("profiles").update({ credits: sellerProfile.credits + price }).eq("id", auction.seller_id);
+  // Credit transfer — errors checked; on failure roll the item back to the
+  // seller and release the claim so the buyout is strictly all-or-nothing
+  // (the item transfer above already succeeded at this point).
+  const { error: chargeErr } = await admin.from("profiles").update({ credits: buyerProfile.credits - price }).eq("id", buyerId);
+  let payErr: { message: string } | null = null;
+  if (!chargeErr) {
+    const res = await admin.from("profiles").update({ credits: sellerProfile.credits + price }).eq("id", auction.seller_id);
+    payErr = res.error;
+  }
+  if (chargeErr || payErr) {
+    logServerError("Auctions", "finalizeBuyout credit transfer failed", (chargeErr ?? payErr)?.message);
+    await admin.from("inventory").update({ user_id: auction.seller_id }).eq("id", auction.inventory_id);
+    await unclaim();
+    return { success: false, error: "Credit-Transfer fehlgeschlagen — Kauf abgebrochen." };
+  }
 
   const itemName = (auction.item as unknown as { name: string } | null)?.name ?? "ein Item";
 
@@ -471,16 +494,23 @@ export async function placeBid(auctionId: string, amount: number): Promise<Aucti
     return finalizeBuyout(admin, { id: auctionId, ...auction }, user.id, auction.buyout_price);
   }
 
-  const { error } = await admin
+  const { data: bidUpdated, error } = await admin
     .from("auctions")
     .update({ current_bid: Math.floor(amount), current_bidder_id: user.id })
     .eq("id", auctionId)
     .eq("status", "active")
-    .lt("current_bid", amount);
+    .lt("current_bid", amount)
+    .select("id");
 
   if (error) {
     logServerError("Auctions", "placeBid update failed", error.message);
     return { success: false, error: "Gebot konnte nicht platziert werden." };
+  }
+  if (!bidUpdated || bidUpdated.length === 0) {
+    // The WHERE didn't match: the auction ended, or another bid raced in with an
+    // equal/higher amount. Without this check the update silently matched 0 rows
+    // yet returned success — the bidder thought they were leading but weren't.
+    return { success: false, error: "Zu langsam — die Auktion wurde bereits überboten oder ist beendet." };
   }
 
   const itemName = (auction.item as unknown as { name: string } | null)?.name ?? "ein Item";
