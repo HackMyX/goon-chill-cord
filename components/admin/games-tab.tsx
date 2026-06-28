@@ -17,7 +17,6 @@ import {
 import { AdminTooltip } from "@/components/admin/admin-tooltip";
 import { WorldSessionConfigEditor } from "@/components/admin/world-session-config-editor";
 import { WorldSpawnConfigEditor } from "@/components/admin/world-spawn-editor";
-import { KillStreakConfigEditor } from "@/components/admin/kill-streak-config-editor";
 import { CharacterConfigEditor } from "@/components/admin/character-config-editor";
 import { DonConfigEditor } from "@/components/admin/don-config-editor";
 import { SnakeConfigEditor } from "@/components/admin/snake-config-editor";
@@ -30,7 +29,6 @@ import { DonLeaderboardEditor } from "@/components/admin/don-leaderboard-editor"
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import type { ProfileRow } from "@/components/admin/admin-shell";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
-import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import type { DonConfig } from "@/lib/don-config";
@@ -55,7 +53,6 @@ const GAMES: GameDef[] = [
 
 interface GamesTabProps {
   worldSessionConfig: WorldSessionConfig;
-  killStreakConfig: KillStreakConfig;
   characterConfig: CharacterConfig;
   worldSpawnConfig: WorldSpawnConfig;
   topProfiles: ProfileRow[];
@@ -313,7 +310,6 @@ function HomepageLeaderboardsSection() {
 
 export function GamesTab({
   worldSessionConfig,
-  killStreakConfig,
   characterConfig,
   worldSpawnConfig,
   topProfiles,
@@ -414,7 +410,6 @@ export function GamesTab({
                 <WorldSessionConfigEditor config={worldSessionConfig} />
                 <CharacterConfigEditor config={characterConfig} />
                 <WorldSpawnConfigEditor config={worldSpawnConfig} />
-                <KillStreakConfigEditor config={killStreakConfig} />
 
                 <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
                   <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">

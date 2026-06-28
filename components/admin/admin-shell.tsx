@@ -657,7 +657,6 @@ export function AdminShell({
         {tab === "games" && (
           <GamesTab
             worldSessionConfig={worldSessionConfig}
-            killStreakConfig={killStreakConfig}
             characterConfig={characterConfig}
             worldSpawnConfig={worldSpawnConfig}
             topProfiles={profiles}
