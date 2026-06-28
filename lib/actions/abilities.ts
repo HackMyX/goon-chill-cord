@@ -27,6 +27,8 @@ function rowToDefinition(r: Record<string, unknown>): AbilityDefinition {
     canDropFromCases: (r.can_drop_from_cases as boolean) ?? true,
     enabled: (r.enabled as boolean) ?? true,
     sortOrder: (r.sort_order as number) ?? 0,
+    cardTheme: (r.card_theme as string) ?? undefined,
+    cardRarity: (r.card_rarity as string) ?? undefined,
   };
 }
 
@@ -394,6 +396,8 @@ export async function adminUpsertAbilityDefinition(
     can_drop_from_cases: data.canDropFromCases ?? true,
     enabled: data.enabled ?? true,
     sort_order: data.sortOrder ?? 0,
+    card_theme: data.cardTheme ?? "auto",
+    card_rarity: data.cardRarity ?? "auto",
   });
 
   if (error) return { success: false, error: error.message };

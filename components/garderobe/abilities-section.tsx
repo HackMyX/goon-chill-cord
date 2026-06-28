@@ -4,11 +4,12 @@ import { useState, useTransition } from "react";
 import { Zap, Check, ShieldOff, Info, RefreshCw, Clock } from "lucide-react";
 import type { UserAbility } from "@/lib/abilities";
 import {
-  ABILITY_CATEGORY_COLORS, ABILITY_CATEGORY_LABELS,
+  ABILITY_CATEGORY_LABELS,
   ABILITY_RARITY_COLORS, ABILITY_RARITY_LABELS,
 } from "@/lib/abilities";
 import { equipAbility } from "@/lib/actions/abilities";
 import { useSoundManager } from "@/lib/sound-manager";
+import { AbilityVoucherCard } from "@/components/rewards/ability-voucher-card";
 
 interface AbilitiesSectionProps {
   abilities: UserAbility[];
@@ -120,51 +121,35 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
         </p>
       )}
 
-      {/* Owned abilities grid */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      {/* Owned abilities grid — schick gethemte Gutschein-Karten + Ausrüst-Button */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {abilities.map((ua) => {
           const def = ua.definition;
           if (!def) return null;
           const isEquipped = equipped === ua.abilityKey;
+          const source = ua.source === "level_reward" ? "Level-Belohnung" :
+                         ua.source === "bp_tier" ? "Battle Pass" :
+                         ua.source === "case" ? "Case" :
+                         ua.source === "shop" ? "Shop" :
+                         ua.source === "admin_grant" ? "Admin" : ua.source;
 
           return (
-            <div
-              key={ua.id}
-              className={`rounded-xl border p-4 transition-all ${
-                isEquipped
-                  ? "border-amber-500/40 bg-amber-500/5"
-                  : "border-white/8 bg-white/[0.02] hover:border-white/15"
-              }`}
-            >
-              <div className="mb-2 flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-sm font-bold text-zinc-100">{def.name}</span>
-                    <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${ABILITY_RARITY_COLORS[def.rarity]}`}>
-                      {ABILITY_RARITY_LABELS[def.rarity]}
-                    </span>
-                    <span className={`rounded-md border px-1.5 py-0.5 text-[10px] ${ABILITY_CATEGORY_COLORS[def.category]}`}>
-                      {ABILITY_CATEGORY_LABELS[def.category]}
-                    </span>
-                    <TimeBadge expiresAt={ua.expiresAt} />
-                  </div>
-                  <p className="mt-1 text-xs text-zinc-400">{def.description}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mt-3">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] text-zinc-600">
-                    Quelle: {ua.source === "level_reward" ? "Level-Belohnung" :
-                             ua.source === "bp_tier" ? "Battle Pass" :
-                             ua.source === "case" ? "Case" :
-                             ua.source === "shop" ? "Shop" :
-                             ua.source === "admin_grant" ? "Admin" : ua.source}
-                  </span>
-                  <span className="text-[10px] text-zinc-700">
-                    {new Date(ua.acquiredAt).toLocaleDateString("de-DE")}
-                  </span>
-                </div>
+            <div key={ua.id} className="flex flex-col gap-2">
+              <AbilityVoucherCard
+                name={def.name}
+                description={def.description}
+                icon={def.icon}
+                category={ABILITY_CATEGORY_LABELS[def.category]}
+                cardTheme={def.cardTheme}
+                cardRarity={def.cardRarity}
+                abilityRarity={def.rarity}
+                equipped={isEquipped}
+                expiresAt={ua.expiresAt}
+              />
+              <div className="flex items-center justify-between gap-2 px-1">
+                <span className="text-[10px] text-zinc-600">
+                  {source} · {new Date(ua.acquiredAt).toLocaleDateString("de-DE")}
+                </span>
                 <button
                   onClick={() => handleEquip(ua.abilityKey)}
                   disabled={isPending}

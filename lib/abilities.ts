@@ -83,6 +83,10 @@ export interface AbilityDefinition {
   canDropFromCases: boolean;
   enabled: boolean;
   sortOrder: number;
+  /** Optional: Gutschein-Karten-Theme (BonusCardThemeId oder "auto"). */
+  cardTheme?: string;
+  /** Optional: Gutschein-Karten-Seltenheit (BonusCardRarity oder "auto"). */
+  cardRarity?: string;
 }
 
 export interface UserAbility {

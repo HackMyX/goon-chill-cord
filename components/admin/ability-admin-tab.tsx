@@ -12,6 +12,11 @@ import {
   getAllAbilityDefinitions, adminUpsertAbilityDefinition,
   adminDeleteAbilityDefinition, adminRevokeAbility, getUserAbilities,
 } from "@/lib/actions/abilities";
+import {
+  AUTO_THEME, AUTO_RARITY,
+  BONUS_CARD_THEME_LIST, BONUS_CARD_RARITY_LIST,
+} from "@/lib/bonus-card-themes";
+import { AbilityVoucherCard } from "@/components/rewards/ability-voucher-card";
 
 interface AbilityAdminTabProps {
   profiles: { id: string; username: string }[];
@@ -243,6 +248,47 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
                   {RARITIES.map((r) => <option key={r} value={r}>{ABILITY_RARITY_LABELS[r]}</option>)}
                 </select>
               </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-400">Gutschein-Theme</span>
+                <select
+                  value={editing.cardTheme ?? AUTO_THEME}
+                  onChange={(e) => setEditing((prev) => prev ? { ...prev, cardTheme: e.target.value } : null)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none"
+                >
+                  <option value={AUTO_THEME}>Auto (nach Seltenheit)</option>
+                  {BONUS_CARD_THEME_LIST.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-zinc-400">Gutschein-Seltenheit (Karte)</span>
+                <select
+                  value={editing.cardRarity ?? AUTO_RARITY}
+                  onChange={(e) => setEditing((prev) => prev ? { ...prev, cardRarity: e.target.value } : null)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none"
+                >
+                  <option value={AUTO_RARITY}>Auto</option>
+                  {BONUS_CARD_RARITY_LIST.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+              </label>
+            </div>
+
+            {/* Live-Vorschau der Gutschein-Karte */}
+            <div className="mt-4 rounded-xl border border-white/8 bg-black/20 p-3">
+              <span className="mb-2 block text-xs font-bold text-zinc-300">Vorschau</span>
+              <div className="flex justify-center">
+                <div className="w-[300px] max-w-full">
+                  <AbilityVoucherCard
+                    animateEntry={false}
+                    name={editing.name?.trim() ? editing.name : "Unbenannte Fähigkeit"}
+                    description={editing.description}
+                    icon={editing.icon}
+                    category={editing.category ? ABILITY_CATEGORY_LABELS[editing.category] : undefined}
+                    cardTheme={editing.cardTheme}
+                    cardRarity={editing.cardRarity}
+                    abilityRarity={editing.rarity}
+                  />
+                </div>
+              </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-4">
               {[
