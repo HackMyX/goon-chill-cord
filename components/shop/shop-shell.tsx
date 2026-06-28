@@ -17,6 +17,7 @@ import { ShopCharacterView, type ItemForPreview } from "@/components/shop/shop-c
 import { useSoundManager } from "@/lib/sound-manager";
 import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { purchaseShopItem, getTodayShop, type ShopListingEntry, type ShopCategoryMeta } from "@/lib/actions/shop";
+import { ShopExtrasSection } from "@/components/shop/shop-extras-section";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { useLiveConfig } from "@/lib/use-live-config";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
@@ -984,6 +985,10 @@ export function ShopShell({
             )}
           </div>
         )}
+
+        {/* Extras: abilities + name styles flagged "Im Shop verfügbar" —
+            always shown (independent of the daily item rotation). */}
+        <ShopExtrasSection credits={credits} onCreditsChange={setCredits} />
       </main>
 
       {/* Shared Canvas — one WebGL context for ALL ShopCharacterViews.
