@@ -271,8 +271,13 @@ export async function dropPlinkoBall(input: {
     return { success: false, error: `Nicht genug Credits (benötigt: ${input.betAmount.toLocaleString("de-DE")} CR).` };
   }
 
-  // Simulate ball path
-  const rows = config.rows;
+  // Simulate ball path. The number of pin rows is derived FROM the multiplier
+  // array (buckets = multipliers.length, rows = buckets − 1) so the landing
+  // bucket is ALWAYS a true Binomial(rows, 0.5) draw that maps exactly onto a
+  // multiplier — no index clamping, no probability skew, regardless of what the
+  // legacy `config.rows` field says. Each pin is an independent 50/50 step.
+  const multipliers = riskDef.multipliers;
+  const rows = Math.max(2, multipliers.length - 1);
   const path: number[] = [0];
   let pos = 0;
   for (let r = 0; r < rows; r++) {
@@ -280,11 +285,9 @@ export async function dropPlinkoBall(input: {
     pos += goRight;
     path.push(pos);
   }
-  const bucketIndex = pos;
-  const multipliers = riskDef.multipliers;
-  const bucketCount = multipliers.length;
-  const clampedIdx = Math.min(bucketIndex, bucketCount - 1);
-  let multiplier = multipliers[clampedIdx];
+  const bucketIndex = pos;            // 0 … rows == 0 … multipliers.length−1
+  const clampedIdx = bucketIndex;     // already in range — kept for the DB column name
+  let multiplier = multipliers[bucketIndex];
 
   // Equipped ability (mutually exclusive): boost all multipliers, recover part
   // of a worst-slot loss, or globally boost winnings (credit_bonus).

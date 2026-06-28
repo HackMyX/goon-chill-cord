@@ -40,6 +40,8 @@ interface GameState {
   apple: Pos;
   goldenApple: Pos | null;
   goldenAppleMovesLeft: number;
+  /** Normal apples remaining until the next deterministic golden-apple spawn. */
+  applesUntilGolden: number;
   dir: Dir;
   nextDir: Dir;
   score: number;
@@ -60,6 +62,16 @@ interface GameState {
   applesUntilShrink: number;
   shrinkFlashFrames: number;
   speedTrails: { x: number; y: number; alpha: number }[];
+}
+
+/** Effective golden-apple interval: the admin's `goldenAppleEveryN`, optionally
+ *  shortened — deterministically, never randomly — by an equipped
+ *  snake_gold_apple_rate ability. Returns 0 when goldens are off. */
+function effectiveGoldenEveryN(everyN: number, goldRate: number): number {
+  if (!Number.isFinite(everyN) || everyN <= 0) return 0;
+  const base = Math.max(1, Math.round(everyN));
+  if (goldRate > 0) return Math.max(2, Math.round(base * (1 - Math.min(0.75, goldRate))));
+  return base;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -881,6 +893,7 @@ export function SnakeShell({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameState>({
     snake: [], prevSnake: [], apple: { x: 5, y: 5 }, goldenApple: null, goldenAppleMovesLeft: 0,
+    applesUntilGolden: 0,
     dir: "RIGHT", nextDir: "RIGHT", score: 0, creditsEarned: 0,
     phase: "idle", mode: "x1",
     particles: [], ambientParticles: [], floatingTexts: [],
@@ -1062,22 +1075,29 @@ export function SnakeShell({
 
         if (g.phase !== "playing") return;
 
-        const goldRate = goldAppleRateRef.current;
-        if (modeCfg.goldenAppleEnabled && !g.goldenApple
-          && g.score % modeCfg.bonusEveryN !== 0
-          && (g.score % Math.max(1, Math.floor(modeCfg.bonusEveryN / 2)) === 0
-              || (goldRate > 0 && Math.random() < goldRate))) {
-          const gMin = g.mode === "grind" ? g.shrinkCount : 0;
-          const gMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
-          const gMargin = (g.mode === "grind" && g.applesUntilShrink === 1) ? 1 : 0;
-          // Spawn within 5 cells of the current head so fast reactions are rewarded
-          const GOLDEN_RADIUS = 5;
-          const gRminX = Math.max(gMin + gMargin, newHead.x - GOLDEN_RADIUS);
-          const gRmaxX = Math.min(gMax - gMargin, newHead.x + GOLDEN_RADIUS);
-          const gRminY = Math.max(gMin + gMargin, newHead.y - GOLDEN_RADIUS);
-          const gRmaxY = Math.min(gMax - gMargin, newHead.y + GOLDEN_RADIUS);
-          g.goldenApple = randomPos(BOARD, [newHead, ...g.snake, g.apple], gRminX, gRmaxX, gRminY, gRmaxY);
-          g.goldenAppleMovesLeft = modeCfg.goldenAppleLifeApples;
+        // Deterministic golden-apple cadence — fully decoupled from the bonus
+        // system. The counter ticks ONLY on normal apples and ONLY while no
+        // golden is on the board, so a golden appears after EXACTLY
+        // goldenAppleEveryN normal apples (the admin setting, taken literally).
+        // The snake_gold_apple_rate ability shortens the interval
+        // deterministically — it never injects random extra spawns.
+        const goldEveryN = effectiveGoldenEveryN(modeCfg.goldenAppleEveryN, goldAppleRateRef.current);
+        if (modeCfg.goldenAppleEnabled && goldEveryN > 0 && ateApple && !ateGolden && !g.goldenApple) {
+          g.applesUntilGolden--;
+          if (g.applesUntilGolden <= 0) {
+            const gMin = g.mode === "grind" ? g.shrinkCount : 0;
+            const gMax = g.mode === "grind" ? BOARD - 1 - g.shrinkCount : BOARD - 1;
+            const gMargin = (g.mode === "grind" && g.applesUntilShrink === 1) ? 1 : 0;
+            // Spawn within 5 cells of the current head so fast reactions are rewarded
+            const GOLDEN_RADIUS = 5;
+            const gRminX = Math.max(gMin + gMargin, newHead.x - GOLDEN_RADIUS);
+            const gRmaxX = Math.min(gMax - gMargin, newHead.x + GOLDEN_RADIUS);
+            const gRminY = Math.max(gMin + gMargin, newHead.y - GOLDEN_RADIUS);
+            const gRmaxY = Math.min(gMax - gMargin, newHead.y + GOLDEN_RADIUS);
+            g.goldenApple = randomPos(BOARD, [newHead, ...g.snake, g.apple], gRminX, gRmaxX, gRminY, gRmaxY);
+            g.goldenAppleMovesLeft = modeCfg.goldenAppleLifeApples;
+            g.applesUntilGolden = goldEveryN; // reset for the next cycle
+          }
         }
 
         // Body growth. Farm never grows. A golden apple with tail-loss NET-removes
@@ -1291,6 +1311,7 @@ export function SnakeShell({
     g.apple = initApple;
     g.goldenApple = null;
     g.goldenAppleMovesLeft = 0;
+    g.applesUntilGolden = effectiveGoldenEveryN(modeCfg.goldenAppleEveryN, goldAppleRateRef.current);
     g.dir = "RIGHT"; g.nextDir = "RIGHT";
     g.score = 0; g.creditsEarned = 0;
     g.phase = "playing"; g.mode = mode;

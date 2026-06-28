@@ -212,6 +212,9 @@ function ModeEditor<T extends SnakeModeConfig>({
         <Row label="Goldener Apfel aktiv">
           <Toggle checked={cfg.goldenAppleEnabled} onChange={(v) => set("goldenAppleEnabled" as keyof T, v as T[keyof T])} />
         </Row>
+        <Row label="Goldener Apfel alle N Äpfel" hint="EXAKT alle N normalen Äpfel erscheint ein goldener (deterministisch, unabhängig vom Bonus-System). 1 = nach jedem Apfel.">
+          <Num value={cfg.goldenAppleEveryN} min={1} max={100} onChange={(v) => set("goldenAppleEveryN" as keyof T, v as T[keyof T])} />
+        </Row>
         <Row label="CR-Multiplikator" hint="x mal den normalen CR-Wert">
           <Num value={cfg.goldenAppleCrMultiplier} min={1} max={50} step={0.5} onChange={(v) => set("goldenAppleCrMultiplier" as keyof T, v as T[keyof T])} />
         </Row>

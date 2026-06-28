@@ -104,7 +104,7 @@ function AnimatedCredits({ value }: { value: number }) {
   return <span key={value}>{fmt(display)}</span>;
 }
 
-function PersonalStatsPanel() {
+function PersonalStatsPanel({ reloadKey = 0 }: { reloadKey?: number }) {
   const [stats, setStats] = useState<PlinkoPersonalStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -115,7 +115,7 @@ function PersonalStatsPanel() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, reloadKey]);
 
   if (loading) return <div className="text-xs text-zinc-500 py-2">Lade Statistiken…</div>;
   if (!stats || stats.totalPlays === 0) return null;
@@ -152,7 +152,7 @@ function PersonalStatsPanel() {
   );
 }
 
-function HistoryPanel({ onRefresh }: { onRefresh?: () => void }) {
+function HistoryPanel({ reloadKey = 0 }: { reloadKey?: number }) {
   const [history, setHistory] = useState<PlinkoHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -163,8 +163,7 @@ function HistoryPanel({ onRefresh }: { onRefresh?: () => void }) {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { if (onRefresh) { onRefresh(); } }, [onRefresh]);
+  useEffect(() => { load(); }, [load, reloadKey]);
 
   if (loading) return <div className="text-xs text-zinc-500 py-2">Lade Verlauf…</div>;
   if (history.length === 0) return <p className="text-center text-xs text-zinc-600 py-2">Noch kein Spiel</p>;
@@ -193,13 +192,13 @@ function HistoryPanel({ onRefresh }: { onRefresh?: () => void }) {
   );
 }
 
-function LeaderboardPanel({ config }: { config: PlinkoConfig }) {
+function LeaderboardPanel({ config, reloadKey = 0 }: { config: PlinkoConfig; reloadKey?: number }) {
   const [entries, setEntries] = useState<PlinkoLeaderEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getTopPlinkoWins(config.leaderboardSize).then((e) => { setEntries(e); setLoading(false); });
-  }, [config.leaderboardSize]);
+  }, [config.leaderboardSize, reloadKey]);
 
   if (loading) return <div className="text-xs text-zinc-500 py-2">Lade Rangliste…</div>;
   if (entries.length === 0) return <p className="text-center text-xs text-zinc-600 py-2">Noch keine Einträge</p>;
@@ -264,7 +263,15 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
   const [bigWinOverlay, setBigWinOverlay] = useState<{ mult: number; payout: number } | null>(null);
   const sound = useSoundManager();
   const autoBetRef = useRef(false);
-  const historyRefreshRef = useRef(0);
+  // Server result is stashed here and only committed to the visible UI (last
+  // result, session history, credits, big-win overlay) when the ball LANDS.
+  const pendingResultRef = useRef<PlayResult | null>(null);
+  // Bumped on every LANDED drop so the history/leaderboard/stats panels reload.
+  const [resultsVersion, setResultsVersion] = useState(0);
+  // Always-fresh pointer to doDropBall so the auto-bet effect never calls a
+  // stale closure (the old setTimeout-in-callback version captured canPlay=false
+  // while the previous ball was still animating and killed auto-bet instantly).
+  const doDropRef = useRef<() => void>(() => {});
 
   const riskDef = config.riskLevels.find((r) => r.key === activeRisk) ?? config.riskLevels[0];
   const remaining = Math.max(0, config.hourlyBallLimit - usedThisHour);
@@ -280,7 +287,7 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
   useEffect(() => { autoBetRef.current = autoBet; }, [autoBet]);
 
   function doDropBall() {
-    if (!canPlay) { autoBetRef.current && setAutoBet(false); return; }
+    if (!canPlay) { if (autoBetRef.current) setAutoBet(false); return; }
     sound.click?.();
     setError(null);
     setCurrentPath(null);
@@ -288,6 +295,8 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
     setCurrentMult(null);
 
     const thisBet = betAmount;
+    const riskLabel = riskDef?.label ?? activeRisk;
+    const riskEmoji = riskDef?.emoji ?? "";
     startTransition(async () => {
       const res = await dropPlinkoBall({ riskLevel: activeRisk, betAmount: thisBet });
       if (!res.success) {
@@ -296,39 +305,50 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
         setAutoBet(false);
         return;
       }
-      const riskLabel = riskDef?.label ?? activeRisk;
-      const riskEmoji = riskDef?.emoji ?? "";
+      // Stash the outcome — it stays hidden until the ball reaches the bottom.
+      // Only the board's animation inputs (path/bucket/mult) are set now.
+      pendingResultRef.current = {
+        bucketIndex: res.bucketIndex!, multiplier: res.multiplier!, payout: res.payout!,
+        betAmount: thisBet, newCredits: res.newCredits!, path: res.path!, riskLabel, riskEmoji,
+      };
       setCurrentPath(res.path!);
       setCurrentBucket(res.bucketIndex!);
       setCurrentMult(res.multiplier!);
       setAnimating(true);
       setUsedThisHour((u) => u + 1);
-      setSessionHistory((h) => [
-        { bucketIndex: res.bucketIndex!, multiplier: res.multiplier!, payout: res.payout!, betAmount: thisBet, newCredits: res.newCredits!, path: res.path!, riskLabel, riskEmoji },
-        ...h.slice(0, 49),
-      ]);
-
-      if (res.multiplier! >= 5) {
-        setBigWinOverlay({ mult: res.multiplier!, payout: res.payout! });
-        setTimeout(() => setBigWinOverlay(null), 3000);
-      }
     });
   }
+  // Keep the ref pointed at the latest closure for the auto-bet effect.
+  doDropRef.current = doDropBall;
 
+  // Called by the board the instant the ball settles in a bucket — THIS is
+  // where the result becomes visible (result panel, session list, credits,
+  // big-win overlay, sounds, panel refresh).
   function handleAnimationEnd() {
     setAnimating(false);
-    if (sessionHistory[0]) {
-      setCredits(sessionHistory[0].newCredits);
-      if (sessionHistory[0].multiplier >= 2) sound.save?.();
-      sound.xpGain?.();
+    const r = pendingResultRef.current;
+    if (!r) return;
+    pendingResultRef.current = null;
+    setSessionHistory((h) => [r, ...h.slice(0, 49)]);
+    setCredits(r.newCredits);
+    setResultsVersion((v) => v + 1);
+    if (r.multiplier >= 5) {
+      setBigWinOverlay({ mult: r.multiplier, payout: r.payout });
+      setTimeout(() => setBigWinOverlay(null), 3000);
     }
-    // auto-bet: queue next drop after short delay
-    if (autoBetRef.current) {
-      setTimeout(() => {
-        if (autoBetRef.current) doDropBall();
-      }, 400);
-    }
+    if (r.multiplier >= 2) sound.save?.();
+    sound.xpGain?.();
   }
+
+  // Effect-driven auto-bet: re-evaluates whenever the play-state settles, so it
+  // always sees fresh values. Schedules the next drop a beat after the previous
+  // ball lands; stops cleanly when credits/limit run out.
+  useEffect(() => {
+    if (!autoBet || animating || pending) return;
+    if (!canPlay) { setAutoBet(false); return; }
+    const t = setTimeout(() => doDropRef.current(), 450);
+    return () => clearTimeout(t);
+  }, [autoBet, animating, pending, canPlay]);
 
   const lastResult = sessionHistory[0] ?? null;
   const sessionNet = sessionHistory.reduce((s, h) => s + h.payout - h.betAmount, 0);
@@ -416,7 +436,7 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
           {/* Board — fills all remaining space on desktop */}
           <div className="flex-none lg:flex-1 lg:min-h-0 rounded-2xl overflow-hidden" style={{ minHeight: "min(55vw, 360px)" }}>
           <PlinkoBoard
-            rows={config.rows}
+            rows={Math.max(2, (riskDef?.multipliers.length ?? 13) - 1)}
             riskLevel={riskDef!}
             path={currentPath}
             bucketIndex={currentBucket}
@@ -544,7 +564,7 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
           )}
 
           {config.showHistory && (
-            <div className="flex-none lg:hidden"><PersonalStatsPanel /></div>
+            <div className="flex-none lg:hidden"><PersonalStatsPanel reloadKey={resultsVersion} /></div>
           )}
 
           </div>{/* end LEFT column */}
@@ -637,14 +657,14 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
                     </button>
                   )}
                 </div>
-                {activeTab === "verlauf" && config.showHistory && <HistoryPanel />}
-                {activeTab === "leaderboard" && config.showLeaderboard && <LeaderboardPanel config={config} />}
+                {activeTab === "verlauf" && config.showHistory && <HistoryPanel reloadKey={resultsVersion} />}
+                {activeTab === "leaderboard" && config.showLeaderboard && <LeaderboardPanel config={config} reloadKey={resultsVersion} />}
               </div>
             )}
 
             {/* Personal stats — desktop sidebar */}
             {config.showHistory && (
-              <div className="hidden lg:block"><PersonalStatsPanel /></div>
+              <div className="hidden lg:block"><PersonalStatsPanel reloadKey={resultsVersion} /></div>
             )}
 
             {/* Info footer */}

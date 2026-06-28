@@ -53,6 +53,11 @@ export interface SnakeModeConfig {
   bonusCrFlat: number;
   bonusMultiplierApples: number;
   goldenAppleEnabled: boolean;
+  /** A golden apple spawns after EXACTLY this many normal apples are eaten
+   *  (deterministic, per mode, decoupled from the bonus system). Min 1.
+   *  An equipped snake_gold_apple_rate ability shortens this interval
+   *  deterministically — it never injects random extra spawns. */
+  goldenAppleEveryN: number;
   goldenAppleCrMultiplier: number;
   goldenAppleLifeApples: number;
   goldenAppleTailLoss: number;       // snake blocks removed when golden apple eaten (0 = none)
@@ -113,6 +118,7 @@ export const DEFAULT_X1_CONFIG: SnakeModeConfig = {
   bonusCrFlat: 80,
   bonusMultiplierApples: 5,
   goldenAppleEnabled: true,
+  goldenAppleEveryN: 5,
   goldenAppleCrMultiplier: 5,
   goldenAppleLifeApples: 8,
   goldenAppleTailLoss: 0,
@@ -144,6 +150,7 @@ export const DEFAULT_X2_CONFIG: SnakeModeConfig = {
   bonusCrFlat: 150,
   bonusMultiplierApples: 5,
   goldenAppleEnabled: true,
+  goldenAppleEveryN: 5,
   goldenAppleCrMultiplier: 5,
   goldenAppleLifeApples: 6,
   goldenAppleTailLoss: 0,
@@ -175,6 +182,7 @@ export const DEFAULT_GRIND_CONFIG: SnakeGrindConfig = {
   bonusCrFlat: 100,
   bonusMultiplierApples: 5,
   goldenAppleEnabled: true,
+  goldenAppleEveryN: 6,
   goldenAppleCrMultiplier: 4,
   goldenAppleLifeApples: 15,
   goldenAppleTailLoss: 0,
@@ -211,6 +219,7 @@ export const DEFAULT_FARM_CONFIG: SnakeModeConfig = {
   bonusCrFlat: 0,
   bonusMultiplierApples: 0,
   goldenAppleEnabled: false,
+  goldenAppleEveryN: 5,
   goldenAppleCrMultiplier: 1,
   goldenAppleLifeApples: 0,
   goldenAppleTailLoss: 0,

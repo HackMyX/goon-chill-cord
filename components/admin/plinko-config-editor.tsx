@@ -226,7 +226,7 @@ export function PlinkoConfigEditor({ config: initialConfig }: { config: PlinkoCo
             tip="Maximale Bälle pro Kalendertag und Nutzer. 0 = kein Tageslimit (nur Stundenlimit gilt)."
             onChange={(v) => setForm((f) => ({ ...f, dailyBallLimit: v }))} />
           <NumInput label="Anzahl Reihen (4–16)" value={form.rows} min={4} max={16}
-            tip="Anzahl der Stiftreihen im Plinko-Brett. Mehr Reihen = mehr Felder und größere Spielfläche, aber langsamere Simulation. Empfehlung: 12."
+            tip="Referenzwert für das Layout. WICHTIG: Die tatsächliche Feld-/Bucket-Anzahl ergibt sich pro Risikostufe aus der ANZAHL der Multiplikatoren weiter unten (Buckets = Multiplikatoren, Reihen = Buckets − 1). Für 12 Reihen müssen also genau 13 Multiplikatoren gesetzt sein. So sind die Wahrscheinlichkeiten immer exakt binomial."
             onChange={(v) => setForm((f) => ({ ...f, rows: v }))} />
           <NumInput label="Max Gewinn (CR, 0=∞)" value={form.maxWinCr} min={0} max={10_000_000}
             tip="Obergrenze für einen einzelnen Gewinn in Credits. Schützt die Economy vor extrem hohen Auszahlungen bei kombinierten hohen Einsätzen und Multiplikatoren. 0 = kein Limit."
