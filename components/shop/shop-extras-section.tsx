@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Sparkles, Loader2, Check, Coins, Palette, Zap } from "lucide-react";
+import { Sparkles, Loader2, Check, Coins, Palette, Zap, Award, Ticket } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 import { getShopExtras, purchaseShopExtra, type ShopExtra } from "@/lib/actions/shop-extras";
 import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
+
+const TYPE_ICON: Record<string, typeof Zap> = { ability: Zap, name_style: Palette, badge: Award, voucher: Ticket };
 
 const RARITY_COL: Record<string, string> = {
   selten: "#60a5fa", mythisch: "#c084fc", ultra: "#fbbf24", normal: "#9ca3af",
@@ -14,18 +16,10 @@ const RARITY_LABEL: Record<string, string> = {
 };
 
 function extraToSubject(e: ShopExtra): PreviewSubject {
-  if (e.type === "name_style") {
-    return { kind: "name_style", styleKey: e.key, displayName: e.name };
-  }
-  return {
-    kind: "ability",
-    abilityKey: e.key,
-    name: e.name,
-    description: e.description,
-    category: e.category,
-    rarity: e.rarity,
-    icon: e.icon,
-  };
+  if (e.type === "name_style") return { kind: "name_style", styleKey: e.key, displayName: e.name };
+  if (e.type === "badge") return { kind: "badge", badgeKey: e.key, badgeText: e.name };
+  if (e.type === "voucher") return { kind: "generic", icon: "🎟️", name: e.name, accent: "#e879f9" };
+  return { kind: "ability", abilityKey: e.key, name: e.name, description: e.description, category: e.category, rarity: e.rarity, icon: e.icon };
 }
 
 /**
@@ -48,11 +42,11 @@ export function ShopExtrasSection({ credits, onCreditsChange }: { credits: numbe
 
   const buy = async (e: ShopExtra) => {
     if (e.owned || credits < e.priceCr) return;
-    setBusyKey(`${e.type}:${e.key}`);
+    setBusyKey(e.listingId);
     setError(null);
     sound.click();
     try {
-      const res = await purchaseShopExtra({ type: e.type, key: e.key });
+      const res = await purchaseShopExtra({ listingId: e.listingId });
       if (!res.ok) { setError(res.error ?? "Kauf fehlgeschlagen."); sound.error?.(); }
       else {
         sound.purchaseSuccess?.();
@@ -76,8 +70,8 @@ export function ShopExtrasSection({ credits, onCreditsChange }: { credits: numbe
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {extras.map((e) => {
           const col = RARITY_COL[e.rarity] ?? "#a78bfa";
-          const key = `${e.type}:${e.key}`;
-          const Icon = e.type === "name_style" ? Palette : Zap;
+          const key = e.listingId;
+          const Icon = TYPE_ICON[e.type] ?? Zap;
           const cant = e.owned || credits < e.priceCr;
           return (
             <div key={key} className="flex flex-col overflow-hidden rounded-2xl border bg-white/[0.02] p-3"

@@ -371,6 +371,7 @@ function CategoryCard({ category, onChanged }: { category: ShopCategory; onChang
       color: form.color,
       enabled: form.enabled,
       sortOrder: form.sortOrder,
+      contentType: form.contentType,
       rarityFilter: form.rarityFilter,
       typeFilter: form.typeFilter,
       itemCount: form.itemCount,
@@ -453,7 +454,20 @@ function CategoryCard({ category, onChanged }: { category: ShopCategory; onChang
             />
           </label>
           <label className="flex flex-col gap-1 text-xs text-zinc-400">
-            Item-Anzahl/Tag
+            Inhalt
+            <select
+              value={form.contentType ?? "item"}
+              onChange={(e) => setForm((f) => ({ ...f, contentType: e.target.value as typeof f.contentType }))}
+              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+            >
+              <option value="item">Items</option>
+              <option value="ability">Fähigkeiten</option>
+              <option value="name_style">Name-Styles</option>
+              <option value="badge">Badges</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Anzahl/Tag
             <input
               type="number"
               min={0}

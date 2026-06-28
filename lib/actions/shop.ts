@@ -16,6 +16,7 @@ import {
 } from "@/lib/shop";
 import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
 import type { Rarity } from "@/lib/cases";
+import { grantAbility, grantNameStyle, grantBadge, grantCaseVoucher, grantGameBonus } from "@/lib/rewards-grant";
 
 function logServerError(scope: string, message: string, detail?: string) {
   console.error(`[${scope}] ${message}`, detail ?? "");
@@ -36,6 +37,8 @@ export interface ShopCategoryDayRule {
   itemCountOverride: number | null;
 }
 
+export type ShopContentType = "item" | "ability" | "name_style" | "badge";
+
 export interface ShopCategory {
   id: string;
   name: string;
@@ -43,6 +46,8 @@ export interface ShopCategory {
   color: string;
   enabled: boolean;
   sortOrder: number;
+  /** Which pool this category auto-draws from (default 'item'). */
+  contentType: ShopContentType;
   rarityFilter: Rarity[] | null;
   typeFilter: string[] | null;
   itemCount: number;
@@ -50,6 +55,12 @@ export interface ShopCategory {
   priceMultiplierMax: number;
   dayRules: ShopCategoryDayRule[];
 }
+
+/** Fallback price (before the category multiplier) for non-item givables that
+ *  don't carry their own price — keyed by rarity. */
+const RARITY_BASE_PRICE: Record<string, number> = {
+  normal: 1500, selten: 6000, mythisch: 30000, ultra: 120000,
+};
 
 function mapDayRule(row: {
   id: string;
@@ -97,6 +108,7 @@ export async function listShopCategories(): Promise<ShopCategory[]> {
     color: c.color,
     enabled: c.enabled,
     sortOrder: c.sort_order,
+    contentType: ((c.content_type as ShopContentType) ?? "item"),
     rarityFilter: (c.rarity_filter as Rarity[] | null) ?? null,
     typeFilter: c.type_filter,
     itemCount: c.item_count,
@@ -113,6 +125,7 @@ export interface UpsertShopCategoryInput {
   color: string;
   enabled: boolean;
   sortOrder: number;
+  contentType?: ShopContentType;
   rarityFilter: Rarity[] | null;
   typeFilter: string[] | null;
   itemCount: number;
@@ -137,6 +150,7 @@ export async function upsertShopCategory(input: UpsertShopCategoryInput): Promis
     color: input.color,
     enabled: input.enabled,
     sort_order: Math.floor(input.sortOrder),
+    content_type: input.contentType ?? "item",
     rarity_filter: input.rarityFilter,
     type_filter: input.typeFilter,
     item_count: Math.floor(input.itemCount),
@@ -414,6 +428,32 @@ type ShopItemCandidate = { id: string; rarity: Rarity; type: string; price_cr: n
  * original flat global-settings behavior so nothing breaks for sites that
  * haven't set categories up yet.
  */
+type GivablePoolEntry = { key: string; rarity: Rarity; base: number; text?: string | null };
+
+/** Candidate pool for a non-item shop category. Draws from ALL enabled
+ *  definitions of the type (no per-definition shop flag) — the category config
+ *  controls how many / which rarities actually get listed. */
+async function fetchGivablePool(admin: ReturnType<typeof createAdminClient>, ct: "ability" | "name_style" | "badge"): Promise<GivablePoolEntry[]> {
+  if (ct === "ability") {
+    const { data } = await admin.from("ability_definitions").select("key, rarity, shop_price_cr").eq("enabled", true);
+    return (data ?? []).map((r) => {
+      const rarity = (r.rarity as Rarity) ?? "selten";
+      const price = Number(r.shop_price_cr ?? 0);
+      return { key: r.key as string, rarity, base: price > 0 ? price : (RARITY_BASE_PRICE[rarity] ?? 6000) };
+    });
+  }
+  if (ct === "name_style") {
+    const { data } = await admin.from("name_styles").select("key, rarity, shop_price_cr");
+    return (data ?? []).map((r) => {
+      const rarity = (r.rarity as Rarity) ?? "selten";
+      const price = Number(r.shop_price_cr ?? 0);
+      return { key: r.key as string, rarity, base: price > 0 ? price : (RARITY_BASE_PRICE[rarity] ?? 6000) };
+    });
+  }
+  const { data } = await admin.from("badge_definitions").select("key, label");
+  return (data ?? []).map((r) => ({ key: r.key as string, rarity: "selten" as Rarity, base: RARITY_BASE_PRICE["selten"], text: (r.label as string) ?? null }));
+}
+
 async function ensureShopGenerated(dateKey: string): Promise<void> {
   const admin = createAdminClient();
   const settings = await getShopSettings();
@@ -447,6 +487,7 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
     color: c.color,
     enabled: c.enabled,
     sortOrder: c.sort_order,
+    contentType: ((c.content_type as ShopContentType) ?? "item"),
     rarityFilter: (c.rarity_filter as Rarity[] | null) ?? null,
     typeFilter: c.type_filter,
     itemCount: c.item_count,
@@ -455,15 +496,7 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
     dayRules: (allRuleRows ?? []).filter((r) => r.category_id === c.id).map(mapDayRule),
   }));
 
-  const newRows: {
-    shop_date: string;
-    item_id: string;
-    price_cr: number;
-    purchase_limit: number;
-    featured: boolean;
-    source: "auto";
-    category_id: string | null;
-  }[] = [];
+  const newRows: Record<string, unknown>[] = [];
 
   if (categories.length === 0) {
     // Legacy fallback — no categories configured at all.
@@ -479,6 +512,7 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
         const basePrice = Math.max(item.price_cr, 50);
         newRows.push({
           shop_date: dateKey,
+          listing_type: "item",
           item_id: item.id,
           price_cr: roundToNicePrice(basePrice * multiplier),
           purchase_limit: 1,
@@ -490,37 +524,54 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
       }
     }
   } else {
-    // One big pool, fetched once — each category below filters its own
-    // slice out of it client-side rather than re-querying per category.
+    // One big item pool, fetched once — item categories filter their slice
+    // client-side. Non-item categories pull from their own givable pool.
     const { data: allItems } = await admin.from("items").select("id, rarity, type, price_cr");
     const itemPool = (allItems ?? []) as ShopItemCandidate[];
 
     for (const category of categories) {
       const rule = resolveCategoryRuleForDate(category, dateKey);
       if (!rule.enabled || rule.itemCount <= 0) continue;
+      const priceMult = () => category.priceMultiplierMin + Math.random() * (category.priceMultiplierMax - category.priceMultiplierMin);
 
-      const candidates = itemPool.filter(
-        (item) =>
-          !excludeIds.has(item.id) &&
-          (rule.rarityFilter === null || rule.rarityFilter.includes(item.rarity)) &&
-          (rule.typeFilter === null || rule.typeFilter.includes(item.type))
-      );
-      if (candidates.length === 0) continue;
-
-      const chosen = pickWeightedItems(candidates, rule.itemCount);
-      for (const item of chosen) {
-        const multiplier = category.priceMultiplierMin + Math.random() * (category.priceMultiplierMax - category.priceMultiplierMin);
-        const basePrice = Math.max(item.price_cr, 50);
-        newRows.push({
-          shop_date: dateKey,
-          item_id: item.id,
-          price_cr: roundToNicePrice(basePrice * multiplier),
-          purchase_limit: 1,
-          featured: item.rarity === "mythisch" || item.rarity === "ultra",
-          source: "auto",
-          category_id: category.id,
-        });
-        excludeIds.add(item.id);
+      if (category.contentType === "item") {
+        const candidates = itemPool.filter(
+          (item) =>
+            !excludeIds.has(item.id) &&
+            (rule.rarityFilter === null || rule.rarityFilter.includes(item.rarity)) &&
+            (rule.typeFilter === null || rule.typeFilter.includes(item.type))
+        );
+        if (candidates.length === 0) continue;
+        for (const item of pickWeightedItems(candidates, rule.itemCount)) {
+          const basePrice = Math.max(item.price_cr, 50);
+          newRows.push({
+            shop_date: dateKey, listing_type: "item", item_id: item.id,
+            price_cr: roundToNicePrice(basePrice * priceMult()), purchase_limit: 1,
+            featured: item.rarity === "mythisch" || item.rarity === "ultra", source: "auto", category_id: category.id,
+          });
+          excludeIds.add(item.id);
+        }
+      } else {
+        // Non-item: auto-draws from ALL enabled definitions of this type — no
+        // per-definition "Im Shop verfügbar" flag required (the category IS the gate).
+        const pool = await fetchGivablePool(admin, category.contentType);
+        const candidates = pool.filter(
+          (p) => !excludeIds.has(`${category.contentType}:${p.key}`) &&
+            (rule.rarityFilter === null || rule.rarityFilter.includes(p.rarity)),
+        );
+        if (candidates.length === 0) continue;
+        for (const c of pickWeightedItems(candidates.map((p) => ({ id: p.key, rarity: p.rarity, base: p.base, text: p.text })), rule.itemCount)) {
+          const row: Record<string, unknown> = {
+            shop_date: dateKey, listing_type: category.contentType,
+            price_cr: roundToNicePrice(Math.max(c.base, 100) * priceMult()), purchase_limit: 1,
+            featured: c.rarity === "mythisch" || c.rarity === "ultra", source: "auto", category_id: category.id,
+          };
+          if (category.contentType === "ability") row.ability_key = c.id;
+          else if (category.contentType === "name_style") row.name_style_key = c.id;
+          else if (category.contentType === "badge") { row.badge_key = c.id; row.badge_text = c.text ?? null; }
+          newRows.push(row);
+          excludeIds.add(`${category.contentType}:${c.id}`);
+        }
       }
     }
   }
@@ -693,13 +744,14 @@ export async function purchaseShopItem(listingId: string): Promise<ShopPurchaseR
 
   const { data: listing } = await admin
     .from("shop_listings")
-    .select("id, item_id, price_cr, purchase_limit, shop_date, item:items(name)")
+    .select("id, item_id, listing_type, ability_key, name_style_key, badge_key, badge_text, voucher_config, price_cr, purchase_limit, shop_date, item:items(name)")
     .eq("id", listingId)
     .single();
 
   if (!listing || listing.shop_date !== today) {
     return { success: false, error: "Dieses Angebot ist nicht mehr verfügbar." };
   }
+  const listingType = (listing.listing_type as string) ?? "item";
 
   const { count: alreadyBought } = await admin
     .from("shop_purchases")
@@ -731,16 +783,27 @@ export async function purchaseShopItem(listingId: string): Promise<ShopPurchaseR
     return { success: false, error: "Kauf fehlgeschlagen — bitte erneut versuchen." };
   }
 
-  const { error: invError } = await admin.from("inventory").insert({
-    user_id: user.id,
-    item_id: listing.item_id,
-    equipped: false,
-  });
-  if (invError) {
-    // Roll back the charge since the item was never actually delivered.
-    await admin.from("profiles").update({ credits: profile.credits }).eq("id", user.id);
-    logServerError("Shop", "purchase inventory insert failed", invError.message);
-    return { success: false, error: "Kauf fehlgeschlagen — bitte erneut versuchen." };
+  // Deliver the purchase. Items go to the inventory; every other type is granted
+  // through the central reward granters. On ANY failure the charge is rolled back.
+  let deliveredName = "ein Item";
+  const rollback = async () => { await admin.from("profiles").update({ credits: profile.credits }).eq("id", user.id); };
+  if (listingType === "item") {
+    const { error: invError } = await admin.from("inventory").insert({ user_id: user.id, item_id: listing.item_id, equipped: false });
+    if (invError) { await rollback(); logServerError("Shop", "purchase inventory insert failed", invError.message); return { success: false, error: "Kauf fehlgeschlagen — bitte erneut versuchen." }; }
+    deliveredName = (listing.item as unknown as { name: string } | null)?.name ?? "ein Item";
+  } else {
+    let g: { ok: boolean; error?: string; summary: string };
+    if (listingType === "ability") g = await grantAbility(admin, user.id, { abilityKey: (listing.ability_key as string) ?? "", source: "shop_purchase", sourceDetail: "Shop-Kauf" });
+    else if (listingType === "name_style") g = await grantNameStyle(admin, user.id, { styleKey: (listing.name_style_key as string) ?? "", source: "shop_purchase" });
+    else if (listingType === "badge") g = await grantBadge(admin, user.id, { badgeKey: (listing.badge_key as string) ?? "" });
+    else if (listingType === "voucher") {
+      const vc = (listing.voucher_config ?? {}) as Record<string, unknown>;
+      if ((vc.kind as string) === "game_bonus") g = await grantGameBonus(admin, user.id, { game: vc.game as "plinko" | "snake" | "don", amount: Number(vc.amount ?? 1), durationHours: Number(vc.durationHours ?? 0), source: "shop_purchase" });
+      else g = await grantCaseVoucher(admin, user.id, { mode: (vc.mode as "tier" | "rarity") ?? "tier", tierId: vc.tierId as string | undefined, rarityFloor: vc.rarityFloor as Rarity | undefined, durationHours: Number(vc.durationHours ?? 0), source: "shop_purchase" });
+    }
+    else g = { ok: false, error: "Unbekannter Angebots-Typ.", summary: "" };
+    if (!g.ok) { await rollback(); return { success: false, error: g.error ?? "Kauf fehlgeschlagen." }; }
+    deliveredName = g.summary;
   }
 
   await admin.from("shop_purchases").insert({
@@ -749,7 +812,7 @@ export async function purchaseShopItem(listingId: string): Promise<ShopPurchaseR
     price_paid: listing.price_cr,
   });
 
-  const itemName = (listing.item as unknown as { name: string } | null)?.name ?? "ein Item";
+  const itemName = deliveredName;
 
   try {
     await admin.from("audit_logs").insert({

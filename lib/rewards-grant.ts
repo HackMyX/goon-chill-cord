@@ -124,3 +124,62 @@ export async function grantCaseVoucher(
     : `Gratis-Case (mind. ${RARITY_LABELS[spec.rarityFloor!] ?? spec.rarityFloor})`;
   return { ok: true, summary: `🎟️ ${what}${dur}` };
 }
+
+// ── Ability / name-style / badge (shared by shop + battle pass + level) ───────
+
+export async function grantAbility(
+  admin: Admin,
+  userId: string,
+  opts: { abilityKey: string; durationHours?: number; source?: string; sourceDetail?: string },
+): Promise<{ ok: boolean; error?: string; summary: string }> {
+  if (!opts.abilityKey) return { ok: false, error: "Keine Fähigkeit.", summary: "" };
+  const { data: def } = await admin.from("ability_definitions").select("name").eq("key", opts.abilityKey).maybeSingle();
+  if (!def) return { ok: false, error: "Fähigkeit existiert nicht.", summary: "" };
+  // Skip if already owned (abilities aren't stackable).
+  const { data: owned } = await admin.from("user_abilities").select("id").eq("user_id", userId).eq("ability_key", opts.abilityKey).maybeSingle();
+  if (!owned) {
+    const { error } = await admin.from("user_abilities").insert({
+      user_id: userId,
+      ability_key: opts.abilityKey,
+      source: opts.source ?? "grant",
+      source_detail: opts.sourceDetail ?? null,
+      expires_at: expiryFromHours(opts.durationHours),
+    });
+    if (error) return { ok: false, error: "Fähigkeit konnte nicht vergeben werden.", summary: "" };
+  }
+  return { ok: true, summary: `Fähigkeit: ${(def.name as string) ?? opts.abilityKey}` };
+}
+
+export async function grantNameStyle(
+  admin: Admin,
+  userId: string,
+  opts: { styleKey: string; source?: string },
+): Promise<{ ok: boolean; error?: string; summary: string }> {
+  if (!opts.styleKey) return { ok: false, error: "Kein Name-Style.", summary: "" };
+  try {
+    const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
+    await ensureStyleInDb(opts.styleKey, admin);
+  } catch {
+    return { ok: false, error: "Name-Style konnte nicht angelegt werden.", summary: "" };
+  }
+  const { error } = await admin.from("user_name_styles")
+    .upsert({ user_id: userId, style_key: opts.styleKey, source: opts.source ?? "grant" }, { onConflict: "user_id,style_key", ignoreDuplicates: true });
+  if (error) return { ok: false, error: "Name-Style konnte nicht vergeben werden.", summary: "" };
+  try { const m = await import("@/lib/actions/badges"); void m.checkAndAwardNameStyleBadges(userId); } catch { /* non-fatal */ }
+  return { ok: true, summary: `Name-Style: ${opts.styleKey}` };
+}
+
+export async function grantBadge(
+  admin: Admin,
+  userId: string,
+  opts: { badgeKey: string },
+): Promise<{ ok: boolean; error?: string; summary: string }> {
+  if (!opts.badgeKey) return { ok: false, error: "Kein Badge.", summary: "" };
+  const { data: def } = await admin.from("badge_definitions").select("label").eq("key", opts.badgeKey).maybeSingle();
+  if (!def) return { ok: false, error: "Badge existiert nicht.", summary: "" };
+  const { error } = await admin.from("user_badges")
+    .upsert({ user_id: userId, badge_key: opts.badgeKey }, { onConflict: "user_id,badge_key", ignoreDuplicates: true });
+  if (error) return { ok: false, error: "Badge konnte nicht vergeben werden.", summary: "" };
+  try { const m = await import("@/lib/actions/prio-badges"); await m.recomputeAutoPrioBadges(userId); } catch { /* non-fatal */ }
+  return { ok: true, summary: `Badge: ${(def.label as string) ?? opts.badgeKey}` };
+}
