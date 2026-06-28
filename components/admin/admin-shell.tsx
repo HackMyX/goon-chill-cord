@@ -41,7 +41,7 @@ import { DailyQuestsTab } from "@/components/admin/daily-quests-tab";
 import HomepageChatConfigEditor from "@/components/admin/homepage-chat-config-editor";
 import { FineConfigEditor } from "@/components/admin/fine-config-editor";
 import { AdminGuide } from "@/components/admin/admin-guide";
-import { TAB_GUIDES } from "@/lib/admin-guides";
+import { TAB_GUIDES, guideSearchText } from "@/lib/admin-guides";
 import type { FineConfig } from "@/lib/fine-config-types";
 import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
@@ -318,7 +318,12 @@ const TAB_GROUPS: { title: string; icon: typeof Coins; tabs: Tab[] }[] = [
 // seine Beschreibung/Wörter gefunden wird — nicht nur über die kuratierten Keywords.
 const ADMIN_SEARCH: { label: string; tab: Tab; keywords: string[]; description: string }[] = [
   ...SEARCH_INDEX,
-  ...TABS.map((t) => ({ label: t.label, tab: t.id, keywords: [t.id], description: TAB_DESC[t.id] })),
+  // Pro Tab ein Basis-Eintrag — die keywords enthalten den KOMPLETTEN Guide-Text,
+  // sodass die Suche jedes Wort aus jeder Guide-Zeile findet.
+  ...TABS.map((t) => {
+    const g = TAB_GUIDES[t.id];
+    return { label: t.label, tab: t.id, keywords: g ? [t.id, guideSearchText(g)] : [t.id], description: TAB_DESC[t.id] };
+  }),
 ];
 
 export function AdminShell({

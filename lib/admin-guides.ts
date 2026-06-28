@@ -13,8 +13,30 @@ export interface AdminGuideBlock {
 export interface AdminGuideContent {
   title: string;
   subtitle: string;
-  blocks: AdminGuideBlock[];
+  /** "Hierarchie auf einen Blick" — flow cards (left→right). */
+  hierarchy?: { label: string; text: string }[];
+  /** Numbered "Schritt für Schritt". */
+  steps?: { title: string; text: string }[];
+  /** Highlighted "wie es funktioniert / wichtig" box. */
+  howItWorks?: { heading: string; lines: string[] };
+  /** General bullet sections. */
+  blocks?: AdminGuideBlock[];
+  /** "Begriffe in einem Satz" — term → definition. */
+  glossary?: { term: string; def: string }[];
   tip?: string;
+}
+
+/** Flattens an entire guide into one searchable text blob so the admin search
+ *  can match ANY word from ANY line of the guide. */
+export function guideSearchText(c: AdminGuideContent): string {
+  const parts: string[] = [c.title, c.subtitle];
+  c.hierarchy?.forEach((h) => parts.push(h.label, h.text));
+  c.steps?.forEach((s) => parts.push(s.title, s.text));
+  if (c.howItWorks) parts.push(c.howItWorks.heading, ...c.howItWorks.lines);
+  c.blocks?.forEach((b) => parts.push(b.heading, ...b.lines));
+  c.glossary?.forEach((g) => parts.push(g.term, g.def));
+  if (c.tip) parts.push(c.tip);
+  return parts.join(" ").toLowerCase();
 }
 
 export const TAB_GUIDES: Record<string, AdminGuideContent> = {
@@ -52,22 +74,39 @@ export const TAB_GUIDES: Record<string, AdminGuideContent> = {
 
   shop: {
     title: "So funktioniert der Shop",
-    subtitle: "Tages-Rotation + Automatik für ALLE Givable-Typen.",
+    subtitle: "Tages-Rotation + Automatik für ALLE Givable-Typen — idiotensicher.",
+    hierarchy: [
+      { label: "Automatik", text: "Globale Basis: füllt den Tag bis zur Ziel-Anzahl mit Items." },
+      { label: "Kategorien", text: "Pro Kategorie ein Inhalt-Typ + eigene Regeln." },
+      { label: "Tagesplan", text: "Wochentag-/Sondertag-Regeln überschreiben Kategorien." },
+      { label: "Listing", text: "Ein generierter Eintrag: Item/Fähigkeit/Style/Badge/Gutschein." },
+    ],
+    steps: [
+      { title: "Automatik aktivieren", text: "Ziel-Anzahl Items/Tag + Preisaufschlag min/max + Item-Kategorien für den klassischen globalen Modus." },
+      { title: "Kategorie anlegen", text: "+ Neue Kategorie → Details → Inhalt-Typ wählen (Items / Fähigkeiten / Name-Styles / Badges / Gutscheine)." },
+      { title: "Regeln setzen", text: "Anzahl/Tag, Seltenheits-Filter, Preis-Multiplikator min/max. Optional Wochentag-/Sondertag-Regeln." },
+      { title: "Fertig", text: "Die Automatik zieht ab dem nächsten Shop-Tag automatisch aus dem passenden Pool — kein manuelles Anhaken pro Definition." },
+    ],
+    howItWorks: { heading: "Wie der Tages-Shop generiert wird", lines: [
+      "Einmal pro Shop-Tag: für jede aktive Kategorie wird per Seltenheits-Gewicht die konfigurierte Anzahl aus dem passenden Pool gezogen.",
+      "Item-Kategorien ziehen aus dem Item-Katalog; Fähigkeiten/Styles/Badges aus ALLEN enabled Definitionen; Gutschein-Kategorien erzeugen Gratis-Case-Gutscheine mit Seltenheits-Untergrenze.",
+      "Preis = Basispreis (oder Seltenheits-Standard) × Kategorie-Multiplikator. Manuell eingetragene Listings bleiben immer erhalten.",
+      "Schon heute generiert? Dann greifen Kategorie-Änderungen erst am nächsten Shop-Tag — oder die heutigen Einträge löschen, um sofort neu zu würfeln.",
+    ] },
     blocks: [
-      { heading: "Automatik (oben)", lines: [
-        "Füllt jeden Tag bis zur Ziel-Anzahl mit zufälligen Items aus den gewählten Item-Kategorien. Manuell hinzugefügte Listings bleiben unangetastet.",
-        "Generiert einmal pro Shop-Tag — Änderungen greifen am nächsten Tag (oder heutige Einträge löschen).",
-      ] },
-      { heading: "Kategorien & Tagesplan", lines: [
-        "Jede Kategorie hat einen INHALT-Typ: Items, Fähigkeiten, Name-Styles, Badges oder Gutscheine — die Automatik zieht automatisch aus dem passenden Pool. KEIN manuelles Im-Shop-verfügbar-Anhaken pro Definition nötig.",
-        "Pro Kategorie: Anzahl/Tag, Seltenheits-Filter, Preis-Multiplikator. Wochentag-/Sondertag-Regeln überschreiben das für einzelne Tage.",
-        "Gutschein-Kategorien erzeugen Gratis-Case-Gutscheine nach Seltenheit.",
-      ] },
-      { heading: "Kauf", lines: [
-        "Items landen im Inventar, alles andere wird über die zentralen Grants vergeben (Fähigkeit/Style/Badge/Gutschein) — ein einheitlicher Kaufpfad.",
+      { heading: "Kauf & Vergabe", lines: [
+        "Items landen im Inventar; Fähigkeit/Style/Badge/Gutschein werden über die zentralen Grants vergeben — ein einheitlicher, atomarer Kaufpfad mit Credits-Rückerstattung bei Fehler.",
       ] },
     ],
-    tip: "Für Fähigkeiten im Shop: + Neue Kategorie → Details → Inhalt = Fähigkeiten → Anzahl + Seltenheit.",
+    glossary: [
+      { term: "Inhalt-Typ", def: "Was eine Kategorie verkauft: Item, Fähigkeit, Name-Style, Badge oder Gutschein." },
+      { term: "Ziel-Anzahl", def: "Wie viele Items die globale Automatik pro Tag auffüllt." },
+      { term: "Preis-Multiplikator", def: "Aufschlag auf den Basispreis (min–max, zufällig pro Listing)." },
+      { term: "Tagesplan-Regel", def: "Überschreibt Anzahl/Seltenheit einer Kategorie an bestimmten Wochentagen/Daten." },
+      { term: "Manuelles Listing", def: "Fest eingetragenes Angebot — wird von der Automatik nie überschrieben." },
+      { term: "Featured", def: "Mythisch/Ultra-Angebote werden automatisch hervorgehoben." },
+    ],
+    tip: "Fähigkeiten im Shop: Kategorie mit Inhalt = Fähigkeiten. Gratis-Cases: Inhalt = Gutscheine + Seltenheits-Filter.",
   },
 
   users: {
@@ -126,19 +165,25 @@ export const TAB_GUIDES: Record<string, AdminGuideContent> = {
 
   games: {
     title: "So funktionieren die Spiele-Einstellungen",
-    subtitle: "Snake, Plinko, DON, Mine, Welt/PvP, Charakter.",
-    blocks: [
-      { heading: "Pro Spiel", lines: [
-        "Snake: pro Modus Tempo, Credits/Apfel, Bonus-System, goldener Apfel (alle N Äpfel), Tageslimits.",
-        "Plinko: Einsatz-Limits, Stunden-/Tageslimit, Reihen + Multiplikatoren pro Risiko (RTP beachten!).",
-        "DON: Flip-Limits + Cooldown. Mine: Level-Kurve, Rate, Lager. Welt/PvP & Charakter: Combat-Werte.",
-      ] },
-      { heading: "Wichtig", lines: [
-        "Bei Plinko bestimmen die Multiplikatoren × Wahrscheinlichkeiten den Hausvorteil — Zentrum ist viel wahrscheinlicher als die Ränder.",
-        "Startseiten-Bestenlisten: Reihenfolge/Limit/Profilbild-Modus der Spielelisten.",
-      ] },
+    subtitle: "Snake, Plinko, DON, Mine, Welt/PvP, Charakter — alle Werte.",
+    steps: [
+      { title: "Snake", text: "Pro Modus (Classic/Turbo/Grind/Endless): Tempo, Credits/Apfel, Bonus-System, goldener Apfel alle N Äpfel, Tages-CR- und Tages-Spiel-Limit, Theme." },
+      { title: "Plinko", text: "Einsatz min/max, Stunden-/Tageslimit, Reihen, Multiplikatoren pro Risiko (Niedrig/Mittel/Hoch), Auto-Bet, Visuals." },
+      { title: "DON & Mine", text: "DON: Min/Max-Einsatz, Stunden-/Tageslimit, Cooldown, Gewinnchance, Upgrade-Stufen. Mine: Level-Kurve, CR/Stunde, Lager-Stunden, Upgrade-Kosten." },
+      { title: "Welt & Charakter", text: "PvP/Spawn/Session-Regeln, Monster-Spawn-Raten; Charakter: Schaden, Tempo, Sprung, HP-Regen, Rüstung, Perk-Cap." },
     ],
-    tip: "Bonus-Spielzüge (Gutscheine) heben das Limit pro Zug an; Fähigkeiten wirken zusätzlich.",
+    howItWorks: { heading: "Wichtig: Balance & Hausvorteil", lines: [
+      "Bei Plinko zählt Multiplikator × Wahrscheinlichkeit: das Zentrum (k≈6) ist VIEL wahrscheinlicher als die Ränder. Hohe Rand-Multiplikatoren wirken großzügiger als sie sind — RTP immer binomial-gewichtet denken.",
+      "Tageslimits/Cooldowns bremsen Inflation. Bonus-Spielzüge (Gutscheine) heben das Limit pro Zug an; Fähigkeiten wirken zusätzlich.",
+      "Startseiten-Bestenlisten steuern Reihenfolge, Anzahl und Profilbild-Modus (nur Top 3 oder alle Plätze) der Spielelisten auf der Homepage.",
+    ] },
+    glossary: [
+      { term: "RTP / Hausvorteil", def: "Auszahlungsquote — unter 100 % gewinnt langfristig das Haus." },
+      { term: "Tageslimit", def: "Max. Spielzüge/Credits pro Tag und Spieler." },
+      { term: "Goldener Apfel", def: "Snake: erscheint exakt alle N normalen Äpfel (pro Modus einstellbar)." },
+      { term: "Bonus-Spielzug", def: "Extra-Zug aus einem Gutschein, der über dem normalen Limit greift." },
+    ],
+    tip: "Nach Balance-Änderungen real gegentesten — gerade Plinko-Multiplikatoren wirken anders als die nackten Zahlen vermuten lassen.",
   },
 
   branding: {
@@ -283,36 +328,60 @@ export const TAB_GUIDES: Record<string, AdminGuideContent> = {
 
   level_xp: {
     title: "So funktioniert Level & XP",
-    subtitle: "Level-Kurve, XP-Quellen, Belohnungen, Prestige.",
-    blocks: [
-      { heading: "Kurve & Quellen", lines: [
-        "Pro Level: benötigte XP + Belohnungen (Credits/Fähigkeit/Badge/Name-Style). Bulk-Generator + XP-Kurven-Visualizer.",
-        "XP-Quellen: wie viel XP jede Aktion gibt (Case öffnen, Snake-Score, Plinko-Drop, Streak, Welt-Kill …).",
-      ] },
-      { heading: "Prestige", lines: [
-        "Ab Max-Level zurücksetzen für permanenten XP-Boost. Credits-Rewards werden beim Wiederaufstieg nicht erneut vergeben (Anti-Farm).",
-      ] },
+    subtitle: "Kurve, XP-Quellen, Level-Belohnungen, Prestige.",
+    hierarchy: [
+      { label: "Aktion", text: "Spieler tut etwas (Case öffnen, Snake spielen …)." },
+      { label: "XP-Quelle", text: "Aktion gibt eine konfigurierte XP-Menge." },
+      { label: "Kurve", text: "Gesammelte XP → Level laut benötigter XP pro Stufe." },
+      { label: "Belohnung", text: "Jedes Level kann Rewards auslösen." },
     ],
-    tip: "XP-Multiplikator-Fähigkeiten (xp_boost) und die Synergie-Config beeinflussen die XP zusätzlich.",
+    steps: [
+      { title: "XP-Quellen einstellen", text: "Pro Aktion festlegen, wie viel XP sie gibt (Case-Open, Snake-Score-Punkt, Plinko-Drop, Streak-Claim, Welt-Kill, BP-Tier-Claim …)." },
+      { title: "Level-Kurve bauen", text: "Pro Level benötigte XP — manuell oder per Bulk-Generator (linear/exponentiell). XP-Kurven-Visualizer zeigt den Verlauf." },
+      { title: "Belohnungen vergeben", text: "Pro Level Rewards: Credits / Fähigkeit / Badge / Name-Style. Meilenstein-Level optional mit Celebration." },
+      { title: "Prestige aktivieren", text: "Ab Max-Level Reset für permanenten XP-Boost (Bonus-% im Road-Config)." },
+    ],
+    howItWorks: { heading: "Wie XP verbucht wird (race-sicher)", lines: [
+      "XP läuft über eine atomare RPC (increment_xp) — parallele Vergaben verlieren keine XP und vergeben Level-Rewards genau einmal pro überschrittener Grenze.",
+      "XP-Multiplikator-Fähigkeiten (xp_boost) + Prestige-Bonus + Synergie-Config multiplizieren die rohe XP.",
+      "Prestige-Schutz: ab Prestige > 0 werden Credits-Level-Rewards beim Wiederaufstieg NICHT erneut vergeben (Anti-Farm); Badges/Styles/Fähigkeiten bleiben idempotent.",
+    ] },
+    glossary: [
+      { term: "XP-Quelle", def: "Wie viel XP eine bestimmte Aktion gibt." },
+      { term: "Meilenstein-Level", def: "Level mit Sonder-Belohnung/Feier (alle N Level)." },
+      { term: "Prestige", def: "Reset ab Max-Level für dauerhaften XP-Boost." },
+    ],
+    tip: "XP-Boost-Fähigkeiten und die Synergie-Config wirken zusätzlich — bei Balancing beide mitdenken.",
   },
 
   abilities: {
     title: "So funktionieren Fähigkeiten",
-    subtitle: "Effekt-Typen, Werte, Kombo-Effekte, Shop/Vergabe.",
-    blocks: [
-      { heading: "Anlegen", lines: [
-        "Key/Name/Icon, Kategorie + Effekt-Typ (gruppiert mit Beschreibung + Einheit-Hinweis), Wert, Seltenheit, Shop-Preis.",
-        "Nur EINE Fähigkeit ist gleichzeitig ausgerüstet; sie wirkt server-seitig im jeweiligen Spiel.",
-      ] },
-      { heading: "Effekt-Wert lesen", lines: [
-        "Prozent: 0.25 = +25 %. Chance: 0.25 = 25 %. Wert: z.B. Multiplikator-Untergrenze. Flat: feste Zahl.",
-        "Beispiele: case_luck (Chance auf bessere Seltenheit), plinko_min_multiplier (Mindest-Multiplikator), mine_jackpot_chance.",
-      ] },
-      { heading: "Kombo (effectConfig)", lines: [
-        "Optionale Zusatz-Werte als Schlüssel→Zahl bündeln mehrere Effekte in EINER Fähigkeit (z.B. Mine: double_chance + upgrade_discount).",
-      ] },
+    subtitle: "Effekt-Typen, Werte, Kombo-Effekte, Vergabe & Shop.",
+    hierarchy: [
+      { label: "Definition", text: "Du legst die Fähigkeit an (Name, Kategorie, Effekt-Typ, Wert)." },
+      { label: "Besitz", text: "Spieler bekommt sie (Shop/Battle Pass/Case/Vergabe), optional mit Ablauf." },
+      { label: "Ausrüsten", text: "Nur EINE Fähigkeit gleichzeitig aktiv (Garderobe)." },
+      { label: "Wirkung", text: "Greift server-seitig im jeweiligen Spiel beim Verdienen/Spielen." },
     ],
-    tip: "Fähigkeiten kommen automatisch in den Shop, wenn eine Shop-Kategorie mit Inhalt = Fähigkeiten existiert — kein Extra-Haken nötig.",
+    steps: [
+      { title: "Effekt-Typ wählen", text: "Gruppiertes Dropdown nach Kategorie (Mine/Snake/Plinko/DON/Welt/Global) — mit Beschreibung + Einheit-Hinweis pro Typ. Kategorie wird automatisch gesetzt." },
+      { title: "Wert setzen", text: "Je nach Einheit: Prozent (0.25 = +25 %), Chance (0.25 = 25 %), Wert (z.B. Multiplikator-Untergrenze) oder feste Zahl." },
+      { title: "Optional: Kombo", text: "Zusatz-Effekte (effectConfig) als Schlüssel→Zahl bündeln mehrere Wirkungen in EINER Fähigkeit." },
+      { title: "Verteilen", text: "Shop-Preis setzen (für Shop-Kategorie) oder direkt an Nutzer vergeben; Seltenheit steuert Drop-Gewichte." },
+    ],
+    howItWorks: { heading: "Wie der Effekt im Spiel greift", lines: [
+      "Jedes Spiel liest beim Verdienen die EINE ausgerüstete Fähigkeit (getActiveEquippedAbilityEffect) und wendet sie an.",
+      "Fähigkeiten sind sich gegenseitig ausschließend — es ist immer nur eine aktiv, daher keine Stapelung.",
+      "Beispiele: case_luck (Chance, dass ein Case-Drop eine Seltenheit höher ausfällt), plinko_min_multiplier (garantierter Mindest-Multiplikator), mine_jackpot_chance (3×-Abholung), snake_score_multiplier, don_loss_refund, streak_reward_multiplier.",
+    ] },
+    glossary: [
+      { term: "Effekt-Typ", def: "WAS die Fähigkeit tut (z.B. plinko_min_multiplier) — Single-Source mit Label/Beschreibung/Einheit." },
+      { term: "Effekt-Wert", def: "WIE STARK — Bedeutung hängt von der Einheit ab (Prozent/Chance/Wert/Flat)." },
+      { term: "effectConfig", def: "Kombo-Zusatz: mehrere Effekte in einer Fähigkeit (Schlüssel→Zahl)." },
+      { term: "Seltenheit", def: "Selten/Mythisch/Ultra — Farbe + Drop-Gewicht in Cases/Shop." },
+      { term: "Ablauf (expires_at)", def: "Zeitlich begrenzte Fähigkeit (z.B. aus einem Gutschein/Shop-Deal)." },
+    ],
+    tip: "Fähigkeiten kommen automatisch in den Shop, sobald eine Shop-Kategorie mit Inhalt = Fähigkeiten existiert — kein Extra-Haken pro Fähigkeit nötig.",
   },
 
   vouchers: {
@@ -394,15 +463,21 @@ export const TAB_GUIDES: Record<string, AdminGuideContent> = {
 
   synergy: {
     title: "So funktionieren Synergie & Boosts",
-    subtitle: "Systeme verbinden + Zeit-Boosts.",
-    blocks: [
-      { heading: "Querfluss", lines: [
-        "Steuert, wie Level/Battle-Pass/Quests ineinandergreifen (z.B. wie viel BP-XP ein Level-Up gibt).",
-        "Zeit-Boosts: Wochenende / Happy Hour / Events erhöhen Credits oder XP global in Zeiträumen.",
-      ] },
-      { heading: "Skalierung", lines: [
-        "Level-Staffelung: höhere Level können mehr/weniger bekommen — feinjustierbar.",
-      ] },
+    subtitle: "Systeme verbinden + zeitbasierte globale Boosts.",
+    steps: [
+      { title: "Querfluss einstellen", text: "Wie stark Level/Battle-Pass/Quests ineinandergreifen — z.B. wie viel BP-XP ein Level-Up automatisch mitgibt." },
+      { title: "Zeit-Boosts definieren", text: "Wochenende / Happy Hour / Events: in bestimmten Zeiträumen Credits oder XP global multiplizieren." },
+      { title: "Level-Staffelung", text: "Skalierung nach Spieler-Level — höhere Level bekommen mehr/weniger, feinjustierbar." },
+    ],
+    howItWorks: { heading: "Wie die Boosts zusammenwirken", lines: [
+      "Die Synergie-Multiplikatoren greifen ZUSÄTZLICH zu Fähigkeiten und Prestige — alle Faktoren multiplizieren sich.",
+      "Zeit-Boosts sind global (alle Spieler) und nur im definierten Fenster aktiv.",
+      "Vorsicht: mehrere gleichzeitige Boosts können die Inflation schnell hochtreiben — Gesamtwirkung testen.",
+    ] },
+    glossary: [
+      { term: "Querfluss", def: "Automatischer XP-Übertrag zwischen Level/BP/Quests." },
+      { term: "Happy Hour", def: "Zeitfenster mit erhöhten Credits/XP." },
+      { term: "Level-Staffelung", def: "Boost-Stärke abhängig vom Spieler-Level." },
     ],
   },
 };
