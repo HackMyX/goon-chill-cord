@@ -87,11 +87,12 @@ function rewardLabel(tier: BattlePassTier): string {
       return tier.rewardCredits
         ? `${((tier.rewardCredits) * tier.rewardQuantity).toLocaleString("de-DE")} CR`
         : "Credits";
-    case "item": return `Item${tier.rewardQuantity > 1 ? ` ×${tier.rewardQuantity}` : ""}`;
+    case "item": return `${tier.rewardItemName ?? "Item"}${tier.rewardQuantity > 1 ? ` ×${tier.rewardQuantity}` : ""}`;
     case "random_item": return tier.rewardItemRarity ? `${tier.rewardItemRarity} Item` : "Zufalls-Item";
     case "badge": return tier.rewardBadgeText ?? "Badge";
     case "xp_boost": return `+${tier.rewardXpBoost ?? 1} Fortschrittstag${(tier.rewardXpBoost ?? 1) !== 1 ? "e" : ""}`;
     case "name_style": return `Style: ${tier.rewardNameStyleKey ?? "?"}`;
+    case "ability": return tier.rewardAbilityName ?? tier.rewardAbilityKey ?? "Fähigkeit";
     default: return "Belohnung";
   }
 }
@@ -105,6 +106,7 @@ function rewardIcon(tier: BattlePassTier): string {
     case "badge": return "🏆";
     case "xp_boost": return "⚡";
     case "name_style": return "✨";
+    case "ability": return "🔮";
     default: return "🎁";
   }
 }
@@ -1440,14 +1442,12 @@ function HorizontalTrack({
 
       {/* Scrollable row — negative margin compensates for top padding that prevents vertical clip */}
       <div className="relative -mt-3">
-        {/* Edge-Masken: verdecken den 3D-Überstand am linken/rechten Rand → Kacheln gleiten sauber
-            unter den Rand statt aus dem Container zu ragen oder zu poppen (kein Rand-Bug). */}
-        {roadMode && (
-          <>
-            <div className="pointer-events-none absolute inset-y-0 z-20" style={{ left: -14, width: 88, background: "linear-gradient(to right, rgb(9,7,17) 26%, rgba(9,7,17,0))" }} />
-            <div className="pointer-events-none absolute inset-y-0 z-20" style={{ right: -14, width: 88, background: "linear-gradient(to left, rgb(9,7,17) 26%, rgba(9,7,17,0))" }} />
-          </>
-        )}
+        {/* Edge-Masken (ALLE Modi, nicht nur roadMode): verdecken den 3D-Überstand
+            am linken/rechten Rand → eine teil-rausgescrollte Kachel kann nicht als
+            Geister-Modell über die UI ragen. Der geteilte Vollbild-Canvas scissort
+            auf die Kachel-Rect; diese opaken Bänder kappen, was darüber hinausragt. */}
+        <div className="pointer-events-none absolute inset-y-0 z-20" style={{ left: -14, width: 88, background: "linear-gradient(to right, rgb(9,7,17) 26%, rgba(9,7,17,0))" }} />
+        <div className="pointer-events-none absolute inset-y-0 z-20" style={{ right: -14, width: 88, background: "linear-gradient(to left, rgb(9,7,17) 26%, rgba(9,7,17,0))" }} />
         {/* Left arrow */}
         {canScrollLeft && (
           <button

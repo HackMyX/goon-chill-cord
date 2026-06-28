@@ -436,16 +436,18 @@ export async function purchaseEliteBattlePass(passId: string): Promise<{ success
   if (creditError) return { success: false, error: `Nicht genug ${currencyName}.` };
 
   const now = new Date().toISOString();
+  // Elite is a SUPERSET of Premium — buying Elite also unlocks the Premium track,
+  // so Elite holders get free + premium + elite rewards.
   if (existing) {
     await admin
       .from("user_battle_passes")
-      .update({ has_elite: true, elite_purchased_at: now })
+      .update({ has_premium: true, has_elite: true, elite_purchased_at: now })
       .eq("id", existing.id);
   } else {
     await admin.from("user_battle_passes").insert({
       user_id: user.id,
       pass_id: passId,
-      has_premium: false,
+      has_premium: true,
       has_elite: true,
       progress_days: 0,
       elite_purchased_at: now,
@@ -497,21 +499,29 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
 
   const { data: ubp } = await admin
     .from("user_battle_passes")
-    .select("has_premium, progress_days")
+    .select("has_premium, has_elite, progress_days")
     .eq("user_id", user.id)
     .eq("pass_id", passId)
     .maybeSingle();
 
   const progressDays = ubp?.progress_days ?? 0;
   const hasPremium = ubp?.has_premium ?? false;
+  const hasElite = ubp?.has_elite ?? false;
   const t = tier as Record<string, unknown>;
   const tierNum = t.tier_number as number;
   const isPremium = t.is_premium as boolean;
+  const isElite = t.is_elite as boolean;
 
   if (progressDays < tierNum) {
     return { success: false, error: `Noch nicht freigeschaltet — du brauchst ${tierNum} Login-Tage.` };
   }
-  if (isPremium && !hasPremium) {
+  // Track hierarchy: FREE ⊂ PREMIUM ⊂ ELITE. Elite tiers need the Elite upgrade;
+  // premium tiers need Premium OR Elite (Elite is a superset, so an Elite holder
+  // can claim every premium-track tier too).
+  if (isElite && !hasElite) {
+    return { success: false, error: "Nur für Elite-Pass-Inhaber." };
+  }
+  if (isPremium && !hasPremium && !hasElite) {
     return { success: false, error: "Nur für Premium-Pass-Inhaber." };
   }
 
@@ -1252,23 +1262,21 @@ export async function adminAutoFillBpTiers(
   const hasAnyItems = RAMP.some((r) => byRarity[r].length > 0);
   const pickIdx: Record<string, number> = { normal: 0, selten: 0, mythisch: 0, ultra: 0 };
   const pickItem = (rarity: Rarity): { id: string; type: string | null; name: string } | null => {
-    // bevorzugte Seltenheit, dann nächstbeste mit Bestand
-    for (const r of [rarity, ...RAMP.filter((x) => x !== rarity)]) {
+    // Requested rarity first, then ONLY downward (seltener). NEVER up a rarity —
+    // that would let a Free tier grab a mythisch/ultra when its capped pool is
+    // empty (the exact economy leak). If nothing at-or-below exists → null → the
+    // caller falls back to a credit reward.
+    const reqIdx = RAMP.indexOf(rarity);
+    for (let i = reqIdx; i >= 0; i--) {
+      const r = RAMP[i];
       const pool = byRarity[r];
       if (pool && pool.length) { const it = pool[pickIdx[r] % pool.length]; pickIdx[r]++; return it; }
     }
     return null;
   };
-  const rarityForTier = (tierNumber: number): Rarity => {
-    if (!config.rarityProgression) return "selten";
-    const pct = (tierNumber / tierCount) * 100;
-    if (pct <= 25) return "normal";
-    if (pct <= 60) return "selten";
-    if (pct <= 85) return "mythisch";
-    return "ultra";
-  };
 
-  // ── Track-Grenzen robust (Summe == tierCount, nie negativ) ──
+  // ── Track-Grenzen robust (Summe == tierCount, nie negativ) — VOR rarityForTier,
+  //    weil die track-relative Rarity die Track-Grenzen kennen muss. ──
   let freeCount = Math.round(tierCount * config.freeRatio / 100);
   let eliteCount = passEliteEnabled ? Math.round(tierCount * config.eliteRatio / 100) : 0;
   if (freeCount + eliteCount > tierCount) {
@@ -1276,6 +1284,27 @@ export async function adminAutoFillBpTiers(
     if (freeCount > tierCount) freeCount = tierCount;
   }
   const premiumCount = Math.max(0, tierCount - freeCount - eliteCount);
+
+  // ── ECONOMY-GEHIRN: Rarity wird pro TRACK gedeckelt, nicht global.
+  //    FREE = normal..selten · PREMIUM = normal..mythisch · ELITE = normal..ultra.
+  //    Innerhalb des Tracks steigt die Wertigkeit mit der Position; Meilensteine
+  //    bekommen den Track-Bestwert. So landet NIE ein Ultra im kostenlosen Track. ──
+  const TRACK_CAPS: Record<"free" | "premium" | "elite", Rarity[]> = {
+    free: ["normal", "selten"],
+    premium: ["normal", "selten", "mythisch"],
+    elite: ["normal", "selten", "mythisch", "ultra"],
+  };
+  const rarityForTier = (tierNumber: number, isPremium: boolean, isElite: boolean): Rarity => {
+    const track = isElite ? "elite" : isPremium ? "premium" : "free";
+    const caps = TRACK_CAPS[track];
+    const start = track === "elite" ? freeCount + premiumCount : track === "premium" ? freeCount : 0;
+    const len = track === "elite" ? eliteCount : track === "premium" ? premiumCount : freeCount;
+    if (!config.rarityProgression) return caps[Math.max(0, caps.length - 2)] ?? caps[0];
+    if (len <= 0) return caps[caps.length - 1];
+    const posPct = ((tierNumber - 1 - start) / len) * 100; // 0..100 innerhalb des Tracks
+    const idx = Math.min(caps.length - 1, Math.max(0, Math.floor((posPct / 100) * caps.length)));
+    return caps[idx];
+  };
 
   // ── Mix EXAKT auf tierCount verteilen (echte 100%): Kontingente + greedy-Verteilung ──
   const quota: Record<string, number> = {
@@ -1319,7 +1348,11 @@ export async function adminAutoFillBpTiers(
     let reward_item_rarity: Rarity | null = null;
     let pickedName: string | null = null;
     if (rewardType === "item") {
-      const rar: Rarity = isMilestone ? "ultra" : rarityForTier(tierNumber);
+      // Meilenstein = bester Wert des EIGENEN Tracks (Free→selten, Premium→mythisch,
+      // Elite→ultra), NICHT global ultra. Sonst track-relative Rarity.
+      const rar: Rarity = isMilestone
+        ? (isElite ? "ultra" : isPremium ? "mythisch" : "selten")
+        : rarityForTier(tierNumber, isPremium, isElite);
       if (config.resolveRandomItems !== false) {
         // Konkretes Item schon jetzt auswürfeln → echtes 3D-Modell + echter Name in der Kachel
         const it = pickItem(rar);
