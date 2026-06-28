@@ -47,6 +47,22 @@ function fmtMine(minutes: number): string {
   if (minutes < 90) return `${Math.round(minutes)} Min`;
   return `${(minutes / 60).toLocaleString("de-DE", { maximumFractionDigits: 1 })} Std`;
 }
+const pct = (f: number) => `${(f * 100).toFixed(0)}%`;
+
+/** Erwarteter Auszahlungs-Faktor (RTP) eines Plinko-Boards als Anteil vom Einsatz:
+ *  Σ binom(n,k)/2^n × mult[k] (n = Reihen = multipliers.length − 1). <1 = Hausvorteil. */
+function plinkoRtp(multipliers: number[]): number {
+  const n = multipliers.length - 1;
+  if (n < 1) return 0;
+  const denom = Math.pow(2, n);
+  let coeff = 1; // C(n,0)
+  let ev = 0;
+  for (let k = 0; k <= n; k++) {
+    ev += (coeff / denom) * (multipliers[k] ?? 0);
+    coeff = (coeff * (n - k)) / (k + 1);
+  }
+  return ev;
+}
 const SNAKE_MODE_KEYS = ["x1", "x2", "grind", "farm"] as const;
 type SnakeModeKey = (typeof SNAKE_MODE_KEYS)[number];
 
@@ -163,18 +179,23 @@ export function BalanceCockpit({
         jumpTab: "games",
       });
     }
+    const plinkoLevels = plinkoConfig.riskLevels.map((r) => ({ label: r.label, rtp: plinkoRtp(r.multipliers ?? []) }));
+    const pRtps = plinkoLevels.map((l) => l.rtp).filter((n) => n > 0);
+    const pMin = pRtps.length ? Math.min(...pRtps) : 0;
+    const pMax = pRtps.length ? Math.max(...pRtps) : 0;
     gameRows.push({
       id: "plinko",
       name: "Plinko",
-      value: `Einsatz ab ${fmtCr(plinkoConfig.minBetCr)} CR`,
-      detail: `Multiplikator bis ${plinkoMaxMult}× · ${fmtCr(plinkoConfig.hourlyBallLimit)} Bälle/h${plinkoConfig.dailyBallLimit > 0 ? ` · ${fmtCr(plinkoConfig.dailyBallLimit)}/Tag` : ""}`,
+      value: pRtps.length ? `RTP ${pct(pMin)}–${pct(pMax)}` : `Einsatz ab ${fmtCr(plinkoConfig.minBetCr)} CR`,
+      detail: `${plinkoLevels.map((l) => `${l.label} ${pct(l.rtp)}`).join(" · ")} · Einsatz ab ${fmtCr(plinkoConfig.minBetCr)} CR · max ${plinkoMaxMult}×`,
       jumpTab: "games",
     });
+    const donRtp = 2 * (donConfig.winChance ?? 0.5);
     gameRows.push({
       id: "don",
       name: "Double or Nothing",
-      value: `Einsatz ${fmtCr(donConfig.minBet)}–${donConfig.maxBet != null ? fmtCr(donConfig.maxBet) : "∞"} CR`,
-      detail: `Gewinnchance ${Math.round((donConfig.winChance ?? 0.5) * 100)}% · ${donConfig.dailyFlipLimit != null ? `${fmtCr(donConfig.dailyFlipLimit)} Flips/Tag` : "∞ Flips"}`,
+      value: `RTP ${pct(donRtp)}`,
+      detail: `Gewinnchance ${Math.round((donConfig.winChance ?? 0.5) * 100)}% · EV ${donRtp >= 1 ? "+" : ""}${pct(donRtp - 1)} · Einsatz ${fmtCr(donConfig.minBet)}–${donConfig.maxBet != null ? fmtCr(donConfig.maxBet) : "∞"} CR`,
       jumpTab: "games",
     });
     for (const l of mineConfig.levels) {
@@ -366,6 +387,7 @@ export function BalanceCockpit({
         </div>
         <p className="mt-1.5 text-[11px] text-zinc-500">
           Die Grind-Spalten (Preis-Sektionen) zeigen, wie lange man für einen Preis grinden muss (passive Mine bzw. Snake-Äpfel des gewählten Modus). Einnahme-Sektionen zeigen Auszahlungen/Belohnungen — dort ist die Grind-Spalte sinnlos und entfällt.
+          {" "}<span className="text-amber-300/80">Plinko &amp; DON zeigen den echten RTP</span> (erwartete Auszahlung pro Einsatz, binomial bzw. aus der Gewinnchance gerechnet) — <span className="font-mono">100 %</span> = fair, darunter = Hausvorteil, darüber = Spieler im Vorteil.
         </p>
       </div>
 

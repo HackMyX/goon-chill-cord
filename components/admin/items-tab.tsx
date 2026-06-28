@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, RefreshCw, Loader2 } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ItemRowEditor } from "@/components/admin/item-row-editor";
@@ -20,12 +20,13 @@ import type { ItemRow } from "@/components/admin/admin-shell";
 // the first-paint guess.
 const ESTIMATED_ROW_HEIGHT = 84;
 
-export function ItemsTab({ items, setItems }: { items: ItemRow[]; setItems: (fn: (prev: ItemRow[]) => ItemRow[]) => void }) {
+export function ItemsTab({ items, setItems, focus }: { items: ItemRow[]; setItems: (fn: (prev: ItemRow[]) => ItemRow[]) => void; focus?: { id: string; n: number } | null }) {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [rarityFilter, setRarityFilter] = useState<string>("all");
   const [repricing, setRepricing] = useState(false);
   const [repriceMsg, setRepriceMsg] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sound = useSoundManager();
 
@@ -60,6 +61,24 @@ export function ItemsTab({ items, setItems }: { items: ItemRow[]; setItems: (fn:
     estimateSize: () => ESTIMATED_ROW_HEIGHT,
     overscan: 8,
   });
+
+  // Exakt-Sprung aus dem Balance-Cockpit: Filter zurücksetzen, damit das Ziel-Item
+  // garantiert in der virtualisierten Liste liegt, dann dorthin scrollen + kurz
+  // hervorheben. Reagiert auf focus.n (steigt bei jedem Sprung, auch zum selben Item).
+  useEffect(() => {
+    if (!focus) return;
+    setQuery("");
+    setTypeFilter("all");
+    setRarityFilter("all");
+    setHighlightId(focus.id);
+    const scrollT = setTimeout(() => {
+      const idx = items.findIndex((i) => i.id === focus.id);
+      if (idx >= 0) virtualizer.scrollToIndex(idx, { align: "center" });
+    }, 80);
+    const clearT = setTimeout(() => setHighlightId(null), 2600);
+    return () => { clearTimeout(scrollT); clearTimeout(clearT); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.n]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -133,8 +152,10 @@ export function ItemsTab({ items, setItems }: { items: ItemRow[]; setItems: (fn:
               return (
                 <div
                   key={item.id}
+                  id={`item-row-${item.id}`}
                   ref={virtualizer.measureElement}
                   data-index={virtualRow.index}
+                  className={highlightId === item.id ? "rounded-xl ring-2 ring-purple-400/70 transition-shadow" : ""}
                   style={{
                     position: "absolute",
                     top: 0,

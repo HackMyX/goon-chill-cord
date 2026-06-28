@@ -448,11 +448,18 @@ export function AdminShell({
 
   const sound = useSoundManager();
 
+  // Exakt-Sprung zu einer Item-Zeile (virtualisierte Liste): ItemsTab scrollt
+  // selbst zum Item; n steigt bei jedem Sprung, damit auch derselbe Eintrag erneut greift.
+  const [itemFocus, setItemFocus] = useState<{ id: string; n: number } | null>(null);
+
   // Wechselt zum Tab und scrollt zu einem Anker (#anchor) — Fallback: Tab-Anfang.
   // Wird vom Such-Sprung UND vom Balance-Cockpit ("Bearbeiten") genutzt.
   const goToTab = (tabId: string, anchor?: string) => {
     setTab(tabId as Tab);
     setAdminSearch("");
+    if (tabId === "items" && anchor?.startsWith("item-row-")) {
+      setItemFocus((prev) => ({ id: anchor.slice("item-row-".length), n: (prev?.n ?? 0) + 1 }));
+    }
     setTimeout(() => {
       const el = (anchor ? document.getElementById(anchor) : null) ?? document.getElementById("admin-tab-top");
       el?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -651,7 +658,7 @@ export function AdminShell({
           </div>
         )}
 
-        {tab === "items" && <ItemsTab items={items} setItems={setItems} />}
+        {tab === "items" && <ItemsTab items={items} setItems={setItems} focus={itemFocus} />}
 
         {tab === "monsters" && (
           <div className="flex flex-col gap-3">
