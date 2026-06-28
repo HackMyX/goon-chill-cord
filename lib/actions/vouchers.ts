@@ -5,11 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
-import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
-import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
-import { checkAndAwardNameStyleBadges } from "@/lib/actions/badges";
-import { normalizeCode, parseVoucherRewards, type RedemptionCode, type VoucherReward, type VoucherRewardType, type VoucherRewardValue } from "@/lib/vouchers";
-import { grantCaseVoucher, grantGameBonus } from "@/lib/rewards-grant";
+import { logActivity } from "@/lib/debug-log-server";
+import { normalizeCode, parseVoucherRewards, parseVoucherSpecs, voucherRewardToSpec, type RedemptionCode, type VoucherRewardType, type VoucherRewardValue } from "@/lib/vouchers";
+import { grantReward, type RewardSpec } from "@/lib/rewards-grant";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -22,16 +20,27 @@ async function requireAdminUser() {
   return isAdmin(profile) ? user : null;
 }
 
+/** Build the canonical RewardSpec[] for a code row — understands BOTH the new
+ *  RewardSpec JSONB and the legacy single-reward columns (very old codes). */
+function rowToSpecs(r: Record<string, unknown>): RewardSpec[] {
+  const specs = parseVoucherSpecs(r.rewards);
+  if (specs.length > 0) return specs;
+  // Legacy single-column fallback (codes created before the `rewards` array existed).
+  return parseVoucherRewards(undefined, {
+    rewardType: r.reward_type as VoucherRewardType | undefined,
+    rewardValue: (r.reward_value as VoucherRewardValue) ?? {},
+    abilityDurationHours: (r.ability_duration_hours as number) ?? 0,
+  })
+    .map((v) => voucherRewardToSpec(v))
+    .filter((s): s is RewardSpec => s !== null);
+}
+
 function rowToCode(r: Record<string, unknown>, usedCount: number, uniqueUsers?: number): RedemptionCode {
   const targets = r.target_user_ids;
   return {
     code: r.code as string,
     label: (r.label as string | null) ?? null,
-    rewards: parseVoucherRewards(r.rewards, {
-      rewardType: r.reward_type as VoucherRewardType | undefined,
-      rewardValue: (r.reward_value as VoucherRewardValue) ?? {},
-      abilityDurationHours: (r.ability_duration_hours as number) ?? 0,
-    }),
+    rewards: rowToSpecs(r),
     maxUses: (r.max_uses as number) ?? 0,
     perUserLimit: (r.per_user_limit as number) ?? 1,
     targetUserIds: Array.isArray(targets) && targets.length > 0 ? (targets as string[]) : null,
@@ -116,11 +125,7 @@ export async function claimRedemptionCode(
 
   // Grant the FULL bundle. Every reward must succeed; on any failure roll the
   // whole claim back so the user can retry (and isn't left half-rewarded).
-  const rewards = parseVoucherRewards(row.rewards, {
-    rewardType: row.reward_type as VoucherRewardType | undefined,
-    rewardValue: (row.reward_value as VoucherRewardValue) ?? {},
-    abilityDurationHours: (row.ability_duration_hours as number) ?? 0,
-  });
+  const rewards = rowToSpecs(row);
   if (rewards.length === 0) {
     await admin.from("redemption_claims").delete().eq("id", claimId);
     return { success: false, error: "Dieser Code hat keine Belohnungen." };
@@ -151,93 +156,18 @@ export async function claimRedemptionCode(
   return { success: true, reward: summary };
 }
 
+/** Grant ONE stored voucher reward. Normalises BOTH formats (old VoucherReward
+ *  JSON and new RewardSpec) to a canonical RewardSpec and dispatches through the
+ *  central granter (§9), so every reward type — incl. game_bonus, xp, items — works
+ *  here, and pre-existing codes stay redeemable. */
 async function grantVoucherReward(
   admin: Admin,
   userId: string,
-  reward: VoucherReward
+  reward: unknown
 ): Promise<{ ok: boolean; error?: string; summary: string }> {
-  const type = reward.type;
-  const value: VoucherRewardValue = {
-    amount: reward.amount, abilityKey: reward.abilityKey, badgeKey: reward.badgeKey, styleKey: reward.styleKey,
-  };
-  const abilityDurationHours = Math.max(0, Math.floor(reward.durationHours ?? 0));
-  try {
-    if (type === "credits") {
-      const amount = Math.max(0, Math.floor(value.amount ?? 0));
-      if (amount <= 0) return { ok: false, error: "Code enthält keine Credits.", summary: "" };
-      const { data: p } = await admin.from("profiles").select("credits").eq("id", userId).single();
-      await admin.from("profiles").update({ credits: ((p?.credits as number) ?? 0) + amount }).eq("id", userId);
-      return { ok: true, summary: `+${amount.toLocaleString("de-DE")} Credits` };
-    }
-
-    if (type === "ability") {
-      const abilityKey = value.abilityKey;
-      if (!abilityKey) return { ok: false, error: "Code ohne Fähigkeit.", summary: "" };
-      const { data: def } = await admin.from("ability_definitions").select("name").eq("key", abilityKey).maybeSingle();
-      if (!def) return { ok: false, error: "Fähigkeit existiert nicht mehr.", summary: "" };
-      const expiresAt = abilityDurationHours > 0
-        ? new Date(Date.now() + abilityDurationHours * 3_600_000).toISOString()
-        : null;
-      const { error } = await admin.from("user_abilities").insert({
-        user_id: userId, ability_key: abilityKey, source: "voucher",
-        source_detail: abilityDurationHours > 0 ? `Gutschein (${abilityDurationHours}h)` : "Gutschein",
-        expires_at: expiresAt,
-      });
-      if (error) return { ok: false, error: "Fähigkeit konnte nicht vergeben werden.", summary: "" };
-      const dur = abilityDurationHours > 0 ? ` (${abilityDurationHours}h)` : "";
-      return { ok: true, summary: `Fähigkeit: ${(def.name as string) ?? abilityKey}${dur}` };
-    }
-
-    if (type === "badge") {
-      const badgeKey = value.badgeKey;
-      if (!badgeKey) return { ok: false, error: "Code ohne Badge.", summary: "" };
-      const { data: def } = await admin.from("badge_definitions").select("label").eq("key", badgeKey).maybeSingle();
-      if (!def) return { ok: false, error: "Badge existiert nicht mehr.", summary: "" };
-      const { error } = await admin.from("user_badges")
-        .upsert({ user_id: userId, badge_key: badgeKey }, { onConflict: "user_id,badge_key", ignoreDuplicates: true });
-      if (error) return { ok: false, error: "Badge konnte nicht vergeben werden.", summary: "" };
-      await recomputeAutoPrioBadges(userId);
-      return { ok: true, summary: `Badge: ${(def.label as string) ?? badgeKey}` };
-    }
-
-    if (type === "name_style") {
-      const styleKey = value.styleKey;
-      if (!styleKey) return { ok: false, error: "Code ohne Name-Style.", summary: "" };
-      const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
-      await ensureStyleInDb(styleKey, admin);
-      const { error } = await admin.from("user_name_styles")
-        .upsert({ user_id: userId, style_key: styleKey, source: "voucher" }, { onConflict: "user_id,style_key", ignoreDuplicates: true });
-      if (error) return { ok: false, error: "Name-Style konnte nicht vergeben werden.", summary: "" };
-      void checkAndAwardNameStyleBadges(userId);
-      return { ok: true, summary: `Name-Style: ${styleKey}` };
-    }
-
-    if (type === "case_voucher") {
-      const mode = reward.caseMode === "rarity" ? "rarity" : "tier";
-      return await grantCaseVoucher(admin, userId, {
-        mode,
-        tierId: reward.caseTierId,
-        rarityFloor: reward.caseRarityFloor,
-        durationHours: abilityDurationHours,
-        source: "voucher",
-      });
-    }
-
-    if (type === "game_bonus") {
-      if (!reward.game) return { ok: false, error: "Code ohne Spiel.", summary: "" };
-      return await grantGameBonus(admin, userId, {
-        game: reward.game,
-        amount: Math.max(1, Math.floor(reward.amount ?? 0)),
-        durationHours: abilityDurationHours,
-        source: "voucher",
-      });
-    }
-
-    return { ok: false, error: "Unbekannter Belohnungstyp.", summary: "" };
-  } catch (e) {
-    void logDebugEvent({ level: "error", scope: "voucher", message: "grantVoucherReward fehlgeschlagen", detail: String(e), context: { userId, type } });
-    return { ok: false, error: "Interner Fehler bei der Belohnung.", summary: "" };
-  }
+  const spec = voucherRewardToSpec(reward);
+  if (!spec) return { ok: false, error: "Ungültige Belohnung.", summary: "" };
+  return await grantReward(admin, userId, spec, "voucher");
 }
 
 // ─── Admin: manage codes ─────────────────────────────────────────────────────
@@ -261,57 +191,93 @@ export async function adminListRedemptionCodes(): Promise<RedemptionCode[]> {
   );
 }
 
-/** Validate + sanitise a reward bundle. Returns the cleaned rewards or an error. */
-function sanitizeBundle(raw: VoucherReward[] | undefined): { rewards: VoucherReward[] } | { error: string } {
-  const rewards: VoucherReward[] = [];
+/** Validate + sanitise a canonical RewardSpec bundle (all 9 types). Returns the
+ *  cleaned specs or an error. Stored RAW into `rewards` JSONB; granted via §9. */
+function sanitizeBundle(raw: RewardSpec[] | undefined): { rewards: RewardSpec[] } | { error: string } {
+  const rewards: RewardSpec[] = [];
   for (const r of raw ?? []) {
-    if (r.type === "credits") {
-      const amount = Math.max(0, Math.floor(r.amount ?? 0));
-      if (amount <= 0) return { error: "Eine Credits-Belohnung hat keinen Betrag." };
-      rewards.push({ type: "credits", amount });
-    } else if (r.type === "ability") {
-      if (!r.abilityKey) return { error: "Eine Fähigkeits-Belohnung hat keine Fähigkeit." };
-      rewards.push({ type: "ability", abilityKey: r.abilityKey, durationHours: Math.max(0, Math.floor(r.durationHours ?? 0)) });
-    } else if (r.type === "badge") {
-      if (!r.badgeKey) return { error: "Eine Badge-Belohnung hat kein Badge." };
-      rewards.push({ type: "badge", badgeKey: r.badgeKey });
-    } else if (r.type === "name_style") {
-      if (!r.styleKey) return { error: "Eine Style-Belohnung hat keinen Name-Style." };
-      rewards.push({ type: "name_style", styleKey: r.styleKey });
-    } else if (r.type === "case_voucher") {
-      const mode = r.caseMode === "rarity" ? "rarity" : "tier";
-      if (mode === "tier" && !r.caseTierId) return { error: "Ein Case-Gutschein hat kein Case ausgewählt." };
-      if (mode === "rarity" && !r.caseRarityFloor) return { error: "Ein Case-Gutschein (Seltenheit) hat keine Stufe." };
-      rewards.push({
-        type: "case_voucher",
-        caseMode: mode,
-        caseTierId: mode === "tier" ? r.caseTierId : undefined,
-        caseRarityFloor: mode === "rarity" ? r.caseRarityFloor : undefined,
-        durationHours: Math.max(0, Math.floor(r.durationHours ?? 0)),
-      });
-    } else if (r.type === "game_bonus") {
-      if (!r.game) return { error: "Ein Spiel-Bonus hat kein Spiel ausgewählt." };
-      const amount = Math.max(1, Math.floor(r.amount ?? 0));
-      rewards.push({
-        type: "game_bonus",
-        game: r.game,
-        amount,
-        durationHours: Math.max(0, Math.floor(r.durationHours ?? 0)),
-      });
+    if (!r || typeof r !== "object") continue;
+    const dur = Math.max(0, Math.floor(r.durationHours ?? 0));
+    switch (r.type) {
+      case "credits": {
+        const amount = Math.max(0, Math.floor(r.amount ?? 0));
+        if (amount <= 0) return { error: "Eine Credits-Belohnung hat keinen Betrag." };
+        rewards.push({ type: "credits", amount });
+        break;
+      }
+      case "xp": {
+        const amount = Math.max(0, Math.floor(r.amount ?? 0));
+        if (amount <= 0) return { error: "Eine XP-Belohnung hat keinen Betrag." };
+        rewards.push({ type: "xp", amount });
+        break;
+      }
+      case "item": {
+        if (!r.itemId) return { error: "Eine Item-Belohnung hat kein Item ausgewählt." };
+        rewards.push({ type: "item", itemId: r.itemId, amount: Math.max(1, Math.floor(r.amount ?? 1)) });
+        break;
+      }
+      case "random_item": {
+        if (!r.itemRarity) return { error: "Ein Zufalls-Item hat keine Seltenheit." };
+        rewards.push({ type: "random_item", itemRarity: r.itemRarity, amount: Math.max(1, Math.floor(r.amount ?? 1)) });
+        break;
+      }
+      case "ability": {
+        if (!r.abilityKey) return { error: "Eine Fähigkeits-Belohnung hat keine Fähigkeit." };
+        rewards.push({ type: "ability", abilityKey: r.abilityKey, durationHours: dur });
+        break;
+      }
+      case "badge": {
+        if (!r.badgeKey) return { error: "Eine Badge-Belohnung hat kein Badge." };
+        rewards.push({ type: "badge", badgeKey: r.badgeKey });
+        break;
+      }
+      case "name_style": {
+        if (!r.styleKey) return { error: "Eine Style-Belohnung hat keinen Name-Style." };
+        rewards.push({ type: "name_style", styleKey: r.styleKey });
+        break;
+      }
+      case "case_voucher": {
+        const mode = r.voucherMode === "rarity" ? "rarity" : "tier";
+        if (mode === "tier" && !r.voucherTierId) return { error: "Ein Case-Gutschein hat kein Case ausgewählt." };
+        if (mode === "rarity" && !r.voucherRarityFloor) return { error: "Ein Case-Gutschein (Seltenheit) hat keine Stufe." };
+        rewards.push({
+          type: "case_voucher",
+          voucherMode: mode,
+          voucherTierId: mode === "tier" ? r.voucherTierId : undefined,
+          voucherRarityFloor: mode === "rarity" ? r.voucherRarityFloor : undefined,
+          durationHours: dur,
+        });
+        break;
+      }
+      case "game_bonus": {
+        if (!r.bonusGame) return { error: "Ein Spiel-Bonus hat kein Spiel ausgewählt." };
+        const amount = Math.max(1, Math.floor(r.amount ?? 0));
+        rewards.push({ type: "game_bonus", bonusGame: r.bonusGame, amount, durationHours: dur });
+        break;
+      }
     }
   }
   if (rewards.length === 0) return { error: "Mindestens eine Belohnung hinzufügen." };
   return { rewards };
 }
 
+// Legacy single-reward columns (reward_type/reward_value/ability_duration_hours)
+// carry a DB CHECK that only allows the original 4 types. They're deprecated — the
+// `rewards` JSONB is the source of truth — so we only mirror when the first spec is
+// one of those 4, otherwise we write a constraint-safe placeholder.
+const LEGACY_MIRROR_TYPES = ["credits", "ability", "badge", "name_style"];
+
 /** The DB row patch (bundle + mirrored legacy columns) for a reward bundle. */
-function bundleRow(rewards: VoucherReward[]): Record<string, unknown> {
+function bundleRow(rewards: RewardSpec[]): Record<string, unknown> {
   const first = rewards[0];
+  const mirror = LEGACY_MIRROR_TYPES.includes(first.type);
   return {
     rewards,
-    reward_type: first.type,
-    reward_value: { amount: first.amount, abilityKey: first.abilityKey, badgeKey: first.badgeKey, styleKey: first.styleKey },
-    ability_duration_hours: Math.max(0, Math.floor(first.durationHours ?? 0)),
+    reward_type: mirror ? first.type : "credits",
+    reward_value: mirror
+      ? { amount: first.amount, abilityKey: first.abilityKey, badgeKey: first.badgeKey, styleKey: first.styleKey }
+      : {},
+    ability_duration_hours: mirror ? Math.max(0, Math.floor(first.durationHours ?? 0)) : 0,
   };
 }
 
@@ -337,7 +303,7 @@ function settingsRow(s: CodeSettings): Record<string, unknown> {
 
 export async function adminCreateRedemptionCode(input: CodeSettings & {
   code: string;
-  rewards: VoucherReward[];
+  rewards: RewardSpec[];
 }): Promise<{ success: boolean; error?: string }> {
   const adminUser = await requireAdminUser();
   if (!adminUser) return { success: false, error: "Kein Zugriff." };
@@ -369,7 +335,7 @@ export async function adminCreateRedemptionCode(input: CodeSettings & {
  *  The code string itself is immutable — it's the redemption key claims reference. */
 export async function adminUpdateRedemptionCode(input: CodeSettings & {
   code: string;
-  rewards: VoucherReward[];
+  rewards: RewardSpec[];
   enabled?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
   const adminUser = await requireAdminUser();
@@ -424,7 +390,7 @@ export async function adminDeleteRedemptionCode(
  *  Each user is notified. Great for compensation, prizes, targeted gifts. */
 export async function adminGrantVoucherToUsers(input: {
   userIds: string[];
-  rewards: VoucherReward[];
+  rewards: RewardSpec[];
   note?: string;
 }): Promise<{ success: boolean; error?: string; granted?: number }> {
   const adminUser = await requireAdminUser();
@@ -513,7 +479,7 @@ export async function adminResetUserClaim(code: string, userId: string): Promise
 export async function adminBulkCreateCodes(input: CodeSettings & {
   prefix: string;
   count: number;
-  rewards: VoucherReward[];
+  rewards: RewardSpec[];
 }): Promise<{ success: boolean; error?: string; codes?: string[] }> {
   const adminUser = await requireAdminUser();
   if (!adminUser) return { success: false, error: "Kein Zugriff." };

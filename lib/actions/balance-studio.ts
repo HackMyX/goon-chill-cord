@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import type { MineLevel } from "@/lib/mine-config";
 import type { Rarity } from "@/lib/cases";
-import { parseVoucherRewards, type VoucherRewardType, type VoucherRewardValue } from "@/lib/vouchers";
+import { parseVoucherRewards, parseVoucherSpecs, describeRewardSpec, voucherRewardToSpec, type VoucherRewardType, type VoucherRewardValue } from "@/lib/vouchers";
+import type { RewardSpec } from "@/lib/rewards-grant";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -314,21 +315,27 @@ export async function getBalanceSnapshot(): Promise<BalanceSnapshot> {
     price: 0,
   }));
 
-  // Gutscheine: Summe aller enthaltenen Credit-Belohnungen als „Wert".
+  // Gutscheine: ALLE 9 Reward-Typen (inkl. Spiel-Bonus/Extra-Spins) — Inhalt beschrieben,
+  // Credit-Anteil als „Wert". Versteht neues RewardSpec-Format UND alte Einzel-Codes.
   const vouchers: BalancePriceRow[] = (vc ?? []).map((r) => {
-    const rewards = parseVoucherRewards((r as Record<string, unknown>).rewards, {
-      rewardType: (r.reward_type as VoucherRewardType | undefined) ?? undefined,
-      rewardValue: (r.reward_value as VoucherRewardValue) ?? {},
-      abilityDurationHours: Number(r.ability_duration_hours ?? 0),
-    });
-    const credits = rewards
+    let specs: RewardSpec[] = parseVoucherSpecs((r as Record<string, unknown>).rewards);
+    if (specs.length === 0) {
+      // Legacy-Einzelcode ohne rewards-JSONB → aus den alten Spalten ableiten.
+      specs = parseVoucherRewards((r as Record<string, unknown>).rewards, {
+        rewardType: (r.reward_type as VoucherRewardType | undefined) ?? undefined,
+        rewardValue: (r.reward_value as VoucherRewardValue) ?? {},
+        abilityDurationHours: Number(r.ability_duration_hours ?? 0),
+      }).map(voucherRewardToSpec).filter((s): s is RewardSpec => s !== null);
+    }
+    const credits = specs
       .filter((x) => x.type === "credits")
       .reduce((s, x) => s + Number(x.amount ?? 0), 0);
     const code = r.code as string;
     const label = (r.label as string | null) ?? null;
+    const contents = specs.map(describeRewardSpec).join(" + ");
     return {
       key: code,
-      name: label ? `${code} · ${label}` : code,
+      name: `${code}${label ? ` · ${label}` : ""}${contents ? ` — ${contents}` : ""}`,
       rarity: (r.enabled as boolean) === false ? "normal" : "selten",
       price: credits,
     };

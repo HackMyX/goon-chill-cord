@@ -1,3 +1,5 @@
+import type { RewardSpec } from "@/lib/rewards-grant";
+
 export type VoucherRewardType = "credits" | "ability" | "badge" | "name_style" | "case_voucher" | "game_bonus";
 
 /** Kept inline (no import) so this dependency-free module stays usable client-side. */
@@ -34,8 +36,9 @@ export interface VoucherReward {
 export interface RedemptionCode {
   code: string;
   label: string | null;
-  /** Full reward bundle. Always ≥1 entry (legacy single-reward codes are mapped in). */
-  rewards: VoucherReward[];
+  /** Full reward bundle as canonical RewardSpec[] (old + new formats normalised in).
+   *  Always ≥1 entry; legacy single-reward codes are mapped in. */
+  rewards: RewardSpec[];
   maxUses: number; // 0 = unlimited
   /** How many times ONE user may redeem this code (default 1). */
   perUserLimit: number;
@@ -126,6 +129,78 @@ export function parseVoucherRewards(
     });
   }
   return out;
+}
+
+// ─── RewardSpec bridge ────────────────────────────────────────────────────────
+// Gutschein-Codes speichern ihre Belohnungen jetzt als kanonische RewardSpec[]
+// (siehe lib/rewards-grant.ts, §9). Diese Helfer normalisieren BEIDE Formate —
+// das ALTE VoucherReward-Format (game/caseMode/caseTierId/caseRarityFloor) UND
+// das NEUE RewardSpec-Format (bonusGame/voucherMode/voucherTierId/voucherRarityFloor) —
+// damit vor der Umstellung erstellte Codes weiterhin einlösbar bleiben.
+
+/** Normalize EINE gespeicherte Belohnung (alt ODER neu) zu einer kanonischen RewardSpec.
+ *  Unbekannter/ungültiger Typ → null. */
+export function voucherRewardToSpec(raw: unknown): RewardSpec | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const type = r.type;
+  const KNOWN = ["credits", "xp", "item", "random_item", "ability", "name_style", "badge", "case_voucher", "game_bonus"];
+  if (typeof type !== "string" || !KNOWN.includes(type)) return null;
+
+  const num = (v: unknown): number | undefined => (typeof v === "number" ? v : undefined);
+  const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+
+  // Alt → Neu Feld-Mapping (neue Felder haben Vorrang).
+  const bonusGameRaw = r.bonusGame ?? r.game;
+  const voucherModeRaw = r.voucherMode ?? r.caseMode;
+  const voucherTierId = str(r.voucherTierId) ?? str(r.caseTierId);
+  const voucherRarityRaw = r.voucherRarityFloor ?? r.caseRarityFloor;
+
+  return {
+    type: type as RewardSpec["type"],
+    amount: num(r.amount),
+    itemId: str(r.itemId),
+    itemRarity: str(r.itemRarity),
+    abilityKey: str(r.abilityKey),
+    styleKey: str(r.styleKey),
+    badgeKey: str(r.badgeKey),
+    durationHours: num(r.durationHours),
+    voucherMode: voucherModeRaw === "tier" || voucherModeRaw === "rarity" ? voucherModeRaw : undefined,
+    voucherTierId,
+    voucherRarityFloor:
+      voucherRarityRaw === "normal" || voucherRarityRaw === "selten" || voucherRarityRaw === "mythisch" || voucherRarityRaw === "ultra"
+        ? voucherRarityRaw
+        : undefined,
+    bonusGame: bonusGameRaw === "plinko" || bonusGameRaw === "snake" || bonusGameRaw === "don" ? bonusGameRaw : undefined,
+  };
+}
+
+/** Coerce the DB `rewards` JSONB column into a clean RewardSpec[] (alt + neu). */
+export function parseVoucherSpecs(rewardsJson: unknown): RewardSpec[] {
+  if (!Array.isArray(rewardsJson)) return [];
+  return rewardsJson
+    .map((r) => voucherRewardToSpec(r))
+    .filter((s): s is RewardSpec => s !== null);
+}
+
+/** Short human label for ANY of the 9 RewardSpec types (admin list + redeem result). */
+export function describeRewardSpec(spec: RewardSpec): string {
+  const dur = spec.durationHours ? ` ·${spec.durationHours}h` : "";
+  switch (spec.type) {
+    case "credits": return `💰 ${(spec.amount ?? 0).toLocaleString("de-DE")} Credits`;
+    case "xp": return `✨ ${spec.amount ?? 0} XP`;
+    case "item": return `📦 ${spec.amount && spec.amount > 1 ? `${spec.amount}× ` : ""}Item`;
+    case "random_item": return `🎲 ${spec.amount && spec.amount > 1 ? `${spec.amount}× ` : ""}Zufalls-Item${spec.itemRarity ? ` (${spec.itemRarity})` : ""}`;
+    case "ability": return `🔮 Fähigkeit ${spec.abilityKey ?? "?"}${dur}`;
+    case "name_style": return `🎨 Style ${spec.styleKey ?? "?"}`;
+    case "badge": return `🏅 Badge ${spec.badgeKey ?? "?"}`;
+    case "case_voucher":
+      return (spec.voucherMode ?? "rarity") === "rarity"
+        ? `🎟️ Gratis-Case (mind. ${VOUCHER_RARITY_LABELS[spec.voucherRarityFloor ?? "normal"]})${dur}`
+        : `🎟️ Gratis-Case${dur}`;
+    case "game_bonus":
+      return `🎮 +${spec.amount ?? 0} ${spec.bonusGame ? VOUCHER_BONUS_GAME_LABELS[spec.bonusGame] : "Spielzüge"}${dur}`;
+  }
 }
 
 /** Short human label for one reward (admin list + redeem result). */

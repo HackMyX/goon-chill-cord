@@ -2,186 +2,42 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  Gift, Loader2, Plus, Trash2, Check, X, Ticket, Sparkles, Info, Pencil, Save,
+  Gift, Loader2, Plus, Trash2, Check, X, Ticket, Info, Pencil, Save,
   Send, Users, Calendar, RotateCcw, ChevronDown, Search, Layers, Target, Clock, UserCheck,
 } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
-import { KeySelect } from "@/components/admin/key-select";
 import {
   adminListRedemptionCodes, adminCreateRedemptionCode, adminUpdateRedemptionCode,
   adminToggleRedemptionCode, adminDeleteRedemptionCode, adminGrantVoucherToUsers,
   adminGetCodeClaims, adminResetUserClaim, adminBulkCreateCodes, type VoucherClaimRow,
 } from "@/lib/actions/vouchers";
-import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
-import { getBadgeDefinitions } from "@/lib/actions/badges";
-import {
-  VOUCHER_REWARD_LABELS, VOUCHER_REWARD_ICONS, voucherRewardShort,
-  VOUCHER_BONUS_GAME_LABELS, VOUCHER_RARITY_LABELS,
-  type RedemptionCode, type VoucherReward, type VoucherRewardType,
-  type VoucherBonusGame, type VoucherRarity,
-} from "@/lib/vouchers";
-import { getOpenableCases, type OpenableCaseView } from "@/lib/actions/rewards";
+import { describeRewardSpec, type RedemptionCode } from "@/lib/vouchers";
+import { RewardSpecEditor } from "@/components/admin/reward-spec-editor";
+import type { RewardSpec } from "@/lib/rewards-grant";
 
 type Profile = { id: string; username: string };
-type Lookup = { abilities: { key: string; name: string }[]; badges: { key: string; label: string }[] };
 
-// Case-Gutscheine + Spiel-Boni werden bewusst NICHT per Code/Direktvergabe verteilt —
-// sie gehören in Battle Pass, Cases & Co. (als 3D-Givable). Hier nur die klassischen Typen.
-const REWARD_TYPES = (Object.keys(VOUCHER_REWARD_LABELS) as VoucherRewardType[])
-  .filter((t) => t !== "case_voucher" && t !== "game_bonus");
 const INPUT = "rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none focus:border-purple-400/50";
+
+// Kurze Erklärung am Reward-Editor: hier kann JEDER Belohnungstyp vergeben werden.
+function RewardEditorHint() {
+  return (
+    <p className="mb-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-zinc-500">
+      <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-purple-300/70" />
+      <span>
+        Hier ist <b className="text-zinc-300">jeder</b> Belohnungstyp wählbar — Credits, XP, Items, Fähigkeiten,
+        Name-Styles, Badges, Case-Gutscheine und <b className="text-zinc-300">Spiel-Bonus</b>.{" "}
+        <b className="text-zinc-300">Spiel-Bonus</b> = X extra Züge/Spins für DON/Plinko/Snake, die <i>on top</i> aufs
+        Tageslimit kommen. Dauer 0 = unbegrenzt gültig.
+      </span>
+    </p>
+  );
+}
 
 /** ISO (UTC) → local value for <input type="datetime-local"> */
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
   return new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-}
-
-// ─── Reusable reward-bundle editor ────────────────────────────────────────────
-function BundleEditor({ rewards, setRewards, look, accent = "purple" }: {
-  rewards: VoucherReward[];
-  setRewards: (fn: (prev: VoucherReward[]) => VoucherReward[]) => void;
-  look: Lookup;
-  accent?: "purple" | "emerald";
-}) {
-  const sound = useSoundManager();
-  const [type, setType] = useState<VoucherRewardType>("ability");
-  const [amount, setAmount] = useState(500);
-  const [abilityKey, setAbilityKey] = useState("");
-  const [duration, setDuration] = useState(48);
-  const [badgeKey, setBadgeKey] = useState("");
-  const [styleKey, setStyleKey] = useState("");
-  const [caseMode, setCaseMode] = useState<"tier" | "rarity">("tier");
-  const [caseTierId, setCaseTierId] = useState("");
-  const [caseRarityFloor, setCaseRarityFloor] = useState<VoucherRarity>("selten");
-  const [game, setGame] = useState<VoucherBonusGame>("don");
-  const [cases, setCases] = useState<OpenableCaseView[]>([]);
-  useEffect(() => { getOpenableCases().then(setCases).catch(() => undefined); }, []);
-
-  const abilityName = (k?: string) => look.abilities.find((a) => a.key === k)?.name ?? k ?? "?";
-  const badgeLabel = (k?: string) => look.badges.find((b) => b.key === k)?.label ?? k ?? "?";
-  const caseLabel = (id?: string) => cases.find((c) => c.tierId === id)?.label ?? id ?? "?";
-
-  function chip(r: VoucherReward): string {
-    if (r.type === "credits") return `${(r.amount ?? 0).toLocaleString("de-DE")} CR`;
-    if (r.type === "ability") return `${abilityName(r.abilityKey)}${r.durationHours ? ` · ${r.durationHours}h` : " · perm"}`;
-    if (r.type === "badge") return badgeLabel(r.badgeKey);
-    if (r.type === "name_style") return r.styleKey ?? "?";
-    if (r.type === "case_voucher") {
-      const what = r.caseMode === "rarity" ? `Case ≥${VOUCHER_RARITY_LABELS[r.caseRarityFloor ?? "normal"]}` : caseLabel(r.caseTierId);
-      return `${what}${r.durationHours ? ` · ${r.durationHours}h` : ""}`;
-    }
-    return `+${r.amount ?? 0} ${r.game ? VOUCHER_BONUS_GAME_LABELS[r.game] : ""}${r.durationHours ? ` · ${r.durationHours}h` : ""}`;
-  }
-
-  function add() {
-    let r: VoucherReward | null = null;
-    if (type === "credits") { if (amount <= 0) return; r = { type: "credits", amount }; }
-    else if (type === "ability") { if (!abilityKey) return; r = { type: "ability", abilityKey, durationHours: Math.max(0, duration) }; }
-    else if (type === "badge") { if (!badgeKey) return; r = { type: "badge", badgeKey }; }
-    else if (type === "name_style") { if (!styleKey.trim()) return; r = { type: "name_style", styleKey: styleKey.trim() }; }
-    else if (type === "case_voucher") {
-      if (caseMode === "tier") { if (!caseTierId) return; r = { type: "case_voucher", caseMode: "tier", caseTierId, durationHours: Math.max(0, duration) }; }
-      else { r = { type: "case_voucher", caseMode: "rarity", caseRarityFloor, durationHours: Math.max(0, duration) }; }
-    }
-    else if (type === "game_bonus") { if (amount <= 0) return; r = { type: "game_bonus", game, amount, durationHours: Math.max(0, duration) }; }
-    if (r) { setRewards((p) => [...p, r as VoucherReward]); sound.click(); }
-  }
-
-  const ring = accent === "emerald" ? "border-emerald-400/15 bg-emerald-500/[0.03]" : "border-purple-400/15 bg-purple-500/[0.03]";
-  const chipCls = accent === "emerald" ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-purple-400/30 bg-purple-500/10 text-purple-200";
-
-  return (
-    <div className={`rounded-xl border ${ring} p-4`}>
-      <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-300">
-        <Sparkles className="h-3.5 w-3.5" /> Belohnungs-Bündel ({rewards.length})
-      </p>
-      {rewards.length === 0 ? (
-        <p className="mb-3 text-xs text-zinc-600">Noch keine Belohnung — unten konfigurieren und „Hinzufügen".</p>
-      ) : (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {rewards.map((r, i) => (
-            <span key={i} className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold ${chipCls}`}>
-              <span>{VOUCHER_REWARD_ICONS[r.type]}</span>{chip(r)}
-              <button onClick={() => { setRewards((p) => p.filter((_, j) => j !== i)); sound.click(); }} className="ml-0.5 opacity-60 hover:text-red-400"><X className="h-3 w-3" /></button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex flex-wrap items-end gap-3 border-t border-white/5 pt-3">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-zinc-400">Typ</span>
-          <select value={type} onChange={(e) => setType(e.target.value as VoucherRewardType)} className={INPUT}>
-            {REWARD_TYPES.map((t) => <option key={t} value={t}>{VOUCHER_REWARD_ICONS[t]} {VOUCHER_REWARD_LABELS[t]}</option>)}
-          </select>
-        </div>
-        {type === "credits" && (
-          <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Credits</span>
-            <input type="number" min={1} value={amount} onChange={(e) => setAmount(Math.max(0, parseInt(e.target.value) || 0))} className={`${INPUT} w-28`} /></div>
-        )}
-        {type === "ability" && (
-          <>
-            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Fähigkeit</span>
-              <select value={abilityKey} onChange={(e) => setAbilityKey(e.target.value)} className={INPUT}>
-                <option value="">wählen…</option>
-                {look.abilities.map((a) => <option key={a.key} value={a.key}>{a.name}</option>)}
-              </select></div>
-            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Dauer (Std., 0=perm.)</span>
-              <input type="number" min={0} value={duration} onChange={(e) => setDuration(Math.max(0, parseInt(e.target.value) || 0))} className={`${INPUT} w-28`} /></div>
-          </>
-        )}
-        {type === "badge" && (
-          <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Badge</span>
-            <select value={badgeKey} onChange={(e) => setBadgeKey(e.target.value)} className={INPUT}>
-              <option value="">wählen…</option>
-              {look.badges.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
-            </select></div>
-        )}
-        {type === "name_style" && (
-          <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Name-Style</span>
-            <KeySelect kind="name_style" value={styleKey} onChange={setStyleKey} placeholder="wählen…" className={`${INPUT} w-40`} /></div>
-        )}
-        {type === "case_voucher" && (
-          <>
-            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Modus</span>
-              <select value={caseMode} onChange={(e) => setCaseMode(e.target.value as "tier" | "rarity")} className={INPUT}>
-                <option value="tier">Konkretes Case</option>
-                <option value="rarity">Nach Seltenheit (alle Cases)</option>
-              </select></div>
-            {caseMode === "tier" ? (
-              <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Case</span>
-                <select value={caseTierId} onChange={(e) => setCaseTierId(e.target.value)} className={INPUT}>
-                  <option value="">wählen…</option>
-                  {cases.map((c) => <option key={c.tierId} value={c.tierId}>{c.groupTitle} · {c.label}</option>)}
-                </select></div>
-            ) : (
-              <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Mind. Seltenheit</span>
-                <select value={caseRarityFloor} onChange={(e) => setCaseRarityFloor(e.target.value as VoucherRarity)} className={INPUT}>
-                  {(Object.keys(VOUCHER_RARITY_LABELS) as VoucherRarity[]).map((k) => <option key={k} value={k}>{VOUCHER_RARITY_LABELS[k]}</option>)}
-                </select></div>
-            )}
-            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Ablauf (Std., 0=nie)</span>
-              <input type="number" min={0} value={duration} onChange={(e) => setDuration(Math.max(0, parseInt(e.target.value) || 0))} className={`${INPUT} w-28`} /></div>
-          </>
-        )}
-        {type === "game_bonus" && (
-          <>
-            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Spiel</span>
-              <select value={game} onChange={(e) => setGame(e.target.value as VoucherBonusGame)} className={INPUT}>
-                {(Object.keys(VOUCHER_BONUS_GAME_LABELS) as VoucherBonusGame[]).map((k) => <option key={k} value={k}>{VOUCHER_BONUS_GAME_LABELS[k]}</option>)}
-              </select></div>
-            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Anzahl extra</span>
-              <input type="number" min={1} value={amount} onChange={(e) => setAmount(Math.max(0, parseInt(e.target.value) || 0))} className={`${INPUT} w-24`} /></div>
-            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Ablauf (Std., 0=nie)</span>
-              <input type="number" min={0} value={duration} onChange={(e) => setDuration(Math.max(0, parseInt(e.target.value) || 0))} className={`${INPUT} w-28`} /></div>
-          </>
-        )}
-        <button onClick={add} className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold ${chipCls} hover:brightness-125`}>
-          <Plus className="h-3.5 w-3.5" /> Hinzufügen
-        </button>
-      </div>
-    </div>
-  );
 }
 
 // ─── Reusable searchable multi-select for players ─────────────────────────────
@@ -245,7 +101,6 @@ function statusOf(c: RedemptionCode): { label: string; cls: string } {
 
 export function VoucherAdminTab({ profiles }: { profiles: Profile[] }) {
   const sound = useSoundManager();
-  const [look, setLook] = useState<Lookup>({ abilities: [], badges: [] });
   const [codes, setCodes] = useState<RedemptionCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -254,7 +109,7 @@ export function VoucherAdminTab({ profiles }: { profiles: Profile[] }) {
   const [grantOpen, setGrantOpen] = useState(false);
   const [grantIds, setGrantIds] = useState<string[]>([]);
   const [grantNote, setGrantNote] = useState("");
-  const [grantRewards, setGrantRewards] = useState<VoucherReward[]>([]);
+  const [grantRewards, setGrantRewards] = useState<RewardSpec[]>([]);
   const [granting, setGranting] = useState(false);
 
   // Code form
@@ -267,7 +122,7 @@ export function VoucherAdminTab({ profiles }: { profiles: Profile[] }) {
   const [expiresAt, setExpiresAt] = useState("");
   const [targeted, setTargeted] = useState(false);
   const [targetIds, setTargetIds] = useState<string[]>([]);
-  const [rewards, setRewards] = useState<VoucherReward[]>([]);
+  const [rewards, setRewards] = useState<RewardSpec[]>([]);
   const [saving, setSaving] = useState(false);
   // Bulk mode
   const [bulk, setBulk] = useState(false);
@@ -287,8 +142,6 @@ export function VoucherAdminTab({ profiles }: { profiles: Profile[] }) {
 
   useEffect(() => {
     void reload();
-    getAllAbilityDefinitions().then((a) => setLook((l) => ({ ...l, abilities: a.map((x) => ({ key: x.key, name: x.name })) }))).catch(() => {});
-    getBadgeDefinitions().then((b) => setLook((l) => ({ ...l, badges: b.map((x) => ({ key: x.key, label: x.label })) }))).catch(() => {});
   }, [reload]);
 
   function flash(text: string, ok: boolean) { setMsg({ text, ok }); setTimeout(() => setMsg(null), 5000); }
@@ -401,7 +254,10 @@ export function VoucherAdminTab({ profiles }: { profiles: Profile[] }) {
                 <input value={grantNote} onChange={(e) => setGrantNote(e.target.value)} placeholder="z.B. Entschuldigung für den Ausfall" className={INPUT} />
               </div>
             </div>
-            <BundleEditor rewards={grantRewards} setRewards={setGrantRewards} look={look} accent="emerald" />
+            <div className="rounded-xl border border-emerald-400/15 bg-emerald-500/[0.03] p-4">
+              <RewardEditorHint />
+              <RewardSpecEditor value={grantRewards} onChange={setGrantRewards} label={`Belohnungs-Bündel (${grantRewards.length})`} />
+            </div>
             <button onClick={handleGrant} disabled={granting || grantIds.length === 0 || grantRewards.length === 0}
               className="flex w-fit items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-40">
               {granting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} An {grantIds.length} Spieler vergeben
@@ -457,7 +313,10 @@ export function VoucherAdminTab({ profiles }: { profiles: Profile[] }) {
           {targeted && <div className="mt-3"><UserMultiSelect profiles={profiles} selected={targetIds} onChange={setTargetIds} /></div>}
         </div>
 
-        <div className="mt-4"><BundleEditor rewards={rewards} setRewards={setRewards} look={look} /></div>
+        <div className="mt-4 rounded-xl border border-purple-400/15 bg-purple-500/[0.03] p-4">
+          <RewardEditorHint />
+          <RewardSpecEditor value={rewards} onChange={setRewards} label={`Belohnungs-Bündel (${rewards.length})`} />
+        </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button onClick={handleSave} disabled={saving || !code.trim() || rewards.length === 0}
@@ -508,7 +367,7 @@ export function VoucherAdminTab({ profiles }: { profiles: Profile[] }) {
                     {c.perUserLimit > 1 && <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">{c.perUserLimit}×/Spieler</span>}
                     <div className="flex flex-wrap gap-1.5">
                       {c.rewards.map((r, i) => (
-                        <span key={i} className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-zinc-400">{VOUCHER_REWARD_ICONS[r.type]} {voucherRewardShort(r)}</span>
+                        <span key={i} className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-zinc-400">{describeRewardSpec(r)}</span>
                       ))}
                     </div>
                     {c.label && <span className="text-xs text-zinc-500">{c.label}</span>}
