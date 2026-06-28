@@ -69,6 +69,21 @@ function DayPill({
   );
 }
 
+/** Kurz-Label einer Meilenstein-Givable-Belohnung (RewardSpec) für die Anzeige. */
+function streakRewardLabel(spec: StreakConfig["milestoneRewards"][number]): string {
+  switch (spec.type) {
+    case "credits": return spec.amount ? `${spec.amount.toLocaleString("de-DE")} CR` : "";
+    case "xp": return spec.amount ? `+${spec.amount} XP` : "";
+    case "item": case "random_item": return "Item";
+    case "ability": return "Fähigkeit";
+    case "name_style": return "Name-Style";
+    case "badge": return "Badge";
+    case "case_voucher": return "Gratis-Case";
+    case "game_bonus": return `+${spec.amount ?? 1} ${spec.bonusGame ?? "Spiel"}`;
+    default: return "";
+  }
+}
+
 export function StreakInfoPopover({ streakDays, bestStreakDays, config }: StreakInfoPopoverProps) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -232,6 +247,12 @@ export function StreakInfoPopover({ streakDays, bestStreakDays, config }: Streak
                 <p className="flex items-start gap-1.5">
                   <Star className="mt-0.5 h-3 w-3 shrink-0 text-amber-400" />
                   Alle {config.milestoneInterval} Tage: +{config.milestoneBonus.toLocaleString("de-DE")} Bonus.
+                </p>
+              )}
+              {config.milestoneRewards && config.milestoneRewards.length > 0 && (
+                <p className="flex items-start gap-1.5">
+                  <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-fuchsia-400" />
+                  Meilenstein-Extras: {config.milestoneRewards.map(streakRewardLabel).filter(Boolean).join(" · ")}
                 </p>
               )}
               {config.weekendMultiplier !== 1 && (
