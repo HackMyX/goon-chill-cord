@@ -55,7 +55,7 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
       if (result.success) {
         setEquipped(newKey);
         sound.abilityEquip();
-        setMsg(newKey ? `✅ "${abilities.find((a) => a.abilityKey === newKey)?.definition?.name ?? newKey}" ausgerüstet` : "Fähigkeits-Slot geleert");
+        setMsg(newKey ? `✅ "${abilities.find((a) => a.abilityKey === newKey)?.definition?.name ?? newKey}" aktiviert` : "Gutschein-Slot geleert");
         setTimeout(() => setMsg(""), 2500);
       } else {
         setMsg(`❌ ${result.error}`);
@@ -68,9 +68,9 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
     return (
       <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-6 text-center">
         <Zap className="mx-auto mb-3 h-8 w-8 text-zinc-600" />
-        <p className="text-sm font-medium text-zinc-400">Keine Fähigkeiten</p>
+        <p className="text-sm font-medium text-zinc-400">Keine Fähigkeits-Gutscheine</p>
         <p className="mt-1 text-xs text-zinc-600">
-          Fähigkeiten erhältst du aus Cases, dem Shop, dem Battle Pass oder bei Level-Ups.
+          Fähigkeits-Gutscheine erhältst du aus Cases, dem Shop, dem Battle Pass oder bei Level-Ups.
         </p>
       </div>
     );
@@ -84,7 +84,7 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
       <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
         <div className="mb-3 flex items-center gap-2">
           <Zap className="h-4 w-4 text-amber-400" />
-          <span className="text-sm font-bold text-zinc-200">Ausgerüsteter Fähigkeiten-Slot</span>
+          <span className="text-sm font-bold text-zinc-200">Mein aktiver Fähigkeits-Gutschein</span>
         </div>
         {equippedAbility?.definition ? (
           <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
@@ -108,7 +108,7 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-white/10 p-4 text-center text-sm text-zinc-600">
-            Kein Slot belegt — wähle unten eine Fähigkeit aus
+            Kein Slot belegt — wähle unten einen Fähigkeits-Gutschein aus
           </div>
         )}
       </div>
@@ -190,8 +190,8 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
       <div className="flex items-start gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-3 text-xs text-zinc-500">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
-          Du kannst eine Fähigkeit gleichzeitig ausrüsten. Die Fähigkeit ist in allen Spielen aktiv,
-          solange sie ausgerüstet ist. Tausche sie jederzeit aus.
+          Du kannst einen Fähigkeits-Gutschein gleichzeitig aktivieren. Der Gutschein ist in allen Spielen aktiv,
+          solange er ausgerüstet ist. Tausche ihn jederzeit aus.
         </span>
       </div>
     </div>

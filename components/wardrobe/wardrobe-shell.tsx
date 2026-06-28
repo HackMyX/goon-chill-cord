@@ -700,7 +700,7 @@ export function WardrobeShell({
         <div className="mt-6">
           <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
             <span>⚡</span>
-            Fähigkeiten-Slot
+            Mein Fähigkeits-Gutschein
           </h2>
           <AbilitiesSection abilities={abilities} equippedKey={equippedAbilityKey} />
         </div>

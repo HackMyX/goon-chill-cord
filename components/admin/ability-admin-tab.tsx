@@ -10,7 +10,7 @@ import {
 } from "@/lib/abilities";
 import {
   getAllAbilityDefinitions, adminUpsertAbilityDefinition,
-  adminDeleteAbilityDefinition, adminGrantAbility, adminRevokeAbility, getUserAbilities,
+  adminDeleteAbilityDefinition, adminRevokeAbility, getUserAbilities,
 } from "@/lib/actions/abilities";
 
 interface AbilityAdminTabProps {
@@ -44,12 +44,6 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
 
-  // Grant ability form
-  const [grantUserId, setGrantUserId] = useState("");
-  const [grantAbilityKey, setGrantAbilityKey] = useState("");
-  const [grantDurationHours, setGrantDurationHours] = useState(0);
-  const [grantMsg, setGrantMsg] = useState("");
-
   // User inventory modal
   const [viewUserId, setViewUserId] = useState("");
   const [userInventory, setUserInventory] = useState<{ id: string; abilityKey: string; source: string; acquiredAt: string }[]>([]);
@@ -76,20 +70,13 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
   }
 
   async function handleDelete(key: string) {
-    if (!confirm(`Fähigkeit "${key}" wirklich löschen?`)) return;
+    if (!confirm(`Fähigkeits-Gutschein "${key}" wirklich löschen?`)) return;
     const result = await adminDeleteAbilityDefinition(key);
     if (result.success) {
       setAbilities((prev) => prev.filter((a) => a.key !== key));
     } else {
       alert(result.error);
     }
-  }
-
-  async function handleGrant() {
-    if (!grantUserId || !grantAbilityKey) return;
-    const res = await adminGrantAbility(grantUserId, grantAbilityKey, "admin_grant", grantDurationHours);
-    setGrantMsg(res.success ? (grantDurationHours > 0 ? `✅ Vergeben (${grantDurationHours}h)!` : "✅ Vergeben (permanent)!") : `❌ ${res.error}`);
-    setTimeout(() => setGrantMsg(""), 2500);
   }
 
   async function handleLoadInventory() {
@@ -111,7 +98,7 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
 
   if (loading) return (
     <div className="flex items-center gap-2 py-8 text-zinc-500">
-      <RefreshCw className="h-4 w-4 animate-spin" /> Lade Fähigkeiten…
+      <RefreshCw className="h-4 w-4 animate-spin" /> Lade Fähigkeits-Gutscheine…
     </div>
   );
 
@@ -120,13 +107,13 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Zap className="h-5 w-5 text-amber-400" />
-          <h2 className="text-base font-bold text-zinc-100">Fähigkeiten (Abilities)</h2>
+          <h2 className="text-base font-bold text-zinc-100">Fähigkeits-Gutscheine</h2>
         </div>
         <button
           onClick={() => setEditing({ ...BLANK })}
           className="flex items-center gap-1.5 rounded-xl bg-purple-600/80 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-500"
         >
-          <Plus className="h-3.5 w-3.5" /> Neue Fähigkeit
+          <Plus className="h-3.5 w-3.5" /> Neuer Fähigkeits-Gutschein
         </button>
       </div>
 
@@ -178,7 +165,7 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
           <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-zinc-900 p-6">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-bold text-zinc-100">
-                {abilities.some((a) => a.key === editing.key) ? "Fähigkeit bearbeiten" : "Neue Fähigkeit"}
+                {abilities.some((a) => a.key === editing.key) ? "Fähigkeits-Gutschein bearbeiten" : "Neuer Fähigkeits-Gutschein"}
               </h3>
               <button onClick={() => setEditing(null)} className="rounded-lg p-1 text-zinc-400 hover:text-zinc-100">
                 <X className="h-5 w-5" />
@@ -360,47 +347,6 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
         </div>
       )}
 
-      {/* Grant ability */}
-      <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
-        <h3 className="mb-4 flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
-          <Zap className="h-3.5 w-3.5 text-purple-400" />
-          Fähigkeit manuell vergeben
-        </h3>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-400">Spieler</span>
-            <select value={grantUserId} onChange={(e) => setGrantUserId(e.target.value)}
-              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none">
-              <option value="">Spieler wählen…</option>
-              {[...profiles].sort((a, b) => a.username.localeCompare(b.username, "de")).map((p) => <option key={p.id} value={p.id}>{p.username}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-400">Fähigkeit</span>
-            <select value={grantAbilityKey} onChange={(e) => setGrantAbilityKey(e.target.value)}
-              className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none">
-              <option value="">Fähigkeit wählen…</option>
-              {abilities.map((a) => <option key={a.key} value={a.key}>{a.name}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-400">Dauer (Std., 0 = permanent)</span>
-            <input
-              type="number"
-              min={0}
-              value={grantDurationHours}
-              onChange={(e) => setGrantDurationHours(Math.max(0, parseInt(e.target.value) || 0))}
-              className="w-32 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none"
-            />
-          </div>
-          <button onClick={handleGrant} disabled={!grantUserId || !grantAbilityKey}
-            className="rounded-xl bg-purple-600/80 px-4 py-1.5 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50">
-            {grantDurationHours > 0 ? `${grantDurationHours}h vergeben` : "Vergeben"}
-          </button>
-          {grantMsg && <span className={`text-sm ${grantMsg.startsWith("✅") ? "text-emerald-400" : "text-red-400"}`}>{grantMsg}</span>}
-        </div>
-      </div>
-
       {/* View user inventory */}
       <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
         <h3 className="mb-4 flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
@@ -438,7 +384,7 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
           </div>
         )}
         {viewUserId && userInventory.length === 0 && !inventoryLoading && (
-          <p className="text-xs text-zinc-500 italic">Keine Fähigkeiten</p>
+          <p className="text-xs text-zinc-500 italic">Keine Fähigkeits-Gutscheine</p>
         )}
       </div>
     </div>

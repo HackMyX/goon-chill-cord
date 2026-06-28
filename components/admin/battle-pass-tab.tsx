@@ -56,7 +56,7 @@ const REWARD_LABELS: Record<BpRewardType, string> = {
   badge:      "Badge / Titel",
   xp_boost:   "XP Boost (Tage)",
   name_style: "Name Style",
-  ability:    "Fähigkeit",
+  ability:    "Fähigkeits-Gutschein",
   case_voucher: "Case-Gutschein",
   game_bonus: "Spiel-Bonus",
 };
@@ -368,7 +368,7 @@ function AutoFillModal({
                 { key: "rewardMixRandomItem" as const, label: "Zuf. Item", color: "accent-purple-400" },
                 { key: "rewardMixXpBoost" as const, label: "XP Boost", color: "accent-blue-400" },
                 { key: "rewardMixBadge" as const, label: "Badge", color: "accent-amber-400" },
-                { key: "rewardMixAbility" as const, label: "Fähigkeit", color: "accent-fuchsia-400" },
+                { key: "rewardMixAbility" as const, label: "Fähigkeits-Gutschein", color: "accent-fuchsia-400" },
                 { key: "rewardMixNameStyle" as const, label: "Name-Style", color: "accent-pink-400" },
                 { key: "rewardMixCaseVoucher" as const, label: "Gratis-Case", color: "accent-cyan-400" },
                 { key: "rewardMixGameBonus" as const, label: "Spiel-Bonus", color: "accent-teal-400" },
@@ -1039,20 +1039,20 @@ function TierEditorModal({
             {rewardType === "ability" && (
               <div className="space-y-2">
                 <label className="flex flex-col gap-1 text-xs text-zinc-400">
-                  Fähigkeit auswählen
+                  Fähigkeits-Gutschein auswählen
                   <select
                     value={rewardAbilityKey}
                     onChange={(e) => setRewardAbilityKey(e.target.value)}
                     className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
                   >
-                    <option value="">— Fähigkeit wählen —</option>
+                    <option value="">— Fähigkeits-Gutschein wählen —</option>
                     {abilities.map((ab) => (
                       <option key={ab.key} value={ab.key}>{ab.icon ? `${ab.icon} ` : ""}{ab.name} ({ab.rarity})</option>
                     ))}
                   </select>
                 </label>
                 <p className="text-[10px] text-zinc-500">
-                  Liste kommt live aus dem Fähigkeiten-Admin ({abilities.length} verfügbar) — neue Fähigkeiten erscheinen hier automatisch.
+                  Liste kommt live aus dem Fähigkeits-Gutschein-Admin ({abilities.length} verfügbar) — neue Fähigkeits-Gutscheine erscheinen hier automatisch.
                   {abilities.length === 0 && " Noch keine angelegt."}
                 </p>
               </div>
@@ -2806,7 +2806,7 @@ function BpGuide() {
             <div className="flex flex-wrap gap-2 text-[11px]">
               {[
                 { i: "💰", t: "Credits" }, { i: "📦", t: "Item (konkret)" }, { i: "🎲", t: "Zufalls-Item (nach Rarität)" },
-                { i: "🏆", t: "Badge/Titel" }, { i: "⚡", t: "XP-/Fortschritts-Boost" }, { i: "✨", t: "Name-Style" }, { i: "🔮", t: "Fähigkeit" },
+                { i: "🏆", t: "Badge/Titel" }, { i: "⚡", t: "XP-/Fortschritts-Boost" }, { i: "✨", t: "Name-Style" }, { i: "🔮", t: "Fähigkeits-Gutschein" },
               ].map((r) => (
                 <span key={r.t} className="rounded-lg border border-white/8 bg-white/[0.03] px-2.5 py-1 font-semibold text-zinc-300">{r.i} {r.t}</span>
               ))}

@@ -29,7 +29,7 @@ export function ActiveAbilityBadge({ refreshKey = 0 }: { refreshKey?: number }) 
 
   return (
     <span
-      title={`Aktive Fähigkeit: ${effectLabel}`}
+      title={`Aktiver Fähigkeits-Gutschein: ${effectLabel}`}
       className="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-black"
       style={{ borderColor: `${col}66`, background: `${col}1f`, color: col, boxShadow: `0 0 12px -3px ${col}` }}
     >

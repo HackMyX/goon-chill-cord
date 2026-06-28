@@ -58,7 +58,7 @@ export interface RedemptionCode {
 
 export const VOUCHER_REWARD_LABELS: Record<VoucherRewardType, string> = {
   credits: "Credits",
-  ability: "Fähigkeit",
+  ability: "Fähigkeits-Gutschein",
   badge: "Badge",
   name_style: "Name-Style",
   case_voucher: "Case-Gutschein",
@@ -192,7 +192,7 @@ export function describeRewardSpec(spec: RewardSpec): string {
     case "xp": return `✨ ${spec.amount ?? 0} XP`;
     case "item": return `📦 ${spec.amount && spec.amount > 1 ? `${spec.amount}× ` : ""}Item`;
     case "random_item": return `🎲 ${spec.amount && spec.amount > 1 ? `${spec.amount}× ` : ""}Zufalls-Item${spec.itemRarity ? ` (${spec.itemRarity})` : ""}`;
-    case "ability": return `🔮 Fähigkeit ${spec.abilityKey ?? "?"}${dur}`;
+    case "ability": return `🔮 Fähigkeits-Gutschein ${spec.abilityKey ?? "?"}${dur}`;
     case "name_style": return `🎨 Style ${spec.styleKey ?? "?"}`;
     case "badge": return `🏅 Badge ${spec.badgeKey ?? "?"}`;
     case "case_voucher":
@@ -209,7 +209,7 @@ export function voucherRewardShort(r: VoucherReward): string {
   const dur = r.durationHours ? ` (${r.durationHours}h)` : "";
   switch (r.type) {
     case "credits": return `${(r.amount ?? 0).toLocaleString("de-DE")} Credits`;
-    case "ability": return `Fähigkeit ${r.abilityKey ?? "?"}${dur}`;
+    case "ability": return `Fähigkeits-Gutschein ${r.abilityKey ?? "?"}${dur}`;
     case "badge": return `Badge ${r.badgeKey ?? "?"}`;
     case "name_style": return `Style ${r.styleKey ?? "?"}`;
     case "case_voucher":

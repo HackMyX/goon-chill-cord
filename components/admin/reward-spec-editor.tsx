@@ -43,7 +43,7 @@ export function RewardSpecEditor({
             <option value="xp">XP</option>
             <option value="item">Item (fest)</option>
             <option value="random_item">Item (zufällig)</option>
-            <option value="ability">Fähigkeit</option>
+            <option value="ability">Fähigkeits-Gutschein</option>
             <option value="badge">Badge</option>
             <option value="name_style">Name-Style</option>
             <option value="case_voucher">Gutschein (Case)</option>
@@ -80,7 +80,7 @@ export function RewardSpecEditor({
                 else set(idx, { styleKey: v });
               }}
               className={`flex-1 ${INP}`}
-              placeholder={r.type === "ability" ? "Fähigkeit wählen…" : r.type === "badge" ? "Badge wählen…" : "Name-Style wählen…"}
+              placeholder={r.type === "ability" ? "Fähigkeits-Gutschein wählen…" : r.type === "badge" ? "Badge wählen…" : "Name-Style wählen…"}
             />
           )}
 
