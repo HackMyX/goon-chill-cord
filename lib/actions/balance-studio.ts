@@ -269,6 +269,21 @@ async function requireAdmin() {
   return admin;
 }
 
+export interface BalancePriceRow { key: string; name: string; rarity: string; price: number; }
+
+/** Preis-Listen fürs Balance-Cockpit: Fähigkeiten + Name-Styles (Shop-Preise).
+ *  Items + Case-Tiers liegen dem Client bereits als Props vor. */
+export async function getBalancePrices(): Promise<{ abilities: BalancePriceRow[]; nameStyles: BalancePriceRow[] }> {
+  const admin = await requireAdmin();
+  const [{ data: ab }, { data: st }] = await Promise.all([
+    admin.from("ability_definitions").select("key, name, rarity, shop_price_cr").eq("enabled", true),
+    admin.from("name_styles").select("key, label, rarity, shop_price_cr"),
+  ]);
+  const abilities = (ab ?? []).map((r) => ({ key: r.key as string, name: (r.name as string) ?? (r.key as string), rarity: (r.rarity as string) ?? "selten", price: Number(r.shop_price_cr ?? 0) }));
+  const nameStyles = (st ?? []).map((r) => ({ key: r.key as string, name: (r.label as string) ?? (r.key as string), rarity: (r.rarity as string) ?? "selten", price: Number(r.shop_price_cr ?? 0) }));
+  return { abilities, nameStyles };
+}
+
 export async function saveEconomySettings(data: {
   startingCredits: number;
   mineLevels: MineLevel[];

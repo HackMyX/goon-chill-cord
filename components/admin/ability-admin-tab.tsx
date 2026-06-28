@@ -129,7 +129,7 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
       {/* Ability grid */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {abilities.map((a) => (
-          <div key={a.key} className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+          <div key={a.key} id={`ability-row-${a.key}`} className="scroll-mt-20 rounded-xl border border-white/8 bg-white/[0.02] p-4">
             <div className="mb-2 flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2">

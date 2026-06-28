@@ -31,6 +31,7 @@ import { NameStylesTab } from "@/components/admin/name-styles-tab";
 import { BalanceStudioTab } from "@/components/admin/balance-studio-tab";
 import { LevelConfigEditor } from "@/components/admin/level-config-editor";
 import { GivablesTab } from "@/components/admin/givables-tab";
+import { BalanceCockpit } from "@/components/admin/balance-cockpit";
 import { EconomySynergyEditor } from "@/components/admin/economy-synergy-editor";
 import { SoundConfigEditor } from "@/components/admin/sound-config-editor";
 import { MusicConfigEditor } from "@/components/admin/music-config-editor";
@@ -171,7 +172,7 @@ interface AdminShellProps {
 
 type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "givables" | "sounds" | "music" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy";
 
-const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string }[] = [
+const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string; anchor?: string }[] = [
   { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
   { label: "Case-Preise & Gruppen", tab: "economy", keywords: ["cases", "preis", "gruppe", "rarity", "items", "öffnen"], description: "Case-Konfiguration und Preise" },
   { label: "Shop MOTD", tab: "shop", keywords: ["shop", "motd", "banner", "listing", "verkauf"], description: "Shop-Artikel und Tages-Rotation" },
@@ -313,7 +314,7 @@ const TAB_GROUPS: { title: string; icon: typeof Coins; tabs: Tab[] }[] = [
 // Kombinierter Such-Index: die kuratierten Einträge (spezifische Einstellungen)
 // PLUS ein Basis-Eintrag pro Tab (Label + Beschreibung), damit JEDER Tab auch über
 // seine Beschreibung/Wörter gefunden wird — nicht nur über die kuratierten Keywords.
-const ADMIN_SEARCH: { label: string; tab: Tab; keywords: string[]; description: string }[] = [
+const ADMIN_SEARCH: { label: string; tab: Tab; keywords: string[]; description: string; anchor?: string }[] = [
   ...SEARCH_INDEX,
   // Pro Tab ein Basis-Eintrag — die keywords enthalten den KOMPLETTEN Guide-Text,
   // sodass die Suche jedes Wort aus jeder Guide-Zeile findet.
@@ -447,6 +448,17 @@ export function AdminShell({
 
   const sound = useSoundManager();
 
+  // Wechselt zum Tab und scrollt zu einem Anker (#anchor) — Fallback: Tab-Anfang.
+  // Wird vom Such-Sprung UND vom Balance-Cockpit ("Bearbeiten") genutzt.
+  const goToTab = (tabId: string, anchor?: string) => {
+    setTab(tabId as Tab);
+    setAdminSearch("");
+    setTimeout(() => {
+      const el = (anchor ? document.getElementById(anchor) : null) ?? document.getElementById("admin-tab-top");
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 90);
+  };
+
   const filteredProfiles =
     userSearch.trim().length > 0
       ? profiles.filter(
@@ -523,11 +535,7 @@ export function AdminShell({
                 filteredSearch.slice(0, 8).map((result, i) => (
                   <button
                     key={i}
-                    onClick={() => {
-                      setTab(result.tab); setAdminSearch(""); sound.click();
-                      // Land on the tab's guide/top so the result feels like a jump.
-                      setTimeout(() => document.getElementById("admin-tab-top")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
-                    }}
+                    onClick={() => { sound.click(); goToTab(result.tab, result.anchor); }}
                     onMouseEnter={sound.hover}
                     className="flex w-full flex-col gap-0.5 px-4 py-2.5 text-left transition-colors hover:bg-white/5"
                   >
@@ -587,7 +595,18 @@ export function AdminShell({
         <div id="admin-tab-top" className="scroll-mt-4" />
         {TAB_GUIDES[tab] && <AdminGuide content={TAB_GUIDES[tab]} />}
 
-        {tab === "balance" && <BalanceStudioTab />}
+        {tab === "balance" && (
+          <>
+            <BalanceCockpit
+              onJump={goToTab}
+              items={items}
+              caseTiers={caseTiers}
+              mineConfig={mineConfig}
+              snakeConfig={snakeConfig}
+            />
+            <BalanceStudioTab />
+          </>
+        )}
 
         {tab === "economy" && (
           <CasesAdminTab caseGroups={caseGroups} caseTiers={caseTiers} items={items} />
