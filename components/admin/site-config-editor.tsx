@@ -29,6 +29,7 @@ const SLOT_LABELS: Record<string, string> = {
   surveys: "Umfragen",
   quests: "Daily Quests",
   friends: "Freunde",
+  rewards: "Gutscheine",
   wardrobe: "Garderobe",
   notifications: "Benachrichtigungen",
   level: "Level-Abzeichen",

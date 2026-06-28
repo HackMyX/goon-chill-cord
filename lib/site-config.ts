@@ -102,7 +102,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
 //   logout          — sign-out button (off by default; logout also lives at the
 //                     bottom of /account)
 export const DEFAULT_TOPBAR_RIGHT_SLOTS = [
-  "games", "shop", "auctions", "trading", "community", "surveys", "quests", "friends", "wardrobe", "notifications", "level", "profile", "profile_avatar", "logout",
+  "games", "shop", "auctions", "trading", "community", "surveys", "quests", "friends", "rewards", "wardrobe", "notifications", "level", "profile", "profile_avatar", "logout",
 ] as const;
 
 export type TopbarSlotKey = typeof DEFAULT_TOPBAR_RIGHT_SLOTS[number];

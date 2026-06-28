@@ -31,6 +31,7 @@ import { LevelBadge } from "@/components/ui/level-badge";
 import { LevelMenuTrigger } from "@/components/ui/level-menu-modal";
 import { DailyQuestsTrigger } from "@/components/daily-quests/daily-quests-panel";
 import { FriendsTrigger } from "@/components/social/friends-panel";
+import { RewardWalletTrigger } from "@/components/rewards/reward-wallet";
 
 interface TopBarProps {
   credits: number;
@@ -210,6 +211,12 @@ export function TopBar({
         return (
           <div key="friends" className="hidden xl:flex">
             <FriendsTrigger userId={resolvedUserId ?? undefined} />
+          </div>
+        );
+      case "rewards":
+        return (
+          <div key="rewards" className="hidden xl:flex">
+            <RewardWalletTrigger userId={resolvedUserId ?? undefined} />
           </div>
         );
       case "wardrobe":

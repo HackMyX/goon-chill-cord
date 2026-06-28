@@ -15,8 +15,11 @@ import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
 import { getBadgeDefinitions } from "@/lib/actions/badges";
 import {
   VOUCHER_REWARD_LABELS, VOUCHER_REWARD_ICONS, voucherRewardShort,
+  VOUCHER_BONUS_GAME_LABELS, VOUCHER_RARITY_LABELS,
   type RedemptionCode, type VoucherReward, type VoucherRewardType,
+  type VoucherBonusGame, type VoucherRarity,
 } from "@/lib/vouchers";
+import { getOpenableCases, type OpenableCaseView } from "@/lib/actions/rewards";
 
 type Profile = { id: string; username: string };
 type Lookup = { abilities: { key: string; name: string }[]; badges: { key: string; label: string }[] };
@@ -44,15 +47,27 @@ function BundleEditor({ rewards, setRewards, look, accent = "purple" }: {
   const [duration, setDuration] = useState(48);
   const [badgeKey, setBadgeKey] = useState("");
   const [styleKey, setStyleKey] = useState("");
+  const [caseMode, setCaseMode] = useState<"tier" | "rarity">("tier");
+  const [caseTierId, setCaseTierId] = useState("");
+  const [caseRarityFloor, setCaseRarityFloor] = useState<VoucherRarity>("selten");
+  const [game, setGame] = useState<VoucherBonusGame>("don");
+  const [cases, setCases] = useState<OpenableCaseView[]>([]);
+  useEffect(() => { getOpenableCases().then(setCases).catch(() => undefined); }, []);
 
   const abilityName = (k?: string) => look.abilities.find((a) => a.key === k)?.name ?? k ?? "?";
   const badgeLabel = (k?: string) => look.badges.find((b) => b.key === k)?.label ?? k ?? "?";
+  const caseLabel = (id?: string) => cases.find((c) => c.tierId === id)?.label ?? id ?? "?";
 
   function chip(r: VoucherReward): string {
     if (r.type === "credits") return `${(r.amount ?? 0).toLocaleString("de-DE")} CR`;
     if (r.type === "ability") return `${abilityName(r.abilityKey)}${r.durationHours ? ` · ${r.durationHours}h` : " · perm"}`;
     if (r.type === "badge") return badgeLabel(r.badgeKey);
-    return r.styleKey ?? "?";
+    if (r.type === "name_style") return r.styleKey ?? "?";
+    if (r.type === "case_voucher") {
+      const what = r.caseMode === "rarity" ? `Case ≥${VOUCHER_RARITY_LABELS[r.caseRarityFloor ?? "normal"]}` : caseLabel(r.caseTierId);
+      return `${what}${r.durationHours ? ` · ${r.durationHours}h` : ""}`;
+    }
+    return `+${r.amount ?? 0} ${r.game ? VOUCHER_BONUS_GAME_LABELS[r.game] : ""}${r.durationHours ? ` · ${r.durationHours}h` : ""}`;
   }
 
   function add() {
@@ -61,6 +76,11 @@ function BundleEditor({ rewards, setRewards, look, accent = "purple" }: {
     else if (type === "ability") { if (!abilityKey) return; r = { type: "ability", abilityKey, durationHours: Math.max(0, duration) }; }
     else if (type === "badge") { if (!badgeKey) return; r = { type: "badge", badgeKey }; }
     else if (type === "name_style") { if (!styleKey.trim()) return; r = { type: "name_style", styleKey: styleKey.trim() }; }
+    else if (type === "case_voucher") {
+      if (caseMode === "tier") { if (!caseTierId) return; r = { type: "case_voucher", caseMode: "tier", caseTierId, durationHours: Math.max(0, duration) }; }
+      else { r = { type: "case_voucher", caseMode: "rarity", caseRarityFloor, durationHours: Math.max(0, duration) }; }
+    }
+    else if (type === "game_bonus") { if (amount <= 0) return; r = { type: "game_bonus", game, amount, durationHours: Math.max(0, duration) }; }
     if (r) { setRewards((p) => [...p, r as VoucherReward]); sound.click(); }
   }
 
@@ -116,6 +136,41 @@ function BundleEditor({ rewards, setRewards, look, accent = "purple" }: {
         {type === "name_style" && (
           <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Name-Style-Key</span>
             <input value={styleKey} onChange={(e) => setStyleKey(e.target.value)} placeholder="z.B. abyssal" className={`${INPUT} w-40`} /></div>
+        )}
+        {type === "case_voucher" && (
+          <>
+            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Modus</span>
+              <select value={caseMode} onChange={(e) => setCaseMode(e.target.value as "tier" | "rarity")} className={INPUT}>
+                <option value="tier">Konkretes Case</option>
+                <option value="rarity">Nach Seltenheit (alle Cases)</option>
+              </select></div>
+            {caseMode === "tier" ? (
+              <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Case</span>
+                <select value={caseTierId} onChange={(e) => setCaseTierId(e.target.value)} className={INPUT}>
+                  <option value="">wählen…</option>
+                  {cases.map((c) => <option key={c.tierId} value={c.tierId}>{c.groupTitle} · {c.label}</option>)}
+                </select></div>
+            ) : (
+              <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Mind. Seltenheit</span>
+                <select value={caseRarityFloor} onChange={(e) => setCaseRarityFloor(e.target.value as VoucherRarity)} className={INPUT}>
+                  {(Object.keys(VOUCHER_RARITY_LABELS) as VoucherRarity[]).map((k) => <option key={k} value={k}>{VOUCHER_RARITY_LABELS[k]}</option>)}
+                </select></div>
+            )}
+            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Ablauf (Std., 0=nie)</span>
+              <input type="number" min={0} value={duration} onChange={(e) => setDuration(Math.max(0, parseInt(e.target.value) || 0))} className={`${INPUT} w-28`} /></div>
+          </>
+        )}
+        {type === "game_bonus" && (
+          <>
+            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Spiel</span>
+              <select value={game} onChange={(e) => setGame(e.target.value as VoucherBonusGame)} className={INPUT}>
+                {(Object.keys(VOUCHER_BONUS_GAME_LABELS) as VoucherBonusGame[]).map((k) => <option key={k} value={k}>{VOUCHER_BONUS_GAME_LABELS[k]}</option>)}
+              </select></div>
+            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Anzahl extra</span>
+              <input type="number" min={1} value={amount} onChange={(e) => setAmount(Math.max(0, parseInt(e.target.value) || 0))} className={`${INPUT} w-24`} /></div>
+            <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Ablauf (Std., 0=nie)</span>
+              <input type="number" min={0} value={duration} onChange={(e) => setDuration(Math.max(0, parseInt(e.target.value) || 0))} className={`${INPUT} w-28`} /></div>
+          </>
         )}
         <button onClick={add} className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold ${chipCls} hover:brightness-125`}>
           <Plus className="h-3.5 w-3.5" /> Hinzufügen

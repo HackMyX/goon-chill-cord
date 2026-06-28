@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { findCaseTier, pickRarity, RARITY_LABELS, type CaseExtraDrop } from "@/lib/cases";
+import { findCaseTier, pickRarity, RARITY_LABELS, type CaseExtraDrop, type Rarity } from "@/lib/cases";
+
+/** Low→high rarity order, used to enforce a case-voucher's guaranteed minimum rarity. */
+const RARITY_ORDER: Rarity[] = ["normal", "selten", "mythisch", "ultra"];
 import { getCaseConfig } from "@/lib/cases-config";
 import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
 import { applyCreditBonus } from "@/lib/actions/abilities";
@@ -204,7 +207,7 @@ async function grantExtraDrop(
   }
 }
 
-export async function openCase(tierId: string): Promise<OpenCaseResult> {
+export async function openCase(tierId: string, tokenId?: string): Promise<OpenCaseResult> {
   const caseGroups = await getCaseConfig();
   const found = findCaseTier(tierId, caseGroups);
   if (!found) {
@@ -225,6 +228,38 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
     return { success: false, error: "Du musst eingeloggt sein." };
   }
 
+  // ── Free-open voucher token (optional) ──────────────────────────────────────
+  // When a tokenId is passed we validate it server-side (must belong to the
+  // caller, be unredeemed + unexpired, and apply to THIS case). The token is only
+  // *claimed* further down — after the item pool resolves — so a failed open
+  // never burns it. openCase stays the single source of truth for rolling/granting.
+  const admin = createAdminClient();
+  let free = false;
+  let rarityFloor: Rarity | null = null;
+  let tokenRowId: string | null = null;
+  if (tokenId) {
+    const { data: tk } = await admin
+      .from("case_tokens")
+      .select("id, user_id, mode, tier_id, rarity_floor, redeemed_at, expires_at")
+      .eq("id", tokenId)
+      .maybeSingle();
+    const t = tk as Record<string, unknown> | null;
+    if (!t || t.user_id !== user.id) return { success: false, error: "Gutschein nicht gefunden." };
+    if (t.redeemed_at) return { success: false, error: "Gutschein bereits eingelöst." };
+    if (t.expires_at && new Date(t.expires_at as string) < new Date()) {
+      return { success: false, error: "Gutschein ist abgelaufen." };
+    }
+    if ((t.mode as string) === "tier" && ((t.tier_id as string | null) ?? null) !== tier.id) {
+      return { success: false, error: "Dieser Gutschein gilt für ein anderes Case." };
+    }
+    if ((t.mode as string) === "rarity") {
+      const rf = (t.rarity_floor as string | null) ?? null;
+      rarityFloor = rf && (RARITY_ORDER as string[]).includes(rf) ? (rf as Rarity) : null;
+    }
+    free = true;
+    tokenRowId = t.id as string;
+  }
+
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("credits, cases_opened")
@@ -235,11 +270,15 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
     return { success: false, error: "Profil konnte nicht geladen werden." };
   }
 
-  if (profile.credits < tier.price) {
+  if (!free && profile.credits < tier.price) {
     return { success: false, error: "Nicht genug Credits für dieses Case." };
   }
 
-  const rolledRarity = pickRarity(tier.rarityWeights);
+  let rolledRarity = pickRarity(tier.rarityWeights);
+  // Rarity-floor voucher: guarantee at least the configured minimum rarity.
+  if (free && rarityFloor && RARITY_ORDER.indexOf(rolledRarity as Rarity) < RARITY_ORDER.indexOf(rarityFloor)) {
+    rolledRarity = rarityFloor;
+  }
 
   // Item pool resolution (priority order):
   // 1. perRarityItemIds[rarity] — specific items for this exact rarity (new, preferred)
@@ -324,34 +363,54 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
   // Decide whether this open lands on the item pool or a configured extra drop.
   const chosenExtra = pickExtraDrop(tier.extraDrops ?? [], rolledRarity, pool.length);
   const wonItem = chosenExtra ? null : pool[Math.floor(Math.random() * pool.length)];
-  const newCredits = profile.credits - tier.price;
 
-  // Guard against a race where credits changed between the read above and
-  // this write (e.g. a double click) by re-checking the balance atomically.
-  const { data: updatedRows, error: updateError } = await supabase
-    .from("profiles")
-    .update({
-      credits: newCredits,
-      cases_opened: profile.cases_opened + 1,
-    })
-    .eq("id", user.id)
-    .gte("credits", tier.price)
-    .select("credits");
-
-  if (updateError || !updatedRows || updatedRows.length === 0) {
-    return { success: false, error: "Nicht genug Credits für dieses Case." };
+  // Pay for the open. Two paths:
+  //  - free (voucher token): atomically CLAIM the token first (prevents
+  //    double-spend), then bump cases_opened — no credits move.
+  //  - paid: atomic credit deduction with a balance re-check (anti double-click).
+  let finalCredits = profile.credits;
+  if (free) {
+    const { data: claimed } = await admin
+      .from("case_tokens")
+      .update({ redeemed_at: new Date().toISOString() })
+      .eq("id", tokenRowId!)
+      .is("redeemed_at", null)
+      .select("id");
+    if (!claimed || claimed.length === 0) {
+      return { success: false, error: "Gutschein bereits eingelöst." };
+    }
+    await supabase.from("profiles").update({ cases_opened: profile.cases_opened + 1 }).eq("id", user.id);
+  } else {
+    const newCredits = profile.credits - tier.price;
+    const { data: updatedRows, error: updateError } = await supabase
+      .from("profiles")
+      .update({ credits: newCredits, cases_opened: profile.cases_opened + 1 })
+      .eq("id", user.id)
+      .gte("credits", tier.price)
+      .select("credits");
+    if (updateError || !updatedRows || updatedRows.length === 0) {
+      return { success: false, error: "Nicht genug Credits für dieses Case." };
+    }
+    finalCredits = updatedRows[0].credits;
   }
 
-  // Grant the won thing. On ANY failure, roll the credit deduction back so the
-  // player never pays for nothing.
+  // Undo the payment if granting the drop fails — un-claim the token (free) or
+  // refund the credits (paid) so the player never loses something for nothing.
+  const rollbackOpen = async () => {
+    if (free) {
+      await admin.from("case_tokens").update({ redeemed_at: null, won_summary: null }).eq("id", tokenRowId!);
+      await supabase.from("profiles").update({ cases_opened: profile.cases_opened }).eq("id", user.id);
+    } else {
+      await supabase.from("profiles").update({ credits: profile.credits, cases_opened: profile.cases_opened }).eq("id", user.id);
+    }
+  };
+
+  // Grant the won thing. On ANY failure, roll the payment back.
   let won: WonDrop;
   if (chosenExtra) {
     const granted = await grantExtraDrop(createAdminClient(), user.id, chosenExtra, tier.label);
     if (!granted.ok) {
-      await supabase
-        .from("profiles")
-        .update({ credits: profile.credits, cases_opened: profile.cases_opened })
-        .eq("id", user.id);
+      await rollbackOpen();
       return { success: false, error: granted.error };
     }
     won = granted.won;
@@ -361,14 +420,16 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
       .insert({ user_id: user.id, item_id: wonItem!.id });
 
     if (inventoryError) {
-      // Roll back the credit deduction since the item was never granted.
-      await supabase
-        .from("profiles")
-        .update({ credits: profile.credits, cases_opened: profile.cases_opened })
-        .eq("id", user.id);
+      await rollbackOpen();
       return { success: false, error: "Item konnte nicht vergeben werden." };
     }
     won = { kind: "item", rarity: wonItem!.rarity, name: wonItem!.name, item: wonItem! };
+  }
+
+  // Record on the token what it yielded (best-effort, for the wallet history).
+  if (free && tokenRowId) {
+    const rl = RARITY_LABELS[won.rarity as keyof typeof RARITY_LABELS] ?? won.rarity;
+    try { await admin.from("case_tokens").update({ won_summary: `${won.name} (${rl})` }).eq("id", tokenRowId); } catch { /* non-fatal */ }
   }
 
   // Audit trail — best-effort via the service-role client (so a user can't
@@ -380,12 +441,13 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
       payload: {
         tierId: tier.id,
         groupId: group.id,
-        price: tier.price,
+        price: free ? 0 : tier.price,
+        free,
         kind: won.kind,
         wonItemId: won.kind === "item" ? won.item.id : null,
         wonItemName: won.name,
         rarity: won.rarity,
-        newCredits: updatedRows[0].credits,
+        newCredits: finalCredits,
       },
     });
   } catch {
@@ -464,7 +526,7 @@ export async function openCase(tierId: string): Promise<OpenCaseResult> {
     success: true,
     drop: won,
     item: won.kind === "item" ? won.item : undefined,
-    newCredits: updatedRows[0].credits,
+    newCredits: finalCredits,
   };
 }
 

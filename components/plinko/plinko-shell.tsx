@@ -21,6 +21,7 @@ import { getPlinkoConfig } from "@/lib/actions/plinko";
 import { useLiveConfig } from "@/lib/use-live-config";
 import { useSoundManager } from "@/lib/sound-manager";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { GameBonusBadge } from "@/components/rewards/game-bonus-badge";
 
 interface Props {
   config: PlinkoConfig;
@@ -406,6 +407,7 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
             {remaining}/{config.hourlyBallLimit}/h
             {config.dailyBallLimit > 0 && <span className="ml-1">· {config.dailyBallLimit}/Tag</span>}
           </div>
+          <GameBonusBadge game="plinko" suffix="Bälle" refreshKey={resultsVersion} />
         </div>
       </header>
 

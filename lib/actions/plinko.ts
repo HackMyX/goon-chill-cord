@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
 import { broadcastLive } from "@/lib/realtime-broadcast";
+import { consumeGameBonus } from "@/lib/rewards-grant";
 import { DEFAULT_PLINKO_CONFIG, type PlinkoConfig, type PlinkoRiskLevel } from "@/lib/plinko-types";
 export type { PlinkoConfig, PlinkoRiskLevel } from "@/lib/plinko-types";
 
@@ -250,17 +251,22 @@ export async function dropPlinkoBall(input: {
     return { success: false, error: `Max-Einsatz: ${config.maxBetCr.toLocaleString("de-DE")} CR.` };
   }
 
-  // Hourly limit check
+  // Limit check. A player over their hourly/daily cap may still drop a ball if
+  // they hold a Plinko-Bonus voucher — it's consumed one ball at a time and
+  // bypasses both caps for that ball.
   const usedHour = await getMyPlinkoUsageThisHour(user.id);
-  if (usedHour >= config.hourlyBallLimit) {
-    return { success: false, error: `Stündliches Limit erreicht (${config.hourlyBallLimit} Bälle/h).` };
-  }
-
-  // Daily limit check (0 = disabled)
+  const overHourly = usedHour >= config.hourlyBallLimit;
+  let overDaily = false;
   if (config.dailyBallLimit > 0) {
     const usedToday = await getMyPlinkoUsageToday(user.id);
-    if (usedToday >= config.dailyBallLimit) {
-      return { success: false, error: `Tägliches Limit erreicht (${config.dailyBallLimit} Bälle/Tag).` };
+    overDaily = usedToday >= config.dailyBallLimit;
+  }
+  if (overHourly || overDaily) {
+    const usedBonus = await consumeGameBonus(admin, user.id, "plinko");
+    if (!usedBonus) {
+      return overDaily
+        ? { success: false, error: `Tägliches Limit erreicht (${config.dailyBallLimit} Bälle/Tag).` }
+        : { success: false, error: `Stündliches Limit erreicht (${config.hourlyBallLimit} Bälle/h).` };
     }
   }
 

@@ -7,6 +7,7 @@ import { Coins, Timer, Zap } from "lucide-react";
 import { flipDouble } from "@/lib/actions/double-or-nothing";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
+import { GameBonusBadge } from "@/components/rewards/game-bonus-badge";
 import type { DonConfig } from "@/lib/don-config";
 
 function fireDoNConfetti() {
@@ -119,6 +120,7 @@ export function DoubleOrNothing({ credits, onCreditsChange, donConfig, initialFl
         {donConfig.sectionTitle}
       </h2>
       <p className="mt-1 text-sm text-zinc-400">{donConfig.sectionSubtitle}</p>
+      <div className="mt-2 flex justify-center"><GameBonusBadge game="don" suffix="Spins" refreshKey={flipsUsed} /></div>
 
       {/* Remaining spins display */}
       {donConfig.showRemainingSpins && donConfig.dailyFlipLimit !== null && (

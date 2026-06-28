@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
 import { broadcastLive } from "@/lib/realtime-broadcast";
+import { consumeGameBonus } from "@/lib/rewards-grant";
 import {
   DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG, DEFAULT_FARM_CONFIG,
   DEFAULT_THEME_X1, DEFAULT_THEME_X2, DEFAULT_THEME_GRIND, DEFAULT_THEME_FARM,
@@ -407,10 +408,15 @@ export async function submitSnakeScore(
       return p?.speed_mode === speedMode;
     }).length;
     if (gamesThisMode >= modeCfg.dailyGameLimit) {
-      return {
-        success: false,
-        error: `Tageslimit von ${modeCfg.dailyGameLimit} Spielen (${speedMode}) erreicht. Komm morgen wieder!`,
-      };
+      // Over the daily cap — but a Snake-Bonus voucher grants an extra game
+      // (consumed one at a time across all modes).
+      const usedBonus = await consumeGameBonus(admin, user.id, "snake");
+      if (!usedBonus) {
+        return {
+          success: false,
+          error: `Tageslimit von ${modeCfg.dailyGameLimit} Spielen (${speedMode}) erreicht. Komm morgen wieder!`,
+        };
+      }
     }
   }
 

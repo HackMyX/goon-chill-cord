@@ -1,7 +1,11 @@
-export type VoucherRewardType = "credits" | "ability" | "badge" | "name_style";
+export type VoucherRewardType = "credits" | "ability" | "badge" | "name_style" | "case_voucher" | "game_bonus";
+
+/** Kept inline (no import) so this dependency-free module stays usable client-side. */
+export type VoucherBonusGame = "plinko" | "snake" | "don";
+export type VoucherRarity = "normal" | "selten" | "mythisch" | "ultra";
 
 export interface VoucherRewardValue {
-  amount?: number; // credits
+  amount?: number; // credits / game_bonus count
   abilityKey?: string; // ability
   badgeKey?: string; // badge
   styleKey?: string; // name_style
@@ -13,12 +17,18 @@ export interface VoucherRewardValue {
  */
 export interface VoucherReward {
   type: VoucherRewardType;
-  amount?: number;          // credits
+  amount?: number;          // credits — OR number of extra plays for game_bonus
   abilityKey?: string;      // ability
-  /** Ability duration in hours (0 / undefined = permanent). Per-reward. */
+  /** Ability / case_voucher / game_bonus duration in hours (0 = permanent / no expiry). */
   durationHours?: number;
   badgeKey?: string;        // badge
   styleKey?: string;        // name_style
+  // ── case_voucher ──
+  caseMode?: "tier" | "rarity";
+  caseTierId?: string;          // caseMode='tier'
+  caseRarityFloor?: VoucherRarity; // caseMode='rarity'
+  // ── game_bonus ──
+  game?: VoucherBonusGame;
 }
 
 export interface RedemptionCode {
@@ -47,6 +57,8 @@ export const VOUCHER_REWARD_LABELS: Record<VoucherRewardType, string> = {
   ability: "Fähigkeit",
   badge: "Badge",
   name_style: "Name-Style",
+  case_voucher: "Case-Gutschein",
+  game_bonus: "Spiel-Bonus",
 };
 
 export const VOUCHER_REWARD_ICONS: Record<VoucherRewardType, string> = {
@@ -54,6 +66,21 @@ export const VOUCHER_REWARD_ICONS: Record<VoucherRewardType, string> = {
   ability: "🔮",
   badge: "🏅",
   name_style: "🎨",
+  case_voucher: "🎟️",
+  game_bonus: "🎮",
+};
+
+export const VOUCHER_BONUS_GAME_LABELS: Record<VoucherBonusGame, string> = {
+  plinko: "Plinko-Bälle",
+  snake: "Snake-Spiele",
+  don: "DON-Spins",
+};
+
+export const VOUCHER_RARITY_LABELS: Record<VoucherRarity, string> = {
+  normal: "Normal",
+  selten: "Selten",
+  mythisch: "Mythisch",
+  ultra: "Ultra",
 };
 
 /** Normalize a user-entered code: trim, uppercase, collapse internal spaces. */
@@ -72,7 +99,7 @@ export function parseVoucherRewards(
     for (const r of rewardsJson as Record<string, unknown>[]) {
       if (!r || typeof r !== "object") continue;
       const type = r.type as VoucherRewardType;
-      if (!["credits", "ability", "badge", "name_style"].includes(type)) continue;
+      if (!["credits", "ability", "badge", "name_style", "case_voucher", "game_bonus"].includes(type)) continue;
       out.push({
         type,
         amount: typeof r.amount === "number" ? r.amount : undefined,
@@ -80,6 +107,10 @@ export function parseVoucherRewards(
         durationHours: typeof r.durationHours === "number" ? r.durationHours : undefined,
         badgeKey: typeof r.badgeKey === "string" ? r.badgeKey : undefined,
         styleKey: typeof r.styleKey === "string" ? r.styleKey : undefined,
+        caseMode: r.caseMode === "tier" || r.caseMode === "rarity" ? r.caseMode : undefined,
+        caseTierId: typeof r.caseTierId === "string" ? r.caseTierId : undefined,
+        caseRarityFloor: typeof r.caseRarityFloor === "string" ? (r.caseRarityFloor as VoucherRarity) : undefined,
+        game: r.game === "plinko" || r.game === "snake" || r.game === "don" ? r.game : undefined,
       });
     }
   }
@@ -99,10 +130,17 @@ export function parseVoucherRewards(
 
 /** Short human label for one reward (admin list + redeem result). */
 export function voucherRewardShort(r: VoucherReward): string {
+  const dur = r.durationHours ? ` (${r.durationHours}h)` : "";
   switch (r.type) {
     case "credits": return `${(r.amount ?? 0).toLocaleString("de-DE")} Credits`;
-    case "ability": return `Fähigkeit ${r.abilityKey ?? "?"}${r.durationHours ? ` (${r.durationHours}h)` : ""}`;
+    case "ability": return `Fähigkeit ${r.abilityKey ?? "?"}${dur}`;
     case "badge": return `Badge ${r.badgeKey ?? "?"}`;
     case "name_style": return `Style ${r.styleKey ?? "?"}`;
+    case "case_voucher":
+      return r.caseMode === "rarity"
+        ? `🎟️ Gratis-Case (mind. ${VOUCHER_RARITY_LABELS[r.caseRarityFloor ?? "normal"]})${dur}`
+        : `🎟️ Gratis-Case${dur}`;
+    case "game_bonus":
+      return `🎮 +${r.amount ?? 0} ${r.game ? VOUCHER_BONUS_GAME_LABELS[r.game] : "Spielzüge"}${dur}`;
   }
 }

@@ -104,6 +104,8 @@ const REQUIRED_TABLES = [
   "daily_quest_templates", "daily_quest_config", "user_daily_quests",
   // Social / Friends System (run scripts/add-friends-system.cjs)
   "friend_requests", "friendships", "blocked_users",
+  // Reward Vouchers — Case-Gutscheine + Spiel-Bonus (run scripts/add-reward-vouchers.cjs)
+  "case_tokens", "game_bonus_allowances",
 ] as const;
 
 /** Tables that are optional (future features, not yet fully live). WARNUNG if missing. */
@@ -1183,6 +1185,34 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
     }
   } catch (e) {
     results.push(err("social_tables", "Social / Freunde", "Freundes-Tabellen", String(e)));
+  }
+
+  // ── 38. Reward-Gutscheine (Case-Token + Spiel-Bonus) ──────────────────────
+  // Tabellen: case_tokens, game_bonus_allowances + RPC consume_game_bonus
+  // (scripts/add-reward-vouchers.cjs). Treiben Case-Gutscheine & Extra-Spielzüge.
+  try {
+    const [{ error: ctErr, count: openTokens }, { error: gbErr }] = await Promise.all([
+      admin.from("case_tokens").select("*", { count: "exact", head: true }).is("redeemed_at", null),
+      admin.from("game_bonus_allowances").select("id").limit(0),
+    ]);
+    if (ctErr || gbErr) {
+      results.push(err("reward_vouchers", "Reward-Gutscheine", "Gutschein-Tabellen",
+        `Tabelle(n) fehlen — node scripts/add-reward-vouchers.cjs (${ctErr?.message ?? gbErr?.message})`));
+    } else {
+      results.push(ok("reward_vouchers", "Reward-Gutscheine", "Gutschein-System",
+        `${openTokens ?? 0} offene Case-Token`));
+    }
+    // RPC-Existenz prüfen (no-op-Aufruf mit Null-UUID).
+    const { error: rpcErr } = await admin.rpc("consume_game_bonus", {
+      p_user_id: "00000000-0000-0000-0000-000000000000", p_game: "__healthcheck__",
+    });
+    results.push(rpcErr
+      ? err("rpc_consume_game_bonus", "Reward-Gutscheine", "consume_game_bonus RPC",
+          `RPC fehlt/fehlerhaft: ${rpcErr.message} — scripts/add-reward-vouchers.cjs ausführen.`)
+      : ok("rpc_consume_game_bonus", "Reward-Gutscheine", "consume_game_bonus RPC",
+          "Atomare Bonus-Verbuchung verfügbar."));
+  } catch (e) {
+    results.push(err("reward_vouchers", "Reward-Gutscheine", "Gutschein-Tabellen", String(e)));
   }
 
   return results;

@@ -6,6 +6,7 @@ import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getDonConfig } from "@/lib/actions/don-config";
 import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
+import { consumeGameBonus } from "@/lib/rewards-grant";
 
 export interface FlipResult {
   success: boolean;
@@ -79,6 +80,10 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
       }
     }
 
+    // A DON-Bonus voucher grants extra flips beyond the caps — consumed ONCE per
+    // flip even when both the hourly and daily caps are hit simultaneously.
+    let donBonusConsumed = false;
+
     // Hourly limit check — base limit + bonus from user's upgrade tier
     if (config.hourlyFlipLimit !== null) {
       const userUpgradeTier = (profile as { don_upgrade_tier?: number }).don_upgrade_tier ?? 0;
@@ -97,11 +102,14 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
         .eq("action", "double_or_nothing")
         .gte("created_at", hourAgo.toISOString());
       if ((hourFlips ?? 0) >= effectiveHourlyLimit) {
-        return {
-          success: false,
-          error: `Stundenlimit von ${effectiveHourlyLimit} Flips erreicht. Bitte warte etwas!`,
-          remainingHourlyFlips: 0,
-        };
+        if (!donBonusConsumed) donBonusConsumed = await consumeGameBonus(adminClient, user.id, "don");
+        if (!donBonusConsumed) {
+          return {
+            success: false,
+            error: `Stundenlimit von ${effectiveHourlyLimit} Flips erreicht. Bitte warte etwas!`,
+            remainingHourlyFlips: 0,
+          };
+        }
       }
     }
 
@@ -116,11 +124,14 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
         .gte("created_at", todayStart.toISOString());
 
       if ((todayFlips ?? 0) >= effectiveDailyLimit) {
-        return {
-          success: false,
-          error: `Tageslimit von ${effectiveDailyLimit} Flips erreicht. Komm morgen wieder!`,
-          remainingFlips: 0,
-        };
+        if (!donBonusConsumed) donBonusConsumed = await consumeGameBonus(adminClient, user.id, "don");
+        if (!donBonusConsumed) {
+          return {
+            success: false,
+            error: `Tageslimit von ${effectiveDailyLimit} Flips erreicht. Komm morgen wieder!`,
+            remainingFlips: 0,
+          };
+        }
       }
     }
   } catch {
