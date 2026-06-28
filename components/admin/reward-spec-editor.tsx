@@ -1,12 +1,15 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Trash2, Plus } from "lucide-react";
 import type { RewardSpec, BonusGame } from "@/lib/rewards-grant";
 import { KeySelect } from "@/components/admin/key-select";
 import {
   BONUS_CARD_THEME_LIST, BONUS_CARD_RARITY_LIST,
   AUTO_THEME, AUTO_RARITY,
+  type RarityTier,
 } from "@/lib/bonus-card-themes";
+import { getRarityTiers } from "@/lib/actions/rarity-tiers";
 import { BonusCard } from "@/components/rewards/bonus-card";
 
 /**
@@ -28,6 +31,14 @@ export function RewardSpecEditor({
   label?: string;
 }) {
   const rows = value ?? [];
+  // Konfigurierte Stärke→Seltenheit-Stufen EINMAL laden, damit die Live-Vorschau
+  // die echten Stufen spiegelt (Fehlschlag → undefined → Default in BonusCard).
+  const [tiers, setTiers] = useState<RarityTier[] | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    getRarityTiers().then((t) => { if (alive) setTiers(t); }).catch(() => { /* Default */ });
+    return () => { alive = false; };
+  }, []);
   const set = (i: number, patch: Partial<RewardSpec>) => onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   const add = () => onChange([...rows, { type: "credits", amount: 100 }]);
   const remove = (i: number) => onChange(rows.filter((_, idx) => idx !== i));
@@ -159,6 +170,7 @@ export function RewardSpecEditor({
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Live-Vorschau</span>
                   <BonusCard
                     animateEntry={false}
+                    tiers={tiers}
                     preview={{
                       theme: r.cardTheme,
                       rarity: r.cardRarity,

@@ -366,6 +366,7 @@ export function WardrobeShell({
   const [equippedOnly, setEquippedOnly] = useState(false);
   const [sort, setSort] = useState<SortKey>("rarity-desc");
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [rubric, setRubric] = useState<"items" | "abilities" | "styles" | "boni" | "badges">("items");
   const [nameStyleData, setNameStyleData] = useState<{
     owned: UserNameStyleRow[];
     activeKey: string | null;
@@ -601,132 +602,154 @@ export function WardrobeShell({
           />
 
           <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <CategoryFilters
-                  categories={categories}
-                  active={currentCategory.id}
-                  onSelect={(id) => {
-                    sound.click();
-                    setActiveCategory(id);
-                  }}
-                />
+            {/* EINE Rubrik „Meine Gutscheine" mit Typ-Chips — genau ein Typ sichtbar */}
+            <div>
+              <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
+                <span>🎟️</span>
+                Meine Gutscheine
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { id: "items", label: "Ausrüstung", show: true },
+                    { id: "abilities", label: "Fähigkeits-Gutscheine", show: true },
+                    { id: "styles", label: "Style-Gutscheine", show: !!nameStyleData },
+                    { id: "boni", label: "Boni", show: true },
+                    { id: "badges", label: "Badges", show: initialBadges.length > 0 },
+                  ] as const
+                )
+                  .filter((chip) => chip.show)
+                  .map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onMouseEnter={sound.hover}
+                      onClick={() => {
+                        sound.click();
+                        setRubric(chip.id);
+                      }}
+                      className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                        rubric === chip.id
+                          ? "border-purple-400 bg-purple-500/15 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.45)]"
+                          : "border-white/10 bg-white/[0.02] text-zinc-300 hover:border-white/30"
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
               </div>
-              <CombatStatsPanel equippedByCategory={equippedByCategory} />
             </div>
 
-            <WardrobeFilters
-              query={query}
-              onQueryChange={setQuery}
-              activeRarities={activeRarities}
-              onToggleRarity={toggleRarityFilter}
-              equippedOnly={equippedOnly}
-              onToggleEquippedOnly={() => setEquippedOnly((v) => !v)}
-              sort={sort}
-              onSortChange={setSort}
-              resultCount={visibleItems.length}
-            />
-
-            {visibleItems.length === 0 ? (
-              <p className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-8 text-center text-sm text-zinc-500">
-                Keine Items gefunden — Filter anpassen oder zurücksetzen.
-              </p>
-            ) : (
-              <div ref={scrollParentRef} className="h-[70vh] overflow-y-auto pr-1">
-                <div
-                  style={{ height: virtualizer.getTotalSize(), position: "relative" }}
-                >
-                  {virtualizer.getVirtualItems().map((virtualRow) => {
-                    const row = visibleItems[virtualRow.index];
-                    return (
-                      <div
-                        key={row.id}
-                        ref={virtualizer.measureElement}
-                        data-index={virtualRow.index}
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          width: "100%",
-                          // No fixed `height` here on purpose — letting the
-                          // row size itself naturally is what
-                          // `measureElement` actually measures. Forcing it
-                          // back to the (possibly still-wrong) estimate
-                          // would defeat the whole point of measuring.
-                          transform: `translateY(${virtualRow.start}px)`,
-                          paddingBottom: 8,
-                        }}
-                      >
-                        <ItemRow
-                          id={row.id}
-                          name={row.item.name}
-                          rarity={row.item.rarity}
-                          type={row.item.type}
-                          damage={row.item.damage}
-                          armor={row.item.armor}
-                          perk_type={row.item.perk_type}
-                          perk_magnitude={row.item.perk_magnitude}
-                          shield_hp={row.item.shield_hp}
-                          shield_regen_cooldown_sec={row.item.shield_regen_cooldown_sec}
-                          equipped={row.equipped}
-                          onToggle={handleToggle}
-                          onPreview={setPreviewId}
-                        />
-                      </div>
-                    );
-                  })}
+            {rubric === "items" && (
+              <>
+                <div className="flex flex-wrap items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <CategoryFilters
+                      categories={categories}
+                      active={currentCategory.id}
+                      onSelect={(id) => {
+                        sound.click();
+                        setActiveCategory(id);
+                      }}
+                    />
+                  </div>
+                  <CombatStatsPanel equippedByCategory={equippedByCategory} />
                 </div>
-              </div>
+
+                <WardrobeFilters
+                  query={query}
+                  onQueryChange={setQuery}
+                  activeRarities={activeRarities}
+                  onToggleRarity={toggleRarityFilter}
+                  equippedOnly={equippedOnly}
+                  onToggleEquippedOnly={() => setEquippedOnly((v) => !v)}
+                  sort={sort}
+                  onSortChange={setSort}
+                  resultCount={visibleItems.length}
+                />
+
+                {visibleItems.length === 0 ? (
+                  <p className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-8 text-center text-sm text-zinc-500">
+                    Keine Items gefunden — Filter anpassen oder zurücksetzen.
+                  </p>
+                ) : (
+                  <div ref={scrollParentRef} className="h-[70vh] overflow-y-auto pr-1">
+                    <div
+                      style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+                    >
+                      {virtualizer.getVirtualItems().map((virtualRow) => {
+                        const row = visibleItems[virtualRow.index];
+                        return (
+                          <div
+                            key={row.id}
+                            ref={virtualizer.measureElement}
+                            data-index={virtualRow.index}
+                            style={{
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              width: "100%",
+                              // No fixed `height` here on purpose — letting the
+                              // row size itself naturally is what
+                              // `measureElement` actually measures. Forcing it
+                              // back to the (possibly still-wrong) estimate
+                              // would defeat the whole point of measuring.
+                              transform: `translateY(${virtualRow.start}px)`,
+                              paddingBottom: 8,
+                            }}
+                          >
+                            <ItemRow
+                              id={row.id}
+                              name={row.item.name}
+                              rarity={row.item.rarity}
+                              type={row.item.type}
+                              damage={row.item.damage}
+                              armor={row.item.armor}
+                              perk_type={row.item.perk_type}
+                              perk_magnitude={row.item.perk_magnitude}
+                              shield_hp={row.item.shield_hp}
+                              shield_regen_cooldown_sec={row.item.shield_regen_cooldown_sec}
+                              equipped={row.equipped}
+                              onToggle={handleToggle}
+                              onPreview={setPreviewId}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {rubric === "abilities" && (
+              <AbilitiesSection abilities={abilities} equippedKey={equippedAbilityKey} />
+            )}
+
+            {rubric === "styles" && nameStyleData && (
+              <NameStyleSection
+                initialOwned={nameStyleData.owned}
+                initialActiveKey={nameStyleData.activeKey}
+                username={username}
+                credits={credits}
+                isAdmin={isAdmin}
+              />
+            )}
+
+            {rubric === "boni" && (
+              <VouchersSection caseTokens={caseTokens} gameBonuses={gameBonuses} />
+            )}
+
+            {rubric === "badges" && initialBadges.length > 0 && (
+              <PrioBadgeSelectionSection
+                badges={initialBadges}
+                initialSelected={initialPrioBadges}
+                maxPrioBadges={maxPrioBadges}
+                locked={initialPrioLocked}
+              />
             )}
           </div>
         </div>
-
-        {nameStyleData && (
-          <div className="mt-6">
-            <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
-              <span>🎨</span>
-              Name-Styles
-            </h2>
-            <NameStyleSection
-              initialOwned={nameStyleData.owned}
-              initialActiveKey={nameStyleData.activeKey}
-              username={username}
-              credits={credits}
-              isAdmin={isAdmin}
-            />
-          </div>
-        )}
-
-        <div className="mt-6">
-          <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
-            <span>⚡</span>
-            Mein Fähigkeits-Gutschein
-          </h2>
-          <AbilitiesSection abilities={abilities} equippedKey={equippedAbilityKey} />
-        </div>
-
-        <div className="mt-6">
-          <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
-            <span>🎟️</span>
-            Meine Gutscheine
-          </h2>
-          <VouchersSection caseTokens={caseTokens} gameBonuses={gameBonuses} />
-        </div>
-
-        {initialBadges.length > 0 && (
-          <div className="mt-6">
-            <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
-              <span>⭐</span>
-              Prio-Badges
-            </h2>
-            <PrioBadgeSelectionSection
-              badges={initialBadges}
-              initialSelected={initialPrioBadges}
-              maxPrioBadges={maxPrioBadges}
-              locked={initialPrioLocked}
-            />
-          </div>
-        )}
       </main>
 
       {previewRow && (

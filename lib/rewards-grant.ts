@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Rarity } from "@/lib/cases";
 import { RARITY_LABELS } from "@/lib/cases";
 import { BONUS_GAMES, BONUS_GAME_LABELS, isBonusGame, type BonusGame } from "@/lib/bonus-games";
+import { rarityFromAmount, DEFAULT_RARITY_TIERS, AUTO_RARITY, type RarityTier } from "@/lib/bonus-card-themes";
 
 /**
  * Central granter for the two cross-cutting reward kinds that can be embedded in
@@ -150,6 +151,20 @@ export async function grantGameBonus(
 ): Promise<{ ok: boolean; error?: string; summary: string }> {
   const amount = Math.max(1, Math.floor(opts.amount));
   if (!isBonusGame(opts.game)) return { ok: false, error: "Unbekanntes Spiel für Bonus.", summary: "" };
+
+  // Auto-Auflösung: fehlt cardRarity oder ="auto", die KONKRETE Seltenheit aus
+  // der Menge + den KONFIGURIERTEN Stufen bestimmen (Fallback: Defaults). So wird
+  // nie "auto"/null gespeichert; card_theme bleibt wie übergeben (löst sich später
+  // aus der nun konkreten Seltenheit auf).
+  let cardRarity = opts.cardRarity;
+  if (!cardRarity || cardRarity === AUTO_RARITY) {
+    let tiers: RarityTier[] = DEFAULT_RARITY_TIERS;
+    const { data: cfg } = await admin.from("site_config").select("rarity_tiers").eq("id", "default").single();
+    const raw = (cfg as { rarity_tiers?: unknown } | null)?.rarity_tiers;
+    if (Array.isArray(raw) && raw.length > 0) tiers = raw as RarityTier[];
+    cardRarity = rarityFromAmount(amount, tiers);
+  }
+
   const { error } = await admin.from("game_bonus_allowances").insert({
     user_id: userId,
     game: opts.game,
@@ -158,7 +173,7 @@ export async function grantGameBonus(
     source: opts.source ?? "voucher",
     expires_at: expiryFromHours(opts.durationHours),
     card_theme: opts.cardTheme ?? null,
-    card_rarity: opts.cardRarity ?? null,
+    card_rarity: cardRarity,
     card_title: opts.cardTitle ?? null,
     card_subtitle: opts.cardSubtitle ?? null,
   });

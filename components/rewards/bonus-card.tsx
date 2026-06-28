@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import {
   getBonusCardRarity,
   resolveCardRarity, resolveCardTheme,
+  type RarityTier,
 } from "@/lib/bonus-card-themes";
 import { BONUS_GAME_LABELS, type BonusGame } from "@/lib/bonus-games";
 import type { ActiveBonusCard } from "@/lib/actions/bonus-cards";
@@ -90,12 +91,14 @@ export function BonusCard(
     className?: string;
     /** Eintritts-Animation (scale/opacity). Default an. */
     animateEntry?: boolean;
+    /** Konfigurierte Stärke→Seltenheit-Stufen (sonst Default). */
+    tiers?: RarityTier[];
   },
 ) {
   const card = "card" in props ? fromActive(props.card) : fromPreview(props.preview);
   // AUTO-Auflösung: Seltenheit aus der Bonus-Menge (Stufen), Theme aus der Seltenheit.
   // „auto"/leer wird hier real aufgelöst; konkrete Werte bleiben unverändert.
-  const effectiveRarity = resolveCardRarity(card.rarity, card.total);
+  const effectiveRarity = resolveCardRarity(card.rarity, card.total, props.tiers);
   const theme = resolveCardTheme(card.theme, effectiveRarity);
   const rarity = getBonusCardRarity(effectiveRarity);
 

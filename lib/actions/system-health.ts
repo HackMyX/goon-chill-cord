@@ -184,6 +184,7 @@ const COLUMN_CHECKS: Array<{
   { id: "col_site_topbarslots",     category: "Konfiguration", table: "site_config", col: "topbar_right_slots",      detail: "node scripts/db-audit-fix.cjs" },
   { id: "col_site_topbarbtnstyle",  category: "Konfiguration", table: "site_config", col: "topbar_button_style",     detail: "node scripts/db-audit-fix.cjs" },
   { id: "col_site_version",         category: "Konfiguration", table: "site_config", col: "site_version",            detail: "node scripts/db-audit-fix.cjs" },
+  { id: "col_site_raritytiers",     category: "Konfiguration", table: "site_config", col: "rarity_tiers",            detail: "node scripts/add-rarity-tiers-config.cjs" },
   // Patch notes — popup toggle
   { id: "col_patch_popup",        category: "Patch Notes",        table: "patch_notes",         col: "show_popup",              detail: "ALTER TABLE patch_notes ADD COLUMN show_popup boolean NOT NULL DEFAULT false;" },
   // Startseiten-Bestenlisten — Profilbild-Modus (Top 3 vs. alle Plätze)

@@ -1,11 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { Gift, Loader2, Check, X, Send, Users, Info, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Gift, Loader2, Check, X, Send, Users, Info, Search, Sparkles } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 import { adminGrantVoucherToUsers } from "@/lib/actions/vouchers";
 import { RewardSpecEditor } from "@/components/admin/reward-spec-editor";
 import type { RewardSpec } from "@/lib/rewards-grant";
+import { getRarityTiers, saveRarityTiers } from "@/lib/actions/rarity-tiers";
+import {
+  DEFAULT_RARITY_TIERS, getBonusCardRarity,
+  type RarityTier, type BonusCardRarity,
+} from "@/lib/bonus-card-themes";
 
 type Profile = { id: string; username: string };
 
@@ -71,6 +76,98 @@ function UserMultiSelect({ profiles, selected, onChange }: {
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// Fixe Reihenfolge der 5 Seltenheiten (nur minAmount editierbar).
+const RARITY_ORDER: BonusCardRarity[] = ["normal", "selten", "episch", "mythisch", "ultra"];
+
+// ─── Seltenheits-Stufen (Auto-Theme) ──────────────────────────────────────────
+// Bestimmt, welche Seltenheit (und damit welches Auto-Theme) eine Bonus-Menge
+// bekommt. Speichert in site_config.rarity_tiers via saveRarityTiers().
+function RarityTiersEditor() {
+  const sound = useSoundManager();
+  const [tiers, setTiers] = useState<RarityTier[]>(DEFAULT_RARITY_TIERS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getRarityTiers()
+      .then((t) => { if (alive) setTiers(t); })
+      .catch(() => { /* Default bleibt */ })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  // minAmount pro Seltenheit (auf fixe Reihenfolge normalisiert).
+  const minOf = (r: BonusCardRarity): number =>
+    tiers.find((t) => t.rarity === r)?.minAmount
+    ?? DEFAULT_RARITY_TIERS.find((t) => t.rarity === r)?.minAmount
+    ?? 0;
+
+  const setMin = (r: BonusCardRarity, v: number) => {
+    const next = RARITY_ORDER.map((rr) => ({ rarity: rr, minAmount: rr === r ? Math.max(0, Math.floor(v || 0)) : minOf(rr) }));
+    setTiers(next);
+  };
+
+  async function handleSave() {
+    setSaving(true); setMsg(null); sound.click();
+    const ordered = RARITY_ORDER.map((r) => ({ rarity: r, minAmount: minOf(r) }));
+    const res = await saveRarityTiers(ordered);
+    setSaving(false);
+    if (res.success) { sound.save(); setMsg({ text: "Stufen gespeichert.", ok: true }); }
+    else { sound.error(); setMsg({ text: res.error ?? "Fehler.", ok: false }); }
+    setTimeout(() => setMsg(null), 5000);
+  }
+
+  return (
+    <div className="rounded-2xl border border-amber-400/15 bg-amber-500/[0.02] p-5">
+      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-300">
+        <Sparkles className="h-3.5 w-3.5" /> Seltenheits-Stufen (Auto-Theme)
+      </h3>
+      <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-zinc-500">
+        <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-300/70" />
+        <span>
+          Bestimmt, welche Seltenheit (und damit welches Auto-Theme) eine Bonus-Menge bekommt. Ultra = RGB.
+          Ab der hier eingestellten Menge gilt die jeweilige Stufe.
+        </span>
+      </p>
+      <div className="mt-4 flex flex-col gap-2">
+        {loading ? (
+          <span className="flex items-center gap-2 text-xs text-zinc-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Lade…</span>
+        ) : (
+          RARITY_ORDER.map((r) => {
+            const style = getBonusCardRarity(r);
+            return (
+              <div key={r} className="flex items-center gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+                <span
+                  className="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider"
+                  style={{ background: style.ribbon, color: style.text, boxShadow: `0 0 0 1px ${style.ring}` }}
+                >
+                  {style.label}
+                </span>
+                <span className="ml-auto text-[11px] text-zinc-400">ab Menge</span>
+                <input
+                  type="number" min={0}
+                  value={minOf(r)}
+                  onChange={(e) => setMin(r, Number(e.target.value))}
+                  className={`w-24 ${INPUT}`}
+                />
+              </div>
+            );
+          })
+        )}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button onClick={handleSave} disabled={saving || loading}
+          className="flex w-fit items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-500 disabled:opacity-40">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Stufen speichern
+        </button>
+        {msg && <p className={`text-sm font-semibold ${msg.ok ? "text-emerald-400" : "text-red-400"}`}>{msg.text}</p>}
       </div>
     </div>
   );
@@ -143,6 +240,9 @@ export function VoucherAdminTab({ profiles }: { profiles: Profile[] }) {
           </div>
         </div>
       </div>
+
+      {/* SELTENHEITS-STUFEN (Auto-Theme) */}
+      <RarityTiersEditor />
     </div>
   );
 }
