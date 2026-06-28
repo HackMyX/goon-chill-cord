@@ -73,7 +73,7 @@ interface RemotePlayersProps {
 /**
  * Renders every *other* player currently in the World as a fully-equipped
  * `CharacterModel` — no input, no physics, just lerping toward the latest
- * 10Hz transform broadcast (lib/world-realtime.ts) from that peer's own
+ * 20Hz transform broadcast (lib/world-realtime.ts) from that peer's own
  * Player.tsx, plus a blood-burst reaction whenever a server-broadcast
  * "pvp_damage" event names this avatar as the target (the actual HP change
  * happens on that peer's own tab, not here — this is purely the visual
@@ -147,8 +147,8 @@ function RemotePlayerAvatar({
   // Drives the right-arm swing animation when a pvp_damage event says this
   // avatar landed a hit — 0 = idle, 0→1 = mid-swing, resets to 0 when done.
   const attackProgressRef = useRef(0);
-  // Mirrors the remote player's animState broadcast — updated at 10Hz.
-  const animStateRef = useRef<'idle' | 'run' | 'slide' | 'attack' | 'jump' | 'hurt'>('idle');
+  // Mirrors the remote player's animState broadcast — updated at 20Hz.
+  const animStateRef = useRef<'idle' | 'run' | 'slide' | 'attack' | 'jump' | 'hurt' | 'death'>('idle');
   // Smoothly interpolated Y offset for the jump visual (peer Y is never
   // broadcast — only X/Z are — so we fake height from animState alone).
   const remoteYRef = useRef(0);
@@ -291,7 +291,7 @@ function RemotePlayerAvatar({
 
     // Cosmetic walk-cycle driven by the peer's own reported moving/sprinting
     // flags (not by locally inferring it from position deltas, which at a
-    // 10Hz feed would lag a full sample behind and visibly stutter) — same
+    // 20Hz feed would lag a full sample behind and visibly stutter) — same
     // sine-swing shape Player.tsx uses for the local body, just without any
     // of the jump/attack pose blending this avatar never needs since it has
     // no local combat yet (Phase 1 is visuals-only).
@@ -330,13 +330,19 @@ function RemotePlayerAvatar({
     remoteYRef.current = THREE.MathUtils.lerp(remoteYRef.current, targetY, Math.min(1, delta * 7));
     g.position.y = remoteYRef.current;
 
+    // Death takes priority over every other pose: face-plant forward, mirroring
+    // the local player's own death-fall (player.tsx faceplants to ~PI/2.1), so a
+    // killed peer visibly collapses instead of standing upright until they
+    // respawn. We don't replicate the local shrink-despawn (partial parity) —
+    // the avatar simply unmounts when the player leaves/respawns.
+    const isDead = animStateRef.current === 'death';
     // Slide: squash scale-Y + forward tilt. Run: slight forward lean.
-    const isSliding = animStateRef.current === 'slide';
+    const isSliding = !isDead && animStateRef.current === 'slide';
     g.scale.y = THREE.MathUtils.lerp(g.scale.y, isSliding ? 0.65 : 1, Math.min(1, delta * 8));
     g.rotation.x = THREE.MathUtils.lerp(
       g.rotation.x,
-      isSliding ? 0.30 : animStateRef.current === 'run' ? -0.07 : 0,
-      Math.min(1, delta * 8)
+      isDead ? Math.PI / 2.1 : isSliding ? 0.30 : animStateRef.current === 'run' ? -0.07 : 0,
+      Math.min(1, delta * (isDead ? 5 : 8))
     );
   });
 

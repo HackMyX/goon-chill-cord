@@ -73,7 +73,7 @@ interface PlayerProps {
    * the weapon HUD chip — purely a UI side-effect hook, never read back
    * into the physics/animation above. */
   onAttack?: (damage: number, hit: boolean) => void;
-  /** Throttled to ~10/sec (not every frame) so the HP/Stamina/Shield HUD in
+  /** Throttled to ~20/sec (not every frame) so the HP/Stamina/Shield HUD in
    * world-shell.tsx stays live without re-rendering React 60×/sec. */
   onStatsChange?: (stats: PlayerStatsSnapshot) => void;
   /** Fired exactly once at the moment hp hits 0 (not every frame while
@@ -1174,7 +1174,7 @@ export function Player({
         shieldRegenCooldown: combatRef.current.shieldRegenCooldown,
         shieldRegenCooldownDuration: combatRef.current.shieldRegenCooldownDuration,
       });
-      // Same 10Hz cadence as the HUD sync above — a position broadcast
+      // Same 20Hz cadence as the HUD sync above — a position broadcast
       // doesn't need to be any more frequent than the HUD itself updates,
       // and reusing this timer means no second interval to keep in sync.
       broadcastTransform({
@@ -1187,7 +1187,9 @@ export function Player({
         shieldMaxHp: combatRef.current.shieldMaxHp,
         moving,
         sprinting,
-        animState: hurtTimer.current > 0
+        animState: combatRef.current.dead
+          ? 'death'
+          : hurtTimer.current > 0
           ? 'hurt'
           : slideActive.current
           ? 'slide'

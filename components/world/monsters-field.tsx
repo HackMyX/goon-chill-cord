@@ -26,9 +26,11 @@ import {
   subscribeToMonsterKill,
   subscribeToMonsterAggroAlert,
   subscribeToWorldTransforms,
+  subscribeToMonsterAttack,
   broadcastMonsterSync,
   broadcastMonsterKill,
   broadcastMonsterCrossAttack,
+  broadcastMonsterAttack,
   type MonsterSyncPayload,
 } from "@/lib/world-realtime";
 import type { AggroTarget } from "@/components/world/monster";
@@ -61,6 +63,15 @@ interface MonstersFieldProps {
 }
 
 let spawnSeq = 0;
+
+/** A remote attacker only keeps kill-streak credit for one of our monsters
+ * if their last registered hit landed within this window before the monster
+ * actually died — otherwise the killing blow is attributed to the local
+ * owner (whose direct hits go straight through Monster.tsx and never touch
+ * the remote-hitter map). Tuned to comfortably cover realtime round-trip +
+ * the 8 Hz sync cadence while still excluding a stale tag from a much
+ * earlier exchange. */
+const REMOTE_KILL_CREDIT_WINDOW_MS = 600;
 
 function randomSpawnPosition(spawnSafeRadius: number): [number, number, number] {
   const angle = Math.random() * Math.PI * 2;
@@ -109,9 +120,20 @@ export function MonstersField({
   const playerCount = useRef(1);
   // Ref mirror of spawns so the sync interval can read the live list.
   const spawnsRef = useRef<MonsterSpawn[]>([]);
-  // Tracks which remote attacker last hit a given own monster id — used to
-  // route kill-streak credit to the correct player on a cross-player kill.
-  const lastRemoteHitterRef = useRef<Map<string, string>>(new Map());
+  // Tracks which remote attacker last hit a given own monster id, plus WHEN
+  // (ms timestamp) — used to route kill-streak credit to the correct player
+  // on a cross-player kill. The timestamp guards against a "kill steal": a
+  // remote tag set long before the local owner lands the actual killing blow
+  // would otherwise hand the streak credit to the wrong player. Only a
+  // *recent* remote hit (within REMOTE_KILL_CREDIT_WINDOW_MS) counts as the
+  // plausible final blow.
+  const lastRemoteHitterRef = useRef<Map<string, { id: string; t: number }>>(new Map());
+  // Live mirror of the room roster (by userId) — read synchronously in the
+  // monster_sync handler so a late REST snapshot from a player who already
+  // left can't resurrect their ghost monsters (the roster-leave cleanup
+  // below only prunes the map it can see at leave time, not snapshots that
+  // arrive a tick later).
+  const onlineIdsRef = useRef<Set<string>>(new Set([userId]));
   // Tracks whether the player was dead last frame so we can fire the
   // despawn exactly once on the transition, not every frame while dead.
   const wasDeadRef = useRef(false);
@@ -122,6 +144,12 @@ export function MonstersField({
   // subscribeToWorldTransforms (track attacker movement while window is open).
   const aggroTargetRef = useRef<AggroTarget | null>(null);
 
+  // Latest attack-pulse timestamp per remote monster id — written by the
+  // monster_attack subscription, read each frame by RemoteMonster to fire a
+  // one-shot lunge. A ref (not state) so an incoming attack never re-renders
+  // the whole field; RemoteMonster polls its own id.
+  const remoteAttackPulseRef = useRef<Map<string, number>>(new Map());
+
   useEffect(() => {
     spawnsRef.current = spawns;
   }, [spawns]);
@@ -130,6 +158,9 @@ export function MonstersField({
   useEffect(() => {
     return subscribeToWorldRoster((onlineUserIds) => {
       playerCount.current = Math.max(1, onlineUserIds.size);
+      // Keep our own id in the live set too (presence usually includes it,
+      // but never drop the local owner) so the sync-handler guard is robust.
+      onlineIdsRef.current = new Set(onlineUserIds).add(userId);
       setRemoteMonsters((prev) => {
         let changed = false;
         const updated = new Map(prev);
@@ -142,7 +173,7 @@ export function MonstersField({
         return changed ? updated : prev;
       });
     });
-  }, []);
+  }, [userId]);
 
   // Broadcast own monster pool at ~8Hz so other players can render smooth movement.
   useEffect(() => {
@@ -177,9 +208,16 @@ export function MonstersField({
       // self: false on the channel means we never receive our own broadcast,
       // but guard anyway.
       if (payload.ownerId === userId) return;
+      // Drop snapshots from a player who already left the roster — a late
+      // REST packet must not resurrect ghosts the leave-cleanup just pruned.
+      if (!onlineIdsRef.current.has(payload.ownerId)) return;
       setRemoteMonsters((prev) => {
         const updated = new Map(prev);
-        updated.set(payload.ownerId, payload.monsters.filter((m) => m.alive));
+        // Keep dead monsters too (alive:false) so RemoteMonster can play the
+        // sink-and-fade death animation instead of popping out — the owner
+        // keeps broadcasting a just-killed mob for ~MONSTER_DEATH_CLEANUP_MS
+        // before dropping it from its own pool, which unmounts it here.
+        updated.set(payload.ownerId, payload.monsters);
         return updated;
       });
     });
@@ -192,7 +230,7 @@ export function MonstersField({
       const handle = registryRef.current.find((h) => h.id === payload.monsterId);
       if (!handle || !handle.isAlive()) return;
       // Track last remote hitter for kill attribution before applying damage.
-      lastRemoteHitterRef.current.set(payload.monsterId, payload.attackerId);
+      lastRemoteHitterRef.current.set(payload.monsterId, { id: payload.attackerId, t: Date.now() });
       handle.takeDamage(payload.amount);
     });
   }, [userId, registryRef]);
@@ -204,6 +242,25 @@ export function MonstersField({
       onMonsterKilled(payload.typeId);
     });
   }, [userId, onMonsterKilled]);
+
+  // Receive remote monster-attack pulses → record a timestamp the matching
+  // RemoteMonster reads each frame to play its lunge.
+  useEffect(() => {
+    return subscribeToMonsterAttack((payload) => {
+      if (payload.ownerId === userId) return;
+      if (!onlineIdsRef.current.has(payload.ownerId)) return;
+      const now = Date.now();
+      // Prune stale pulses (a lunge is consumed within ~0.3s) so the map
+      // can't grow unbounded with ids of long-despawned monsters.
+      const map = remoteAttackPulseRef.current;
+      if (map.size > 64) {
+        for (const [mid, t] of map) {
+          if (now - t > 5000) map.delete(mid);
+        }
+      }
+      map.set(payload.monsterId, now);
+    });
+  }, [userId]);
 
   // Cross-player aggro: when someone hits one of our monsters, make all our
   // monsters chase the attacker for crossPlayerAggroDurationSec seconds.
@@ -243,6 +300,12 @@ export function MonstersField({
       broadcastMonsterSync({ ownerId: userId, monsters: [] });
       setSpawns([]);
       setProjectiles([]);
+      // Cleanup state tied to the now-despawned mobs: stale kill-attribution
+      // tags would otherwise accumulate across a long session, and a lingering
+      // cross-player aggro target would keep firing cross-attack broadcasts at
+      // a player our (now gone) monsters were chasing.
+      lastRemoteHitterRef.current.clear();
+      aggroTargetRef.current = null;
     }
     // When the player respawns, add a short delay before the first mob appears.
     if (!isDead && wasDeadRef.current) {
@@ -298,8 +361,13 @@ export function MonstersField({
   }
 
   function handleDied(spawnId: string, typeId: string) {
-    const remoteKillerId = lastRemoteHitterRef.current.get(spawnId) ?? null;
+    const lastHit = lastRemoteHitterRef.current.get(spawnId);
     lastRemoteHitterRef.current.delete(spawnId);
+    // Only credit the remote attacker if their last hit was recent enough to
+    // plausibly be the killing blow — otherwise a local owner's killing hit
+    // after an old remote tag would wrongly hand them the streak (kill steal).
+    const remoteKillerId =
+      lastHit && Date.now() - lastHit.t < REMOTE_KILL_CREDIT_WINDOW_MS ? lastHit.id : null;
 
     if (remoteKillerId !== null && remoteKillerId !== userId) {
       // Remote player landed the killing blow — broadcast the kill so they
@@ -345,6 +413,7 @@ export function MonstersField({
           characterConfig={characterConfig}
           aggroTargetRef={aggroTargetRef}
           onRemoteAttack={handleRemoteAttack}
+          onAttack={() => broadcastMonsterAttack({ ownerId: userId, monsterId: s.id })}
         />
       ))}
       {projectiles.map((p) => (
@@ -372,6 +441,8 @@ export function MonstersField({
             z={m.z}
             hp={m.hp}
             maxHp={m.maxHp}
+            alive={m.alive}
+            attackPulseRef={remoteAttackPulseRef}
             registryRef={registryRef}
             characterConfig={characterConfig}
           />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Billboard, Text } from "@react-three/drei";
@@ -8,6 +8,8 @@ import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import type { CharacterConfig } from "@/lib/character-config";
 import { broadcastMonsterHit } from "@/lib/world-realtime";
+import { FloatingDamageNumber, DEATH_SINK_DURATION } from "@/components/world/monster";
+import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 
 interface RemoteMonsterProps {
   ownerId: string;
@@ -19,21 +21,44 @@ interface RemoteMonsterProps {
   z: number;
   hp: number;
   maxHp: number;
+  /** Owner's authoritative alive flag from the latest monster_sync. False
+   * for a just-killed mob the owner is still broadcasting (for
+   * ~MONSTER_DEATH_CLEANUP_MS) so this ghost can play a matching death
+   * animation instead of popping out, and so it stops being hittable. */
+  alive: boolean;
+  /** Shared map (owned by MonstersField) of monsterId → last attack-pulse
+   * timestamp. This monster polls its own id each frame; a newer timestamp
+   * than last consumed fires a one-shot lunge so observers see the swing. */
+  attackPulseRef: React.RefObject<Map<string, number>>;
   registryRef: MonsterRegistry;
   characterConfig: CharacterConfig;
 }
+
+// Module-scoped so every RemoteMonster's popups/bursts get unique keys
+// without colliding across instances — same idiom as monster.tsx.
+let remotePopupSeq = 0;
+let remoteBurstSeq = 0;
 
 /**
  * Ghost visual of another player's monster — rendered by MonstersField on
  * every client that isn't the owner. No AI loop (it never chases or attacks
  * the local player), but it IS registered in the local MonsterRegistry so
  * the local player can melee it. `takeDamage` broadcasts `monster_hit` to
- * the owner, who applies the real damage in their own simulation; the visual
- * HP bar updates on the next `monster_sync` snapshot (~125ms later).
+ * the owner, who applies the *authoritative* damage in their own simulation;
+ * the synced HP bar then catches up on the next `monster_sync` snapshot
+ * (~125ms later).
+ *
+ * To make a landed hit feel immediate rather than waiting that full round
+ * trip, `takeDamage` ALSO fires optimistic local feedback on the attacker's
+ * own screen — a floating damage number, a blood burst, a hit-flash, and a
+ * predicted HP-bar drop — identical to what the owner's own Monster.tsx
+ * shows. The next authoritative sync reconciles the predicted HP back to the
+ * real value (so concurrent attackers / owner-side clamping self-correct).
  *
  * Slightly transparent so players can instantly distinguish remote monsters
  * from their own. Walk animation is driven by comparing consecutive sync
- * positions — no flags needed.
+ * positions — no flags needed; a subtle idle sway keeps a standing mob from
+ * reading as a frozen statue.
  */
 export function RemoteMonster({
   ownerId,
@@ -45,15 +70,19 @@ export function RemoteMonster({
   z,
   hp,
   maxHp,
+  alive,
+  attackPulseRef,
   registryRef,
   characterConfig,
 }: RemoteMonsterProps) {
   const group = useRef<THREE.Group>(null);
   const healthFill = useRef<THREE.Mesh>(null);
+  const healthGroup = useRef<THREE.Group>(null);
   const armL = useRef<THREE.Group>(null);
   const armR = useRef<THREE.Group>(null);
   const legL = useRef<THREE.Group>(null);
   const legR = useRef<THREE.Group>(null);
+  const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
 
   // Lerp target — updated via useEffect when sync arrives, animated in useFrame.
   const targetPos = useRef(new THREE.Vector3(x, y, z));
@@ -68,6 +97,24 @@ export function RemoteMonster({
   const hpRef = useRef(hp);
   const maxHpRef = useRef(maxHp);
 
+  // Death animation state — mirrors the owner's Monster.tsx sink-and-fade.
+  const aliveRef = useRef(alive);
+  const deathT = useRef(0);
+  const deathBaseY = useRef<number | null>(null);
+
+  // Local hit-flash decay (white-hot torso emissive pulse on each landed hit).
+  const hitGlow = useRef(0);
+
+  // One-shot attack lunge, fired when MonstersField records a newer attack
+  // pulse for this monster id than we last consumed.
+  const lunge = useRef(0);
+  const lastAttackPulse = useRef(0);
+
+  // Optimistic local feedback — the only React state here, identical in shape
+  // to monster.tsx's; one re-render per landed hit is acceptable (rare event).
+  const [popups, setPopups] = useState<{ id: number; amount: number }[]>([]);
+  const [bloodBursts, setBloodBursts] = useState<{ id: number }[]>([]);
+
   useEffect(() => {
     const dist = Math.hypot(x - lastSyncX.current, z - lastSyncZ.current);
     movingRef.current = dist > 0.05;
@@ -77,31 +124,73 @@ export function RemoteMonster({
   }, [x, y, z]);
 
   useEffect(() => {
+    // Authoritative reconciliation: the synced HP overwrites any optimistic
+    // prediction takeDamage applied locally.
     hpRef.current = hp;
     maxHpRef.current = maxHp;
   }, [hp, maxHp]);
 
+  useEffect(() => {
+    aliveRef.current = alive;
+  }, [alive]);
+
   useFrame((_, delta) => {
     if (!group.current) return;
+
+    // Death: sink, topple, and shrink in place — mirrors Monster.tsx so a
+    // remote-killed mob fades out the same way it does on the owner's screen
+    // instead of vanishing instantly. MonstersField unmounts this component
+    // once the owner drops the corpse from its broadcast pool.
+    if (!aliveRef.current) {
+      if (deathBaseY.current === null) deathBaseY.current = group.current.position.y;
+      deathT.current += delta;
+      group.current.position.y = deathBaseY.current - Math.min(0.9, deathT.current * 0.9);
+      group.current.rotation.z = THREE.MathUtils.lerp(
+        group.current.rotation.z,
+        Math.PI / 2.2,
+        Math.min(1, deathT.current * 2)
+      );
+      group.current.scale.setScalar(Math.max(0.05, 1 - deathT.current / (DEATH_SINK_DURATION * 1.4)));
+      if (healthGroup.current) healthGroup.current.visible = false;
+      return;
+    }
 
     // Smooth position interpolation — rate 14 instead of 8 so the avatar
     // stays close to the owner's real position at 8Hz updates.
     group.current.position.lerp(targetPos.current, Math.min(1, delta * 14));
 
-    // Walk animation driven by movement state inferred from sync position delta.
+    // Walk + idle animation. walkClock keeps advancing even while idle (slow)
+    // so the limbs sway subtly instead of snapping to a dead-still rest pose —
+    // the "statue" fix. Amplitude blends from a small idle sway (0.06) up to a
+    // full walk swing (0.42) as inferred movement ramps in.
     walkAmplitude.current = THREE.MathUtils.lerp(
       walkAmplitude.current,
       movingRef.current ? 1 : 0,
       Math.min(1, delta * 8)
     );
-    if (movingRef.current || walkAmplitude.current > 0.01) {
-      walkClock.current += delta * 7;
+    walkClock.current += delta * (movingRef.current ? 7 : 1.2);
+    const swing = Math.sin(walkClock.current) * (0.06 + walkAmplitude.current * (0.42 - 0.06));
+
+    // Consume a fresh attack pulse → fire a one-shot lunge, then decay it
+    // (same rate/arm bias as the owner's local Monster.tsx lunge).
+    const pulse = attackPulseRef.current?.get(id) ?? 0;
+    if (pulse > lastAttackPulse.current) {
+      lastAttackPulse.current = pulse;
+      lunge.current = 1;
     }
-    const swing = Math.sin(walkClock.current) * walkAmplitude.current * 0.42;
+    lunge.current = Math.max(0, lunge.current - delta * 3.5);
+
     if (legL.current) legL.current.rotation.x = swing;
     if (legR.current) legR.current.rotation.x = -swing;
-    if (armL.current) armL.current.rotation.x = -swing * 0.8;
-    if (armR.current) armR.current.rotation.x = swing * 0.8;
+    if (armL.current) armL.current.rotation.x = -swing * 0.8 - lunge.current * 0.5;
+    if (armR.current) armR.current.rotation.x = swing * 0.8 - lunge.current * 1.7;
+
+    // Hit-flash: quick white-hot emissive pulse decaying with hitGlow (~0.25s).
+    hitGlow.current = Math.max(0, hitGlow.current - delta * 4);
+    if (torsoMaterial.current) {
+      torsoMaterial.current.emissive.setRGB(1, 0.25, 0.25);
+      torsoMaterial.current.emissiveIntensity = hitGlow.current * 1.4;
+    }
 
     if (healthFill.current) {
       const frac = maxHpRef.current > 0 ? Math.max(0, hpRef.current / maxHpRef.current) : 0;
@@ -118,11 +207,27 @@ export function RemoteMonster({
       typeId: type.id,
       ownerId,
       getPosition: () => group.current?.position ?? new THREE.Vector3(x, y, z),
-      isAlive: () => true,
+      isAlive: () => aliveRef.current,
       getHp: () => hpRef.current,
       hitRadius: characterConfig.attackHitRadius * type.scale,
       takeDamage: (amount) => {
+        if (!aliveRef.current) return 0;
+        // Tell the owner (authoritative) to apply the real damage.
         broadcastMonsterHit({ attackerId: localUserId, ownerId, monsterId: id, amount });
+        // Optimistic local feedback so the hit lands NOW on the attacker's
+        // screen rather than after a full sync round trip — predicted HP is
+        // overwritten by the next authoritative monster_sync.
+        hpRef.current = Math.max(0, hpRef.current - amount);
+        hitGlow.current = 1;
+        const popupId = ++remotePopupSeq;
+        setPopups((curr) => [...curr, { id: popupId, amount }]);
+        setTimeout(() => setPopups((curr) => curr.filter((p) => p.id !== popupId)), 700);
+        const burstId = ++remoteBurstSeq;
+        setBloodBursts((curr) => [...curr, { id: burstId }]);
+        setTimeout(
+          () => setBloodBursts((curr) => curr.filter((b) => b.id !== burstId)),
+          BLOOD_BURST_LIFETIME_MS
+        );
         return amount;
       },
     };
@@ -144,6 +249,7 @@ export function RemoteMonster({
           <mesh castShadow>
             <sphereGeometry args={[0.42, 14, 10]} />
             <meshStandardMaterial
+              ref={torsoMaterial}
               color={type.colorHex}
               transparent
               opacity={REMOTE_OPACITY}
@@ -159,6 +265,7 @@ export function RemoteMonster({
           <mesh position={[0, 1.5, 0]} castShadow>
             <boxGeometry args={[0.5, 0.7, 0.3]} />
             <meshStandardMaterial
+              ref={torsoMaterial}
               color={type.colorHex}
               transparent
               opacity={isGhost ? REMOTE_OPACITY * 0.6 : REMOTE_OPACITY}
@@ -220,7 +327,7 @@ export function RemoteMonster({
       )}
 
       {/* Health bar + name — purple name tint marks it as a remote monster */}
-      <Billboard position={[0, isSlime ? 1.15 : 2.55, 0]}>
+      <Billboard ref={healthGroup} position={[0, isSlime ? 1.15 : 2.55, 0]}>
         <mesh>
           <planeGeometry args={[1, 0.12]} />
           <meshBasicMaterial color="#1a1a1a" transparent opacity={0.85} />
@@ -233,6 +340,16 @@ export function RemoteMonster({
           {type.name}
         </Text>
       </Billboard>
+
+      {popups.map((p) => (
+        <FloatingDamageNumber key={p.id} amount={p.amount} />
+      ))}
+
+      {bloodBursts.map((b) => (
+        <group key={b.id} position={[0, isSlime ? 0.45 : 1.1, 0]}>
+          <BloodBurst />
+        </group>
+      ))}
     </group>
   );
 }

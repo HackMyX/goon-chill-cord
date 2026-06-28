@@ -16,13 +16,13 @@ const WORLD_ROOM = "main";
  * module's browser-side channel subscribes to. */
 export const WORLD_CHANNEL_NAME = `world-room:${WORLD_ROOM}`;
 
-/** One player's transform, broadcast ~10×/sec (see Player.tsx's existing
+/** One player's transform, broadcast ~20×/sec (see Player.tsx's existing
  * STATS_SYNC_INTERVAL throttle, reused for this same tick) — never at full
  * frame rate, this is a presence/visuals feed, not a physics-tick replay.
  * `hp` rides along so a remote player's health bar (if ever shown) doesn't
  * need a second channel; `moving`/`sprinting` are cosmetic-only flags so a
  * remote avatar's walk-cycle can react without guessing from position
- * deltas (those are noisy at 10Hz and would lag a full update behind). */
+ * deltas (those are noisy at 20Hz and would lag a full update behind). */
 export interface WorldTransformPayload {
   id: string;
   x: number;
@@ -38,8 +38,10 @@ export interface WorldTransformPayload {
   sprinting: boolean;
   /** Animation state broadcast alongside position so remote avatars can
    * mirror slide/jump/attack poses without local physics. Optional for
-   * backwards-compat with any payload received before this field existed. */
-  animState?: 'idle' | 'run' | 'slide' | 'attack' | 'jump' | 'hurt';
+   * backwards-compat with any payload received before this field existed.
+   * `death` takes priority over everything so a killed player visibly
+   * collapses on every other screen instead of standing upright. */
+  animState?: 'idle' | 'run' | 'slide' | 'attack' | 'jump' | 'hurt' | 'death';
 }
 
 /** Server-authored (lib/actions/pvp.ts via lib/realtime-server.ts), never
@@ -61,7 +63,7 @@ export interface PvpDamagePayload {
  * Deliberately separate from lib/presence.ts's PRESENCE_CHANNEL
  * ("site-presence") — that channel's only job is the Community page's
  * sitewide online dot, and is subscribed to by every logged-in tab on the
- * entire site, not just players inside /world. Piping 10Hz position
+ * entire site, not just players inside /world. Piping 20Hz position
  * broadcasts through it would flood every other page's tab with traffic it
  * has no use for. This module follows the exact same lazy-singleton,
  * subscribe-once pattern as lib/presence-client.ts (see its top comment for
@@ -72,7 +74,7 @@ export interface PvpDamagePayload {
  * (`broadcast`) layered on top of the same `presence` join/leave roster.
  */
 /** Periodic position+health snapshot of one player's entire local monster
- * pool, broadcast at ~4Hz (250ms) so other clients can render ghost
+ * pool, broadcast at ~8Hz (125ms) so other clients can render ghost
  * versions — one message per owner replaces the previous one, so receivers
  * just overwrite the owner's entry in their remote-monster map. */
 export interface MonsterSyncPayload {
@@ -137,6 +139,18 @@ export interface MonsterCrossAttackPayload {
   amount: number;
 }
 
+/** Fire-and-forget pulse the moment one of an owner's monsters starts a
+ * melee swing — purely a "play the lunge animation on this monster now" cue
+ * for everyone else's RemoteMonster ghost of it (the actual damage rides the
+ * existing cross_attack/applyIncomingDamage paths, never this). Sent as a
+ * discrete event rather than a flag on the 8 Hz monster_sync snapshot
+ * because the lunge lasts only ~0.14 s and would routinely fall between two
+ * snapshot ticks and be missed. Same pattern as pvp_damage/cross_attack. */
+export interface MonsterAttackPayload {
+  ownerId: string;
+  monsterId: string;
+}
+
 let channel: RealtimeChannel | null = null;
 let subscribed = false;
 const transformListeners = new Set<(payload: WorldTransformPayload) => void>();
@@ -147,6 +161,7 @@ const monsterHitListeners = new Set<(payload: MonsterHitPayload) => void>();
 const monsterKillListeners = new Set<(payload: MonsterKillPayload) => void>();
 const monsterAggroAlertListeners = new Set<(payload: MonsterAggroAlertPayload) => void>();
 const monsterCrossAttackListeners = new Set<(payload: MonsterCrossAttackPayload) => void>();
+const monsterAttackListeners = new Set<(payload: MonsterAttackPayload) => void>();
 
 function currentRoster(ch: RealtimeChannel): Set<string> {
   const state = ch.presenceState() as Record<string, { user_id?: string }[]>;
@@ -189,6 +204,9 @@ function ensureWorldChannel(): RealtimeChannel {
   });
   channel.on("broadcast", { event: "monster_cross_attack" }, ({ payload }) => {
     for (const listener of monsterCrossAttackListeners) listener(payload as MonsterCrossAttackPayload);
+  });
+  channel.on("broadcast", { event: "monster_attack" }, ({ payload }) => {
+    for (const listener of monsterAttackListeners) listener(payload as MonsterAttackPayload);
   });
   channel.on("presence", { event: "sync" }, () => {
     const ids = currentRoster(channel!);
@@ -299,7 +317,7 @@ export function subscribeToWorldRoster(onSync: (onlineUserIds: Set<string>) => v
 }
 
 /** Broadcast the caller's local monster pool snapshot to all other players
- * in the room — fire-and-forget at ~4Hz, next tick supersedes a dropped one. */
+ * in the room — fire-and-forget at ~8Hz, next tick supersedes a dropped one. */
 export function broadcastMonsterSync(payload: MonsterSyncPayload): void {
   if (!subscribed || !channel) return;
   channel.httpSend("monster_sync", payload).catch(() => {});
@@ -373,4 +391,20 @@ export function subscribeToMonsterCrossAttack(fn: (payload: MonsterCrossAttackPa
   ensureWorldChannel();
   monsterCrossAttackListeners.add(fn);
   return () => monsterCrossAttackListeners.delete(fn);
+}
+
+/** Broadcast that one of the caller's monsters just started a melee swing —
+ * fire-and-forget, lets every other client play the lunge on their ghost of
+ * that monster. */
+export function broadcastMonsterAttack(payload: MonsterAttackPayload): void {
+  if (!subscribed || !channel) return;
+  channel.httpSend("monster_attack", payload).catch(() => {});
+}
+
+/** Subscribe to incoming monster-attack pulses — the owner-filtered cue to
+ * play a lunge animation on the matching RemoteMonster. */
+export function subscribeToMonsterAttack(fn: (payload: MonsterAttackPayload) => void): () => void {
+  ensureWorldChannel();
+  monsterAttackListeners.add(fn);
+  return () => monsterAttackListeners.delete(fn);
 }

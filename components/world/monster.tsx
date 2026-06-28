@@ -54,18 +54,22 @@ interface MonsterProps {
   /** Called when this monster lands a melee hit on the cross-player aggro
    * target — MonstersField broadcasts it to the attacker's client. */
   onRemoteAttack: (amount: number) => void;
+  /** Called the instant this monster starts a melee swing (independent of
+   * who it's hitting) — MonstersField broadcasts a monster_attack pulse so
+   * every other player's ghost of this monster plays the same lunge. */
+  onAttack?: () => void;
 }
 
 let popupSeq = 0;
 let bloodBurstSeq = 0;
-const DEATH_SINK_DURATION = 1.1;
+export const DEATH_SINK_DURATION = 1.1;
 /** How far past full-health-bar-fade the death sink animation has to run
  * before MonstersField actually unmounts this component — long enough for
  * the sink+fade below to finish, not so long the corpse blocks a new
  * spawn for no reason. */
 export const MONSTER_DEATH_CLEANUP_MS = 1300;
 
-function FloatingDamageNumber({ amount }: { amount: number }) {
+export function FloatingDamageNumber({ amount }: { amount: number }) {
   const ref = useRef<THREE.Group>(null);
   const age = useRef(0);
   useFrame((_, delta) => {
@@ -237,6 +241,7 @@ export function Monster({
   characterConfig,
   aggroTargetRef,
   onRemoteAttack,
+  onAttack,
 }: MonsterProps) {
   const group = useRef<THREE.Group>(null);
   const upperBody = useRef<THREE.Group>(null);
@@ -457,6 +462,7 @@ export function Monster({
     if (dist < type.attackRange && attackCooldownLeft.current <= 0) {
       attackCooldownLeft.current = type.attackCooldown;
       lunge.current = 1;
+      onAttack?.();
       if (useAggro) {
         // Cross-player aggro mode: route damage to the remote attacker via a
         // broadcast instead of the local player's combatRef.
