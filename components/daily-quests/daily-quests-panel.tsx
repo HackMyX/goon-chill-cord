@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ListChecks, X, RotateCcw, CheckCircle2, Coins, Sparkles, Package,
@@ -404,7 +405,7 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
   return (
     <div
       ref={panelRef}
-      className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 z-[80] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-white/[0.08] bg-zinc-950/95 backdrop-blur-xl shadow-2xl"
+      className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 z-[140] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-white/[0.08] bg-zinc-950/95 backdrop-blur-xl shadow-2xl"
       style={{ width: "min(100vw, 400px)", maxHeight: "min(100dvh - 80px, 600px)" }}
     >
       {/* Toast */}
@@ -583,6 +584,13 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
 export function DailyQuestsTrigger({ userId }: { userId?: string }) {
   const [open, setOpen] = useState(false);
   const [badge, setBadge] = useState(0);
+  // The panel is `position: fixed`, but the TopBar (its render parent) has a
+  // `backdrop-filter`, which establishes a containing block for fixed
+  // descendants — so rendered inline the panel anchors to the tiny header and
+  // stays invisible/clipped. Portal it to <body> so `fixed` targets the
+  // viewport (same fix the Level menu modal uses).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (!userId) return;
@@ -609,7 +617,10 @@ export function DailyQuestsTrigger({ userId }: { userId?: string }) {
 
   return (
     <>
-      {open && <DailyQuestsPanel onClose={() => setOpen(false)} />}
+      {mounted && open && createPortal(
+        <DailyQuestsPanel onClose={() => setOpen(false)} />,
+        document.body,
+      )}
       {!open && (
         <button
           onClick={() => setOpen(true)}

@@ -122,10 +122,18 @@ export function TopBar({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedUserId]);
 
-  const slots: string[] =
+  const rawSlots: string[] =
     Array.isArray(topbarRightSlots) && topbarRightSlots.length > 0
       ? topbarRightSlots
       : [...DEFAULT_TOPBAR_RIGHT_SLOTS];
+  // Pin the profile cluster to the OUTER right edge: the avatar (incl. level)
+  // is always the outermost item, with notifications tucked just inside it.
+  // Every other slot keeps the admin-configured order.
+  const TAIL_SLOTS = ["notifications", "level", "profile_avatar"];
+  const slots: string[] = [
+    ...rawSlots.filter((s) => !TAIL_SLOTS.includes(s)),
+    ...TAIL_SLOTS.filter((s) => rawSlots.includes(s)),
+  ];
 
   function renderSlot(slot: string) {
     switch (slot) {
@@ -244,7 +252,7 @@ export function TopBar({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={liveAvatarUrl} alt="Profil" className="h-full w-full object-cover" />
               ) : (
-                <UserRound className="h-4.5 w-4.5 text-purple-300" />
+                <UserRound className="h-4 w-4 text-purple-300" />
               )}
             </Link>
             {liveLevel > 0 && (
@@ -273,8 +281,29 @@ export function TopBar({
       className="sticky top-0 z-50 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:gap-4 border-b border-white/[0.06] bg-[#030305]/95 px-3 sm:px-4 py-2 backdrop-blur-md"
       style={{ paddingLeft: "max(0.75rem, calc(0.75rem + env(safe-area-inset-left)))", paddingRight: "max(0.75rem, calc(0.75rem + env(safe-area-inset-right)))" }}
     >
-      {/* Left: version + logo + credits + admin buttons */}
+      {/* Left: admin/mod panels (outermost edge) + version + logo + credits */}
       <div className="flex items-center gap-2.5 justify-self-start">
+        {/* Mod / Admin panels — pinned to the FAR LEFT edge, before the version,
+            ICON-ONLY (no text) with a soft tinted pill. */}
+        {isAdmin && (
+          <IconButton
+            icon={ShieldAlert}
+            label="Admin-Panel"
+            href="/admin"
+            showLabel={false}
+            className="hidden h-8 w-8 xl:flex [@media(max-height:600px)]:hidden rounded-lg bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30 hover:bg-amber-500/25 hover:text-amber-200 hover:ring-amber-300/60 border-0 shadow-[0_0_12px_-4px_rgba(245,158,11,0.6)]"
+          />
+        )}
+        {(isAdmin || isModerator) && (
+          <IconButton
+            icon={Shield}
+            label="Mod-Panel"
+            href="/mod"
+            showLabel={false}
+            className="hidden h-8 w-8 xl:flex [@media(max-height:600px)]:hidden rounded-lg bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30 hover:bg-sky-500/25 hover:text-sky-200 hover:ring-sky-300/60 border-0 shadow-[0_0_12px_-4px_rgba(56,189,248,0.6)]"
+          />
+        )}
+
         <Link
           href="/patchnotes"
           onMouseEnter={sound.hover}
@@ -284,26 +313,6 @@ export function TopBar({
         >
           {siteVersion}
         </Link>
-
-        {/* Mod / Admin panels — far left next to the version, ICON-ONLY (no text) */}
-        {isAdmin && (
-          <IconButton
-            icon={ShieldAlert}
-            label="Admin-Panel"
-            href="/admin"
-            showLabel={false}
-            className="hidden h-8 w-8 xl:flex [@media(max-height:600px)]:hidden bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200 border-0"
-          />
-        )}
-        {(isAdmin || isModerator) && (
-          <IconButton
-            icon={Shield}
-            label="Mod-Panel"
-            href="/mod"
-            showLabel={false}
-            className="hidden h-8 w-8 xl:flex [@media(max-height:600px)]:hidden bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 border-0"
-          />
-        )}
 
         <Link
           href="/"
