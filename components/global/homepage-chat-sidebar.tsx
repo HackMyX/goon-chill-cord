@@ -325,7 +325,14 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const latestIdRef = useRef<string | null>(null);
+  // Newest COMMITTED message time (ms) currently applied — guards against
+  // out-of-order / stale poll snapshots re-injecting old messages.
+  const newestTimeRef = useRef(0);
   const pendingOptimisticRef = useRef<string | null>(null);
+  // Live mirror of config.maxMessages so polling/append read it without forcing
+  // the realtime channel to resubscribe whenever the admin tweaks the limit.
+  const maxRef = useRef(config.maxMessages);
+  maxRef.current = config.maxMessages;
   const loadedRef = useRef(false);
   const supabase = useRef(createClient());
   const sound = useSoundManager();
@@ -390,7 +397,10 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
     loadedRef.current = false;
     getGlobalChatMessages(config.maxMessages).then((msgs) => {
       setMessages(msgs);
-      if (msgs.length > 0) latestIdRef.current = msgs[msgs.length - 1].id;
+      if (msgs.length > 0) {
+        latestIdRef.current = msgs[msgs.length - 1].id;
+        newestTimeRef.current = Date.parse(msgs[msgs.length - 1].createdAt) || 0;
+      }
       setLoading(false);
       loadedRef.current = true;
       setTimeout(scrollToBottom, 50);
@@ -431,11 +441,15 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
             nameStyleKey,
           },
         ];
-        return next.slice(-config.maxMessages);
+        // Always keep chronological order so a late/out-of-order INSERT can never
+        // appear at the bottom as if it were the newest message.
+        next.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+        return next.slice(-maxRef.current);
       });
 
       if (optId) pendingOptimisticRef.current = null;
       latestIdRef.current = id;
+      newestTimeRef.current = Math.max(newestTimeRef.current, Date.parse(row.created_at as string) || 0);
 
       if (config.messageAnimation) {
         setAnimateNewIds((prev) => {
@@ -466,9 +480,9 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
         setTimeout(scrollToBottom, 30);
       }
     },
-    // isOpen and ownUsername intentionally excluded — read via refs so this
-    // callback stays stable across sidebar open/close and profile load.
-    [config.maxMessages, config.messageAnimation, config.mentionSound, scrollToBottom]
+    // isOpen, ownUsername and maxMessages intentionally excluded — read via refs
+    // so this callback stays stable across sidebar open/close and profile load.
+    [config.messageAnimation, config.mentionSound, scrollToBottom]
   );
 
   // ── Realtime subscription + polling fallback ──────────────────────────────
@@ -489,30 +503,40 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
         "postgres_changes",
         { event: "DELETE", schema: "public", table: "global_chat_messages" },
         () => {
-          getGlobalChatMessages(config.maxMessages).then((msgs) => {
+          getGlobalChatMessages(maxRef.current).then((msgs) => {
             setMessages(msgs);
             latestIdRef.current = msgs.length > 0 ? msgs[msgs.length - 1].id : null;
+            newestTimeRef.current = msgs.length > 0 ? (Date.parse(msgs[msgs.length - 1].createdAt) || 0) : 0;
           });
         }
       )
       .subscribe();
 
+    // Poll re-syncs from the server so a silently-dropped realtime INSERT is never
+    // missed. `fresh` is the AUTHORITATIVE newest-N window (server-sorted, deduped),
+    // so we REPLACE state with it instead of appending "messages not in current
+    // state" — the old append logic re-injected previously-sliced messages at the
+    // bottom, which is exactly how stale messages from "old times" reappeared.
     const pollMs = 4000;
     const poll = setInterval(async () => {
-      const fresh = await getGlobalChatMessages(config.maxMessages);
-      if (fresh.length === 0) { setMessages([]); latestIdRef.current = null; return; }
-      const newestId = fresh[fresh.length - 1].id;
-      if (newestId === latestIdRef.current) return;
+      const fresh = await getGlobalChatMessages(maxRef.current);
+      if (fresh.length === 0) {
+        setMessages((prev) => (prev.length === 0 ? prev : []));
+        latestIdRef.current = null; newestTimeRef.current = 0;
+        return;
+      }
+      const newest = fresh[fresh.length - 1];
+      if (newest.id === latestIdRef.current) return;            // nothing new
+      const newestTime = Date.parse(newest.createdAt) || 0;
+      if (newestTime < newestTimeRef.current) return;           // stale/out-of-order snapshot → ignore
+      newestTimeRef.current = newestTime;
+      latestIdRef.current = newest.id;
       setMessages((prev) => {
-        const withoutOpt = pendingOptimisticRef.current
-          ? prev.filter((m) => m.id !== pendingOptimisticRef.current)
-          : prev;
-        const existing = new Set(withoutOpt.map((m) => m.id));
-        const added = fresh.filter((m) => !existing.has(m.id));
-        if (added.length === 0) return withoutOpt;
-        return [...withoutOpt, ...added].slice(-config.maxMessages);
+        const optId = pendingOptimisticRef.current;
+        const opt = optId ? prev.find((m) => m.id === optId) : null;
+        // Keep a still-pending optimistic bubble at the end until the server returns it.
+        return opt && !fresh.some((m) => m.id === opt.id) ? [...fresh, opt] : fresh;
       });
-      latestIdRef.current = newestId;
       if (isOpenRef.current) setTimeout(scrollToBottom, 30);
     }, pollMs);
 
@@ -520,7 +544,7 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
       client.removeChannel(channel);
       clearInterval(poll);
     };
-  }, [appendMessage, config.maxMessages, scrollToBottom]);
+  }, [appendMessage, scrollToBottom]);
 
   // ── Toggle sidebar ────────────────────────────────────────────────────────
   function toggleOpen() {
@@ -591,15 +615,18 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
       // realtime event leaves the "…" stuck until reload.
       const optId = pendingOptimisticRef.current;
       pendingOptimisticRef.current = null;
-      const fresh = await getGlobalChatMessages(config.maxMessages);
+      const fresh = await getGlobalChatMessages(maxRef.current);
       if (fresh.length > 0) {
-        latestIdRef.current = fresh[fresh.length - 1].id;
+        const newest = fresh[fresh.length - 1];
+        latestIdRef.current = newest.id;
+        newestTimeRef.current = Math.max(newestTimeRef.current, Date.parse(newest.createdAt) || 0);
+        // fresh is authoritative: the just-sent message is now committed and in it,
+        // so replace state with fresh (drop the optimistic). Keep the optimistic
+        // appended only if replication lag means it isn't in fresh yet.
         setMessages((prev) => {
-          const withoutOpt = optId ? prev.filter((m) => m.id !== optId) : prev;
-          const existingIds = new Set(withoutOpt.map((m) => m.id));
-          const added = fresh.filter((m) => !existingIds.has(m.id));
-          const next = added.length > 0 ? [...withoutOpt, ...added] : withoutOpt;
-          return next.slice(-config.maxMessages);
+          const opt = optId ? prev.find((m) => m.id === optId) : null;
+          const stillMissing = opt && !fresh.some((m) => m.userId === opt.userId && m.content === opt.content);
+          return stillMissing ? [...fresh, opt] : fresh;
         });
         setTimeout(scrollToBottom, 50);
       }
