@@ -10,7 +10,6 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { NotificationPrefsSection } from "@/components/account/notification-prefs-section";
 import { ClientSettingsSection } from "@/components/account/client-settings-section";
-import { RedeemCodeCard } from "@/components/account/redeem-code-card";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { LevelBadge } from "@/components/ui/level-badge";
 import { LevelMenuTrigger } from "@/components/ui/level-menu-modal";
@@ -422,8 +421,6 @@ export function AccountShell({
             </div>
           </div>
         </div>
-
-        <RedeemCodeCard />
 
         <ClientSettingsSection />
 

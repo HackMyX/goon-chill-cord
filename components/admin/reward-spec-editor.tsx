@@ -5,7 +5,7 @@ import type { RewardSpec, BonusGame } from "@/lib/rewards-grant";
 import { KeySelect } from "@/components/admin/key-select";
 import {
   BONUS_CARD_THEME_LIST, BONUS_CARD_RARITY_LIST,
-  DEFAULT_BONUS_CARD_THEME, DEFAULT_BONUS_CARD_RARITY,
+  AUTO_THEME, AUTO_RARITY,
 } from "@/lib/bonus-card-themes";
 import { BonusCard } from "@/components/rewards/bonus-card";
 
@@ -114,26 +114,31 @@ export function RewardSpecEditor({
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Karten-Darstellung</span>
                   <div className="flex flex-wrap items-center gap-2">
                     <select
-                      value={r.cardTheme ?? DEFAULT_BONUS_CARD_THEME}
+                      value={r.cardTheme ?? AUTO_THEME}
                       onChange={(e) => set(idx, { cardTheme: e.target.value })}
                       title="Theme der Karte"
                       className={INP}
                     >
+                      <option value={AUTO_THEME}>Auto (nach Seltenheit)</option>
                       {BONUS_CARD_THEME_LIST.map((t) => (
                         <option key={t.id} value={t.id}>{t.label}</option>
                       ))}
                     </select>
                     <select
-                      value={r.cardRarity ?? DEFAULT_BONUS_CARD_RARITY}
+                      value={r.cardRarity ?? AUTO_RARITY}
                       onChange={(e) => set(idx, { cardRarity: e.target.value })}
                       title="Seltenheit (Ribbon)"
                       className={INP}
                     >
+                      <option value={AUTO_RARITY}>Auto (nach Stärke)</option>
                       {BONUS_CARD_RARITY_LIST.map((rr) => (
                         <option key={rr.id} value={rr.id}>{rr.label}</option>
                       ))}
                     </select>
                   </div>
+                  <p className="text-[10px] leading-snug text-zinc-500">
+                    Auto: Seltenheit ergibt sich aus der Menge (Stufen), Theme aus der Seltenheit. Ultra = RGB. Manuell überschreibbar.
+                  </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <input
                       value={r.cardTitle ?? ""}

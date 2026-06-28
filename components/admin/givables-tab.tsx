@@ -10,7 +10,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 
 /**
  * "Givables" — vereint die vergebbaren Inhalte, die früher zwei getrennte Tabs
- * waren: Fähigkeiten + Gutschein-Codes. Ein Sub-Umschalter wählt den Bereich;
+ * waren: Fähigkeiten + Gutscheine. Ein Sub-Umschalter wählt den Bereich;
  * der jeweils passende Guide wird darüber gerendert.
  */
 export function GivablesTab({ profiles }: { profiles: { id: string; username: string }[] }) {
@@ -19,7 +19,7 @@ export function GivablesTab({ profiles }: { profiles: { id: string; username: st
 
   const SUBS = [
     { id: "abilities" as const, label: "Fähigkeiten", icon: Zap },
-    { id: "vouchers" as const, label: "Gutschein-Codes", icon: Gift },
+    { id: "vouchers" as const, label: "Gutscheine", icon: Gift },
   ];
 
   return (

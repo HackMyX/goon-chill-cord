@@ -266,6 +266,13 @@
   100% { background-position: -150% 0; }
 }
 
+/* Bonus-Karten — animiertes RGB-Spektrum (Ultra-Theme, theme.animationClass="bonus-rgb-bg") */
+.bonus-rgb-bg { background-size: 300% 300% !important; animation: bonus-rgb 6s linear infinite; }
+@keyframes bonus-rgb {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+
 /* Shimmer card sweep — trigger via group-hover */
 @keyframes card-shimmer-sweep {
   0% { transform: translateX(-100%) skewX(-20deg); }

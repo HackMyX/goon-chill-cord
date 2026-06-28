@@ -7,7 +7,12 @@
 
 export type BonusCardThemeId =
   | "aurora" | "legendary" | "holographic" | "glass" | "inferno"
-  | "frost" | "cyber" | "void" | "toxic" | "royal";
+  | "frost" | "cyber" | "void" | "toxic" | "royal" | "rgb";
+
+/** Spezial-Wert: Theme automatisch aus der Seltenheit ableiten. */
+export const AUTO_THEME = "auto" as const;
+/** Spezial-Wert: Seltenheit automatisch aus der Stärke/Menge ableiten. */
+export const AUTO_RARITY = "auto" as const;
 
 export interface BonusCardTheme {
   id: BonusCardThemeId;
@@ -32,6 +37,8 @@ export interface BonusCardTheme {
   pattern?: string;
   /** Animierter schimmernder Verlauf (z.B. holographic). */
   animated?: boolean;
+  /** Optionale CSS-Klasse für Spezial-Animation (z.B. RGB-Spektrum). */
+  animationClass?: string;
   /** Emoji/Glyph als Default-Kartensymbol. */
   glyph: string;
 }
@@ -109,6 +116,15 @@ export const BONUS_CARD_THEMES: Record<BonusCardThemeId, BonusCardTheme> = {
     sheen: "linear-gradient(120deg, transparent 35%, rgba(252,211,77,0.18) 50%, transparent 65%)",
     animated: true, glyph: "♛",
   },
+  rgb: {
+    id: "rgb", label: "RGB (Ultra)", blurb: "Animiertes RGB-Spektrum — höchste Stufe",
+    // Animierter Regenbogen-Verlauf via CSS-Klasse `bonus-rgb-bg` (globals.css).
+    background: "linear-gradient(120deg, #ff0080, #ff8c00, #ffe600, #00ff8c, #00cfff, #8a2be2, #ff0080)",
+    border: "rgba(255,255,255,0.6)", glow: "0 0 40px -4px rgba(255,255,255,0.45), 0 0 60px -10px rgba(139,92,246,0.5)",
+    accent: "#ffffff", text: "#ffffff", sub: "rgba(255,255,255,0.92)",
+    sheen: "linear-gradient(120deg, transparent 25%, rgba(255,255,255,0.4) 50%, transparent 75%)",
+    animated: true, glyph: "🌈", animationClass: "bonus-rgb-bg",
+  },
 };
 
 export const BONUS_CARD_THEME_LIST: BonusCardTheme[] = Object.values(BONUS_CARD_THEMES);
@@ -143,4 +159,48 @@ export const DEFAULT_BONUS_CARD_RARITY: BonusCardRarity = "selten";
 
 export function getBonusCardRarity(id?: string | null): RarityStyle {
   return (id && BONUS_CARD_RARITIES[id as BonusCardRarity]) || BONUS_CARD_RARITIES[DEFAULT_BONUS_CARD_RARITY];
+}
+
+// ── Auto: Seltenheit aus Stärke/Menge + Theme aus Seltenheit ───────────────────
+
+/** Stärke→Seltenheit-Stufe. Aufsteigend; das letzte Tier mit minAmount<=amount gewinnt. */
+export interface RarityTier { rarity: BonusCardRarity; minAmount: number; }
+
+/** Standard-Stufen (überschreibbar). Anlehnung an „0-10 normal, 10-20 selten, …". */
+export const DEFAULT_RARITY_TIERS: RarityTier[] = [
+  { rarity: "normal",   minAmount: 0 },
+  { rarity: "selten",   minAmount: 10 },
+  { rarity: "episch",   minAmount: 20 },
+  { rarity: "mythisch", minAmount: 35 },
+  { rarity: "ultra",    minAmount: 50 },
+];
+
+/** Welche Seltenheit ergibt eine Menge/Stärke? */
+export function rarityFromAmount(amount: number, tiers: RarityTier[] = DEFAULT_RARITY_TIERS): BonusCardRarity {
+  let result: BonusCardRarity = "normal";
+  for (const t of [...tiers].sort((a, b) => a.minAmount - b.minAmount)) {
+    if (amount >= t.minAmount) result = t.rarity;
+  }
+  return result;
+}
+
+/** Auto-Theme je Seltenheit (Ultra = RGB-Spektrum). */
+export const RARITY_THEME: Record<BonusCardRarity, BonusCardThemeId> = {
+  normal:   "void",
+  selten:   "frost",
+  episch:   "royal",
+  mythisch: "aurora",
+  ultra:    "rgb",
+};
+
+/** Effektive Seltenheit: "auto"/leer → aus der Menge ableiten, sonst die gesetzte. */
+export function resolveCardRarity(rarity: string | null | undefined, amount: number, tiers?: RarityTier[]): BonusCardRarity {
+  if (rarity && rarity !== AUTO_RARITY && rarity in BONUS_CARD_RARITIES) return rarity as BonusCardRarity;
+  return rarityFromAmount(amount, tiers);
+}
+
+/** Effektives Theme: "auto"/leer → aus der (aufgelösten) Seltenheit, sonst das gesetzte. */
+export function resolveCardTheme(theme: string | null | undefined, resolvedRarity: BonusCardRarity): BonusCardTheme {
+  if (theme && theme !== AUTO_THEME && theme in BONUS_CARD_THEMES) return BONUS_CARD_THEMES[theme as BonusCardThemeId];
+  return BONUS_CARD_THEMES[RARITY_THEME[resolvedRarity]];
 }

@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  getBonusCardTheme, getBonusCardRarity,
-  DEFAULT_BONUS_CARD_THEME, DEFAULT_BONUS_CARD_RARITY,
+  getBonusCardRarity,
+  resolveCardRarity, resolveCardTheme,
 } from "@/lib/bonus-card-themes";
 import { BONUS_GAME_LABELS, type BonusGame } from "@/lib/bonus-games";
 import type { ActiveBonusCard } from "@/lib/actions/bonus-cards";
@@ -56,8 +56,8 @@ function fromPreview(p: BonusCardPreview): NormalizedCard {
   const total = Math.max(1, Math.floor(p.amount || 1));
   const hours = Math.max(0, Math.floor(p.durationHours ?? 0));
   return {
-    theme: p.theme ?? DEFAULT_BONUS_CARD_THEME,
-    rarity: p.rarity ?? DEFAULT_BONUS_CARD_RARITY,
+    theme: p.theme ?? null,
+    rarity: p.rarity ?? null,
     title: p.title?.trim() ? p.title.trim() : null,
     subtitle: p.subtitle?.trim() ? p.subtitle.trim() : null,
     gameLabel: p.gameLabel ?? BONUS_GAME_LABELS[p.game] ?? p.game,
@@ -93,8 +93,11 @@ export function BonusCard(
   },
 ) {
   const card = "card" in props ? fromActive(props.card) : fromPreview(props.preview);
-  const theme = getBonusCardTheme(card.theme);
-  const rarity = getBonusCardRarity(card.rarity);
+  // AUTO-Auflösung: Seltenheit aus der Bonus-Menge (Stufen), Theme aus der Seltenheit.
+  // „auto"/leer wird hier real aufgelöst; konkrete Werte bleiben unverändert.
+  const effectiveRarity = resolveCardRarity(card.rarity, card.total);
+  const theme = resolveCardTheme(card.theme, effectiveRarity);
+  const rarity = getBonusCardRarity(effectiveRarity);
 
   // Live-Tick für die Restlaufzeit (alle 30s), nur wenn ein Ablauf existiert.
   const [now, setNow] = useState(() => Date.now());
@@ -122,9 +125,9 @@ export function BonusCard(
       className={`relative isolate w-[300px] max-w-full overflow-hidden rounded-2xl p-[1.5px] ${props.className ?? ""}`}
       style={{ background: rarity.ribbon, boxShadow: theme.glow }}
     >
-      {/* Innenkarte mit Theme-Hintergrund */}
+      {/* Innenkarte mit Theme-Hintergrund (animationClass ergänzt z.B. RGB-Animation) */}
       <div
-        className="relative overflow-hidden rounded-[15px] px-4 pb-4 pt-3"
+        className={`relative overflow-hidden rounded-[15px] px-4 pb-4 pt-3 ${theme.animationClass ?? ""}`}
         style={{
           background: theme.background,
           border: `1px solid ${theme.border}`,
