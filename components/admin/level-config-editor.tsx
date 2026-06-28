@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Save, RefreshCw, AlertTriangle, CheckCircle2, TrendingUp, Zap, Star, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { AdminTooltip } from "@/components/admin/admin-tooltip";
-import { DEFAULT_LEVEL_ROAD_CONFIG } from "@/lib/level-system";
+import { DEFAULT_LEVEL_ROAD_CONFIG, LEVEL_TITLES } from "@/lib/level-system";
 import type { XpConfig, LevelDefinition, XpSourceConfig, LevelReward, LevelRoadConfig, LevelRoadTier } from "@/lib/level-system";
 import { getXpConfig, updateXpConfig, adminGrantXp } from "@/lib/actions/level-system";
 
@@ -28,6 +28,95 @@ function NumInput({ label, value, onChange, min = 0, step = 1, unit = "" }: {
         {unit && <span className="shrink-0 text-xs text-zinc-500">{unit}</span>}
       </div>
     </label>
+  );
+}
+
+// ── XP curve chart + bulk level generator ────────────────────────────────────
+
+function XpCurveTools({ levels, onApply }: { levels: LevelDefinition[]; onApply: (levels: LevelDefinition[]) => void }) {
+  const [count, setCount] = useState(Math.max(10, levels.length || 50));
+  const [base, setBase] = useState(100);
+  const [curve, setCurve] = useState<"linear" | "exponential">("exponential");
+  const [factor, setFactor] = useState(1.18);
+  const [open, setOpen] = useState(false);
+
+  const sorted = [...levels].sort((a, b) => a.level - b.level);
+  const maxXp = Math.max(1, ...sorted.map((l) => l.xpRequired));
+  const maxLv = Math.max(1, ...sorted.map((l) => l.level));
+  const W = 100, H = 40;
+  const points = sorted.map((l) => `${(l.level / maxLv) * W},${(H - (l.xpRequired / maxXp) * H).toFixed(2)}`).join(" ");
+
+  function handleGenerate() {
+    if (!confirm(`${count} Level mit ${curve === "exponential" ? "exponentieller" : "linearer"} Kurve generieren? Die XP-Werte ALLER Level werden überschrieben (Titel & Belohnungen vorhandener Level bleiben erhalten).`)) return;
+    const byLevel = new Map(levels.map((l) => [l.level, l]));
+    const out: LevelDefinition[] = [];
+    let total = 0;
+    for (let L = 1; L <= count; L++) {
+      if (L > 1) {
+        const step = curve === "exponential" ? base * Math.pow(factor, L - 2) : base + factor * (L - 2);
+        total += Math.max(1, step);
+      }
+      const existing = byLevel.get(L);
+      out.push({
+        level: L,
+        xpRequired: L === 1 ? 0 : Math.round(total),
+        title: existing?.title ?? LEVEL_TITLES[L] ?? `Level ${L}`,
+        rewards: existing?.rewards ?? [],
+      });
+    }
+    onApply(out);
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-violet-400/20 bg-violet-500/[0.04] p-4">
+      <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-violet-300">
+        <TrendingUp className="h-3.5 w-3.5" /> XP-Kurve &amp; Bulk-Generator
+      </div>
+      <div className="mb-3 rounded-lg border border-white/8 bg-black/30 p-2">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-24 w-full">
+          {[0.25, 0.5, 0.75].map((g) => (
+            <line key={g} x1="0" y1={H * g} x2={W} y2={H * g} stroke="rgba(255,255,255,0.06)" strokeWidth="0.3" />
+          ))}
+          {sorted.length > 1 && (
+            <polyline points={points} fill="none" stroke="#a78bfa" strokeWidth="0.8" vectorEffect="non-scaling-stroke" />
+          )}
+        </svg>
+        <div className="flex justify-between text-[9px] text-zinc-600">
+          <span>Lv. 1</span>
+          <span>max {maxXp.toLocaleString("de-DE")} XP</span>
+          <span>Lv. {maxLv}</span>
+        </div>
+      </div>
+      <button onClick={() => setOpen((v) => !v)} className="text-[11px] font-semibold text-violet-300 hover:text-violet-200">
+        {open ? "− Generator schließen" : "+ Level automatisch generieren"}
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <NumInput label="Anzahl Level" value={count} onChange={(v) => setCount(Math.max(1, Math.min(200, Math.round(v))))} min={1} />
+            <NumInput label="Basis-XP (Lv. 2)" value={base} onChange={(v) => setBase(Math.max(1, Math.round(v)))} min={1} />
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-zinc-400">Kurve</span>
+              <select value={curve} onChange={(e) => setCurve(e.target.value as "linear" | "exponential")} className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60">
+                <option value="exponential">Exponentiell</option>
+                <option value="linear">Linear</option>
+              </select>
+            </label>
+            <NumInput
+              label={curve === "exponential" ? "Faktor (×/Lvl)" : "Zuwachs (+XP/Lvl)"}
+              value={factor}
+              onChange={(v) => setFactor(curve === "exponential" ? Math.max(1.01, Math.min(3, v)) : Math.max(0, Math.round(v)))}
+              min={0}
+              step={curve === "exponential" ? 0.01 : 10}
+            />
+          </div>
+          <button onClick={handleGenerate} className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-violet-500">
+            <Zap className="h-3.5 w-3.5" /> {count} Level generieren
+          </button>
+          <p className="text-[10px] text-zinc-500">Überschreibt die XP-Werte aller Level; Titel &amp; Belohnungen vorhandener Level bleiben. Danach unten „Speichern" klicken.</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -301,6 +390,9 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
           Level-Definitionen ({config.levels.length} Level)
           <AdminTooltip text="Konfiguriert jedes einzelne Level: benötigte XP, Anzeige-Titel und optionale Belohnungen (Credits, Badge, Name-Style, Fähigkeit). Klicke ein Level auf, um es zu bearbeiten. Tipp: Frühe Level brauchen wenig XP für schnelles Vorankommen, späte Level deutlich mehr für Langzeitmotivation." />
         </h3>
+
+        <XpCurveTools levels={config.levels} onApply={(newLevels) => setConfig((c) => ({ ...c, levels: newLevels }))} />
+
         <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
           {config.levels.map((lvl) => (
             <div key={lvl.level} className="rounded-xl border border-white/8 bg-black/20">

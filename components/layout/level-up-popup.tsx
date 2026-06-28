@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap, Star, ChevronUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { getLevelColor } from "@/lib/level-system";
+import { getLevelColor, isMilestoneLevel, resolveLevelRoadTier, DEFAULT_LEVEL_ROAD_CONFIG, type LevelRoadConfig, type LevelDefinition } from "@/lib/level-system";
+import { getXpConfig } from "@/lib/actions/level-system";
 import { useSoundManager } from "@/lib/sound-manager";
+import { MilestoneCelebration } from "@/components/layout/milestone-celebration";
 
 interface LevelUpEvent {
   id: string;
@@ -16,7 +18,18 @@ interface LevelUpEvent {
 export function LevelUpPopup({ userId }: { userId?: string | null }) {
   const [queue, setQueue] = useState<LevelUpEvent[]>([]);
   const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
+  const [roadConfig, setRoadConfig] = useState<LevelRoadConfig>(DEFAULT_LEVEL_ROAD_CONFIG);
+  const [levels, setLevels] = useState<LevelDefinition[]>([]);
   const sound = useSoundManager();
+
+  // Load level config once so milestone level-ups can trigger the fullscreen
+  // celebration (with the level's title + rewards), and tier colours match.
+  useEffect(() => {
+    getXpConfig().then((cfg) => {
+      setRoadConfig(cfg.levelRoadConfig ?? DEFAULT_LEVEL_ROAD_CONFIG);
+      setLevels(cfg.levels ?? []);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (userId) { setResolvedUserId(userId); return; }
@@ -63,10 +76,24 @@ export function LevelUpPopup({ userId }: { userId?: string | null }) {
   }
 
   const current = queue[0] ?? null;
+  const showMilestone = !!current && isMilestoneLevel(current.newLevel, roadConfig) && roadConfig.celebrateMilestones !== false;
+  const tier = current ? resolveLevelRoadTier(current.newLevel, roadConfig) : null;
+  const levelDef = current ? levels.find((l) => l.level === current.newLevel) : undefined;
 
   return (
     <AnimatePresence>
-      {current && (
+      {current && showMilestone && tier && (
+        <MilestoneCelebration
+          key={current.id}
+          level={current.newLevel}
+          title={levelDef?.title}
+          accent={tier.accent}
+          glow={tier.glow}
+          rewards={levelDef?.rewards ?? []}
+          onClose={() => dismiss(current.id)}
+        />
+      )}
+      {current && !showMilestone && (
         <motion.div
           key={current.id}
           initial={{ opacity: 0, y: 80, scale: 0.85 }}
