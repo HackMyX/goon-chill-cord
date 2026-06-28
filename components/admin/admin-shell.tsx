@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Zap, Volume2, Eye, Settings2, Music, ListChecks, SwatchBook, Gift, Link2 } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Volume2, Eye, Settings2, Music, ListChecks, SwatchBook, Gift, Link2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CasesAdminTab } from "@/components/admin/case-group-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -30,8 +30,7 @@ import { BadgesTab } from "@/components/admin/badges-tab";
 import { NameStylesTab } from "@/components/admin/name-styles-tab";
 import { BalanceStudioTab } from "@/components/admin/balance-studio-tab";
 import { LevelConfigEditor } from "@/components/admin/level-config-editor";
-import { AbilityAdminTab } from "@/components/admin/ability-admin-tab";
-import { VoucherAdminTab } from "@/components/admin/voucher-admin-tab";
+import { GivablesTab } from "@/components/admin/givables-tab";
 import { EconomySynergyEditor } from "@/components/admin/economy-synergy-editor";
 import { SoundConfigEditor } from "@/components/admin/sound-config-editor";
 import { MusicConfigEditor } from "@/components/admin/music-config-editor";
@@ -170,7 +169,7 @@ interface AdminShellProps {
   fineConfig: FineConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "vouchers" | "sounds" | "music" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "givables" | "sounds" | "music" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy";
 
 const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string }[] = [
   { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
@@ -189,8 +188,8 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Daily Quests", tab: "daily_quests", keywords: ["daily", "quest", "tagesquest", "aufgabe", "belohnung", "fortschritt"], description: "Tägliche Quests für alle Spieler" },
   { label: "Synergie & Boosts", tab: "synergy", keywords: ["synergie", "boost", "multiplikator", "level", "skalierung", "battle pass", "querfluss", "wochenende", "happy hour", "event", "xp", "credits", "verbindung"], description: "Level/BP/Quests verbinden, Zeit-Boosts, Level-Staffelung" },
   { label: "Level & XP Quellen", tab: "level_xp", keywords: ["level", "xp", "erfahrung", "aufstieg", "quellen"], description: "XP-Quellen und Level-Definitionen" },
-  { label: "Fähigkeiten", tab: "abilities", keywords: ["fähigkeit", "ability", "mine", "speed", "boost", "rüstung"], description: "Fähigkeiten-Definitionen und Grants" },
-  { label: "Gutscheine", tab: "vouchers", keywords: ["gutschein", "voucher", "code", "redeem", "einlösen", "geschenk"], description: "Einlösbare Codes erstellen und verwalten" },
+  { label: "Fähigkeiten", tab: "givables", keywords: ["fähigkeit", "ability", "mine", "speed", "boost", "rüstung"], description: "Fähigkeiten-Definitionen und Grants" },
+  { label: "Gutscheine", tab: "givables", keywords: ["gutschein", "voucher", "code", "redeem", "einlösen", "geschenk"], description: "Einlösbare Codes erstellen und verwalten" },
   { label: "Sound-Einstellungen", tab: "sounds", keywords: ["sound", "ton", "lautstärke", "audio"], description: "Sound-Events und Lautstärken" },
   { label: "Hintergrundmusik", tab: "music", keywords: ["musik", "music", "bgm", "hintergrund", "track", "loop", "arcade", "chill", "adventure", "fade", "lautstärke"], description: "BGM pro Seite zuweisen, Track-Bibliothek verwalten" },
   { label: "Theming / Designs", tab: "theme", keywords: ["theme", "design", "farbe", "color", "palette", "skin", "darkmode", "neon", "cyber", "matrix", "vaporwave", "look", "stil", "akzentfarbe"], description: "Seitenweites Gesamt-Design wählen (Farben, Glow), Live-Vorschau" },
@@ -213,7 +212,7 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Feintuning", tab: "fine_config", keywords: ["feintuning", "fine", "nametag", "lerp", "sync", "blut", "partikel", "chat", "polling", "badges", "limit", "höhe", "geschwindigkeit", "multiplayer", "dead reckoning", "swing"], description: "Alle feingranularen konfigurierbaren Werte: Nametag, MP-Sync, Hit-Effekte, Chat" },
   { label: "Shop-Automatik & Kategorien", tab: "shop", keywords: ["automatik", "kategorie", "content", "inhalt", "typ", "fähigkeit", "name-style", "badge", "gutschein", "häufigkeit", "anzahl", "seltenheit", "tagesplan", "wochentag", "preisaufschlag", "rotation", "auto-generieren"], description: "Pro Kategorie: welcher Typ (Item/Fähigkeit/Style/Badge/Gutschein), Anzahl/Tag, Seltenheit, Preis, Wochentag-Regeln" },
   { label: "Gutscheine im Shop (Gratis-Cases)", tab: "shop", keywords: ["gutschein", "voucher", "gratis case", "case", "shop", "kategorie", "seltenheit"], description: "Gutschein-Kategorie generiert automatisch Gratis-Case-Gutscheine nach Seltenheit" },
-  { label: "Fähigkeiten-Effekte & Kombo", tab: "abilities", keywords: ["effekt", "effecttype", "effectconfig", "kombo", "case_luck", "glück", "jackpot", "multiplikator", "loss", "rückgabe", "plinko", "snake", "don", "mine", "streak", "boost", "wert", "einheit", "prozent", "chance"], description: "Effekt-Typen (gruppiert + beschrieben), Wert/Einheit, Kombo-Effekte (effectConfig), Shop-Preis" },
+  { label: "Fähigkeiten-Effekte & Kombo", tab: "givables", keywords: ["effekt", "effecttype", "effectconfig", "kombo", "case_luck", "glück", "jackpot", "multiplikator", "loss", "rückgabe", "plinko", "snake", "don", "mine", "streak", "boost", "wert", "einheit", "prozent", "chance"], description: "Effekt-Typen (gruppiert + beschrieben), Wert/Einheit, Kombo-Effekte (effectConfig), Shop-Preis" },
   { label: "Fähigkeit im Shop verkaufen", tab: "shop", keywords: ["fähigkeit", "ability", "shop", "verkaufen", "preis", "kategorie", "kaufen"], description: "Fähigkeiten über eine Shop-Kategorie (Inhalt=Fähigkeiten) automatisch verkaufen" },
   { label: "Prestige", tab: "level_xp", keywords: ["prestige", "reset", "neustart", "stern", "xp boost", "max level"], description: "Prestige-System: Reset ab Max-Level für permanenten XP-Boost" },
   { label: "Economy-Generator (Battle Pass)", tab: "battlepass", keywords: ["auto-fill", "generator", "economy", "rarity", "track", "meilenstein", "automatisch"], description: "Battle-Pass-Levels track-gerecht automatisch befüllen" },
@@ -237,8 +236,7 @@ const TABS = ([
   { id: "streak",         label: "Daily-Streak",         icon: Flame },
   { id: "debug",          label: "Debug Log",            icon: Bug },
   { id: "economy",        label: "Economy & Cases",      icon: Coins },
-  { id: "abilities",      label: "Fähigkeiten",          icon: Zap },
-  { id: "vouchers",       label: "Gutscheine",           icon: Gift },
+  { id: "givables",       label: "Givables",             icon: Gift },
   { id: "fine_config",    label: "Feintuning",           icon: Settings2 },
   { id: "games",          label: "Games",                icon: Gamepad2 },
   { id: "items",          label: "Items",                icon: Package },
@@ -290,8 +288,7 @@ const TAB_DESC: Record<Tab, string> = {
   badges: "Badge-Definitionen + Vergabe (auto & manuell).",
   namestyles: "Name-Style-Katalog, Animationen, Shop-Verfügbarkeit, Case-Drops.",
   level_xp: "Level-Kurve, XP-Quellen pro Aktion, Level-Belohnungen, Prestige.",
-  abilities: "Fähigkeiten: Effekt-Typen, Werte, Kombo-Effekte (effectConfig), Shop-Preis, Vergabe.",
-  vouchers: "Einlösbare Codes (Credits/Badge/Style) erstellen + Direkt-Vergabe.",
+  givables: "Vergebbare Inhalte in EINEM Menü: Fähigkeiten (Effekt-Typen, Kombo, Vergabe) + Gutschein-Codes (Bündel, Bulk, Direkt-Vergabe).",
   sounds: "Sound-Events und Lautstärken.",
   music: "Hintergrundmusik pro Seite, Track-Bibliothek, Fades.",
   theme: "Gesamt-Design der Seite (Farben, Glow, Presets) mit Live-Vorschau.",
@@ -306,7 +303,7 @@ const TAB_DESC: Record<Tab, string> = {
 const TAB_GROUPS: { title: string; icon: typeof Coins; tabs: Tab[] }[] = [
   { title: "Spiele & Welt", icon: Gamepad2, tabs: ["games", "monsters", "pets", "balance"] },
   { title: "Wirtschaft", icon: Coins, tabs: ["economy", "shop", "items"] },
-  { title: "Belohnungen & Fortschritt", icon: Sparkles, tabs: ["battlepass", "daily_quests", "streak", "level_xp", "synergy", "abilities", "vouchers"] },
+  { title: "Belohnungen & Fortschritt", icon: Sparkles, tabs: ["battlepass", "daily_quests", "streak", "level_xp", "synergy", "givables"] },
   { title: "Kosmetik", icon: SwatchBook, tabs: ["badges", "namestyles", "preview_config"] },
   { title: "Community & Inhalte", icon: MessageCircle, tabs: ["chat", "homepage_chat", "surveys", "patchnotes", "users"] },
   { title: "Design & Medien", icon: Palette, tabs: ["branding", "theme", "sounds", "music"] },
@@ -321,8 +318,11 @@ const ADMIN_SEARCH: { label: string; tab: Tab; keywords: string[]; description: 
   // Pro Tab ein Basis-Eintrag — die keywords enthalten den KOMPLETTEN Guide-Text,
   // sodass die Suche jedes Wort aus jeder Guide-Zeile findet.
   ...TABS.map((t) => {
-    const g = TAB_GUIDES[t.id];
-    return { label: t.label, tab: t.id, keywords: g ? [t.id, guideSearchText(g)] : [t.id], description: TAB_DESC[t.id] };
+    // Givables vereint die früheren Tabs abilities + vouchers — deren Guide-Text
+    // wird unter dem givables-Tab durchsuchbar gemacht.
+    const guideIds = t.id === "givables" ? ["abilities", "vouchers"] : [t.id];
+    const txt = guideIds.map((id) => { const g = TAB_GUIDES[id]; return g ? guideSearchText(g) : ""; }).join(" ");
+    return { label: t.label, tab: t.id, keywords: [t.id, txt], description: TAB_DESC[t.id] };
   }),
 ];
 
@@ -708,13 +708,9 @@ export function AdminShell({
           />
         )}
 
-        {tab === "abilities" && (
-          <AbilityAdminTab
-            profiles={profiles.map((p) => ({ id: p.id, username: p.username }))}
-          />
+        {tab === "givables" && (
+          <GivablesTab profiles={profiles.map((p) => ({ id: p.id, username: p.username }))} />
         )}
-
-        {tab === "vouchers" && <VoucherAdminTab profiles={profiles.map((p) => ({ id: p.id, username: p.username }))} />}
 
         {tab === "sounds" && (
           <SoundConfigEditor initialConfig={soundConfig} />
