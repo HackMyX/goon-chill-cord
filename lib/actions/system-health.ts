@@ -457,6 +457,7 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
     { key: "NEXT_PUBLIC_SUPABASE_ANON_KEY",id: "env_sb_anon", severity: "error", detail: "Supabase Anon Key fehlt — App kann nicht verbinden." },
     { key: "SUPABASE_SERVICE_ROLE_KEY",  id: "env_sb_service", severity: "error", detail: "Service Role Key fehlt — Admin-Operationen schlagen fehl." },
     { key: "GROQ_API_KEY",               id: "env_groq",       severity: "warn",  detail: "GROQ API-Schlüssel fehlt — KI-Chat nicht aktiv. Alternativ im Admin-Panel hinterlegen." },
+    { key: "CRON_SECRET",                id: "env_cron_secret",severity: "warn",  detail: "CRON_SECRET fehlt — /api/cron/cleanup läuft ohne Auth-Schutz (intern ok). Für öffentliche Deployments setzen." },
   ];
   for (const ev of envVars) {
     const present = !!process.env[ev.key];

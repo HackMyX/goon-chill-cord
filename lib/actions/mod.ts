@@ -15,6 +15,7 @@ import {
   type TicketMessage,
   type ModeratorWithPermissions,
   type EscalationTarget,
+  type ModAuditEntry,
 } from "@/lib/mod";
 
 // ---------------------------------------------------------------------------
@@ -102,6 +103,39 @@ async function broadcastPermissionChange() {
 export async function getMyEffectivePermissions(): Promise<ModPermissions> {
   const { user, isAdminUser } = await requireMod();
   return effectivePerms(isAdminUser, user.id);
+}
+
+/**
+ * Loads the most recent audit-/activity-log entries for the mod panel.
+ * Gated by the effective `canViewAuditLog` permission (admins always pass).
+ * Mirrors the admin-shell query so `<AuditTimeline>` can render the result.
+ */
+export async function getAuditLogForMod(limit = 100): Promise<ModAuditEntry[]> {
+  const { user, isAdminUser } = await requireMod();
+  const perms = await effectivePerms(isAdminUser, user.id);
+  if (!perms.canViewAuditLog) {
+    throw new Error("Keine Berechtigung für das Aktivitätslog");
+  }
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("audit_logs")
+    .select("id, action, payload, created_at, profiles(username)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (!data) return [];
+  return data.map((row) => {
+    const prof = row.profiles as { username?: string } | { username?: string }[] | null;
+    const actor = Array.isArray(prof)
+      ? prof[0]?.username ?? null
+      : prof?.username ?? null;
+    return {
+      id: row.id as string,
+      action: row.action as string,
+      payload: (row.payload ?? null) as Record<string, unknown> | null,
+      created_at: row.created_at as string,
+      actor,
+    };
+  });
 }
 
 export async function updateModPermissions(

@@ -71,6 +71,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export interface AuditLogEntry {
   id: string;
+  user_id?: string;
   action: string;
   payload: Record<string, unknown> | null;
   created_at: string;
@@ -192,13 +193,15 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Level & XP Quellen", tab: "level_xp", keywords: ["level", "xp", "erfahrung", "aufstieg", "quellen"], description: "XP-Quellen und Level-Definitionen" },
   { label: "Fähigkeits-Gutscheine", tab: "givables", keywords: ["fähigkeit", "ability", "mine", "speed", "boost", "rüstung"], description: "Fähigkeits-Gutschein-Definitionen und Grants" },
   { label: "Gutscheine", tab: "givables", keywords: ["gutschein", "voucher", "vergeben", "geschenk", "belohnung"], description: "Gutschein-Bündel direkt an Spieler vergeben" },
+  { label: "Seltenheits-Stufen", tab: "givables", keywords: ["seltenheit", "rarität", "stufen", "tiers", "auto", "stärke", "theme", "rgb", "ultra", "bonus", "karte"], description: "Welche Menge/Stärke welche Seltenheit + Auto-Theme ergibt (Ultra = RGB)" },
+  { label: "Bonus-Karten-Themes", tab: "givables", keywords: ["theme", "karte", "card", "design", "bonus", "rgb", "präsentation", "vorschau", "aurora", "legendär", "holographisch", "seltenheit"], description: "Theme/Seltenheit/Titel pro Gutschein-Karte + Live-Vorschau" },
   { label: "Sound-Einstellungen", tab: "sounds", keywords: ["sound", "ton", "lautstärke", "audio"], description: "Sound-Events und Lautstärken" },
   { label: "Hintergrundmusik", tab: "music", keywords: ["musik", "music", "bgm", "hintergrund", "track", "loop", "arcade", "chill", "adventure", "fade", "lautstärke"], description: "BGM pro Seite zuweisen, Track-Bibliothek verwalten" },
   { label: "Theming / Designs", tab: "theme", keywords: ["theme", "design", "farbe", "color", "palette", "skin", "darkmode", "neon", "cyber", "matrix", "vaporwave", "look", "stil", "akzentfarbe"], description: "Seitenweites Gesamt-Design wählen (Farben, Glow), Live-Vorschau" },
   { label: "Preview-Engine", tab: "preview_config", keywords: ["preview", "vorschau", "3d", "rotation", "zoom", "partikel", "glow", "badge", "item", "namestyle"], description: "Vorschau-Engine Konfiguration für Items, Badges, Name-Styles" },
   { label: "Name-Styles", tab: "namestyles", keywords: ["namestyle", "name", "animation", "shimmer", "rainbow", "glitch"], description: "Name-Stil Katalog und Shop" },
   { label: "Badges & Sondertags", tab: "badges", keywords: ["badge", "tag", "sondertag", "vergabe", "farbe"], description: "Badge-Definitionen und Vergaben" },
-  { label: "Chat-Einstellungen", tab: "chat", keywords: ["chat", "nachrichten", "filter", "rate", "limit", "global"], description: "Chat-Konfiguration und Moderation" },
+  { label: "Chat-Einstellungen", tab: "chat", keywords: ["chat", "nachrichten", "filter", "rate", "limit", "global", "stumm", "stummschalten", "mute", "sperre", "moderation"], description: "Chat-Konfiguration, Moderation und Stummschaltung" },
   { label: "Homepage Chat Sidebar", tab: "homepage_chat", keywords: ["homepage", "sidebar", "chat", "startseite", "glassmorphism", "offen"], description: "Chat-Sidebar auf der Startseite konfigurieren" },
   { label: "Startseite Konfiguration", tab: "branding", keywords: ["branding", "logo", "startseite", "homepage", "karten", "topbar"], description: "Site-Konfiguration und Homepage-Design" },
   { label: "Patchnotes", tab: "patchnotes", keywords: ["patch", "notes", "update", "popup", "changelog"], description: "Patchnotes und Update-Popups" },
@@ -437,6 +440,7 @@ export function AdminShell({
           const actorName = profilesRef.current.find((p) => p.id === row.user_id)?.username ?? null;
           const entry: AuditLogEntry = {
             id: row.id,
+            user_id: row.user_id,
             action: row.action,
             payload: row.payload,
             created_at: row.created_at,

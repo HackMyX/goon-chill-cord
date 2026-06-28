@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Shield, Save, Loader2, Info, Trophy, Bot } from "lucide-react";
+import { Shield, Save, Loader2, Info, Trophy, Bot, Check, X } from "lucide-react";
 import { AdminTooltip } from "@/components/admin/admin-tooltip";
 
 function fmt(n: number) { return new Intl.NumberFormat("de-DE").format(n); }
@@ -13,6 +13,38 @@ interface Props {
   permissions: ModPermissions;
 }
 
+/** Two-state Erlaubt(grün ✓)/Gesperrt(rot ✕) segmented control. */
+function AllowDenyControl({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex shrink-0 overflow-hidden rounded-lg border border-white/10 text-[11px] font-bold">
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        aria-pressed={value}
+        className={`flex items-center gap-1 px-2.5 py-1.5 transition-all duration-150 ${
+          value
+            ? "bg-emerald-500/25 text-emerald-200 shadow-[inset_0_0_0_1.5px_rgba(16,185,129,0.55)]"
+            : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
+        }`}
+      >
+        <Check className="h-3 w-3" /> Erlaubt
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        aria-pressed={!value}
+        className={`flex items-center gap-1 border-l border-white/10 px-2.5 py-1.5 transition-all duration-150 ${
+          !value
+            ? "bg-red-500/25 text-red-200 shadow-[inset_0_0_0_1.5px_rgba(239,68,68,0.55)]"
+            : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
+        }`}
+      >
+        <X className="h-3 w-3" /> Gesperrt
+      </button>
+    </div>
+  );
+}
+
 function Toggle({
   label, description, value, onChange,
 }: {
@@ -22,21 +54,16 @@ function Toggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5">
+    <div className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+      value
+        ? "border-emerald-500/25 bg-emerald-500/[0.05]"
+        : "border-red-500/20 bg-red-500/[0.04]"
+    }`}>
       <div>
         <p className="text-sm font-semibold text-zinc-200">{label}</p>
         {description && <p className="mt-0.5 text-[11px] text-zinc-500">{description}</p>}
       </div>
-      <button
-        onClick={() => onChange(!value)}
-        role="switch"
-        aria-checked={value}
-        className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900"
-      >
-        <span className={`relative block h-6 w-11 overflow-hidden rounded-full transition-colors duration-200 ${value ? "bg-purple-600" : "bg-zinc-700"}`}>
-          <span className={`absolute left-0 top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${value ? "translate-x-[22px]" : "translate-x-[2px]"}`} />
-        </span>
-      </button>
+      <AllowDenyControl value={value} onChange={onChange} />
     </div>
   );
 }
@@ -68,6 +95,23 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
         <span>
           Diese Einstellungen gelten für <strong>alle Moderatoren</strong> gleichzeitig. Admins haben immer
           vollen Zugriff unabhängig von diesen Einstellungen.
+        </span>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-4 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-2.5 text-[11px] text-zinc-400">
+        <span className="font-semibold text-zinc-500">Legende:</span>
+        <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1 rounded-md bg-emerald-500/25 px-1.5 py-0.5 font-bold text-emerald-200">
+            <Check className="h-3 w-3" /> Erlaubt
+          </span>
+          <span className="text-zinc-500">= Recht für alle Mods aktiv</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1 rounded-md bg-red-500/25 px-1.5 py-0.5 font-bold text-red-200">
+            <X className="h-3 w-3" /> Gesperrt
+          </span>
+          <span className="text-zinc-500">= Recht für alle Mods deaktiviert</span>
         </span>
       </div>
 

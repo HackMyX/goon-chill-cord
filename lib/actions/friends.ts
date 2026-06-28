@@ -313,6 +313,15 @@ export async function sendFriendRequest(targetUserId: string): Promise<ActionRes
     return { ok: false, error: "Anfrage fehlgeschlagen." };
   }
 
+  // Aktivitätslog (non-fatal).
+  try {
+    await admin.from("audit_logs").insert({
+      user_id: me,
+      action: "friend_request_sent",
+      payload: { targetUserId, targetName: (target as { username?: string }).username ?? null },
+    });
+  } catch { /* non-fatal */ }
+
   const { data: meProfile } = await admin.from("profiles").select("username").eq("id", me).maybeSingle();
   const myName = (meProfile as { username?: string } | null)?.username ?? "Jemand";
   await notifyUser({
@@ -348,8 +357,21 @@ async function acceptRequestInternal(admin: AdminClient, requestId: string, me: 
     { onConflict: "user_id,friend_id", ignoreDuplicates: true },
   );
 
-  const { data: meProfile } = await admin.from("profiles").select("username").eq("id", me).maybeSingle();
+  const [{ data: meProfile }, { data: fromProfile }] = await Promise.all([
+    admin.from("profiles").select("username").eq("id", me).maybeSingle(),
+    admin.from("profiles").select("username").eq("id", r.from_user_id).maybeSingle(),
+  ]);
   const myName = (meProfile as { username?: string } | null)?.username ?? "Jemand";
+
+  // Aktivitätslog für den Annehmenden (non-fatal).
+  try {
+    await admin.from("audit_logs").insert({
+      user_id: me,
+      action: "friend_request_accepted",
+      payload: { fromUserId: r.from_user_id, fromName: (fromProfile as { username?: string } | null)?.username ?? null },
+    });
+  } catch { /* non-fatal */ }
+
   await notifyUser({
     userId: r.from_user_id,
     type: "friend_accepted",
@@ -432,7 +454,7 @@ export async function blockUser(targetUserId: string): Promise<ActionResult> {
   if (me === targetUserId) return { ok: false, error: "Du kannst dich nicht selbst blockieren." };
   const admin = createAdminClient();
 
-  const { data: target } = await admin.from("profiles").select("id").eq("id", targetUserId).maybeSingle();
+  const { data: target } = await admin.from("profiles").select("id, username").eq("id", targetUserId).maybeSingle();
   if (!target) return { ok: false, error: "Nutzer nicht gefunden." };
 
   // Blockieren entfernt Freundschaft + offene Anfragen in beide Richtungen.
@@ -447,6 +469,16 @@ export async function blockUser(targetUserId: string): Promise<ActionResult> {
     { blocker_id: me, blocked_id: targetUserId },
     { onConflict: "blocker_id,blocked_id", ignoreDuplicates: true },
   );
+
+  // Aktivitätslog (non-fatal).
+  try {
+    await admin.from("audit_logs").insert({
+      user_id: me,
+      action: "user_blocked",
+      payload: { targetUserId, targetName: (target as { username?: string }).username ?? null },
+    });
+  } catch { /* non-fatal */ }
+
   await Promise.all([broadcastLive(`friends:${me}`), broadcastLive(`friends:${targetUserId}`)]);
   return { ok: true };
 }

@@ -348,6 +348,15 @@ export async function dropPlinkoBall(input: {
     bucket_index: clampedIdx,
   });
 
+  // Aktivitätslog (non-fatal — darf den Spielzug nie brechen).
+  try {
+    await admin.from("audit_logs").insert({
+      user_id: user.id,
+      action: "plinko_play",
+      payload: { riskLevel: input.riskLevel, ballCost: input.betAmount, multiplier, payout },
+    });
+  } catch { /* non-fatal */ }
+
   if (config.announceBigWins && payout >= config.bigWinThreshold) {
     const { data: prof } = await admin.from("profiles").select("username").eq("id", user.id).single();
     const username = (prof?.username as string) ?? "Jemand";

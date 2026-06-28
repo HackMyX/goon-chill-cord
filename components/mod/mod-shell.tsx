@@ -13,6 +13,7 @@ import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { GlobalChatPanel } from "@/components/global/global-chat-panel";
 import { ModConfigEditor } from "@/components/admin/mod-config-editor";
 import { ModUserPermissionsEditor } from "@/components/admin/mod-user-permissions-editor";
+import { AuditTimeline } from "@/components/admin/audit-timeline";
 import { createClient } from "@/lib/supabase/client";
 import { StyledUsername } from "@/components/ui/styled-username";
 import Link from "next/link";
@@ -25,11 +26,11 @@ import {
   modRemoveWarning, getModUserHistory, getTicketMessages, modMarkInProgress, modReplyToTicket,
   modDeleteTicket, modSetTicketPriority, modUpdateTicketStatus, modGrantTicketReward,
   modRemoveTicketReward, modEscalateTicket, modPauseTicket, getMyEffectivePermissions,
-  getEscalationTargets,
+  getEscalationTargets, getAuditLogForMod,
 } from "@/lib/actions/mod";
 import { addInternalNote, getInternalNotes, getTicketRewards, deleteTicketsBulk, deleteTicketsByDateRange, type InternalNote, type TicketReward } from "@/lib/actions/tickets";
 import { ModTicketDetailModal } from "@/components/mod/mod-ticket-detail-modal";
-import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage, EscalationTarget } from "@/lib/mod";
+import type { ModPermissions, ModActionRow, ModUserSummary, ModTicket, TicketMessage, EscalationTarget, ModAuditEntry } from "@/lib/mod";
 import { ADMIN_MOD_PERMISSIONS } from "@/lib/mod";
 
 // ---------------------------------------------------------------------------
@@ -2184,7 +2185,91 @@ function ActionLog({ actions }: { actions: ModActionRow[] }) {
 // Main Shell
 // ---------------------------------------------------------------------------
 
-type ModTab = "overview" | "users" | "tickets" | "actions" | "chat" | "ki" | "moderators";
+// ---------------------------------------------------------------------------
+// Audit-/Activity-Log Panel (mod side) — gated by canViewAuditLog.
+// Loads via the canViewAuditLog-guarded server action and reuses the same
+// <AuditTimeline> component as the admin panel.
+// ---------------------------------------------------------------------------
+
+function AuditLogPanel() {
+  const [entries, setEntries] = useState<ModAuditEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const sound = useSoundManager();
+
+  async function load() {
+    setRefreshing(true);
+    try {
+      const list = await getAuditLogForMod(100);
+      setEntries(list);
+      setError(null);
+    } catch {
+      setError("Aktivitätslog konnte nicht geladen werden.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  // Live-update: new audit entries appear without a full reload (AGENTS §3).
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("mod-audit-live")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "audit_logs" },
+        () => { load(); }
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2">
+        <FileText className="h-4 w-4 text-emerald-400" />
+        <h3 className="text-sm font-bold text-zinc-300">Aktivitätslog</h3>
+        {entries && (
+          <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">
+            {entries.length}
+          </span>
+        )}
+        <button
+          onMouseEnter={sound.hover}
+          onClick={() => { sound.click(); load(); }}
+          disabled={refreshing}
+          className="ml-auto flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          Aktualisieren
+        </button>
+      </div>
+      <p className="text-xs text-zinc-500">
+        Chronologisches Protokoll aller relevanten Aktionen auf der Seite (Käufe, Spiele,
+        Admin-/Mod-Eingriffe). Nur sichtbar mit dem Recht <strong className="text-emerald-300">Aktivitätslog ansehen</strong>.
+      </p>
+
+      <div className="rounded-2xl border border-white/8 bg-black/30 p-4">
+        {error ? (
+          <p className="px-4 py-8 text-center text-sm text-red-400">{error}</p>
+        ) : entries === null ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Lade Aktivitätslog…
+          </div>
+        ) : (
+          <AuditTimeline entries={entries} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+type ModTab = "overview" | "users" | "tickets" | "actions" | "audit" | "chat" | "ki" | "moderators";
 
 interface ModShellProps {
   modUsername: string;
@@ -2214,7 +2299,7 @@ function ModShellInner({
 
   const [activeTab, setActiveTab] = useState<ModTab>(() => {
     const q = searchParams.get("tab");
-    return (q === "tickets" || q === "users" || q === "actions" || q === "chat" || q === "ki" || q === "moderators") ? q : "overview";
+    return (q === "tickets" || q === "users" || q === "actions" || q === "audit" || q === "chat" || q === "ki" || q === "moderators") ? q : "overview";
   });
   const [deepOpenTicketId, setDeepOpenTicketId] = useState<string | null>(
     () => searchParams.get("open")
@@ -2253,7 +2338,7 @@ function ModShellInner({
 
   useEffect(() => {
     const q = searchParams.get("tab");
-    if (q === "tickets" || q === "users" || q === "actions" || q === "chat" || q === "ki" || q === "moderators") setActiveTab(q);
+    if (q === "tickets" || q === "users" || q === "actions" || q === "audit" || q === "chat" || q === "ki" || q === "moderators") setActiveTab(q);
     const open = searchParams.get("open");
     if (open) setDeepOpenTicketId(open);
   }, [searchParams]);
@@ -2268,6 +2353,7 @@ function ModShellInner({
       show: permissions.canViewTickets },
     { id: "moderators",  label: "Moderatoren",   Icon: Shield,          show: isAdminUser },
     { id: "actions",     label: "Aktionen",      Icon: History,         show: true },
+    { id: "audit",       label: "Aktivitätslog", Icon: FileText,        show: permissions.canViewAuditLog },
     { id: "chat",        label: "Chat",          Icon: MessageSquare,   show: true },
     { id: "ki",          label: "KI-Assistent",  Icon: Sparkles,        show: true },
   ];
@@ -2398,6 +2484,9 @@ function ModShellInner({
             </div>
             <ActionLog actions={recentActions} />
           </div>
+        )}
+        {activeTab === "audit" && permissions.canViewAuditLog && (
+          <AuditLogPanel />
         )}
         {activeTab === "chat" && (
           <div className="flex flex-col gap-4">

@@ -9,6 +9,7 @@ import {
   ALL_CLEANUP_KEYS,
   CLEANUP_SOURCE_META,
   DEFAULT_CLEANUP_RULES,
+  PLAYER_ACTIVITY_ACTIONS,
 } from "@/lib/cleanup-config";
 import { logDebugEvent } from "@/lib/debug-log-server";
 
@@ -42,7 +43,7 @@ export async function getCleanupRules(): Promise<CleanupRule[]> {
       await admin.from("cleanup_config").upsert(
         missingKeys.map((key) => ({
           source_key: key,
-          enabled: false,
+          enabled: CLEANUP_SOURCE_META[key].defaultEnabled ?? false,
           retention_days: CLEANUP_SOURCE_META[key].defaultRetentionDays,
           updated_at: new Date().toISOString(),
         })),
@@ -58,7 +59,7 @@ export async function getCleanupRules(): Promise<CleanupRule[]> {
           sourceKey: key,
           label: meta.label,
           description: meta.description,
-          enabled: false,
+          enabled: meta.defaultEnabled ?? false,
           retentionDays: meta.defaultRetentionDays,
           lastRunAt: null,
           lastRunDeleted: null,
@@ -149,12 +150,17 @@ export async function runCleanupNow(
 // Run all enabled rules (called by a cron or admin trigger)
 // ---------------------------------------------------------------------------
 
-export async function runAllEnabledCleanups(): Promise<{
+export async function runAllEnabledCleanups(options?: { system?: boolean }): Promise<{
   success: boolean;
   results: Array<{ sourceKey: CleanupSourceKey; deleted: number; error?: string }>;
 }> {
   try {
-    await requireAdmin();
+    // System/Cron-Aufrufe haben keine User-Session — die Authentifizierung
+    // erfolgt dort über das CRON_SECRET in der Route. Admin-UI-Aufrufe (ohne
+    // options) müssen weiterhin eingeloggter Admin sein.
+    if (!options?.system) {
+      await requireAdmin();
+    }
     const rules = await getCleanupRules();
     const enabledRules = rules.filter((r) => r.enabled && r.retentionDays > 0);
     const results: Array<{ sourceKey: CleanupSourceKey; deleted: number; error?: string }> = [];
@@ -297,11 +303,34 @@ async function deleteSource(key: CleanupSourceKey, cutoffIso: string): Promise<n
       }
     }
     case "audit_logs": {
+      // Admin/Mod-Audit = alles AUSSER Spieler-Aktivität (so überschneiden
+      // sich "audit_logs" und "player_activity" nicht).
+      try {
+        const notInList = `(${PLAYER_ACTIVITY_ACTIONS.join(",")})`;
+        const { data, error } = await admin
+          .from("audit_logs")
+          .delete()
+          .lt("created_at", cutoffIso)
+          .not("action", "in", notInList)
+          .select("id");
+        if (error) {
+          if (pgCode(error) === PG_UNDEFINED_TABLE) return 0;
+          throw error;
+        }
+        return data?.length ?? 0;
+      } catch (e) {
+        if (pgCode(e) === PG_UNDEFINED_TABLE) return 0;
+        throw e;
+      }
+    }
+    case "player_activity": {
+      // Spieler-Aktivität = nur die Gameplay/Wirtschaft/Sozial-Aktionen.
       try {
         const { data, error } = await admin
           .from("audit_logs")
           .delete()
           .lt("created_at", cutoffIso)
+          .in("action", [...PLAYER_ACTIVITY_ACTIONS])
           .select("id");
         if (error) {
           if (pgCode(error) === PG_UNDEFINED_TABLE) return 0;

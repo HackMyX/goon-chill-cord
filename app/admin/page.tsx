@@ -168,7 +168,7 @@ export default async function AdminPage() {
   ] = await Promise.all([
     admin
       .from("audit_logs")
-      .select("id, action, payload, created_at, profiles(username)")
+      .select("id, user_id, action, payload, created_at, profiles(username)")
       .order("created_at", { ascending: false })
       .limit(50),
     fetchTierRows(),

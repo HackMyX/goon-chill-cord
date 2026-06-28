@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, Save, RotateCcw, UserCog, Bot } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Save, RotateCcw, UserCog, Bot, Check, X, Minus } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 import { getModeratorUsers, setModUserPermissions } from "@/lib/actions/mod";
 import { ADMIN_MOD_PERMISSIONS, DEFAULT_MOD_PERMISSIONS, type ModPermissions, type ModeratorWithPermissions } from "@/lib/mod";
@@ -41,19 +41,64 @@ const PERM_LABELS: {
 
 const SECTIONS = ["Tickets", "Nutzer", "System"] as const;
 
-function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+type TriMode = "allow" | "inherit" | "deny";
+
+/**
+ * Three-state permission switch:
+ *  - "Erlaubt" (grün ✓)  → Recht wird dem Mod individuell GEGEBEN
+ *  - "Standard" (grau)    → erbt den globalen Gruppen-Wert (kein Override)
+ *  - "Gesperrt" (rot ✕)   → Recht wird dem Mod individuell ENTZOGEN
+ */
+function TriStateSwitch({ mode, groupVal, onChange }: {
+  mode: TriMode;
+  groupVal: boolean;
+  onChange: (m: TriMode) => void;
+}) {
+  const segs: { k: TriMode; label: string; Icon: typeof Check; active: string }[] = [
+    { k: "allow",   label: "Erlaubt",  Icon: Check, active: "bg-emerald-500/25 text-emerald-200 shadow-[inset_0_0_0_1.5px_rgba(16,185,129,0.55)]" },
+    { k: "inherit", label: "Standard", Icon: Minus, active: "bg-zinc-500/30 text-zinc-100 shadow-[inset_0_0_0_1.5px_rgba(161,161,170,0.5)]" },
+    { k: "deny",    label: "Gesperrt", Icon: X,     active: "bg-red-500/25 text-red-200 shadow-[inset_0_0_0_1.5px_rgba(239,68,68,0.55)]" },
+  ];
   return (
-    <button
-      onClick={() => !disabled && onChange(!value)}
-      role="switch"
-      aria-checked={value}
-      disabled={disabled}
-      className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-purple-400 disabled:opacity-40"
-    >
-      <span className={`relative block h-5 w-9 overflow-hidden rounded-full transition-colors ${value ? "bg-purple-600" : "bg-zinc-700"}`}>
-        <span className={`absolute left-0 top-[2px] h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${value ? "translate-x-[18px]" : "translate-x-[2px]"}`} />
+    <div className="flex shrink-0 overflow-hidden rounded-lg border border-white/10 text-[11px] font-bold">
+      {segs.map((s, i) => (
+        <button
+          key={s.k}
+          type="button"
+          onClick={() => onChange(s.k)}
+          aria-pressed={mode === s.k}
+          title={s.k === "inherit" ? `Standard (erbt: ${groupVal ? "Erlaubt" : "Gesperrt"})` : s.label}
+          className={`flex items-center gap-1 px-2 py-1.5 transition-all duration-150 ${i > 0 ? "border-l border-white/10" : ""} ${
+            mode === s.k ? s.active : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
+          }`}
+        >
+          <s.Icon className="h-3 w-3" /> {s.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Inline badge that spells out what the current choice MEANS for this mod. */
+function ModeBadge({ mode, groupVal }: { mode: TriMode; groupVal: boolean }) {
+  if (mode === "allow") {
+    return (
+      <span className="flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-300 bg-emerald-500/15">
+        <Check className="h-2.5 w-2.5" /> erlaubt · gibt Recht
       </span>
-    </button>
+    );
+  }
+  if (mode === "deny") {
+    return (
+      <span className="flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-red-300 bg-red-500/15">
+        <X className="h-2.5 w-2.5" /> gesperrt · entzieht Recht
+      </span>
+    );
+  }
+  return (
+    <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-zinc-400 bg-zinc-700/40">
+      Standard · erbt {groupVal ? "Erlaubt" : "Gesperrt"}
+    </span>
   );
 }
 
@@ -92,6 +137,26 @@ function ModRow({ mod, globalPerms }: { mod: ModeratorWithPermissions; globalPer
       } else {
         // Different from group → store as individual override (beats group)
         (next as Record<string, unknown>)[key] = val;
+      }
+      return Object.keys(next).length === 0 ? null : next;
+    });
+  }
+
+  // Three-state mode of a boolean permission: explicit allow/deny or inherited.
+  function getMode(key: keyof ModPermissions): TriMode {
+    if (override && key in override) return override[key] ? "allow" : "deny";
+    return "inherit";
+  }
+
+  // Set the three-state mode. "inherit" removes the override (falls back to group),
+  // "allow"/"deny" stores an explicit individual override (beats the group).
+  function setMode(key: keyof ModPermissions, mode: TriMode) {
+    setOverride((prev) => {
+      const next = { ...(prev ?? {}) };
+      if (mode === "inherit") {
+        delete next[key];
+      } else {
+        (next as Record<string, unknown>)[key] = mode === "allow";
       }
       return Object.keys(next).length === 0 ? null : next;
     });
@@ -157,16 +222,27 @@ function ModRow({ mod, globalPerms }: { mod: ModeratorWithPermissions; globalPer
           ) : (
             <>
               {/* Legend */}
-              <div className="mb-3 flex flex-wrap items-center gap-3 text-[10px] text-zinc-500">
-                <span className="flex items-center gap-1">
-                  <span className="inline-block h-2 w-2 rounded-full bg-purple-500/70" />
-                  <span className="text-purple-400 font-semibold">Individuell</span> — überschreibt Gruppe
+              <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2 text-[10px] text-zinc-400">
+                <span className="font-semibold text-zinc-500">Legende:</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="flex items-center gap-1 rounded bg-emerald-500/25 px-1.5 py-0.5 font-bold text-emerald-200">
+                    <Check className="h-2.5 w-2.5" /> Erlaubt
+                  </span>
+                  <span className="text-zinc-500">= Recht GEGEBEN</span>
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block h-2 w-2 rounded-full bg-zinc-600" />
-                  <span className="text-zinc-400">Gruppe</span> — globale Einstellung
+                <span className="flex items-center gap-1.5">
+                  <span className="flex items-center gap-1 rounded bg-red-500/25 px-1.5 py-0.5 font-bold text-red-200">
+                    <X className="h-2.5 w-2.5" /> Gesperrt
+                  </span>
+                  <span className="text-zinc-500">= Recht ENTZOGEN</span>
                 </span>
-                <span className="ml-auto text-zinc-600 italic">Individuelle Rechte überschreiben IMMER die Gruppe</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="flex items-center gap-1 rounded bg-zinc-500/30 px-1.5 py-0.5 font-bold text-zinc-200">
+                    <Minus className="h-2.5 w-2.5" /> Standard
+                  </span>
+                  <span className="text-zinc-500">= erbt globale Einstellung</span>
+                </span>
+                <span className="w-full text-zinc-600 italic">Erlaubt/Gesperrt überschreiben IMMER die globale Gruppe — Standard folgt der Gruppe.</span>
               </div>
 
               {SECTIONS.map((section) => {
@@ -180,26 +256,28 @@ function ModRow({ mod, globalPerms }: { mod: ModeratorWithPermissions; globalPer
                         const source = getSource(key);
                         const isIndividual = source === "individual";
                         const groupVal = globalPerms[key];
-                        const differsFromGroup = isIndividual && val !== groupVal;
 
                         if (isNumber) {
                           return (
                             <div
                               key={key}
-                              className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition-colors ${
+                              className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 transition-colors ${
                                 isIndividual
-                                  ? "border-purple-500/40 bg-purple-500/5"
-                                  : "border-white/5 bg-white/[0.02]"
+                                  ? "border-amber-500/40 bg-amber-500/[0.06]"
+                                  : "border-white/8 bg-white/[0.02]"
                               }`}
                             >
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <p className="text-xs font-semibold text-zinc-200">{label}</p>
-                                  {isIndividual && (
-                                    <span className="text-[9px] font-bold uppercase tracking-wide text-purple-400 bg-purple-500/15 px-1 py-0.5 rounded">individuell</span>
-                                  )}
-                                  {!isIndividual && (
-                                    <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-600 bg-zinc-700/30 px-1 py-0.5 rounded">gruppe</span>
+                                  {isIndividual ? (
+                                    <span className="text-[9px] font-bold uppercase tracking-wide text-amber-300 bg-amber-500/20 px-1 py-0.5 rounded">
+                                      überschrieben (Standard: {String(groupVal)})
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-400 bg-zinc-700/40 px-1 py-0.5 rounded">
+                                      Standard ({String(groupVal)})
+                                    </span>
                                   )}
                                 </div>
                                 <p className="text-[10px] text-zinc-500">{description}</p>
@@ -211,15 +289,17 @@ function ModRow({ mod, globalPerms }: { mod: ModeratorWithPermissions; globalPer
                                   max={max ?? 9999999}
                                   value={val as number}
                                   onChange={(e) => setVal(key as "maxTempBanHours" | "maxRewardPerTicket" | "maxChatMuteHours", Number(e.target.value))}
-                                  className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+                                  className={`w-24 rounded-lg border bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none transition-colors ${
+                                    isIndividual ? "border-amber-400/40 focus:border-amber-400/70" : "border-white/10 focus:border-purple-400/60"
+                                  }`}
                                 />
                                 {isIndividual && (
                                   <button
                                     onClick={() => resetOne(key)}
-                                    title={`Auf Gruppe zurücksetzen (${String(groupVal)})`}
-                                    className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+                                    title={`Auf Standard zurücksetzen (${String(groupVal)})`}
+                                    className="flex items-center gap-1 rounded-md border border-white/10 px-1.5 py-1 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-amber-400/40 hover:text-amber-300"
                                   >
-                                    ↺
+                                    <RotateCcw className="h-2.5 w-2.5" /> Standard
                                   </button>
                                 )}
                               </div>
@@ -227,50 +307,31 @@ function ModRow({ mod, globalPerms }: { mod: ModeratorWithPermissions; globalPer
                           );
                         }
 
+                        const mode = getMode(key);
+                        const rowTint =
+                          mode === "allow"
+                            ? "border-emerald-500/30 bg-emerald-500/[0.05]"
+                            : mode === "deny"
+                              ? "border-red-500/25 bg-red-500/[0.04]"
+                              : "border-white/8 bg-white/[0.02]";
+
                         return (
                           <div
                             key={key}
-                            className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition-colors ${
-                              isIndividual
-                                ? differsFromGroup
-                                  ? "border-purple-500/40 bg-purple-500/5"
-                                  : "border-purple-500/20 bg-purple-500/[0.03]"
-                                : "border-white/5 bg-white/[0.02]"
-                            }`}
+                            className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 transition-colors ${rowTint}`}
                           >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <p className="text-xs font-semibold text-zinc-200">{label}</p>
-                                {isIndividual && (
-                                  <span className={`text-[9px] font-bold uppercase tracking-wide px-1 py-0.5 rounded ${
-                                    differsFromGroup
-                                      ? "text-purple-300 bg-purple-500/20"
-                                      : "text-purple-500 bg-purple-500/10"
-                                  }`}>
-                                    individuell{differsFromGroup ? ` ≠ Gruppe(${String(groupVal)})` : ""}
-                                  </span>
-                                )}
-                                {!isIndividual && (
-                                  <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-600 bg-zinc-700/30 px-1 py-0.5 rounded">gruppe</span>
-                                )}
+                                <ModeBadge mode={mode} groupVal={groupVal as boolean} />
                               </div>
                               <p className="text-[10px] text-zinc-500">{description}</p>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Toggle
-                                value={val as boolean}
-                                onChange={(v) => setVal(key as keyof ModPermissions, v as ModPermissions[typeof key])}
-                              />
-                              {isIndividual && (
-                                <button
-                                  onClick={() => resetOne(key)}
-                                  title={`Auf Gruppe zurücksetzen (${String(groupVal)})`}
-                                  className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
-                                >
-                                  ↺
-                                </button>
-                              )}
-                            </div>
+                            <TriStateSwitch
+                              mode={mode}
+                              groupVal={groupVal as boolean}
+                              onChange={(m) => setMode(key, m)}
+                            />
                           </div>
                         );
                       })}

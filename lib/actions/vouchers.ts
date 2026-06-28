@@ -402,6 +402,8 @@ export async function adminGrantVoucherToUsers(input: {
   if (userIds.length === 0) return { success: false, error: "Keine Spieler ausgewählt." };
 
   const admin = createAdminClient();
+  const { data: adminProfile } = await admin.from("profiles").select("username").eq("id", adminUser.id).maybeSingle();
+  const adminName = (adminProfile as { username?: string } | null)?.username ?? "Admin";
   let granted = 0;
   for (const userId of userIds) {
     const summaries: string[] = [];
@@ -414,6 +416,16 @@ export async function adminGrantVoucherToUsers(input: {
     if (!ok) continue;
     granted++;
     const summary = summaries.join(" · ");
+
+    // Aktivitätslog im Log des EMPFÄNGERS (non-fatal).
+    try {
+      await admin.from("audit_logs").insert({
+        user_id: userId,
+        action: "voucher_received",
+        payload: { summary, by: adminName, note: input.note?.trim() || null },
+      });
+    } catch { /* non-fatal */ }
+
     await notifyUser({
       userId,
       type: "admin_grant_item",

@@ -11,9 +11,67 @@ export type CleanupSourceKey =
   | "login_events"
   | "notifications"
   | "audit_logs"
+  | "player_activity"
   | "tickets_closed"
   | "trade_offers_done"
   | "auctions_done";
+
+/**
+ * `audit_logs.action` values that represent SPIELER-Aktivität
+ * (Gameplay / Wirtschaft / Sozial) — as opposed to Admin/Mod-Audit.
+ *
+ * Used to split the shared `audit_logs` table into two retention policies:
+ *  - rows WHERE action IN (PLAYER_ACTIVITY_ACTIONS)      → source "player_activity" (24h)
+ *  - rows WHERE action NOT IN (PLAYER_ACTIVITY_ACTIONS)  → source "audit_logs"      (Admin/Mod-Audit, 90d)
+ *
+ * Hinweis: enthält bewusst auch ein paar Vorwärts-kompatible Keys
+ * (z.B. snake_game, plinko_play, voucher_received, friend_*), die heute
+ * evtl. in eigene Tabellen schreiben — schadet nicht (kein Treffer = keine Wirkung),
+ * verhindert aber, dass künftige Spieler-Aktionen versehentlich im Admin-Audit landen.
+ */
+export const PLAYER_ACTIVITY_ACTIONS = [
+  // Cases
+  "case_open",
+  "case_batch_open",
+  // Double or Nothing
+  "double_or_nothing",
+  "don_upgrade_purchase",
+  // Snake
+  "snake_earn",
+  "snake_game",
+  // Plinko (schreibt aktuell in plinko_plays — Vorwärts-Kompatibilität)
+  "plinko_play",
+  // Mine
+  "mine_collect",
+  "mine_upgrade",
+  // Shop
+  "shop_purchase",
+  // Streak (Daily) + Kill-Streak (Farmwelt)
+  "streak_claim",
+  "streak_kill",
+  "streak_commit",
+  "streak_forfeit",
+  // Level / XP-Belohnungen
+  "level_reward_credits",
+  // Auktionen
+  "auction_sold",
+  "auction_buyout",
+  // Trades
+  "trade_accepted",
+  "trade_declined",
+  "trade_cancelled",
+  // PvP
+  "pvp_hit_attempt",
+  // Battle Pass (Spieler-Kauf / Tier-Claim)
+  "battle_pass_purchase",
+  "battle_pass_tier_claim",
+  // Sozial (Vorwärts-Kompatibilität — heute eigene Tabellen)
+  "friend_request",
+  "friend_accepted",
+  "user_blocked",
+  // Gutscheine (Vorwärts-Kompatibilität)
+  "voucher_received",
+] as const;
 
 export interface CleanupRule {
   /** Which table / data source this rule applies to */
@@ -34,7 +92,7 @@ export interface CleanupRule {
 
 export const CLEANUP_SOURCE_META: Record<
   CleanupSourceKey,
-  { label: string; description: string; defaultRetentionDays: number }
+  { label: string; description: string; defaultRetentionDays: number; defaultEnabled?: boolean }
 > = {
   debug_logs: {
     label: "Debug-Log",
@@ -62,9 +120,15 @@ export const CLEANUP_SOURCE_META: Record<
     defaultRetentionDays: 60,
   },
   audit_logs: {
-    label: "Admin Audit-Log",
-    description: "Protokoll aller Admin-Aktionen",
-    defaultRetentionDays: 365,
+    label: "Admin/Mod-Audit (audit_logs)",
+    description: "Admin-/Mod-Änderungen — alles außer Spieler-Aktivität",
+    defaultRetentionDays: 90,
+  },
+  player_activity: {
+    label: "Spieler-Aktivität (audit_logs)",
+    description: "Spiel-/Wirtschafts-/Sozial-Aktionen der Spieler",
+    defaultRetentionDays: 1,
+    defaultEnabled: true, // Standard: Spieler-Logs nach 24h automatisch löschen
   },
   tickets_closed: {
     label: "Geschlossene Tickets",

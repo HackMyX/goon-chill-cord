@@ -884,7 +884,7 @@ export async function purchaseShopItem(listingId: string): Promise<ShopPurchaseR
     await admin.from("audit_logs").insert({
       user_id: user.id,
       action: "shop_purchase",
-      payload: { listingId, itemName, price: listing.price_cr, newCredits },
+      payload: { listingId, itemName, price: listing.price_cr, listingType, newCredits },
     });
   } catch {
     // best-effort

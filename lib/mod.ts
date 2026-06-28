@@ -169,3 +169,16 @@ export interface TicketMessage {
   createdAt: string;
   attachmentUrl: string | null;
 }
+
+/**
+ * A single activity-/audit-log entry as consumed by the mod panel.
+ * Shape is compatible with the admin `<AuditTimeline>` `AuditEntry` prop
+ * (id/action/payload/created_at + resolved actor username).
+ */
+export interface ModAuditEntry {
+  id: string;
+  action: string;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+  actor: string | null;
+}
