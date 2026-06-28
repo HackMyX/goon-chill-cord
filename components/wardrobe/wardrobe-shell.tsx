@@ -22,6 +22,8 @@ import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { NameStyleSection } from "@/components/wardrobe/name-style-section";
 import { getMyNameStyles, type UserNameStyleRow } from "@/lib/actions/name-styles";
 import { AbilitiesSection } from "@/components/garderobe/abilities-section";
+import { VouchersSection } from "@/components/garderobe/vouchers-section";
+import type { CaseTokenView, GameBonusView } from "@/lib/actions/rewards";
 import type { UserAbility } from "@/lib/abilities";
 import { setMyPrioBadges } from "@/lib/actions/prio-badges";
 import { getBadgeStyle } from "@/lib/badges";
@@ -66,6 +68,8 @@ interface WardrobeShellProps {
   initialPrioBadges?: string[];
   initialPrioLocked?: boolean;
   maxPrioBadges?: number;
+  caseTokens?: CaseTokenView[];
+  gameBonuses?: GameBonusView[];
 }
 
 // ── Prio-Badge selection section ──────────────────────────────────────────────
@@ -343,6 +347,8 @@ export function WardrobeShell({
   initialPrioBadges = [],
   initialPrioLocked = false,
   maxPrioBadges = 2,
+  caseTokens = [],
+  gameBonuses = [],
 }: WardrobeShellProps) {
   const [credits, setCredits] = useState(initialCredits);
   useRealtimeProfile((row) => {
@@ -697,6 +703,14 @@ export function WardrobeShell({
             Fähigkeiten-Slot
           </h2>
           <AbilitiesSection abilities={abilities} equippedKey={equippedAbilityKey} />
+        </div>
+
+        <div className="mt-6">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
+            <span>🎟️</span>
+            Meine Gutscheine
+          </h2>
+          <VouchersSection caseTokens={caseTokens} gameBonuses={gameBonuses} />
         </div>
 
         {initialBadges.length > 0 && (

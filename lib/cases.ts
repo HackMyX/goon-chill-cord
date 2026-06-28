@@ -126,7 +126,7 @@ export function rarityBarBgClass(rarity: Rarity): string {
 /** Non-item things a case can drop alongside its item pool. The visual /
  * granting infrastructure already exists app-wide (UniversalPreviewModal,
  * Battle-Pass grant logic), so cases reuse it. */
-export type CaseExtraDropKind = "credits" | "name_style" | "ability" | "badge";
+export type CaseExtraDropKind = "credits" | "name_style" | "ability" | "badge" | "case_voucher" | "game_bonus";
 
 export interface CaseExtraDrop {
   /** Stable local id (for admin editing + React keys). */
@@ -141,11 +141,20 @@ export interface CaseExtraDrop {
   abilityKey?: string; // ability
   badgeKey?: string;   // badge
   badgeText?: string;  // badge display text
+  // ── case_voucher ──
+  caseVoucherMode?: "tier" | "rarity";
+  caseVoucherTierId?: string;
+  caseVoucherRarityFloor?: Rarity;
+  caseVoucherDurationHours?: number;
+  // ── game_bonus ──
+  gameBonusGame?: "plinko" | "snake" | "don";
+  gameBonusAmount?: number;
+  gameBonusDurationHours?: number;
   /** Optional display-name override (falls back to a sensible per-kind default). */
   label?: string;
 }
 
-const EXTRA_DROP_KINDS: CaseExtraDropKind[] = ["credits", "name_style", "ability", "badge"];
+const EXTRA_DROP_KINDS: CaseExtraDropKind[] = ["credits", "name_style", "ability", "badge", "case_voucher", "game_bonus"];
 
 /** Validates/normalizes a raw jsonb value into a clean CaseExtraDrop[]. Never throws. */
 export function normalizeExtraDrops(raw: unknown): CaseExtraDrop[] {
@@ -169,12 +178,23 @@ export function normalizeExtraDrops(raw: unknown): CaseExtraDrop[] {
     if (typeof o.abilityKey === "string") drop.abilityKey = o.abilityKey;
     if (typeof o.badgeKey === "string") drop.badgeKey = o.badgeKey;
     if (typeof o.badgeText === "string") drop.badgeText = o.badgeText;
+    if (o.caseVoucherMode === "tier" || o.caseVoucherMode === "rarity") drop.caseVoucherMode = o.caseVoucherMode;
+    if (typeof o.caseVoucherTierId === "string") drop.caseVoucherTierId = o.caseVoucherTierId;
+    if (RARITY_ORDER.includes(o.caseVoucherRarityFloor as Rarity)) drop.caseVoucherRarityFloor = o.caseVoucherRarityFloor as Rarity;
+    if (typeof o.caseVoucherDurationHours === "number") drop.caseVoucherDurationHours = Math.max(0, Math.round(o.caseVoucherDurationHours));
+    if (o.gameBonusGame === "plinko" || o.gameBonusGame === "snake" || o.gameBonusGame === "don") drop.gameBonusGame = o.gameBonusGame;
+    if (typeof o.gameBonusAmount === "number") drop.gameBonusAmount = Math.max(1, Math.round(o.gameBonusAmount));
+    if (typeof o.gameBonusDurationHours === "number") drop.gameBonusDurationHours = Math.max(0, Math.round(o.gameBonusDurationHours));
     if (typeof o.label === "string") drop.label = o.label;
     // Drop entries that are missing their required target are ignored entirely.
     if (drop.kind === "credits" && !drop.amount) continue;
     if (drop.kind === "name_style" && !drop.styleKey) continue;
     if (drop.kind === "ability" && !drop.abilityKey) continue;
     if (drop.kind === "badge" && !drop.badgeKey) continue;
+    if (drop.kind === "case_voucher" && drop.caseVoucherMode === "tier" && !drop.caseVoucherTierId) continue;
+    if (drop.kind === "case_voucher" && drop.caseVoucherMode === "rarity" && !drop.caseVoucherRarityFloor) continue;
+    if (drop.kind === "case_voucher" && !drop.caseVoucherMode) continue;
+    if (drop.kind === "game_bonus" && (!drop.gameBonusGame || !drop.gameBonusAmount)) continue;
     out.push(drop);
   }
   return out;

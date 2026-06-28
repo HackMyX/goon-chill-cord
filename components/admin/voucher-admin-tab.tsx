@@ -24,7 +24,10 @@ import { getOpenableCases, type OpenableCaseView } from "@/lib/actions/rewards";
 type Profile = { id: string; username: string };
 type Lookup = { abilities: { key: string; name: string }[]; badges: { key: string; label: string }[] };
 
-const REWARD_TYPES = Object.keys(VOUCHER_REWARD_LABELS) as VoucherRewardType[];
+// Case-Gutscheine + Spiel-Boni werden bewusst NICHT per Code/Direktvergabe verteilt —
+// sie gehören in Battle Pass, Cases & Co. (als 3D-Givable). Hier nur die klassischen Typen.
+const REWARD_TYPES = (Object.keys(VOUCHER_REWARD_LABELS) as VoucherRewardType[])
+  .filter((t) => t !== "case_voucher" && t !== "game_bonus");
 const INPUT = "rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none focus:border-purple-400/50";
 
 /** ISO (UTC) → local value for <input type="datetime-local"> */

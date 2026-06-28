@@ -64,10 +64,16 @@ const EXTRA_KIND_OPTIONS: { value: CaseExtraDropKind; label: string }[] = [
   { value: "name_style", label: "Name-Style" },
   { value: "ability", label: "Fähigkeit" },
   { value: "badge", label: "Badge" },
+  { value: "case_voucher", label: "Case-Gutschein" },
+  { value: "game_bonus", label: "Spiel-Bonus" },
 ];
 const EXTRA_KIND_LABEL: Record<CaseExtraDropKind, string> = {
   credits: "Credits", name_style: "Name-Style", ability: "Fähigkeit", badge: "Badge",
+  case_voucher: "Case-Gutschein", game_bonus: "Spiel-Bonus",
 };
+const BONUS_GAME_OPTIONS: { value: "plinko" | "snake" | "don"; label: string }[] = [
+  { value: "plinko", label: "Plinko-Bälle" }, { value: "snake", label: "Snake-Spiele" }, { value: "don", label: "DON-Spins" },
+];
 
 const NAME_STYLE_OPTIONS = Object.values(NAME_STYLES)
   .map((s) => ({ key: s.key, label: s.label, rarity: s.rarity }))
@@ -82,6 +88,8 @@ function extraDropToSubject(d: CaseExtraDrop, abilities: AbilityLite[]): Preview
       return { kind: "ability", abilityKey: d.abilityKey ?? "", name: d.label || a?.name || d.abilityKey || "Fähigkeit", icon: a?.icon, rarity: d.rarity };
     }
     case "badge":      return { kind: "badge", badgeKey: d.badgeKey ?? "", badgeText: d.badgeText || d.badgeKey || "" };
+    case "case_voucher": return { kind: "case_voucher", mode: d.caseVoucherMode ?? "tier", label: d.label, tierLabel: d.caseVoucherTierId, rarityFloor: d.caseVoucherRarityFloor, durationHours: d.caseVoucherDurationHours };
+    case "game_bonus": return { kind: "game_bonus", game: d.gameBonusGame ?? "don", amount: d.gameBonusAmount ?? 1, label: d.label, durationHours: d.gameBonusDurationHours };
   }
 }
 
@@ -92,6 +100,8 @@ function extraDropDisplay(d: CaseExtraDrop, abilities: AbilityLite[]): string {
     case "name_style": return NAME_STYLES[d.styleKey ?? ""]?.label ?? d.styleKey ?? "Name-Style";
     case "ability":    return abilities.find((a) => a.key === d.abilityKey)?.name ?? d.abilityKey ?? "Fähigkeit";
     case "badge":      return d.badgeText || d.badgeKey || "Badge";
+    case "case_voucher": return d.caseVoucherMode === "rarity" ? `Gratis-Case (mind. ${d.caseVoucherRarityFloor ?? "?"})` : "Gratis-Case";
+    case "game_bonus": return `+${d.gameBonusAmount ?? 1} ${BONUS_GAME_OPTIONS.find((g) => g.value === d.gameBonusGame)?.label ?? "Bonus"}`;
   }
 }
 
@@ -115,6 +125,15 @@ function ExtraDropsEditor({
   const [abilityKey, setAbilityKey] = useState("");
   const [badgeKey, setBadgeKey] = useState(ALL_BADGE_KEYS[0] ?? "");
   const [badgeText, setBadgeText] = useState("");
+  const [cvMode, setCvMode] = useState<"tier" | "rarity">("tier");
+  const [cvTierId, setCvTierId] = useState("");
+  const [cvRarityFloor, setCvRarityFloor] = useState<Rarity>("selten");
+  const [cvDuration, setCvDuration] = useState(0);
+  const [gbGame, setGbGame] = useState<"plinko" | "snake" | "don">("don");
+  const [gbAmount, setGbAmount] = useState(5);
+  const [gbDuration, setGbDuration] = useState(0);
+  const [openCases, setOpenCases] = useState<{ tierId: string; label: string; groupTitle: string }[]>([]);
+  useEffect(() => { void import("@/lib/actions/rewards").then((m) => m.getOpenableCases().then(setOpenCases).catch(() => undefined)); }, []);
   const [label, setLabel] = useState("");
   const [preview, setPreview] = useState<PreviewSubject | null>(null);
 
@@ -134,6 +153,16 @@ function ExtraDropsEditor({
       if (!badgeKey) return;
       base.badgeKey = badgeKey;
       if (badgeText.trim()) base.badgeText = badgeText.trim();
+    } else if (kind === "case_voucher") {
+      base.caseVoucherMode = cvMode;
+      if (cvMode === "tier") { if (!cvTierId) return; base.caseVoucherTierId = cvTierId; }
+      else base.caseVoucherRarityFloor = cvRarityFloor;
+      base.caseVoucherDurationHours = Math.max(0, cvDuration);
+    } else if (kind === "game_bonus") {
+      if (gbAmount <= 0) return;
+      base.gameBonusGame = gbGame;
+      base.gameBonusAmount = Math.max(1, gbAmount);
+      base.gameBonusDurationHours = Math.max(0, gbDuration);
     }
     setDrops([...drops, base]);
     setLabel("");
@@ -305,6 +334,62 @@ function ExtraDropsEditor({
                   placeholder="Anzeigetext"
                   className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60"
                 />
+              </label>
+            </>
+          )}
+          {kind === "case_voucher" && (
+            <>
+              <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                Modus
+                <select value={cvMode} onChange={(e) => setCvMode(e.target.value as "tier" | "rarity")}
+                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60">
+                  <option value="tier">Konkretes Case</option>
+                  <option value="rarity">Nach Seltenheit</option>
+                </select>
+              </label>
+              {cvMode === "tier" ? (
+                <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                  Case
+                  <select value={cvTierId} onChange={(e) => setCvTierId(e.target.value)}
+                    className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60">
+                    <option value="">— wählen —</option>
+                    {openCases.map((c) => <option key={c.tierId} value={c.tierId}>{c.groupTitle} · {c.label}</option>)}
+                  </select>
+                </label>
+              ) : (
+                <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                  Mind. Seltenheit
+                  <select value={cvRarityFloor} onChange={(e) => setCvRarityFloor(e.target.value as Rarity)}
+                    className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60">
+                    {(["normal", "selten", "mythisch", "ultra"] as Rarity[]).map((r) => <option key={r} value={r}>{RARITY_LABELS[r] ?? r}</option>)}
+                  </select>
+                </label>
+              )}
+              <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                Ablauf (Std., 0=nie)
+                <input type="number" min={0} value={cvDuration} onChange={(e) => setCvDuration(Math.max(0, Number(e.target.value) || 0))}
+                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60" />
+              </label>
+            </>
+          )}
+          {kind === "game_bonus" && (
+            <>
+              <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                Spiel
+                <select value={gbGame} onChange={(e) => setGbGame(e.target.value as "plinko" | "snake" | "don")}
+                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60">
+                  {BONUS_GAME_OPTIONS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                Anzahl extra
+                <input type="number" min={1} value={gbAmount} onChange={(e) => setGbAmount(Math.max(1, Number(e.target.value) || 1))}
+                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60" />
+              </label>
+              <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
+                Ablauf (Std., 0=nie)
+                <input type="number" min={0} value={gbDuration} onChange={(e) => setGbDuration(Math.max(0, Number(e.target.value) || 0))}
+                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-fuchsia-400/60" />
               </label>
             </>
           )}

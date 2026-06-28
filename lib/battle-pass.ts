@@ -1,6 +1,6 @@
 import type { Rarity } from "@/lib/cases";
 
-export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_boost" | "name_style" | "ability";
+export type BpRewardType = "credits" | "item" | "random_item" | "badge" | "xp_boost" | "name_style" | "ability" | "case_voucher" | "game_bonus";
 
 // ── Visual config (per-pass) ──────────────────────────────────────────────────
 
@@ -120,6 +120,15 @@ export interface BattlePassTier {
   rewardNameStyleKey: string | null;
   rewardAbilityKey: string | null;
   rewardAbilityName: string | null;
+  // ── case_voucher ──
+  rewardCaseVoucherMode: "tier" | "rarity" | null;
+  rewardCaseVoucherTierId: string | null;
+  rewardCaseVoucherRarityFloor: Rarity | null;
+  rewardCaseVoucherDurationHours: number;
+  // ── game_bonus ──
+  rewardGameBonusGame: "plinko" | "snake" | "don" | null;
+  rewardGameBonusAmount: number;
+  rewardGameBonusDurationHours: number;
   /** Enriched item combat stats (set server-side for item rewards) so the UI can show values. */
   rewardItemStats?: {
     damage: number | null;

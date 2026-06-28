@@ -365,6 +365,10 @@ function BpRewardScene({
     case "xp_boost": return <SpinningBolt />;
     case "name_style": return <SpinningStyleOrb />;
     case "ability": return <SpinningAbilityOrb />;
+    // Vouchers reuse existing geometry (no blind new R3F): a glowing orb for the
+    // case voucher, a die for the game-bonus — both tinted to the reward rarity.
+    case "case_voucher": return <SpinningStyleOrb />;
+    case "game_bonus": return <SpinningDice rarityColor={rc} />;
     default: return <SpinningGem color={rc} />;
   }
 }

@@ -26,6 +26,7 @@ const TRACK_META: Record<Track, { label: string; short: string; color: string; g
 
 const REWARD_EMOJI: Record<BpRewardType, string> = {
   credits: "💰", item: "📦", random_item: "🎲", badge: "🏆", xp_boost: "⚡", name_style: "🎨", ability: "✨",
+  case_voucher: "🎟️", game_bonus: "🎮",
 };
 
 const RARITY_HEX: Record<string, string> = {

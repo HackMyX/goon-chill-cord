@@ -6,6 +6,7 @@ import { getMyAbilities } from "@/lib/actions/abilities";
 import { getMyBadges } from "@/lib/actions/badges";
 import { getMyPrioBadgeState } from "@/lib/actions/prio-badges";
 import { getSiteConfig } from "@/lib/actions/site-config";
+import { getMyRewardWallet } from "@/lib/actions/rewards";
 
 export default async function GarderobePage() {
   const supabase = await createClient();
@@ -23,11 +24,12 @@ export default async function GarderobePage() {
     .eq("id", user.id)
     .single();
 
-  const [userAbilities, myBadges, prioState, siteConfig] = await Promise.all([
+  const [userAbilities, myBadges, prioState, siteConfig, rewardWallet] = await Promise.all([
     getMyAbilities().catch(() => []),
     getMyBadges().catch(() => []),
     getMyPrioBadgeState().catch(() => ({ keys: [] as string[], custom: false, locked: false })),
     getSiteConfig(),
+    getMyRewardWallet().catch(() => ({ caseTokens: [], gameBonuses: [] })),
   ]);
 
   const withDamage = await supabase
@@ -70,6 +72,8 @@ export default async function GarderobePage() {
       initialPrioBadges={prioState.keys}
       initialPrioLocked={prioState.locked}
       maxPrioBadges={siteConfig.maxPrioBadges}
+      caseTokens={rewardWallet.caseTokens}
+      gameBonuses={rewardWallet.gameBonuses}
     />
   );
 }

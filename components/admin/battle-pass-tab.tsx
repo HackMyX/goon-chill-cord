@@ -45,6 +45,8 @@ const REWARD_ICONS: Record<BpRewardType, React.ReactNode> = {
   xp_boost:   <TrendingUp className="h-3.5 w-3.5" />,
   name_style: <Palette className="h-3.5 w-3.5" />,
   ability:    <Zap className="h-3.5 w-3.5" />,
+  case_voucher: <span className="text-sm leading-none">🎟️</span>,
+  game_bonus: <span className="text-sm leading-none">🎮</span>,
 };
 
 const REWARD_LABELS: Record<BpRewardType, string> = {
@@ -55,6 +57,8 @@ const REWARD_LABELS: Record<BpRewardType, string> = {
   xp_boost:   "XP Boost (Tage)",
   name_style: "Name Style",
   ability:    "Fähigkeit",
+  case_voucher: "Case-Gutschein",
+  game_bonus: "Spiel-Bonus",
 };
 
 const TIER_EMOJIS = ["🎁","💰","⚡","🔥","🌟","💎","👑","🎯","🎲","🚀","✨","🎪","🌈","💫","🛡️","⚔️","🎭","🎨","🎵","🎮","🏆","⭐","🎀","🔮","🐉"];
@@ -630,6 +634,15 @@ function TierEditorModal({
   const [rewardXpBoost, setRewardXpBoost] = useState(existing?.rewardXpBoost ?? 1);
   const [rewardNameStyleKey, setRewardNameStyleKey] = useState(existing?.rewardNameStyleKey ?? "");
   const [rewardAbilityKey, setRewardAbilityKey] = useState(existing?.rewardAbilityKey ?? "");
+  const [rewardCaseVoucherMode, setRewardCaseVoucherMode] = useState<"tier" | "rarity">(existing?.rewardCaseVoucherMode ?? "tier");
+  const [rewardCaseVoucherTierId, setRewardCaseVoucherTierId] = useState(existing?.rewardCaseVoucherTierId ?? "");
+  const [rewardCaseVoucherRarityFloor, setRewardCaseVoucherRarityFloor] = useState<Rarity>(existing?.rewardCaseVoucherRarityFloor ?? "selten");
+  const [rewardCaseVoucherDurationHours, setRewardCaseVoucherDurationHours] = useState(existing?.rewardCaseVoucherDurationHours ?? 0);
+  const [rewardGameBonusGame, setRewardGameBonusGame] = useState<"plinko" | "snake" | "don">(existing?.rewardGameBonusGame ?? "don");
+  const [rewardGameBonusAmount, setRewardGameBonusAmount] = useState(existing?.rewardGameBonusAmount ?? 5);
+  const [rewardGameBonusDurationHours, setRewardGameBonusDurationHours] = useState(existing?.rewardGameBonusDurationHours ?? 0);
+  const [openCases, setOpenCases] = useState<{ tierId: string; label: string; groupTitle: string }[]>([]);
+  useEffect(() => { void import("@/lib/actions/rewards").then((m) => m.getOpenableCases().then(setOpenCases).catch(() => undefined)); }, []);
   const [abilities, setAbilities] = useState<{ key: string; name: string; icon: string; rarity: string }[]>([]);
   const [nameStyles, setNameStyles] = useState<{ key: string; label: string; rarity: string }[]>([]);
   const [badges, setBadges] = useState<{ key: string; label: string; icon: string }[]>([]);
@@ -679,6 +692,13 @@ function TierEditorModal({
       rewardXpBoost: rewardType === "xp_boost" ? rewardXpBoost : null,
       rewardNameStyleKey: rewardType === "name_style" ? (rewardNameStyleKey.trim() || null) : null,
       rewardAbilityKey: rewardType === "ability" ? (rewardAbilityKey || null) : null,
+      rewardCaseVoucherMode: rewardType === "case_voucher" ? rewardCaseVoucherMode : null,
+      rewardCaseVoucherTierId: rewardType === "case_voucher" && rewardCaseVoucherMode === "tier" ? (rewardCaseVoucherTierId || null) : null,
+      rewardCaseVoucherRarityFloor: rewardType === "case_voucher" && rewardCaseVoucherMode === "rarity" ? rewardCaseVoucherRarityFloor : null,
+      rewardCaseVoucherDurationHours: rewardType === "case_voucher" ? Math.max(0, rewardCaseVoucherDurationHours) : 0,
+      rewardGameBonusGame: rewardType === "game_bonus" ? rewardGameBonusGame : null,
+      rewardGameBonusAmount: rewardType === "game_bonus" ? Math.max(1, rewardGameBonusAmount) : 0,
+      rewardGameBonusDurationHours: rewardType === "game_bonus" ? Math.max(0, rewardGameBonusDurationHours) : 0,
       rewardQuantity: Math.max(1, rewardQuantity),
       highlightTier,
       description: description.trim() || null,
@@ -1026,6 +1046,68 @@ function TierEditorModal({
                   Liste kommt live aus dem Fähigkeiten-Admin ({abilities.length} verfügbar) — neue Fähigkeiten erscheinen hier automatisch.
                   {abilities.length === 0 && " Noch keine angelegt."}
                 </p>
+              </div>
+            )}
+
+            {rewardType === "case_voucher" && (
+              <div className="space-y-2">
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Modus
+                  <select value={rewardCaseVoucherMode} onChange={(e) => setRewardCaseVoucherMode(e.target.value as "tier" | "rarity")}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60">
+                    <option value="tier">Konkretes Case</option>
+                    <option value="rarity">Nach Seltenheit (alle Cases)</option>
+                  </select>
+                </label>
+                {rewardCaseVoucherMode === "tier" ? (
+                  <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                    Case
+                    <select value={rewardCaseVoucherTierId} onChange={(e) => setRewardCaseVoucherTierId(e.target.value)}
+                      className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60">
+                      <option value="">— Case wählen —</option>
+                      {openCases.map((c) => <option key={c.tierId} value={c.tierId}>{c.groupTitle} · {c.label}</option>)}
+                    </select>
+                  </label>
+                ) : (
+                  <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                    Mind. Seltenheit
+                    <select value={rewardCaseVoucherRarityFloor} onChange={(e) => setRewardCaseVoucherRarityFloor(e.target.value as Rarity)}
+                      className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60">
+                      {(["normal", "selten", "mythisch", "ultra"] as Rarity[]).map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </label>
+                )}
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Ablauf (Std., 0 = nie)
+                  <input type="number" min={0} value={rewardCaseVoucherDurationHours} onChange={(e) => setRewardCaseVoucherDurationHours(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+                </label>
+                <p className="text-[10px] text-zinc-500">Der User erhält einen Gratis-Case-Token in seiner Garderobe.</p>
+              </div>
+            )}
+
+            {rewardType === "game_bonus" && (
+              <div className="space-y-2">
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Spiel
+                  <select value={rewardGameBonusGame} onChange={(e) => setRewardGameBonusGame(e.target.value as "plinko" | "snake" | "don")}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60">
+                    <option value="plinko">Plinko-Bälle</option>
+                    <option value="snake">Snake-Spiele</option>
+                    <option value="don">DON-Spins</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Anzahl extra Spielzüge
+                  <input type="number" min={1} value={rewardGameBonusAmount} onChange={(e) => setRewardGameBonusAmount(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                  Ablauf (Std., 0 = nie)
+                  <input type="number" min={0} value={rewardGameBonusDurationHours} onChange={(e) => setRewardGameBonusDurationHours(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+                </label>
+                <p className="text-[10px] text-zinc-500">Extra-Spielzüge über dem Limit — automatisch genutzt, sichtbar im Spiel + Garderobe.</p>
               </div>
             )}
           </div>

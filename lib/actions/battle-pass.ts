@@ -32,6 +32,13 @@ function rowToTier(r: Record<string, unknown>): BattlePassTier {
     rewardNameStyleKey: r.reward_name_style_key as string | null,
     rewardAbilityKey: (r.reward_ability_key as string | null) ?? null,
     rewardAbilityName: (r.reward_ability_name as string | null) ?? null,
+    rewardCaseVoucherMode: (r.reward_case_voucher_mode as "tier" | "rarity" | null) ?? null,
+    rewardCaseVoucherTierId: (r.reward_case_voucher_tier_id as string | null) ?? null,
+    rewardCaseVoucherRarityFloor: (r.reward_case_voucher_rarity_floor as Rarity | null) ?? null,
+    rewardCaseVoucherDurationHours: (r.reward_case_voucher_duration_hours as number | null) ?? 0,
+    rewardGameBonusGame: (r.reward_game_bonus_game as "plinko" | "snake" | "don" | null) ?? null,
+    rewardGameBonusAmount: (r.reward_game_bonus_amount as number | null) ?? 0,
+    rewardGameBonusDurationHours: (r.reward_game_bonus_duration_hours as number | null) ?? 0,
     rewardQuantity: (r.reward_quantity as number | null) ?? 1,
     highlightTier: (r.highlight_tier as boolean | null) ?? false,
     description: r.description as string | null,
@@ -550,6 +557,38 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
       return { success: false, error: "Die Fähigkeit konnte nicht vergeben werden. Bitte erneut versuchen — der Tier wurde NICHT abgeholt." };
     }
     rewardMsg = `Fähigkeit erhalten: ${abilityKey}`;
+  } else if (rewardType === "case_voucher") {
+    const mode = (t.reward_case_voucher_mode as "tier" | "rarity" | null) === "rarity" ? "rarity" : "tier";
+    const { grantCaseVoucher } = await import("@/lib/rewards-grant");
+    const g = await grantCaseVoucher(admin, user.id, {
+      mode,
+      tierId: (t.reward_case_voucher_tier_id as string | null) ?? undefined,
+      rarityFloor: (t.reward_case_voucher_rarity_floor as Rarity | null) ?? undefined,
+      durationHours: (t.reward_case_voucher_duration_hours as number | null) ?? 0,
+      source: "bp_tier",
+      label: `Battle Pass Tier ${tierNum}`,
+    });
+    if (!g.ok) {
+      return { success: false, error: "Der Case-Gutschein konnte nicht vergeben werden — der Tier wurde NICHT abgeholt." };
+    }
+    rewardMsg = g.summary;
+  } else if (rewardType === "game_bonus") {
+    const game = (t.reward_game_bonus_game as "plinko" | "snake" | "don" | null);
+    const amount = (t.reward_game_bonus_amount as number | null) ?? 0;
+    if (!game || amount <= 0) {
+      return { success: false, error: "Diese Belohnung ist fehlerhaft konfiguriert (Spiel-Bonus). Bitte Admin informieren — der Tier wurde NICHT abgeholt." };
+    }
+    const { grantGameBonus } = await import("@/lib/rewards-grant");
+    const g = await grantGameBonus(admin, user.id, {
+      game, amount,
+      durationHours: (t.reward_game_bonus_duration_hours as number | null) ?? 0,
+      source: "bp_tier",
+      label: `Battle Pass Tier ${tierNum}`,
+    });
+    if (!g.ok) {
+      return { success: false, error: "Der Spiel-Bonus konnte nicht vergeben werden — der Tier wurde NICHT abgeholt." };
+    }
+    rewardMsg = g.summary;
   }
 
   // Award XP for tier claim — fire-and-forget
@@ -920,6 +959,13 @@ export interface AdminTierInput {
   rewardNameStyleKey: string | null;
   rewardAbilityKey?: string | null;
   rewardItemName?: string | null;
+  rewardCaseVoucherMode?: "tier" | "rarity" | null;
+  rewardCaseVoucherTierId?: string | null;
+  rewardCaseVoucherRarityFloor?: Rarity | null;
+  rewardCaseVoucherDurationHours?: number;
+  rewardGameBonusGame?: "plinko" | "snake" | "don" | null;
+  rewardGameBonusAmount?: number;
+  rewardGameBonusDurationHours?: number;
   rewardQuantity: number;
   highlightTier: boolean;
   description: string | null;
@@ -954,6 +1000,13 @@ export async function adminUpsertBpTier(
       reward_xp_boost: (input.rewardType === "xp_boost") ? (input.rewardXpBoost ?? 1) : null,
       reward_name_style_key: (input.rewardType === "name_style") ? (input.rewardNameStyleKey ?? null) : null,
       reward_ability_key: (input.rewardType === "ability") ? (input.rewardAbilityKey ?? null) : null,
+      reward_case_voucher_mode: (input.rewardType === "case_voucher") ? (input.rewardCaseVoucherMode ?? "tier") : null,
+      reward_case_voucher_tier_id: (input.rewardType === "case_voucher" && input.rewardCaseVoucherMode !== "rarity") ? (input.rewardCaseVoucherTierId ?? null) : null,
+      reward_case_voucher_rarity_floor: (input.rewardType === "case_voucher" && input.rewardCaseVoucherMode === "rarity") ? (input.rewardCaseVoucherRarityFloor ?? null) : null,
+      reward_case_voucher_duration_hours: (input.rewardType === "case_voucher") ? Math.max(0, Math.floor(input.rewardCaseVoucherDurationHours ?? 0)) : 0,
+      reward_game_bonus_game: (input.rewardType === "game_bonus") ? (input.rewardGameBonusGame ?? null) : null,
+      reward_game_bonus_amount: (input.rewardType === "game_bonus") ? Math.max(1, Math.floor(input.rewardGameBonusAmount ?? 1)) : 0,
+      reward_game_bonus_duration_hours: (input.rewardType === "game_bonus") ? Math.max(0, Math.floor(input.rewardGameBonusDurationHours ?? 0)) : 0,
       reward_quantity: Math.max(1, input.rewardQuantity),
       highlight_tier: input.highlightTier,
       description: input.description?.trim() || null,
@@ -976,7 +1029,9 @@ export async function adminUpsertBpTier(
 const BP_TIER_CONTENT_COLS =
   "name, is_premium, reward_type, reward_credits, reward_item_id, reward_item_type, " +
   "reward_item_rarity, reward_badge_key, reward_badge_text, reward_xp_boost, reward_name_style_key, " +
-  "reward_ability_key, reward_quantity, highlight_tier, description, icon, bp_xp_required, " +
+  "reward_ability_key, reward_case_voucher_mode, reward_case_voucher_tier_id, reward_case_voucher_rarity_floor, " +
+  "reward_case_voucher_duration_hours, reward_game_bonus_game, reward_game_bonus_amount, reward_game_bonus_duration_hours, " +
+  "reward_quantity, highlight_tier, description, icon, bp_xp_required, " +
   "display_mode, show_tier_name, show_tier_description";
 
 function bpTrackFlags(track: "free" | "premium") {

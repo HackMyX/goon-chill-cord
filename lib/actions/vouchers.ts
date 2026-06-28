@@ -9,6 +9,7 @@ import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
 import { checkAndAwardNameStyleBadges } from "@/lib/actions/badges";
 import { normalizeCode, parseVoucherRewards, type RedemptionCode, type VoucherReward, type VoucherRewardType, type VoucherRewardValue } from "@/lib/vouchers";
+import { grantCaseVoucher, grantGameBonus } from "@/lib/rewards-grant";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -211,6 +212,27 @@ async function grantVoucherReward(
       return { ok: true, summary: `Name-Style: ${styleKey}` };
     }
 
+    if (type === "case_voucher") {
+      const mode = reward.caseMode === "rarity" ? "rarity" : "tier";
+      return await grantCaseVoucher(admin, userId, {
+        mode,
+        tierId: reward.caseTierId,
+        rarityFloor: reward.caseRarityFloor,
+        durationHours: abilityDurationHours,
+        source: "voucher",
+      });
+    }
+
+    if (type === "game_bonus") {
+      if (!reward.game) return { ok: false, error: "Code ohne Spiel.", summary: "" };
+      return await grantGameBonus(admin, userId, {
+        game: reward.game,
+        amount: Math.max(1, Math.floor(reward.amount ?? 0)),
+        durationHours: abilityDurationHours,
+        source: "voucher",
+      });
+    }
+
     return { ok: false, error: "Unbekannter Belohnungstyp.", summary: "" };
   } catch (e) {
     void logDebugEvent({ level: "error", scope: "voucher", message: "grantVoucherReward fehlgeschlagen", detail: String(e), context: { userId, type } });
@@ -256,6 +278,26 @@ function sanitizeBundle(raw: VoucherReward[] | undefined): { rewards: VoucherRew
     } else if (r.type === "name_style") {
       if (!r.styleKey) return { error: "Eine Style-Belohnung hat keinen Name-Style." };
       rewards.push({ type: "name_style", styleKey: r.styleKey });
+    } else if (r.type === "case_voucher") {
+      const mode = r.caseMode === "rarity" ? "rarity" : "tier";
+      if (mode === "tier" && !r.caseTierId) return { error: "Ein Case-Gutschein hat kein Case ausgewählt." };
+      if (mode === "rarity" && !r.caseRarityFloor) return { error: "Ein Case-Gutschein (Seltenheit) hat keine Stufe." };
+      rewards.push({
+        type: "case_voucher",
+        caseMode: mode,
+        caseTierId: mode === "tier" ? r.caseTierId : undefined,
+        caseRarityFloor: mode === "rarity" ? r.caseRarityFloor : undefined,
+        durationHours: Math.max(0, Math.floor(r.durationHours ?? 0)),
+      });
+    } else if (r.type === "game_bonus") {
+      if (!r.game) return { error: "Ein Spiel-Bonus hat kein Spiel ausgewählt." };
+      const amount = Math.max(1, Math.floor(r.amount ?? 0));
+      rewards.push({
+        type: "game_bonus",
+        game: r.game,
+        amount,
+        durationHours: Math.max(0, Math.floor(r.durationHours ?? 0)),
+      });
     }
   }
   if (rewards.length === 0) return { error: "Mindestens eine Belohnung hinzufügen." };

@@ -55,6 +55,8 @@ export type PreviewSubject =
   | { kind: "credits"; amount: number }
   | { kind: "xp_boost"; days: number }
   | { kind: "random_item"; rarity?: string; icon?: string }
+  | { kind: "case_voucher"; mode: "tier" | "rarity"; label?: string; tierLabel?: string; rarityFloor?: string; durationHours?: number }
+  | { kind: "game_bonus"; game: "plinko" | "snake" | "don"; amount: number; label?: string; durationHours?: number }
   | { kind: "generic"; icon: string; name: string; description?: string; accent?: string };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -468,6 +470,62 @@ function GenericHero({ subject }: { subject: Extract<PreviewSubject, { kind: "ge
   );
 }
 
+const VOUCHER_GAME_INFO: Record<"plinko" | "snake" | "don", { label: string; emoji: string; color: string }> = {
+  plinko: { label: "Plinko-Bälle", emoji: "🔵", color: "#8b5cf6" },
+  snake:  { label: "Snake-Spiele", emoji: "🐍", color: "#22c55e" },
+  don:    { label: "DON-Spins",    emoji: "🎲", color: "#f59e0b" },
+};
+
+function CaseVoucherHero({ subject }: { subject: Extract<PreviewSubject, { kind: "case_voucher" }> }) {
+  const col = subject.rarityFloor ? getRarityColor(subject.rarityFloor) : "#e879f9";
+  return (
+    <div className="relative flex h-full w-full flex-col items-center justify-center bg-black/50">
+      <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle at 50% 40%, ${col}1c 0%, transparent 70%)` }} />
+      <div className="relative z-10 flex flex-col items-center gap-6">
+        <motion.div
+          className="relative flex h-28 w-28 items-center justify-center rounded-2xl border-2"
+          style={{ borderColor: `${col}60`, background: `radial-gradient(circle at 50% 30%, ${col}22 0%, transparent 70%)` }}
+          animate={{ boxShadow: [`0 0 30px ${col}30`, `0 0 70px ${col}66`, `0 0 30px ${col}30`], rotate: [0, 3, -3, 0] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <span className="text-5xl">🎟️</span>
+        </motion.div>
+        <div className="text-center">
+          <p className="text-xl font-black text-white">{subject.label || "Gratis-Case"}</p>
+          <span className="mt-2 inline-block rounded-full px-3 py-0.5 text-xs font-black uppercase tracking-widest"
+            style={{ background: `${col}20`, color: col, border: `1px solid ${col}40` }}>
+            {subject.mode === "rarity" ? `mind. ${subject.rarityFloor ?? "?"}` : (subject.tierLabel ?? "Case")}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GameBonusHero({ subject }: { subject: Extract<PreviewSubject, { kind: "game_bonus" }> }) {
+  const info = VOUCHER_GAME_INFO[subject.game];
+  const col = info.color;
+  return (
+    <div className="relative flex h-full w-full flex-col items-center justify-center bg-black/50">
+      <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle at 50% 40%, ${col}1c 0%, transparent 70%)` }} />
+      <div className="relative z-10 flex flex-col items-center gap-6">
+        <motion.div
+          className="relative flex h-28 w-28 items-center justify-center rounded-2xl border-2"
+          style={{ borderColor: `${col}60`, background: `radial-gradient(circle at 50% 30%, ${col}22 0%, transparent 70%)` }}
+          animate={{ boxShadow: [`0 0 30px ${col}30`, `0 0 70px ${col}66`, `0 0 30px ${col}30`], y: [0, -4, 0] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <span className="text-5xl">{info.emoji}</span>
+        </motion.div>
+        <div className="text-center">
+          <p className="text-2xl font-black tabular-nums" style={{ color: col }}>+{subject.amount}</p>
+          <p className="mt-1 text-sm font-bold text-white">{subject.label || info.label}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Hero router ──────────────────────────────────────────────────────────────
 
 function PreviewHero({
@@ -485,6 +543,8 @@ function PreviewHero({
     case "credits":     return <CreditsHero subject={subject} config={config} />;
     case "xp_boost":    return <XpBoostHero subject={subject} />;
     case "random_item": return <RandomItemHero subject={subject} />;
+    case "case_voucher":return <CaseVoucherHero subject={subject} />;
+    case "game_bonus":  return <GameBonusHero subject={subject} />;
     case "generic":     return <GenericHero subject={subject} />;
   }
 }
@@ -578,6 +638,30 @@ function PreviewInfo({ subject }: { subject: PreviewSubject }) {
     return (
       <p className="text-center text-[11px] text-zinc-500">
         Ein zufällig ausgewähltes Item aus dem entsprechenden Rarity-Pool.
+      </p>
+    );
+  }
+
+  if (subject.kind === "case_voucher") {
+    return (
+      <div className="space-y-1.5 text-center">
+        <p className="text-sm font-bold text-zinc-100">{subject.label || "Case-Gutschein"}</p>
+        <p className="text-[11px] leading-relaxed text-zinc-400">
+          {subject.mode === "rarity"
+            ? `Öffne ein beliebiges Case gratis — garantiert mindestens ${subject.rarityFloor ?? "?"}.`
+            : `Öffne ${subject.tierLabel ?? "dieses Case"} einmal gratis.`}
+          {subject.durationHours ? ` Läuft in ${subject.durationHours}h ab.` : ""}
+        </p>
+      </div>
+    );
+  }
+
+  if (subject.kind === "game_bonus") {
+    const info = VOUCHER_GAME_INFO[subject.game];
+    return (
+      <p className="text-center text-[11px] text-zinc-500">
+        +{subject.amount} extra {info.label} — werden automatisch genutzt, sobald dein Limit erreicht ist.
+        {subject.durationHours ? ` Läuft in ${subject.durationHours}h ab.` : ""}
       </p>
     );
   }

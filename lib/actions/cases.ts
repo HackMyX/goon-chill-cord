@@ -98,7 +98,9 @@ export type WonDrop =
   | { kind: "credits"; rarity: string; name: string; amount: number }
   | { kind: "name_style"; rarity: string; name: string; styleKey: string }
   | { kind: "ability"; rarity: string; name: string; abilityKey: string; icon?: string }
-  | { kind: "badge"; rarity: string; name: string; badgeKey: string; badgeText: string };
+  | { kind: "badge"; rarity: string; name: string; badgeKey: string; badgeText: string }
+  | { kind: "case_voucher"; rarity: string; name: string; mode: "tier" | "rarity"; rarityFloor?: string }
+  | { kind: "game_bonus"; rarity: string; name: string; game: string; amount: number };
 
 export interface OpenCaseResult {
   success: boolean;
@@ -203,6 +205,33 @@ async function grantExtraDrop(
       if (error) return { ok: false, error: "Badge konnte nicht vergeben werden." };
       await recomputeAutoPrioBadges(userId);
       return { ok: true, won: { kind: "badge", rarity: drop.rarity, name: drop.label || drop.badgeText || badgeKey, badgeKey, badgeText: drop.badgeText || badgeKey } };
+    }
+    case "case_voucher": {
+      const mode = drop.caseVoucherMode === "rarity" ? "rarity" : "tier";
+      const { grantCaseVoucher } = await import("@/lib/rewards-grant");
+      const g = await grantCaseVoucher(admin, userId, {
+        mode,
+        tierId: drop.caseVoucherTierId,
+        rarityFloor: drop.caseVoucherRarityFloor,
+        durationHours: drop.caseVoucherDurationHours,
+        source: "case",
+        label: drop.label,
+      });
+      if (!g.ok) return { ok: false, error: g.error ?? "Case-Gutschein konnte nicht vergeben werden." };
+      return { ok: true, won: { kind: "case_voucher", rarity: drop.rarity, name: drop.label || g.summary, mode, rarityFloor: drop.caseVoucherRarityFloor } };
+    }
+    case "game_bonus": {
+      if (!drop.gameBonusGame || !drop.gameBonusAmount) return { ok: false, error: "Spiel-Bonus-Drop unvollständig." };
+      const { grantGameBonus } = await import("@/lib/rewards-grant");
+      const g = await grantGameBonus(admin, userId, {
+        game: drop.gameBonusGame,
+        amount: drop.gameBonusAmount,
+        durationHours: drop.gameBonusDurationHours,
+        source: "case",
+        label: drop.label,
+      });
+      if (!g.ok) return { ok: false, error: g.error ?? "Spiel-Bonus konnte nicht vergeben werden." };
+      return { ok: true, won: { kind: "game_bonus", rarity: drop.rarity, name: drop.label || g.summary, game: drop.gameBonusGame, amount: drop.gameBonusAmount } };
     }
   }
 }

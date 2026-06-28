@@ -64,6 +64,8 @@ function dropToSubject(d: WonDrop): PreviewSubject {
     case "name_style": return { kind: "name_style", styleKey: d.styleKey };
     case "ability":    return { kind: "ability", abilityKey: d.abilityKey, name: d.name, icon: d.icon, rarity: d.rarity };
     case "badge":      return { kind: "badge", badgeKey: d.badgeKey, badgeText: d.badgeText };
+    case "case_voucher": return { kind: "case_voucher", mode: d.mode, label: d.name, rarityFloor: d.rarityFloor };
+    case "game_bonus": return { kind: "game_bonus", game: d.game as "plinko" | "snake" | "don", amount: d.amount, label: d.name };
   }
 }
 
@@ -78,6 +80,8 @@ function poolEntryToSubject(e: CasePoolEntry): PreviewSubject {
     case "name_style": return { kind: "name_style", styleKey: x.styleKey ?? "default" };
     case "ability":    return { kind: "ability", abilityKey: x.abilityKey ?? "", name: e.name, icon: x.abilityIcon, rarity: e.rarity };
     case "badge":      return { kind: "badge", badgeKey: x.badgeKey ?? "", badgeText: x.badgeText ?? e.name };
+    case "case_voucher": return { kind: "case_voucher", mode: "tier", label: e.name };
+    case "game_bonus": return { kind: "game_bonus", game: "don", amount: 1, label: e.name };
   }
 }
 
@@ -86,6 +90,8 @@ const EXTRA_KIND_LABEL: Record<CaseExtraDrop["kind"], string> = {
   name_style: "Name-Style",
   ability: "Fähigkeit",
   badge: "Badge",
+  case_voucher: "Case-Gutschein",
+  game_bonus: "Spiel-Bonus",
 };
 
 /** A tier's configured extra drop → a pool-gallery entry. */
@@ -98,6 +104,10 @@ function extraToPoolEntry(d: CaseExtraDrop): CasePoolEntry {
       ? d.styleKey ?? "Name-Style"
       : d.kind === "ability"
       ? d.abilityKey ?? "Fähigkeit"
+      : d.kind === "case_voucher"
+      ? (d.caseVoucherMode === "rarity" ? `Gratis-Case (mind. ${d.caseVoucherRarityFloor ?? "?"})` : "Gratis-Case")
+      : d.kind === "game_bonus"
+      ? `+${d.gameBonusAmount ?? 1} Spiel-Bonus`
       : d.badgeText || d.badgeKey || "Badge");
   return {
     rarity: d.rarity,

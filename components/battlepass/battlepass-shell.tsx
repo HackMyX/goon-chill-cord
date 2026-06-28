@@ -65,6 +65,22 @@ function tierToPreviewSubject(tier: BattlePassTier): PreviewSubject | null {
         kind: "credits",
         amount: (tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1),
       };
+    case "case_voucher":
+      return {
+        kind: "case_voucher",
+        mode: tier.rewardCaseVoucherMode ?? "tier",
+        tierLabel: tier.rewardCaseVoucherTierId ?? undefined,
+        rarityFloor: tier.rewardCaseVoucherRarityFloor ?? undefined,
+        durationHours: tier.rewardCaseVoucherDurationHours || undefined,
+      };
+    case "game_bonus":
+      if (!tier.rewardGameBonusGame) return null;
+      return {
+        kind: "game_bonus",
+        game: tier.rewardGameBonusGame,
+        amount: tier.rewardGameBonusAmount || 1,
+        durationHours: tier.rewardGameBonusDurationHours || undefined,
+      };
     default:
       return null;
   }
@@ -92,6 +108,8 @@ function rewardLabel(tier: BattlePassTier): string {
     case "xp_boost": return `+${tier.rewardXpBoost ?? 1} Fortschrittstag${(tier.rewardXpBoost ?? 1) !== 1 ? "e" : ""}`;
     case "name_style": return `Style: ${tier.rewardNameStyleKey ?? "?"}`;
     case "ability": return tier.rewardAbilityName ?? tier.rewardAbilityKey ?? "Fähigkeit";
+    case "case_voucher": return tier.rewardCaseVoucherMode === "rarity" ? `Gratis-Case (${tier.rewardCaseVoucherRarityFloor ?? "?"}+)` : "Gratis-Case";
+    case "game_bonus": return `+${tier.rewardGameBonusAmount || 1} ${tier.rewardGameBonusGame ?? "Spiel"}-Bonus`;
     default: return "Belohnung";
   }
 }
@@ -106,6 +124,8 @@ function rewardIcon(tier: BattlePassTier): string {
     case "xp_boost": return "⚡";
     case "name_style": return "✨";
     case "ability": return "🔮";
+    case "case_voucher": return "🎟️";
+    case "game_bonus": return "🎮";
     default: return "🎁";
   }
 }

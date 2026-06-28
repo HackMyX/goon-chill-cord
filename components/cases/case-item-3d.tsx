@@ -196,6 +196,8 @@ function subjectToReward(subject: Exclude<PreviewSubject, { kind: "item" }>): {
     case "badge":       return { rewardType: "badge", rarity: "mythisch" };
     case "xp_boost":    return { rewardType: "xp_boost", rarity: "selten" };
     case "random_item": return { rewardType: "random_item", rarity: subject.rarity ?? "normal" };
+    case "case_voucher": return { rewardType: "case_voucher", rarity: subject.rarityFloor ?? "selten" };
+    case "game_bonus":  return { rewardType: "game_bonus", rarity: "selten" };
     case "generic":     return { rewardType: "default", rarity: "normal" };
   }
 }

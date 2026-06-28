@@ -254,6 +254,9 @@ const COLUMN_CHECKS: Array<{
   { id: "col_bp_shop_sort_order",    category: "Battle Pass", table: "battle_passes",     col: "shop_sort_order",       detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS shop_sort_order integer NOT NULL DEFAULT 0;" },
   // Battle Pass tiers — name style reward (2026-06-25)
   { id: "col_bpt_name_style_key",    category: "Battle Pass", table: "battle_pass_tiers", col: "reward_name_style_key", detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS reward_name_style_key text NULL;" },
+  // Battle Pass tiers — Gutschein-Rewards (Case-Voucher + Spiel-Bonus)
+  { id: "col_bpt_cv_mode",  category: "Battle Pass", table: "battle_pass_tiers", col: "reward_case_voucher_mode", detail: "node scripts/add-bp-voucher-rewards.cjs" },
+  { id: "col_bpt_gb_game",  category: "Battle Pass", table: "battle_pass_tiers", col: "reward_game_bonus_game",   detail: "node scripts/add-bp-voucher-rewards.cjs" },
   // Battle Pass v3 — shop positioning & per-pass config (2026-06-25)
   { id: "col_bp_shop_position",      category: "Battle Pass", table: "battle_passes",     col: "shop_position",          detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS shop_position text DEFAULT 'below_featured';" },
   { id: "col_bp_shop_banner_size",   category: "Battle Pass", table: "battle_passes",     col: "shop_banner_size",       detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS shop_banner_size text DEFAULT 'card';" },
