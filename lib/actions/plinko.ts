@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
+import { equippedEffectValue } from "@/lib/abilities";
 import { broadcastLive } from "@/lib/realtime-broadcast";
 import { consumeGameBonus } from "@/lib/rewards-grant";
 import { DEFAULT_PLINKO_CONFIG, type PlinkoConfig, type PlinkoRiskLevel } from "@/lib/plinko-types";
@@ -297,30 +298,31 @@ export async function dropPlinkoBall(input: {
 
   // Equipped ability (mutually exclusive): boost all multipliers, recover part
   // of a worst-slot loss, or globally boost winnings (credit_bonus).
+  // effectConfig-Kombo: jeder Effekt-Typ wird aus Primär-Effekt ODER effectConfig gelesen.
   const plinkoEff = await getActiveEquippedAbilityEffect(admin, user.id);
-  if (plinkoEff?.effectType === "plinko_multiplier_boost" && plinkoEff.effectValue > 0) {
-    multiplier = multiplier * (1 + plinkoEff.effectValue);
-  }
+  const vBoost = equippedEffectValue(plinkoEff, "plinko_multiplier_boost");
+  if (vBoost > 0) multiplier = multiplier * (1 + vBoost);
   // Minimum-multiplier guarantee: the result can never be worse than this value.
-  if (plinkoEff?.effectType === "plinko_min_multiplier" && plinkoEff.effectValue > 0) {
-    multiplier = Math.max(multiplier, plinkoEff.effectValue);
-  }
+  const vMin = equippedEffectValue(plinkoEff, "plinko_min_multiplier");
+  if (vMin > 0) multiplier = Math.max(multiplier, vMin);
 
   let payout = Math.floor(input.betAmount * multiplier);
   if (config.maxWinCr > 0) payout = Math.min(payout, config.maxWinCr);
 
   // Loss recovery: refund a fraction of the bet when landing on the lowest slot.
-  if (plinkoEff?.effectType === "plinko_loss_recovery" && plinkoEff.effectValue > 0
-      && payout < input.betAmount && multiplier <= Math.min(...multipliers)) {
-    payout = Math.min(input.betAmount, payout + Math.floor(input.betAmount * plinkoEff.effectValue));
+  const vRecovery = equippedEffectValue(plinkoEff, "plinko_loss_recovery");
+  if (vRecovery > 0 && payout < input.betAmount && multiplier <= Math.min(...multipliers)) {
+    payout = Math.min(input.betAmount, payout + Math.floor(input.betAmount * vRecovery));
   }
   // Loss cushion: refund a fraction of the bet on ANY losing drop.
-  if (plinkoEff?.effectType === "plinko_loss_cushion" && plinkoEff.effectValue > 0 && payout < input.betAmount) {
-    payout = Math.min(input.betAmount, payout + Math.floor(input.betAmount * plinkoEff.effectValue));
+  const vCushion = equippedEffectValue(plinkoEff, "plinko_loss_cushion");
+  if (vCushion > 0 && payout < input.betAmount) {
+    payout = Math.min(input.betAmount, payout + Math.floor(input.betAmount * vCushion));
   }
   // credit_bonus boosts only the winnings (not the staked bet).
-  if (plinkoEff?.effectType === "credit_bonus" && plinkoEff.effectValue > 0 && payout > input.betAmount) {
-    payout = input.betAmount + Math.floor((payout - input.betAmount) * (1 + plinkoEff.effectValue));
+  const vCredit = equippedEffectValue(plinkoEff, "credit_bonus");
+  if (vCredit > 0 && payout > input.betAmount) {
+    payout = input.betAmount + Math.floor((payout - input.betAmount) * (1 + vCredit));
     if (config.maxWinCr > 0) payout = Math.min(payout, config.maxWinCr);
   }
 

@@ -10,6 +10,7 @@ const RARITY_ORDER: Rarity[] = ["normal", "selten", "mythisch", "ultra"];
 import { getCaseConfig } from "@/lib/cases-config";
 import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
 import { applyCreditBonus, getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
+import { equippedEffectValue } from "@/lib/abilities";
 import { notifyUser } from "@/lib/notifications-internal";
 import { broadcastSystemWin } from "@/lib/actions/global-chat";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -308,9 +309,10 @@ export async function openCase(tierId: string, tokenId?: string): Promise<OpenCa
   if (free && rarityFloor && RARITY_ORDER.indexOf(rolledRarity as Rarity) < RARITY_ORDER.indexOf(rarityFloor)) {
     rolledRarity = rarityFloor;
   }
-  // case_luck ability: a chance to bump the roll up one rarity tier.
+  // case_luck ability (Primär ODER effectConfig-Kombo): chance to bump up one tier.
   const luckEff = await getActiveEquippedAbilityEffect(admin, user.id);
-  if (luckEff?.effectType === "case_luck" && luckEff.effectValue > 0 && Math.random() < luckEff.effectValue) {
+  const luckV = equippedEffectValue(luckEff, "case_luck");
+  if (luckV > 0 && Math.random() < luckV) {
     const li = RARITY_ORDER.indexOf(rolledRarity as Rarity);
     if (li >= 0 && li < RARITY_ORDER.length - 1) rolledRarity = RARITY_ORDER[li + 1];
   }

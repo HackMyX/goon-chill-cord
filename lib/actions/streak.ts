@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
+import { equippedEffectValue } from "@/lib/abilities";
 import { notifyUser } from "@/lib/notifications-internal";
 import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 import { getSiteConfig } from "@/lib/actions/site-config";
@@ -259,18 +260,15 @@ export async function claimDailyReward(): Promise<ClaimResult> {
   // window before a streak resets; credit_bonus boosts the reward.
   const streakAdmin = createAdminClient();
   const streakEff = await getActiveEquippedAbilityEffect(streakAdmin, user.id);
-  const graceBonus = streakEff?.effectType === "streak_grace_hours" ? streakEff.effectValue : 0;
+  const graceBonus = equippedEffectValue(streakEff, "streak_grace_hours");
   const effConfig = graceBonus > 0
     ? { ...config, gracePeriodHours: config.gracePeriodHours + graceBonus }
     : config;
 
   const decision = decideStreak(lastClaimDate, profile.streak_days ?? 0, now, effConfig);
   const result = computeStreakReward(decision.newStreak, config, now);
-  // credit_bonus OR streak_reward_multiplier boost the reward (mutually exclusive).
-  const streakRewardMult =
-    streakEff?.effectType === "credit_bonus" && streakEff.effectValue > 0 ? 1 + streakEff.effectValue
-    : streakEff?.effectType === "streak_reward_multiplier" && streakEff.effectValue > 0 ? 1 + streakEff.effectValue
-    : 1;
+  // credit_bonus + streak_reward_multiplier (Primär ODER effectConfig-Kombo, additiv).
+  const streakRewardMult = 1 + equippedEffectValue(streakEff, "credit_bonus") + equippedEffectValue(streakEff, "streak_reward_multiplier");
   const totalCreditsAwarded = Math.floor(result.totalCredits * streakRewardMult);
   const newCredits = profile.credits + totalCreditsAwarded;
   const newBestStreak = Math.max(profile.best_streak_days ?? 0, decision.newStreak);

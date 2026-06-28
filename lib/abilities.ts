@@ -45,6 +45,29 @@ export interface AbilityEffectConfig {
   [key: string]: number | undefined;
 }
 
+export interface EquippedEffect {
+  effectType: string;
+  effectValue: number;
+  effectConfig: Record<string, number>;
+}
+
+/**
+ * Effektiver Wert eines Effekt-Typs für die ausgerüstete Fähigkeit — gelesen aus
+ * dem PRIMÄR-Effekt (wenn `effectType` passt) PLUS dem Kombo-Wert in
+ * `effectConfig[type]`. So kann EINE Fähigkeit mehrere Effekte über mehrere
+ * Spiele tragen (Kombo). Rein additiv: bei leerer effectConfig identisch zum
+ * bisherigen Primär-Verhalten — bricht also nichts.
+ *
+ * Erlaubte effectConfig-Keys = Effekt-Typ-Namen (z.B. `plinko_min_multiplier`,
+ * `snake_score_multiplier`, `case_luck`, `streak_reward_multiplier`, `credit_bonus`).
+ */
+export function equippedEffectValue(eff: EquippedEffect | null, type: string): number {
+  if (!eff) return 0;
+  const primary = eff.effectType === type ? (Number(eff.effectValue) || 0) : 0;
+  const combo = Number(eff.effectConfig?.[type] ?? 0) || 0;
+  return primary + combo;
+}
+
 export interface AbilityDefinition {
   key: string;
   name: string;

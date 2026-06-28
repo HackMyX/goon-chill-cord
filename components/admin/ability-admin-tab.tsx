@@ -287,7 +287,7 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
                   <Plus className="h-3 w-3" /> Wert
                 </button>
               </div>
-              <p className="mb-2 text-[10px] text-zinc-600">Optional: kombiniert mehrere Effekte in EINER Fähigkeit (z.B. <code>double_chance</code>, <code>upgrade_discount</code>, <code>storage_bonus</code>). Greift zusätzlich zum Haupt-Effekt.</p>
+              <p className="mb-2 text-[10px] text-zinc-600">Kombiniert mehrere Effekte in EINER Fähigkeit — greift ÜBER ALLE Spiele zusätzlich zum Haupt-Effekt. <b>Schlüssel = Effekt-Typ-Name</b> (z.B. <code>plinko_min_multiplier</code>, <code>snake_score_multiplier</code>, <code>case_luck</code>, <code>streak_reward_multiplier</code>, <code>credit_bonus</code>), Wert = wie beim Haupt-Effekt. Sonderfall Mine (<code>mine_cr_bonus</code>): zusätzlich <code>storage_bonus</code>/<code>double_chance</code>/<code>upgrade_discount</code>.</p>
               {Object.entries(editing.effectConfig ?? {}).length === 0 ? (
                 <p className="text-[10px] text-zinc-600">Keine Zusatz-Effekte.</p>
               ) : (

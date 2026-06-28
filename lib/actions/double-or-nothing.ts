@@ -6,6 +6,7 @@ import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getDonConfig } from "@/lib/actions/don-config";
 import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
+import { equippedEffectValue } from "@/lib/abilities";
 import { consumeGameBonus } from "@/lib/rewards-grant";
 
 export interface FlipResult {
@@ -47,12 +48,13 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
 
   // Equipped ability (mutually exclusive): don_bonus_flips raises the daily cap,
   // don_daily_shield absorbs one loss/day, credit_bonus boosts wins.
+  // effectConfig-Kombo: Werte aus Primär-Effekt ODER effectConfig.
   const donEff = await getActiveEquippedAbilityEffect(adminClient, user.id);
-  const bonusFlips = donEff?.effectType === "don_bonus_flips" ? Math.floor(donEff.effectValue) : 0;
+  const bonusFlips = Math.floor(equippedEffectValue(donEff, "don_bonus_flips"));
   const effectiveDailyLimit = config.dailyFlipLimit !== null ? config.dailyFlipLimit + bonusFlips : null;
   const dayStartUtc = new Date(); dayStartUtc.setUTCHours(0, 0, 0, 0);
   const shieldUsedAt = (profile as { don_shield_used_at?: string | null }).don_shield_used_at ?? null;
-  const shieldAvailable = !!donEff && donEff.effectType === "don_daily_shield"
+  const shieldAvailable = equippedEffectValue(donEff, "don_daily_shield") > 0
     && (!shieldUsedAt || new Date(shieldUsedAt) < dayStartUtc);
 
   // --- Anti-exploit: cooldown + daily flip limit ---
@@ -164,12 +166,12 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
       delta = 0;        // shield won — no credits lost
       shielded = true;
     }
-  } else if (!won && donEff?.effectType === "don_loss_refund" && donEff.effectValue > 0) {
+  } else if (!won && equippedEffectValue(donEff, "don_loss_refund") > 0) {
     // Loss refund: give back a fraction of the staked amount on every loss.
-    delta = -stake + Math.floor(stake * Math.min(1, donEff.effectValue));
-  } else if (won && donEff?.effectType === "credit_bonus" && donEff.effectValue > 0) {
+    delta = -stake + Math.floor(stake * Math.min(1, equippedEffectValue(donEff, "don_loss_refund")));
+  } else if (won && equippedEffectValue(donEff, "credit_bonus") > 0) {
     // credit_bonus boosts the winnings.
-    delta = Math.floor(stake * (1 + donEff.effectValue));
+    delta = Math.floor(stake * (1 + equippedEffectValue(donEff, "credit_bonus")));
   }
   const newCredits = profile.credits + delta;
 

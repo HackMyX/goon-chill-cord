@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
+import { equippedEffectValue } from "@/lib/abilities";
 import { broadcastLive } from "@/lib/realtime-broadcast";
 import { consumeGameBonus } from "@/lib/rewards-grant";
 import {
@@ -368,14 +369,10 @@ export async function submitSnakeScore(
   // Equipped ability (mutually exclusive): snake_cr_per_apple adds a flat bonus
   // per apple, credit_bonus multiplies the whole earning. Both are folded into
   // the base BEFORE the daily/sanity clamps so they still respect the limits.
+  // effectConfig-Kombo: Werte aus Primär-Effekt ODER effectConfig (additiv stapelbar).
   const snakeEff = await getActiveEquippedAbilityEffect(admin, user.id);
-  const abilityFlat = snakeEff?.effectType === "snake_cr_per_apple" ? Math.round(score * snakeEff.effectValue) : 0;
-  // credit_bonus OR snake_score_multiplier multiply the whole earning (mutually
-  // exclusive — only one ability is equipped at a time).
-  const abilityMult =
-    snakeEff?.effectType === "credit_bonus" && snakeEff.effectValue > 0 ? 1 + snakeEff.effectValue
-    : snakeEff?.effectType === "snake_score_multiplier" && snakeEff.effectValue > 0 ? 1 + snakeEff.effectValue
-    : 1;
+  const abilityFlat = Math.round(score * equippedEffectValue(snakeEff, "snake_cr_per_apple"));
+  const abilityMult = 1 + equippedEffectValue(snakeEff, "credit_bonus") + equippedEffectValue(snakeEff, "snake_score_multiplier");
 
   // Daily CR limit check
   let actualCredits = Math.round((creditsEarned + abilityFlat) * abilityMult);

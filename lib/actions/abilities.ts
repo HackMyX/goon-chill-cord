@@ -7,6 +7,7 @@ import { isAdmin } from "@/lib/admin";
 import { getSynergyConfig } from "@/lib/actions/economy-synergy";
 import { computeSynergyMultipliers } from "@/lib/economy-synergy";
 import type { AbilityDefinition, AbilityCategory, AbilityEffectType, AbilityEffectConfig, AbilityRarity, UserAbility } from "@/lib/abilities";
+import { equippedEffectValue } from "@/lib/abilities";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -155,9 +156,8 @@ export async function applyCreditBonus(admin: Admin, userId: string, baseAmount:
   if (!(baseAmount > 0)) return baseAmount;
   let amount = baseAmount;
   const eff = await getActiveEquippedAbilityEffect(admin, userId);
-  if (eff?.effectType === "credit_bonus" && eff.effectValue > 0) {
-    amount = amount * (1 + eff.effectValue);
-  }
+  const cb = equippedEffectValue(eff, "credit_bonus");
+  if (cb > 0) amount = amount * (1 + cb);
   // Economy-synergy layer: level-scaling + weekend/happy-hour boosts on every
   // activity credit earning (one central hook → applies everywhere automatically).
   try {
