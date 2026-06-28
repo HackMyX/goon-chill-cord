@@ -6,6 +6,17 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ---
 
+# 🗺️ ZUERST LESEN: `ARCHITECTURE.md`
+
+**Bevor du IRGENDWO etwas änderst, lies `ARCHITECTURE.md` im Projekt-Root.** Das ist die
+vollständige System-Landkarte: wie alles zusammenhängt, welche Systeme es gibt (Reward-Dispatcher,
+Gutscheine/Bonus-Karten, Mod-Permissions, Logging/Retention, Notifications, Friends, Chat, Topbar,
+3D), wie sie verbunden sind, und eine Integrations-Checkliste „wenn du X baust, fass Y an". Diese
+AGENTS.md hier sind die verbindlichen Pflichtregeln; ARCHITECTURE.md ist die Karte dahinter. So
+übersiehst du keine Verknüpfung und verstehst sofort, wie/wo/wann etwas eingebunden werden muss.
+
+---
+
 # ⚠️ PFLICHTREGELN FÜR ALLE KIs / AGENTS — UNBEDINGT LESEN ⚠️
 
 ## 1. Health-Check ist PFLICHT bei jeder Änderung
