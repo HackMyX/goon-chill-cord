@@ -215,6 +215,12 @@ function ItemPickerModal({
 
 // ── Auto-fill modal ───────────────────────────────────────────────────────────
 
+const MIX_KEYS = [
+  "rewardMixCredits", "rewardMixRandomItem", "rewardMixXpBoost", "rewardMixBadge",
+  "rewardMixAbility", "rewardMixNameStyle", "rewardMixCaseVoucher", "rewardMixGameBonus",
+] as const;
+type MixKey = (typeof MIX_KEYS)[number];
+
 function AutoFillModal({
   passId,
   tierCount,
@@ -235,11 +241,10 @@ function AutoFillModal({
     setConfig((prev) => ({ ...prev, [key]: value }));
   }
 
-  // Normalize reward mix so the 4 sliders sum to 100 when one changes
-  function setRewardMix(key: "rewardMixCredits" | "rewardMixRandomItem" | "rewardMixXpBoost" | "rewardMixBadge", value: number) {
+  // Normalize reward mix so ALL sliders sum to 100 when one changes.
+  function setRewardMix(key: MixKey, value: number) {
     setConfig((prev) => {
-      const keys: (keyof BpAutoFillConfig)[] = ["rewardMixCredits", "rewardMixRandomItem", "rewardMixXpBoost", "rewardMixBadge"];
-      const others = keys.filter((k) => k !== key) as ("rewardMixCredits" | "rewardMixRandomItem" | "rewardMixXpBoost" | "rewardMixBadge")[];
+      const others = MIX_KEYS.filter((k) => k !== key);
       const clamped = Math.max(0, Math.min(100, value));
       const remaining = 100 - clamped;
       const otherSum = others.reduce((s, k) => s + (prev[k] as number), 0);
@@ -264,7 +269,7 @@ function AutoFillModal({
   }
 
   const premiumRatio = Math.max(0, 100 - config.freeRatio);
-  const rewardSum = config.rewardMixCredits + config.rewardMixRandomItem + config.rewardMixXpBoost + config.rewardMixBadge;
+  const rewardSum = MIX_KEYS.reduce((s, k) => s + (config[k] as number), 0);
 
   async function handleAutoFill() {
     setRunning(true);
@@ -363,6 +368,10 @@ function AutoFillModal({
                 { key: "rewardMixRandomItem" as const, label: "Zuf. Item", color: "accent-purple-400" },
                 { key: "rewardMixXpBoost" as const, label: "XP Boost", color: "accent-blue-400" },
                 { key: "rewardMixBadge" as const, label: "Badge", color: "accent-amber-400" },
+                { key: "rewardMixAbility" as const, label: "Fähigkeit", color: "accent-fuchsia-400" },
+                { key: "rewardMixNameStyle" as const, label: "Name-Style", color: "accent-pink-400" },
+                { key: "rewardMixCaseVoucher" as const, label: "Gratis-Case", color: "accent-cyan-400" },
+                { key: "rewardMixGameBonus" as const, label: "Spiel-Bonus", color: "accent-teal-400" },
               ]).map(({ key, label, color }) => (
                 <div key={key} className="flex items-center gap-2">
                   <span className="w-16 shrink-0 text-[11px] text-zinc-400">{label}</span>

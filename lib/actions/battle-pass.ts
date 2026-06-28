@@ -1205,6 +1205,20 @@ export async function adminAutoFillBpTiers(
     return null;
   };
 
+  // ── Givable-Pools (Fähigkeiten / Name-Styles) für den erweiterten Reward-Mix ──
+  const abilityPool: string[] = [];
+  const stylePool: string[] = [];
+  try {
+    const { data: abRows } = await admin.from("ability_definitions").select("key").eq("enabled", true);
+    for (const a of (abRows ?? []) as { key: string }[]) abilityPool.push(a.key);
+  } catch { /* leer → Fallback auf Credits */ }
+  try {
+    const { data: stRows } = await admin.from("name_styles").select("key");
+    for (const s of (stRows ?? []) as { key: string }[]) stylePool.push(s.key);
+  } catch { /* leer → Fallback auf Credits */ }
+  let abIdx = 0, stIdx = 0;
+  const BONUS_GAMES_LIST: ("plinko" | "snake" | "don")[] = ["plinko", "snake", "don"];
+
   // ── Track-Grenzen (Summe == tierCount): nur noch FREE + PREMIUM ──
   let freeCount = Math.round(tierCount * config.freeRatio / 100);
   if (freeCount > tierCount) freeCount = tierCount;
@@ -1235,8 +1249,12 @@ export async function adminAutoFillBpTiers(
     credits: Math.round(tierCount * config.rewardMixCredits / 100),
     xp_boost: Math.round(tierCount * config.rewardMixXpBoost / 100),
     badge: Math.round(tierCount * config.rewardMixBadge / 100),
+    ability: Math.round(tierCount * (config.rewardMixAbility ?? 0) / 100),
+    name_style: Math.round(tierCount * (config.rewardMixNameStyle ?? 0) / 100),
+    case_voucher: Math.round(tierCount * (config.rewardMixCaseVoucher ?? 0) / 100),
+    game_bonus: Math.round(tierCount * (config.rewardMixGameBonus ?? 0) / 100),
   };
-  const quotaSum = quota.item + quota.credits + quota.xp_boost + quota.badge;
+  const quotaSum = quota.item + quota.credits + quota.xp_boost + quota.badge + quota.ability + quota.name_style + quota.case_voucher + quota.game_bonus;
   quota.credits = Math.max(0, quota.credits + (tierCount - quotaSum)); // Rundungsrest auf Credits
 
   // Build all tier upsert rows
@@ -1253,10 +1271,10 @@ export async function adminAutoFillBpTiers(
     if (isMilestone && hasAnyItems) {
       rewardType = "item";
     } else {
-      const order: BpRewardType[] = ["item", "credits", "xp_boost", "badge"];
+      const order: BpRewardType[] = ["item", "credits", "xp_boost", "badge", "ability", "name_style", "case_voucher", "game_bonus"];
       let best: BpRewardType = "credits";
       let bestN = -1;
-      for (const t of order) { if (quota[t] > bestN) { bestN = quota[t]; best = t; } }
+      for (const t of order) { if ((quota[t] ?? 0) > bestN) { bestN = quota[t] ?? 0; best = t; } }
       rewardType = bestN > 0 ? best : "credits";
     }
     if (quota[rewardType] !== undefined && quota[rewardType] > 0) quota[rewardType]--;
@@ -1284,6 +1302,30 @@ export async function adminAutoFillBpTiers(
       }
     }
 
+    // Givable-Rewards (Fähigkeit / Name-Style / Case-Gutschein / Spiel-Bonus).
+    // Leerer Pool → Fallback auf Credits (greift im Credits-Block unten, da hier davor).
+    let reward_name_style_key: string | null = null;
+    let reward_ability_key: string | null = null;
+    let reward_case_voucher_mode: string | null = null;
+    let reward_case_voucher_rarity_floor: Rarity | null = null;
+    const reward_case_voucher_duration_hours = 0;
+    let reward_game_bonus_game: string | null = null;
+    let reward_game_bonus_amount = 0;
+    const reward_game_bonus_duration_hours = 0;
+    if (rewardType === "ability") {
+      if (abilityPool.length) reward_ability_key = abilityPool[abIdx++ % abilityPool.length];
+      else rewardType = "credits";
+    } else if (rewardType === "name_style") {
+      if (stylePool.length) reward_name_style_key = stylePool[stIdx++ % stylePool.length];
+      else rewardType = "credits";
+    } else if (rewardType === "case_voucher") {
+      reward_case_voucher_mode = "rarity";
+      reward_case_voucher_rarity_floor = isMilestone ? (isPremium ? "ultra" : "selten") : rarityForTier(tierNumber, isPremium);
+    } else if (rewardType === "game_bonus") {
+      reward_game_bonus_game = BONUS_GAMES_LIST[tierNumber % BONUS_GAMES_LIST.length];
+      reward_game_bonus_amount = isMilestone ? 10 : (3 + Math.floor((tierNumber / Math.max(1, tierCount)) * 5));
+    }
+
     // Credits (progressiv, Meilenstein verdoppelt)
     let reward_credits: number | null = null;
     if (rewardType === "credits") {
@@ -1304,7 +1346,11 @@ export async function adminAutoFillBpTiers(
     const icon = isMilestone ? "⭐"
       : rewardType === "credits" ? "💰"
       : rewardType === "item" ? "📦"
-      : rewardType === "xp_boost" ? "⚡" : "🏆";
+      : rewardType === "xp_boost" ? "⚡"
+      : rewardType === "ability" ? "✨"
+      : rewardType === "name_style" ? "🎨"
+      : rewardType === "case_voucher" ? "🎟️"
+      : rewardType === "game_bonus" ? "🎮" : "🏆";
     // Aussagekräftiger Name (User will Items immer mit echtem Namen sehen)
     const name =
       rewardType === "item" ? (pickedName ?? `Level ${tierNumber}`)
@@ -1312,6 +1358,10 @@ export async function adminAutoFillBpTiers(
       : rewardType === "random_item" ? "Zufalls-Item"
       : rewardType === "xp_boost" ? "XP-Boost"
       : rewardType === "badge" ? (reward_badge_text ?? "Season Badge")
+      : rewardType === "ability" ? (reward_ability_key ?? "Fähigkeit")
+      : rewardType === "name_style" ? (reward_name_style_key ?? "Name-Style")
+      : rewardType === "case_voucher" ? "Gratis-Case"
+      : rewardType === "game_bonus" ? `Spiel-Bonus (${reward_game_bonus_game})`
       : `Level ${tierNumber}`;
     const tierDisplayMode = (config.milestoneAlways3D && isMilestone) ? "3d" : (config.defaultDisplayMode ?? "3d");
 
@@ -1328,8 +1378,14 @@ export async function adminAutoFillBpTiers(
       reward_badge_text,
       reward_item_rarity,
       reward_xp_boost,
-      reward_name_style_key: null,
-      reward_ability_key: null,
+      reward_name_style_key,
+      reward_ability_key,
+      reward_case_voucher_mode,
+      reward_case_voucher_rarity_floor,
+      reward_case_voucher_duration_hours,
+      reward_game_bonus_game,
+      reward_game_bonus_amount,
+      reward_game_bonus_duration_hours,
       reward_quantity: 1,
       highlight_tier: isMilestone,
       description: null,

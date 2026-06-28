@@ -239,6 +239,10 @@ export interface BpAutoFillConfig {
   rewardMixRandomItem: number;
   rewardMixXpBoost: number;
   rewardMixBadge: number;
+  rewardMixAbility: number;
+  rewardMixNameStyle: number;
+  rewardMixCaseVoucher: number;
+  rewardMixGameBonus: number;
   freeRatio: number;
   rarityProgression: boolean;
   creditProgression: boolean;
@@ -259,6 +263,10 @@ export const DEFAULT_AUTOFILL_CONFIG: BpAutoFillConfig = {
   rewardMixRandomItem: 50,
   rewardMixXpBoost: 15,
   rewardMixBadge: 10,
+  rewardMixAbility: 0,
+  rewardMixNameStyle: 0,
+  rewardMixCaseVoucher: 0,
+  rewardMixGameBonus: 0,
   freeRatio: 45,
   rarityProgression: true,
   creditProgression: true,
