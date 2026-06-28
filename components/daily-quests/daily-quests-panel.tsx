@@ -12,6 +12,21 @@ import { getMyDailyQuests, claimDailyQuestReward } from "@/lib/actions/daily-que
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { DIFFICULTY_LABELS, DIFFICULTY_COLORS, DIFFICULTY_BG, REWARD_TYPE_LABELS, type UserDailyQuest } from "@/lib/daily-quests";
+import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
+
+/** Maps a daily-quest reward (rewardExtra spec) to a 3D-previewable subject. */
+function rewardSpecToSubject(spec: UserDailyQuest["rewardExtra"][number]): PreviewSubject | null {
+  switch (spec.type) {
+    case "credits": return spec.amount ? { kind: "credits", amount: spec.amount } : null;
+    case "item": case "random_item": return { kind: "random_item", rarity: spec.itemRarity ?? "selten" };
+    case "ability": return spec.abilityKey ? { kind: "ability", abilityKey: spec.abilityKey, name: spec.abilityKey } : null;
+    case "name_style": return spec.styleKey ? { kind: "name_style", styleKey: spec.styleKey } : null;
+    case "badge": return spec.badgeKey ? { kind: "badge", badgeKey: spec.badgeKey } : null;
+    case "case_voucher": return { kind: "case_voucher", mode: spec.voucherMode ?? "rarity", rarityFloor: spec.voucherRarityFloor };
+    case "game_bonus": return { kind: "game_bonus", game: spec.bonusGame ?? "plinko", amount: spec.amount ?? 1 };
+    default: return null;
+  }
+}
 
 // ── Icon resolver ─────────────────────────────────────────────────────────────
 
@@ -72,22 +87,34 @@ function rewardSpecPill(spec: UserDailyQuest["rewardExtra"][number]): { label: s
   }
 }
 
-function RewardPills({ quest, currencyName }: { quest: UserDailyQuest; currencyName: string }) {
-  const pills: { label: string; color: string; icon: typeof Coins }[] = [];
-  if (quest.rewardCredits > 0) pills.push({ label: `${quest.rewardCredits.toLocaleString("de-DE")} ${currencyName}`, color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Coins });
-  if (quest.rewardXp > 0)      pills.push({ label: `+${quest.rewardXp} XP`, color: "bg-sky-500/20 text-sky-300 border-sky-500/30", icon: Zap });
-  if (quest.rewardBpXp > 0)    pills.push({ label: `+${quest.rewardBpXp} BP-XP`, color: "bg-violet-500/20 text-violet-300 border-violet-500/30", icon: Sparkles });
-  if (quest.rewardItemRarity)  pills.push({ label: `${quest.rewardItemRarity} Item`, color: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30", icon: Package });
-  for (const spec of quest.rewardExtra ?? []) { const p = rewardSpecPill(spec); if (p) pills.push(p); }
+function RewardPills({ quest, currencyName, onPreview }: { quest: UserDailyQuest; currencyName: string; onPreview?: (s: PreviewSubject) => void }) {
+  const pills: { label: string; color: string; icon: typeof Coins; subject: PreviewSubject | null }[] = [];
+  if (quest.rewardCredits > 0) pills.push({ label: `${quest.rewardCredits.toLocaleString("de-DE")} ${currencyName}`, color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Coins, subject: { kind: "credits", amount: quest.rewardCredits } });
+  if (quest.rewardXp > 0)      pills.push({ label: `+${quest.rewardXp} XP`, color: "bg-sky-500/20 text-sky-300 border-sky-500/30", icon: Zap, subject: null });
+  if (quest.rewardBpXp > 0)    pills.push({ label: `+${quest.rewardBpXp} BP-XP`, color: "bg-violet-500/20 text-violet-300 border-violet-500/30", icon: Sparkles, subject: null });
+  if (quest.rewardItemRarity)  pills.push({ label: `${quest.rewardItemRarity} Item`, color: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30", icon: Package, subject: { kind: "random_item", rarity: quest.rewardItemRarity } });
+  for (const spec of quest.rewardExtra ?? []) { const p = rewardSpecPill(spec); if (p) pills.push({ ...p, subject: rewardSpecToSubject(spec) }); }
 
   return (
     <div className="flex flex-wrap gap-1.5 mt-2">
-      {pills.map((p, i) => (
-        <span key={i} className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${p.color}`}>
-          <p.icon className="h-2.5 w-2.5" />
-          {p.label}
-        </span>
-      ))}
+      {pills.map((p, i) =>
+        p.subject && onPreview ? (
+          <button
+            key={i}
+            onClick={(e) => { e.stopPropagation(); onPreview(p.subject!); }}
+            title="3D-Vorschau"
+            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-[filter] hover:brightness-125 ${p.color}`}
+          >
+            <p.icon className="h-2.5 w-2.5" />
+            {p.label}
+          </button>
+        ) : (
+          <span key={i} className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${p.color}`}>
+            <p.icon className="h-2.5 w-2.5" />
+            {p.label}
+          </span>
+        )
+      )}
     </div>
   );
 }
@@ -98,10 +125,12 @@ function QuestCard({
   quest,
   onClaim,
   currencyName,
+  onPreview,
 }: {
   quest: UserDailyQuest;
   onClaim: (id: string) => Promise<void>;
   currencyName: string;
+  onPreview?: (s: PreviewSubject) => void;
 }) {
   const [claiming, setClaiming] = useState(false);
   const pct = quest.targetValue > 0
@@ -204,7 +233,7 @@ function QuestCard({
           )}
 
           {/* Rewards */}
-          <RewardPills quest={quest} currencyName={currencyName} />
+          <RewardPills quest={quest} currencyName={currencyName} onPreview={onPreview} />
         </div>
 
         {/* Claim button */}
@@ -327,6 +356,7 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
   const [filter, setFilter] = useState<"all" | "claimable" | "open" | "done">("all");
   const [confettiKey, setConfettiKey] = useState(0);
   const [claimingAll, setClaimingAll] = useState(false);
+  const [preview, setPreview] = useState<PreviewSubject | null>(null);
   const sound = useSoundManager();
   const { currencyName } = useSiteConfig();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -584,7 +614,7 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
         ) : (
           <AnimatePresence mode="popLayout">
             {visibleQuests.map(q => (
-              <QuestCard key={q.id} quest={q} onClaim={handleClaim} currencyName={currencyName} />
+              <QuestCard key={q.id} quest={q} onClaim={handleClaim} currencyName={currencyName} onPreview={setPreview} />
             ))}
           </AnimatePresence>
         )}
@@ -595,6 +625,7 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
         <ResetCountdown />
       </div>
     </div>
+    {preview && <UniversalPreviewModal subject={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }
