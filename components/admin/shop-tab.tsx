@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Store, Save, Loader2, Plus, Trash2, RefreshCw, Star, Search, Megaphone } from "lucide-react";
+import { Store, Save, Loader2, Plus, Trash2, RefreshCw, Star, Search, Megaphone, Eye } from "lucide-react";
 import { RarityBadge } from "@/components/dashboard/rarity-badge";
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -489,6 +489,8 @@ function AddListingForm({
   );
 }
 
+import { ShopVisualPreview } from "@/components/admin/shop-visual-preview";
+
 const R_COL: Record<string, string> = { normal: "#9ca3af", selten: "#3b82f6", mythisch: "#f59e0b", ultra: "#a855f7" };
 const R_LBL: Record<string, string> = { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" };
 const LT_LBL: Record<string, string> = { item: "Items", ability: "Fähigkeiten", name_style: "Styles", badge: "Badges", voucher: "Gutscheine" };
@@ -508,6 +510,7 @@ function DayShopPanel({
 }) {
   const sound = useSoundManager();
   const [regenerating, setRegenerating] = useState(false);
+  const [show3D, setShow3D] = useState(false);
 
   async function handleRegenerate() {
     setRegenerating(true);
@@ -519,18 +522,34 @@ function DayShopPanel({
 
   return (
     <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-zinc-200">{label}</h3>
-        <button
-          onMouseEnter={sound.hover}
-          onClick={handleRegenerate}
-          disabled={regenerating}
-          className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-white/5 disabled:opacity-50"
-        >
-          {regenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          Automatik neu würfeln
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onMouseEnter={sound.hover}
+            onClick={() => { sound.click(); setShow3D((v) => !v); }}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${show3D ? "border-purple-400/60 bg-purple-500/15 text-purple-200" : "border-white/10 text-zinc-300 hover:bg-white/5"}`}
+          >
+            <Eye className="h-3.5 w-3.5" />
+            3D-Vorschau
+          </button>
+          <button
+            onMouseEnter={sound.hover}
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-white/5 disabled:opacity-50"
+          >
+            {regenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Automatik neu würfeln
+          </button>
+        </div>
       </div>
+
+      {show3D && (
+        <div className="mb-3">
+          <ShopVisualPreview listings={listings} />
+        </div>
+      )}
 
       {listings.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-lg border border-white/5 bg-black/20 px-2.5 py-2">
