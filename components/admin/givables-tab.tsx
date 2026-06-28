@@ -18,7 +18,7 @@ export function GivablesTab({ profiles }: { profiles: { id: string; username: st
   const sound = useSoundManager();
 
   const SUBS = [
-    { id: "abilities" as const, label: "Fähigkeiten", icon: Zap },
+    { id: "abilities" as const, label: "Fähigkeits-Gutscheine", icon: Zap },
     { id: "vouchers" as const, label: "Gutscheine", icon: Gift },
   ];
 

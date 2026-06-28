@@ -75,7 +75,7 @@ function streakRewardLabel(spec: StreakConfig["milestoneRewards"][number]): stri
     case "credits": return spec.amount ? `${spec.amount.toLocaleString("de-DE")} CR` : "";
     case "xp": return spec.amount ? `+${spec.amount} XP` : "";
     case "item": case "random_item": return "Item";
-    case "ability": return "Fähigkeit";
+    case "ability": return "Fähigkeits-Gutschein";
     case "name_style": return "Name-Style";
     case "badge": return "Badge";
     case "case_voucher": return "Gratis-Case";

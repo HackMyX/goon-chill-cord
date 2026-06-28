@@ -62,13 +62,13 @@ function InfoBox({ children }: { children: React.ReactNode }) {
 const EXTRA_KIND_OPTIONS: { value: CaseExtraDropKind; label: string }[] = [
   { value: "credits", label: "Credits" },
   { value: "name_style", label: "Name-Style" },
-  { value: "ability", label: "Fähigkeit" },
+  { value: "ability", label: "Fähigkeits-Gutschein" },
   { value: "badge", label: "Badge" },
   { value: "case_voucher", label: "Case-Gutschein" },
   { value: "game_bonus", label: "Spiel-Bonus" },
 ];
 const EXTRA_KIND_LABEL: Record<CaseExtraDropKind, string> = {
-  credits: "Credits", name_style: "Name-Style", ability: "Fähigkeit", badge: "Badge",
+  credits: "Credits", name_style: "Name-Style", ability: "Fähigkeits-Gutschein", badge: "Badge",
   case_voucher: "Case-Gutschein", game_bonus: "Spiel-Bonus",
 };
 const BONUS_GAME_OPTIONS: { value: "plinko" | "snake" | "don"; label: string }[] = [
@@ -85,7 +85,7 @@ function extraDropToSubject(d: CaseExtraDrop, abilities: AbilityLite[]): Preview
     case "name_style": return { kind: "name_style", styleKey: d.styleKey ?? "default" };
     case "ability": {
       const a = abilities.find((x) => x.key === d.abilityKey);
-      return { kind: "ability", abilityKey: d.abilityKey ?? "", name: d.label || a?.name || d.abilityKey || "Fähigkeit", icon: a?.icon, rarity: d.rarity };
+      return { kind: "ability", abilityKey: d.abilityKey ?? "", name: d.label || a?.name || d.abilityKey || "Fähigkeits-Gutschein", icon: a?.icon, rarity: d.rarity };
     }
     case "badge":      return { kind: "badge", badgeKey: d.badgeKey ?? "", badgeText: d.badgeText || d.badgeKey || "" };
     case "case_voucher": return { kind: "case_voucher", mode: d.caseVoucherMode ?? "tier", label: d.label, tierLabel: d.caseVoucherTierId, rarityFloor: d.caseVoucherRarityFloor, durationHours: d.caseVoucherDurationHours };
@@ -98,7 +98,7 @@ function extraDropDisplay(d: CaseExtraDrop, abilities: AbilityLite[]): string {
   switch (d.kind) {
     case "credits":    return `${(d.amount ?? 0).toLocaleString("de-DE")} Credits`;
     case "name_style": return NAME_STYLES[d.styleKey ?? ""]?.label ?? d.styleKey ?? "Name-Style";
-    case "ability":    return abilities.find((a) => a.key === d.abilityKey)?.name ?? d.abilityKey ?? "Fähigkeit";
+    case "ability":    return abilities.find((a) => a.key === d.abilityKey)?.name ?? d.abilityKey ?? "Fähigkeits-Gutschein";
     case "badge":      return d.badgeText || d.badgeKey || "Badge";
     case "case_voucher": return d.caseVoucherMode === "rarity" ? `Gratis-Case (mind. ${d.caseVoucherRarityFloor ?? "?"})` : "Gratis-Case";
     case "game_bonus": return `+${d.gameBonusAmount ?? 1} ${BONUS_GAME_OPTIONS.find((g) => g.value === d.gameBonusGame)?.label ?? "Bonus"}`;
@@ -183,7 +183,7 @@ function ExtraDropsEditor({
       <div className="mb-2 flex items-center gap-2">
         <p className="text-[11px] font-semibold tracking-wide text-zinc-400">
           <Gift className="mr-1 inline-block h-3.5 w-3.5 text-fuchsia-400" />
-          EXTRA-DROPS — Nicht-Item-Belohnungen (Credits, Name-Styles, Fähigkeiten, Badges)
+          EXTRA-DROPS — Nicht-Item-Belohnungen (Credits, Name-Styles, Fähigkeits-Gutscheine, Badges)
         </p>
         <span className="rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] text-fuchsia-300">Neu</span>
       </div>
@@ -302,7 +302,7 @@ function ExtraDropsEditor({
           )}
           {kind === "ability" && (
             <label className="flex flex-col gap-1 text-[10px] text-zinc-400">
-              Fähigkeit
+              Fähigkeits-Gutschein
               <select
                 value={abilityKey}
                 onChange={(e) => setAbilityKey(e.target.value)}
@@ -1551,7 +1551,7 @@ function CaseGuide() {
               <GuideStep n={4} icon={Package} title="Pool füllen" accent="#e879f9">
                 Wähle <strong className="text-zinc-300">Item-Typen</strong> (ganze Kategorien) oder pro Rarität{" "}
                 <strong className="text-zinc-300">exakte Items</strong>. Dazu optional{" "}
-                <strong className="text-fuchsia-300">Extra-Drops</strong> (Credits, Name-Styles, Fähigkeiten, Badges).
+                <strong className="text-fuchsia-300">Extra-Drops</strong> (Credits, Name-Styles, Fähigkeits-Gutscheine, Badges).
               </GuideStep>
             </div>
           </div>
@@ -1619,7 +1619,7 @@ function CaseGuide() {
             <ul className="space-y-1 text-[11.5px] leading-relaxed text-zinc-400">
               <li>
                 <Gift className="mr-1 inline-block h-3.5 w-3.5 text-fuchsia-400" />
-                <strong className="text-zinc-300">Extra-Drops</strong> (Credits, Name-Style, Fähigkeit, Badge) legst
+                <strong className="text-zinc-300">Extra-Drops</strong> (Credits, Name-Style, Fähigkeits-Gutschein, Badge) legst
                 du direkt im Tier an. Sie mischen sich in den gewählten Rarität-Topf.
               </li>
               <li>

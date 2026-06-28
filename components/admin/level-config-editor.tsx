@@ -223,7 +223,7 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
           <TrendingUp className="h-5 w-5 text-purple-400" />
           <h2 className="flex items-center gap-1.5 text-base font-bold text-zinc-100">
             Level & XP System
-            <AdminTooltip text="Konfiguriert das Level- und Erfahrungspunkte-System. Nutzer sammeln XP durch Aktionen (Mine, Streak, Snake, etc.) und steigen in Levels auf. Jedes Level kann Belohnungen (Credits, Badge, Fähigkeit) vergeben. Änderungen gelten sofort für alle neuen XP-Gewinne." />
+            <AdminTooltip text="Konfiguriert das Level- und Erfahrungspunkte-System. Nutzer sammeln XP durch Aktionen (Mine, Streak, Snake, etc.) und steigen in Levels auf. Jedes Level kann Belohnungen (Credits, Badge, Fähigkeits-Gutschein) vergeben. Änderungen gelten sofort für alle neuen XP-Gewinne." />
           </h2>
         </div>
         <div className="flex gap-2">
@@ -260,12 +260,12 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
       {/* Slot count */}
       <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
         <h3 className="mb-3 flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
-          Fähigkeiten-Slots
-          <AdminTooltip text="Anzahl der Fähigkeits-Slots die jeder Spieler gleichzeitig ausgerüstet haben kann. Erhöhe diesen Wert wenn das Spiel komplexer wird — aber beachte: mehr Slots = stärkere Buff-Stapelung, was die Balance beeinflusst. Standard: 1." />
+          Gutschein-Slots
+          <AdminTooltip text="Anzahl der Gutschein-Slots die jeder Spieler gleichzeitig ausgerüstet haben kann. Erhöhe diesen Wert wenn das Spiel komplexer wird — aber beachte: mehr Slots = stärkere Buff-Stapelung, was die Balance beeinflusst. Standard: 1." />
         </h3>
         <div className="max-w-xs">
           <NumInput
-            label="Anzahl Fähigkeiten-Slots pro Spieler"
+            label="Anzahl Gutschein-Slots pro Spieler"
             value={config.abilitySlotCount}
             onChange={(v) => setConfig((c) => ({ ...c, abilitySlotCount: Math.max(1, Math.min(5, v)) }))}
             min={1}
@@ -399,7 +399,7 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
         <h3 className="mb-4 flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
           <Star className="h-3.5 w-3.5 text-amber-400" />
           Level-Definitionen ({config.levels.length} Level)
-          <AdminTooltip text="Konfiguriert jedes einzelne Level: benötigte XP, Anzeige-Titel und optionale Belohnungen (Credits, Badge, Name-Style, Fähigkeit). Klicke ein Level auf, um es zu bearbeiten. Tipp: Frühe Level brauchen wenig XP für schnelles Vorankommen, späte Level deutlich mehr für Langzeitmotivation." />
+          <AdminTooltip text="Konfiguriert jedes einzelne Level: benötigte XP, Anzeige-Titel und optionale Belohnungen (Credits, Badge, Name-Style, Fähigkeits-Gutschein). Klicke ein Level auf, um es zu bearbeiten. Tipp: Frühe Level brauchen wenig XP für schnelles Vorankommen, späte Level deutlich mehr für Langzeitmotivation." />
         </h3>
 
         <XpCurveTools levels={config.levels} onApply={(newLevels) => setConfig((c) => ({ ...c, levels: newLevels }))} />
@@ -459,7 +459,7 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
                           <option value="xp">XP</option>
                           <option value="item">Item (fest)</option>
                           <option value="random_item">Item (zufällig)</option>
-                          <option value="ability">Fähigkeit</option>
+                          <option value="ability">Fähigkeits-Gutschein</option>
                           <option value="badge">Badge</option>
                           <option value="name_style">Name-Style</option>
                           <option value="case_voucher">Gutschein (Case)</option>
@@ -497,7 +497,7 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
                               else if (r.type === "badge") setReward(lvl.level, idx, { badgeKey: v });
                               else setReward(lvl.level, idx, { nameStyleKey: v });
                             }}
-                            placeholder={r.type === "ability" ? "Fähigkeit wählen…" : r.type === "badge" ? "Badge wählen…" : "Name-Style wählen…"}
+                            placeholder={r.type === "ability" ? "Fähigkeits-Gutschein wählen…" : r.type === "badge" ? "Badge wählen…" : "Name-Style wählen…"}
                             className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none"
                           />
                         )}

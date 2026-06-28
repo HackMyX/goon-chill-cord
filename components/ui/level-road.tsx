@@ -34,7 +34,7 @@ function rewardLabel(r: LevelReward): string {
   if (r.type === "xp") return `+${r.amount ?? 0} XP`;
   if (r.type === "item") return "Item";
   if (r.type === "random_item") return `Zufalls-Item${r.itemRarity ? ` (${r.itemRarity})` : ""}`;
-  if (r.type === "ability") return r.abilityKey ?? "Fähigkeit";
+  if (r.type === "ability") return r.abilityKey ?? "Fähigkeits-Gutschein";
   if (r.type === "badge") return r.badgeKey ?? "Badge";
   if (r.type === "name_style") return r.nameStyleKey ?? "Style";
   if (r.type === "case_voucher") return "Gratis-Case";

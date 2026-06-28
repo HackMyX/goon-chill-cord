@@ -88,7 +88,7 @@ function poolEntryToSubject(e: CasePoolEntry): PreviewSubject {
 const EXTRA_KIND_LABEL: Record<CaseExtraDrop["kind"], string> = {
   credits: "Credits",
   name_style: "Name-Style",
-  ability: "Fähigkeit",
+  ability: "Fähigkeits-Gutschein",
   badge: "Badge",
   case_voucher: "Case-Gutschein",
   game_bonus: "Spiel-Bonus",
@@ -103,7 +103,7 @@ function extraToPoolEntry(d: CaseExtraDrop): CasePoolEntry {
       : d.kind === "name_style"
       ? d.styleKey ?? "Name-Style"
       : d.kind === "ability"
-      ? d.abilityKey ?? "Fähigkeit"
+      ? d.abilityKey ?? "Fähigkeits-Gutschein"
       : d.kind === "case_voucher"
       ? (d.caseVoucherMode === "rarity" ? `Gratis-Case (mind. ${d.caseVoucherRarityFloor ?? "?"})` : "Gratis-Case")
       : d.kind === "game_bonus"

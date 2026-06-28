@@ -416,7 +416,7 @@ export function BalanceCockpit({
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {/* Preise / Kosten */}
           <PriceSection title="Items" rows={priceLists.itemRows} />
-          <PriceSection title="Fähigkeiten (Shop-Preis)" rows={priceLists.abilityRows} emptyHint="Keine Fähigkeit mit Shop-Preis." />
+          <PriceSection title="Fähigkeits-Gutscheine (Shop-Preis)" rows={priceLists.abilityRows} emptyHint="Kein Fähigkeits-Gutschein mit Shop-Preis." />
           <PriceSection title="Name-Styles (Shop-Preis)" rows={priceLists.styleRows} emptyHint="Keine Name-Styles mit Shop-Preis." />
           <PriceSection title="Case-Tiers (Preis)" rows={priceLists.caseRows} />
           <PriceSection title="Battle-Pass (Premium-Preis)" rows={priceLists.bpRows} emptyHint="Keine Battle-Pässe." />

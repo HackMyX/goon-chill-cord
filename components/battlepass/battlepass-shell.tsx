@@ -107,7 +107,7 @@ function rewardLabel(tier: BattlePassTier): string {
     case "badge": return tier.rewardBadgeText ?? "Badge";
     case "xp_boost": return `+${tier.rewardXpBoost ?? 1} Fortschrittstag${(tier.rewardXpBoost ?? 1) !== 1 ? "e" : ""}`;
     case "name_style": return `Style: ${tier.rewardNameStyleKey ?? "?"}`;
-    case "ability": return tier.rewardAbilityName ?? tier.rewardAbilityKey ?? "Fähigkeit";
+    case "ability": return tier.rewardAbilityName ?? tier.rewardAbilityKey ?? "Fähigkeits-Gutschein";
     case "case_voucher": return tier.rewardCaseVoucherMode === "rarity" ? `Gratis-Case (${tier.rewardCaseVoucherRarityFloor ?? "?"}+)` : "Gratis-Case";
     case "game_bonus": return `+${tier.rewardGameBonusAmount || 1} ${tier.rewardGameBonusGame ?? "Spiel"}-Bonus`;
     default: return "Belohnung";
@@ -381,7 +381,7 @@ function TileMiniPreview({
           )}
         </motion.div>
         <p className="text-[9px] font-black text-purple-300 text-center leading-tight max-w-[52px] truncate">
-          {tier.rewardAbilityName ?? "Fähigkeit"}
+          {tier.rewardAbilityName ?? "Fähigkeits-Gutschein"}
         </p>
       </div>
     );
@@ -636,7 +636,7 @@ function RewardPreviewCard({ tier, accent, glow }: { tier: BattlePassTier; accen
         </motion.div>
         <div className="text-center">
           <p className="text-sm font-black text-purple-300">{tier.rewardAbilityName ?? tier.name}</p>
-          <p className="text-xs text-white/40">Fähigkeit</p>
+          <p className="text-xs text-white/40">Fähigkeits-Gutschein</p>
         </div>
       </div>
     );

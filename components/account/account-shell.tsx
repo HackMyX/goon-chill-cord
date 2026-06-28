@@ -282,7 +282,7 @@ export function AccountShell({
             <span>Gesamt: <span className="font-semibold text-zinc-300">{xp.toLocaleString("de-DE")} XP</span></span>
             {abilitiesCount > 0 && (
               <span>
-                Fähigkeit: <span className="font-semibold text-amber-300">{equippedAbilityKey ?? "keine"}</span>
+                Fähigkeits-Gutschein: <span className="font-semibold text-amber-300">{equippedAbilityKey ?? "keine"}</span>
               </span>
             )}
           </div>

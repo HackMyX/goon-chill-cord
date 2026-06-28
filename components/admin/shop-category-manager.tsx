@@ -17,7 +17,7 @@ import { SHOP_CATEGORY_ICONS, SHOP_CATEGORY_COLORS, resolveShopCategoryIcon } fr
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 
 const CONTENT_LABEL: Record<string, string> = {
-  item: "Items", ability: "Fähigkeiten", name_style: "Name-Styles", badge: "Badges", voucher: "Gutscheine",
+  item: "Items", ability: "Fähigkeits-Gutscheine", name_style: "Name-Styles", badge: "Badges", voucher: "Gutscheine",
 };
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -478,7 +478,7 @@ function CategoryCard({ category, onChanged }: { category: ShopCategory; onChang
               className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
             >
               <option value="item">Items</option>
-              <option value="ability">Fähigkeiten</option>
+              <option value="ability">Fähigkeits-Gutscheine</option>
               <option value="name_style">Name-Styles</option>
               <option value="badge">Badges</option>
               <option value="voucher">Gutscheine</option>

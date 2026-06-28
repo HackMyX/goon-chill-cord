@@ -833,8 +833,8 @@ function XpSourcesSection({ data, onChange }: {
       {/* Ability slot count */}
       <div className="mt-4 flex items-end gap-4 rounded-xl border border-amber-500/15 bg-amber-500/5 p-3">
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-zinc-300">Fähigkeiten-Slots</span>
-          <span className="text-[10px] text-zinc-600">Wie viele Fähigkeiten ein Spieler gleichzeitig ausrüsten darf</span>
+          <span className="text-xs font-medium text-zinc-300">Gutschein-Slots</span>
+          <span className="text-[10px] text-zinc-600">Wie viele Fähigkeits-Gutscheine ein Spieler gleichzeitig ausrüsten darf</span>
           <input
             type="number"
             value={data.abilitySlotCount}

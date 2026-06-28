@@ -22,7 +22,7 @@ function RewardEditorHint() {
     <p className="mb-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-zinc-500">
       <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-purple-300/70" />
       <span>
-        Hier ist <b className="text-zinc-300">jeder</b> Belohnungstyp wählbar — Credits, XP, Items, Fähigkeiten,
+        Hier ist <b className="text-zinc-300">jeder</b> Belohnungstyp wählbar — Credits, XP, Items, Fähigkeits-Gutscheine,
         Name-Styles, Badges, Case-Gutscheine und <b className="text-zinc-300">Spiel-Bonus</b>.{" "}
         <b className="text-zinc-300">Spiel-Bonus</b> = X extra Züge/Spins für DON/Plinko/Snake, die <i>on top</i> aufs
         Tageslimit kommen. Dauer 0 = unbegrenzt gültig.
@@ -207,7 +207,7 @@ export function VoucherAdminTab({ profiles }: { profiles: Profile[] }) {
         <span>
           Vergib Belohnungs-<b className="text-purple-200">Bündel</b> <b>direkt</b> an ausgewählte Spieler — sie landen
           sofort auf den Konten, ganz ohne Code. Automatische Vergaben (Battle Pass, Level, Quests, Shop) laufen unverändert weiter.
-          Fähigkeits-Boosts wirken getimt; die Stärke definierst du unter <b className="text-purple-200">Fähigkeiten</b>.
+          Fähigkeits-Boosts wirken getimt; die Stärke definierst du unter <b className="text-purple-200">Fähigkeits-Gutscheine</b>.
         </span>
       </div>
 

@@ -67,7 +67,7 @@ function RewardIcon({ type }: { type: string }) {
 
 function rewardLabel(r: LevelReward): string {
   if (r.type === "credits") return `${r.amount?.toLocaleString("de-DE") ?? "?"} CR`;
-  if (r.type === "ability") return r.abilityKey ?? "Fähigkeit";
+  if (r.type === "ability") return r.abilityKey ?? "Fähigkeits-Gutschein";
   if (r.type === "badge") return r.badgeKey ?? "Badge";
   if (r.type === "name_style") return r.nameStyleKey ?? "Style";
   return r.type;
@@ -235,7 +235,7 @@ function TierRow({
               <RewardIcon type={reward.type} />
               <span className="text-zinc-300 font-semibold">
                 {reward.type === "credits" ? `${reward.amount?.toLocaleString("de-DE") ?? "?"} CR` :
-                 reward.type === "ability" ? (reward.abilityKey ?? "Fähigkeit") :
+                 reward.type === "ability" ? (reward.abilityKey ?? "Fähigkeits-Gutschein") :
                  reward.type === "badge" ? (reward.badgeKey ?? "Badge") :
                  reward.type === "name_style" ? (reward.nameStyleKey ?? "Style") :
                  reward.type}
@@ -552,7 +552,7 @@ export function LevelMenuModal({
                           <RewardIcon type={reward.type} />
                           <span className="text-zinc-300 font-semibold">
                             {reward.type === "credits" ? `${reward.amount?.toLocaleString("de-DE") ?? "?"} CR` :
-                             reward.type === "ability" ? (reward.abilityKey ?? "Fähigkeit") :
+                             reward.type === "ability" ? (reward.abilityKey ?? "Fähigkeits-Gutschein") :
                              reward.type === "badge" ? (reward.badgeKey ?? "Badge") :
                              reward.type === "name_style" ? (reward.nameStyleKey ?? "Style") :
                              reward.type}
@@ -580,7 +580,7 @@ export function LevelMenuModal({
                             <RewardIcon type={reward.type} />
                             <span className="text-zinc-300 font-semibold">
                               {reward.type === "credits" ? `${reward.amount?.toLocaleString("de-DE") ?? "?"} CR` :
-                               reward.type === "ability" ? (reward.abilityKey ?? "Fähigkeit") :
+                               reward.type === "ability" ? (reward.abilityKey ?? "Fähigkeits-Gutschein") :
                                reward.type === "badge" ? (reward.badgeKey ?? "Badge") :
                                reward.type === "name_style" ? (reward.nameStyleKey ?? "Style") :
                                reward.type}
@@ -772,7 +772,7 @@ export function LevelMenuModal({
                 <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.04] px-4 py-3">
                   <p className="flex items-start gap-2 text-xs text-blue-300/70">
                     <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    XP-Raten werden vom Admin konfiguriert und können sich jederzeit ändern. Ausgerüstete XP-Booster-Fähigkeiten multiplizieren alle gewonnenen XP.
+                    XP-Raten werden vom Admin konfiguriert und können sich jederzeit ändern. Ausgerüstete XP-Booster-Fähigkeits-Gutscheine multiplizieren alle gewonnenen XP.
                   </p>
                 </div>
               </div>

@@ -396,7 +396,7 @@ function AddListingForm({
           className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
         >
           <option value="item">Item</option>
-          <option value="ability">Fähigkeit</option>
+          <option value="ability">Fähigkeits-Gutschein</option>
           <option value="name_style">Name-Style</option>
           <option value="badge">Badge</option>
           <option value="voucher">Gutschein</option>
@@ -495,7 +495,7 @@ import { KeySelect } from "@/components/admin/key-select";
 
 const R_COL: Record<string, string> = { normal: "#9ca3af", selten: "#3b82f6", mythisch: "#f59e0b", ultra: "#a855f7" };
 const R_LBL: Record<string, string> = { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" };
-const LT_LBL: Record<string, string> = { item: "Items", ability: "Fähigkeiten", name_style: "Styles", badge: "Badges", voucher: "Gutscheine" };
+const LT_LBL: Record<string, string> = { item: "Items", ability: "Fähigkeits-Gutscheine", name_style: "Styles", badge: "Badges", voucher: "Gutscheine" };
 
 function DayShopPanel({
   label,

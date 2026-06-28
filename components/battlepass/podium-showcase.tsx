@@ -46,7 +46,7 @@ function rewardText(t: BattlePassTier): string {
     case "badge": return t.rewardBadgeText || "Badge";
     case "xp_boost": return `+${t.rewardXpBoost ?? 1} Fortschrittstage`;
     case "name_style": return t.rewardNameStyleKey || "Name-Style";
-    case "ability": return t.rewardAbilityName || "Fähigkeit";
+    case "ability": return t.rewardAbilityName || "Fähigkeits-Gutschein";
     default: return "Belohnung";
   }
 }

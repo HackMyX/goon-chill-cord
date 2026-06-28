@@ -22,7 +22,7 @@ function rewardIcon(type: string) {
 
 function rewardLabel(r: LevelReward): string {
   if (r.type === "credits") return `${r.amount?.toLocaleString("de-DE") ?? "?"} CR`;
-  if (r.type === "ability") return r.abilityKey ?? "Fähigkeit";
+  if (r.type === "ability") return r.abilityKey ?? "Fähigkeits-Gutschein";
   if (r.type === "badge") return r.badgeKey ?? "Badge";
   if (r.type === "name_style") return r.nameStyleKey ?? "Style";
   return r.type;

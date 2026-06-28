@@ -45,7 +45,7 @@ function rewardSummary(t: BattlePassTier): string {
     case "badge":       return t.rewardBadgeText || "Badge";
     case "xp_boost":    return `+${t.rewardXpBoost ?? 1} Tag(e)`;
     case "name_style":  return t.rewardNameStyleKey || "Name-Style";
-    case "ability":     return t.rewardAbilityName || t.rewardAbilityKey || "Fähigkeit";
+    case "ability":     return t.rewardAbilityName || t.rewardAbilityKey || "Fähigkeits-Gutschein";
     default:            return "Belohnung";
   }
 }
@@ -450,11 +450,11 @@ export function BpRewardStudio({
 
           {/* Fähigkeiten — Liste aus ability_definitions, synct automatisch */}
           <p className="mb-1 mt-3 px-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400">
-            Fähigkeiten <span className="text-zinc-600">({abilities.length})</span>
+            Fähigkeits-Gutscheine <span className="text-zinc-600">({abilities.length})</span>
           </p>
           <div className="max-h-44 space-y-1 overflow-y-auto pr-0.5" style={{ scrollbarWidth: "thin" }}>
             {abilities.length === 0 && (
-              <p className="px-1 py-1 text-[10px] text-zinc-500">Keine Fähigkeiten angelegt — lege im Fähigkeiten-Admin welche an.</p>
+              <p className="px-1 py-1 text-[10px] text-zinc-500">Keine Fähigkeits-Gutscheine angelegt — lege im Fähigkeits-Gutschein-Admin welche an.</p>
             )}
             {abilities.map((ab) => {
               const col = RARITY_HEX[ab.rarity] ?? "#22d3ee";

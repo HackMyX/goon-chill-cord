@@ -397,7 +397,7 @@ function TemplateModal({ template, onSave, onClose }: {
               onChange={v => set("rewardExtra", v)}
               label="Zusätzliche Belohnungen (Givables)"
             />
-            <p className="text-[10px] text-zinc-600 mt-1.5">Werden ZUSÄTZLICH zu den obigen Belohnungen beim Einlösen vergeben (Fähigkeit, Name-Style, Badge, Case-Gutschein, Spiel-Bonus, Item, XP, Credits).</p>
+            <p className="text-[10px] text-zinc-600 mt-1.5">Werden ZUSÄTZLICH zu den obigen Belohnungen beim Einlösen vergeben (Fähigkeits-Gutschein, Name-Style, Badge, Case-Gutschein, Spiel-Bonus, Item, XP, Credits).</p>
           </div>
 
           <div className="flex items-center gap-3">

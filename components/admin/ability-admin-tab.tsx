@@ -279,7 +279,7 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
                 <div className="w-[300px] max-w-full">
                   <AbilityVoucherCard
                     animateEntry={false}
-                    name={editing.name?.trim() ? editing.name : "Unbenannte Fähigkeit"}
+                    name={editing.name?.trim() ? editing.name : "Unbenannter Fähigkeits-Gutschein"}
                     description={editing.description}
                     icon={editing.icon}
                     category={editing.category ? ABILITY_CATEGORY_LABELS[editing.category] : undefined}

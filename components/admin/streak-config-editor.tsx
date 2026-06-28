@@ -145,7 +145,7 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
         <h3 className="mb-2 flex items-center gap-2 text-base font-bold text-zinc-100">
           <Star className="h-5 w-5 text-amber-400" />
           Meilenstein-Belohnungen (Givables)
-          <AdminTooltip text="Zusätzliche Belohnungen, die NUR an Meilenstein-Tagen (jeder Nte Streak-Tag) zusätzlich zum Credit-Bonus vergeben werden. Es sind ALLE Belohnungstypen wählbar (Credits, XP, Items, Fähigkeiten, Name-Styles, Badges, Case-Gutscheine, Spiel-Boni). Vergeben über den zentralen Reward-Dispatcher." />
+          <AdminTooltip text="Zusätzliche Belohnungen, die NUR an Meilenstein-Tagen (jeder Nte Streak-Tag) zusätzlich zum Credit-Bonus vergeben werden. Es sind ALLE Belohnungstypen wählbar (Credits, XP, Items, Fähigkeits-Gutscheine, Name-Styles, Badges, Case-Gutscheine, Spiel-Boni). Vergeben über den zentralen Reward-Dispatcher." />
         </h3>
         <p className="mb-4 text-[11px] text-zinc-500">
           Werden zusätzlich zum Credit-Bonus an jedem Meilenstein-Tag (Intervall oben) ausgeschüttet.
