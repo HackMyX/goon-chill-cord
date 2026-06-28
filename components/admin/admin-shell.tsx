@@ -40,6 +40,8 @@ import { PreviewConfigTab } from "@/components/admin/preview-config-tab";
 import { DailyQuestsTab } from "@/components/admin/daily-quests-tab";
 import HomepageChatConfigEditor from "@/components/admin/homepage-chat-config-editor";
 import { FineConfigEditor } from "@/components/admin/fine-config-editor";
+import { AdminGuide } from "@/components/admin/admin-guide";
+import { TAB_GUIDES } from "@/lib/admin-guides";
 import type { FineConfig } from "@/lib/fine-config-types";
 import type { CleanupRule } from "@/lib/cleanup-config";
 import type { PatchNote } from "@/lib/patchnotes";
@@ -516,7 +518,11 @@ export function AdminShell({
                 filteredSearch.slice(0, 8).map((result, i) => (
                   <button
                     key={i}
-                    onClick={() => { setTab(result.tab); setAdminSearch(""); sound.click(); }}
+                    onClick={() => {
+                      setTab(result.tab); setAdminSearch(""); sound.click();
+                      // Land on the tab's guide/top so the result feels like a jump.
+                      setTimeout(() => document.getElementById("admin-tab-top")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+                    }}
                     onMouseEnter={sound.hover}
                     className="flex w-full flex-col gap-0.5 px-4 py-2.5 text-left transition-colors hover:bg-white/5"
                   >
@@ -572,6 +578,9 @@ export function AdminShell({
             </div>
           );
         })()}
+
+        <div id="admin-tab-top" className="scroll-mt-4" />
+        {TAB_GUIDES[tab] && <AdminGuide content={TAB_GUIDES[tab]} />}
 
         {tab === "balance" && <BalanceStudioTab />}
 
