@@ -125,6 +125,7 @@ const SINGLETON_CONFIGS: Array<{ id: string; table: string; name: string; catego
   { id: "cfg_plinko",      table: "plinko_config",      name: "plinko_config (default)",    category: "Plinko" },
   { id: "cfg_killstreak",  table: "kill_streak_config", name: "kill_streak_config (default)",category: "World" },
   { id: "cfg_xp",          table: "xp_config",          name: "xp_config (default)",         category: "Level & XP" },
+  { id: "cfg_synergy",     table: "economy_synergy_config", name: "economy_synergy_config (default)", category: "Synergie & Boosts" },
   { id: "cfg_sound",       table: "sound_config",        name: "sound_config (default)",      category: "Sound Manager" },
   { id: "cfg_mine",        table: "mine_config",         name: "mine_config (default)",        category: "Mine" },
   { id: "cfg_homepage_chat", table: "homepage_chat_config", name: "homepage_chat_config (default)", category: "Homepage Chat Sidebar" },

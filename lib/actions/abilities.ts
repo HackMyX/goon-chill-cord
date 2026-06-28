@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
+import { getSynergyConfig } from "@/lib/actions/economy-synergy";
+import { computeSynergyMultipliers } from "@/lib/economy-synergy";
 import type { AbilityDefinition, AbilityCategory, AbilityEffectType, AbilityEffectConfig, AbilityRarity, UserAbility } from "@/lib/abilities";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -151,11 +153,22 @@ export async function getActiveEquippedAbilityEffect(
  */
 export async function applyCreditBonus(admin: Admin, userId: string, baseAmount: number): Promise<number> {
   if (!(baseAmount > 0)) return baseAmount;
+  let amount = baseAmount;
   const eff = await getActiveEquippedAbilityEffect(admin, userId);
   if (eff?.effectType === "credit_bonus" && eff.effectValue > 0) {
-    return Math.floor(baseAmount * (1 + eff.effectValue));
+    amount = amount * (1 + eff.effectValue);
   }
-  return baseAmount;
+  // Economy-synergy layer: level-scaling + weekend/happy-hour boosts on every
+  // activity credit earning (one central hook → applies everywhere automatically).
+  try {
+    const cfg = await getSynergyConfig();
+    if (cfg.enabled) {
+      const { data: p } = await admin.from("profiles").select("level").eq("id", userId).single();
+      const m = computeSynergyMultipliers(cfg, (p?.level as number) ?? 1, new Date());
+      amount = amount * m.creditMult;
+    }
+  } catch { /* non-fatal */ }
+  return Math.floor(amount);
 }
 
 // ─── Public queries ────────────────────────────────────────────────────────────

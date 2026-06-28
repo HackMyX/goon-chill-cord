@@ -7,6 +7,8 @@ import { isAdmin } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
 import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
 import { isAbilityActive } from "@/lib/actions/abilities";
+import { getSynergyConfig, addBpXpToActivePass } from "@/lib/actions/economy-synergy";
+import { computeSynergyMultipliers } from "@/lib/economy-synergy";
 import { logDebugEvent } from "@/lib/debug-log-server";
 import {
   calculateLevel, buildLevelInfo, prestigeXpMultiplier,
@@ -137,7 +139,13 @@ export async function awardXp(
   const prestige = (profile.prestige as number) ?? 0;
   const prestigeMult = prestigeXpMultiplier(prestige, config.levelRoadConfig.prestigeXpBonusPercent ?? 5);
 
-  const amount = Math.max(1, Math.round(rawAmount * xpMultiplier * prestigeMult));
+  // Economy-synergy layer: level-scaling + weekend/happy-hour time boosts on XP,
+  // and the Level-XP → Battle-Pass-XP cross-flow (computed after the grant below).
+  const synergyCfg = await getSynergyConfig();
+  const playerLevel = (profile.level as number) ?? 1;
+  const syn = computeSynergyMultipliers(synergyCfg, playerLevel, new Date());
+
+  const amount = Math.max(1, Math.round(rawAmount * xpMultiplier * prestigeMult * syn.xpMult));
 
   // Atomic XP increment — prevents lost updates AND double level-reward grants when
   // many `void awardXp(...)` run concurrently. The RPC serialises the increment under
@@ -209,6 +217,13 @@ export async function awardXp(
       message: `Level-Up: User ${userId} → Level ${newLevel}`,
       context: { userId, oldLevel, newLevel, xpGained: amount, totalXp: newXp, source, rewards: collectedRewards.length },
     });
+  }
+
+  // Cross-flow: a configurable share of the Level-XP just earned also fills the
+  // player's ACTIVE battle pass — so every XP source on the site feeds the pass.
+  if (syn.bpXpFromLevelXpPercent > 0) {
+    const bpXp = Math.round((amount * syn.bpXpFromLevelXpPercent) / 100);
+    if (bpXp > 0) await addBpXpToActivePass(admin, userId, bpXp);
   }
 
   return {

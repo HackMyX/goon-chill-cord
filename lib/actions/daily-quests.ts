@@ -7,6 +7,8 @@ import { isAdmin } from "@/lib/admin";
 import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
 import { awardXp } from "@/lib/actions/level-system";
 import { incrementBpQuestProgress } from "@/lib/actions/bp-quests";
+import { getSynergyConfig } from "@/lib/actions/economy-synergy";
+import { dailyQuestLevelScale } from "@/lib/economy-synergy";
 import {
   DEFAULT_DAILY_QUEST_CONFIG,
   levelScaleFactor,
@@ -372,10 +374,20 @@ export async function claimDailyQuestReward(
     if (!q.completed) return { success: false, error: "Quest noch nicht abgeschlossen." };
     if (q.reward_claimed) return { success: false, error: "Belohnung bereits eingelöst." };
 
-    const rewardCredits = Number(q.reward_credits) ?? 0;
     const rewardXp      = Number(q.reward_xp)      ?? 0;
     const rewardBpXp    = Number(q.reward_bp_xp)   ?? 0;
     const rewardItemRarity = (q.reward_item_rarity as string | null) ?? null;
+
+    // Level-scale the CREDIT reward (XP + BP-XP already flow through awardXp's
+    // synergy layer). Higher-level players earn more from the same quest.
+    let rewardCredits = Number(q.reward_credits) ?? 0;
+    try {
+      const [{ data: prof }, syn] = await Promise.all([
+        admin.from("profiles").select("level").eq("id", user.id).single(),
+        getSynergyConfig(),
+      ]);
+      rewardCredits = Math.round(rewardCredits * dailyQuestLevelScale(syn, (prof?.level as number) ?? 1));
+    } catch { /* keep base */ }
 
     // Atomic claim: only ONE concurrent request can flip reward_claimed false→true.
     // The .eq("reward_claimed", false) guard + row-count check makes the whole

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Zap, Volume2, Eye, Settings2, Music, ListChecks, SwatchBook, Gift } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Zap, Volume2, Eye, Settings2, Music, ListChecks, SwatchBook, Gift, Link2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CasesAdminTab } from "@/components/admin/case-group-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -32,6 +32,7 @@ import { BalanceStudioTab } from "@/components/admin/balance-studio-tab";
 import { LevelConfigEditor } from "@/components/admin/level-config-editor";
 import { AbilityAdminTab } from "@/components/admin/ability-admin-tab";
 import { VoucherAdminTab } from "@/components/admin/voucher-admin-tab";
+import { EconomySynergyEditor } from "@/components/admin/economy-synergy-editor";
 import { SoundConfigEditor } from "@/components/admin/sound-config-editor";
 import { MusicConfigEditor } from "@/components/admin/music-config-editor";
 import { ThemeConfigEditor } from "@/components/admin/theme-config-editor";
@@ -167,7 +168,7 @@ interface AdminShellProps {
   fineConfig: FineConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "vouchers" | "sounds" | "music" | "theme" | "preview_config" | "fine_config" | "daily_quests";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "abilities" | "vouchers" | "sounds" | "music" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy";
 
 const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string }[] = [
   { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
@@ -184,6 +185,7 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Charakter-Werte", tab: "games", keywords: ["charakter", "speed", "jump", "angriff", "rüstung", "hp"], description: "Charakter-Werte und Combat" },
   { label: "Battle Pass", tab: "battlepass", keywords: ["battlepass", "bp", "tier", "premium", "elite", "quest", "xp"], description: "Battle Pass Tiers und Quests" },
   { label: "Daily Quests", tab: "daily_quests", keywords: ["daily", "quest", "tagesquest", "aufgabe", "belohnung", "fortschritt"], description: "Tägliche Quests für alle Spieler" },
+  { label: "Synergie & Boosts", tab: "synergy", keywords: ["synergie", "boost", "multiplikator", "level", "skalierung", "battle pass", "querfluss", "wochenende", "happy hour", "event", "xp", "credits", "verbindung"], description: "Level/BP/Quests verbinden, Zeit-Boosts, Level-Staffelung" },
   { label: "Level & XP Quellen", tab: "level_xp", keywords: ["level", "xp", "erfahrung", "aufstieg", "quellen"], description: "XP-Quellen und Level-Definitionen" },
   { label: "Fähigkeiten", tab: "abilities", keywords: ["fähigkeit", "ability", "mine", "speed", "boost", "rüstung"], description: "Fähigkeiten-Definitionen und Grants" },
   { label: "Gutscheine", tab: "vouchers", keywords: ["gutschein", "voucher", "code", "redeem", "einlösen", "geschenk"], description: "Einlösbare Codes erstellen und verwalten" },
@@ -249,6 +251,7 @@ const TABS = ([
   { id: "users",          label: "User-Management",      icon: Users },
   { id: "cleanup",        label: "Verlaufs-Bereinigung", icon: Trash2 },
   { id: "daily_quests",  label: "Daily Quests",          icon: ListChecks },
+  { id: "synergy",       label: "Synergie & Boosts",     icon: Link2 },
 ] as { id: Tab; label: string; icon: typeof Coins }[]).sort((a, b) => tabSortKey(a.label).localeCompare(tabSortKey(b.label), "de"));
 
 export function AdminShell({
@@ -620,6 +623,7 @@ export function AdminShell({
         {tab === "fine_config" && <FineConfigEditor initial={fineConfig} />}
 
         {tab === "daily_quests" && <DailyQuestsTab currencyName={siteConfig.currencyName} />}
+        {tab === "synergy" && <EconomySynergyEditor />}
 
         {tab === "ki" && (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">
