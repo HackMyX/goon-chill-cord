@@ -605,7 +605,7 @@ export function AdminShell({
           />
         )}
 
-        {tab === "vouchers" && <VoucherAdminTab />}
+        {tab === "vouchers" && <VoucherAdminTab profiles={profiles.map((p) => ({ id: p.id, username: p.username }))} />}
 
         {tab === "sounds" && (
           <SoundConfigEditor initialConfig={soundConfig} />

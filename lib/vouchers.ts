@@ -27,11 +27,19 @@ export interface RedemptionCode {
   /** Full reward bundle. Always ≥1 entry (legacy single-reward codes are mapped in). */
   rewards: VoucherReward[];
   maxUses: number; // 0 = unlimited
+  /** How many times ONE user may redeem this code (default 1). */
+  perUserLimit: number;
+  /** When set, only these user IDs may redeem (targeted code). null = public. */
+  targetUserIds: string[] | null;
+  /** When set, the code only becomes redeemable at/after this time (scheduled). */
+  startsAt: string | null;
   expiresAt: string | null;
   enabled: boolean;
   createdAt: string;
   /** Derived from redemption_claims (admin display only). */
   usedCount: number;
+  /** Distinct users who redeemed (admin display only). */
+  uniqueUsers?: number;
 }
 
 export const VOUCHER_REWARD_LABELS: Record<VoucherRewardType, string> = {

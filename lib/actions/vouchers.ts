@@ -21,7 +21,8 @@ async function requireAdminUser() {
   return isAdmin(profile) ? user : null;
 }
 
-function rowToCode(r: Record<string, unknown>, usedCount: number): RedemptionCode {
+function rowToCode(r: Record<string, unknown>, usedCount: number, uniqueUsers?: number): RedemptionCode {
+  const targets = r.target_user_ids;
   return {
     code: r.code as string,
     label: (r.label as string | null) ?? null,
@@ -31,10 +32,14 @@ function rowToCode(r: Record<string, unknown>, usedCount: number): RedemptionCod
       abilityDurationHours: (r.ability_duration_hours as number) ?? 0,
     }),
     maxUses: (r.max_uses as number) ?? 0,
+    perUserLimit: (r.per_user_limit as number) ?? 1,
+    targetUserIds: Array.isArray(targets) && targets.length > 0 ? (targets as string[]) : null,
+    startsAt: (r.starts_at as string | null) ?? null,
     expiresAt: (r.expires_at as string | null) ?? null,
     enabled: (r.enabled as boolean) ?? true,
     createdAt: r.created_at as string,
     usedCount,
+    uniqueUsers,
   };
 }
 
@@ -54,48 +59,58 @@ export async function claimRedemptionCode(
   const { data: row } = await admin.from("redemption_codes").select("*").eq("code", code).maybeSingle();
   if (!row) return { success: false, error: "Ungültiger Code." };
   if (!(row.enabled as boolean)) return { success: false, error: "Dieser Code ist deaktiviert." };
+  if (row.starts_at && new Date(row.starts_at as string) > new Date()) {
+    return { success: false, error: "Dieser Code ist noch nicht aktiv." };
+  }
   if (row.expires_at && new Date(row.expires_at as string) < new Date()) {
     return { success: false, error: "Dieser Code ist abgelaufen." };
   }
 
-  // Already redeemed by this user? (also enforced by the UNIQUE constraint)
-  const { data: mine } = await admin
-    .from("redemption_claims").select("id").eq("code", code).eq("user_id", user.id).maybeSingle();
-  if (mine) return { success: false, error: "Du hast diesen Code bereits eingelöst." };
+  // Targeted code — only the listed users may redeem.
+  const targets = row.target_user_ids;
+  if (Array.isArray(targets) && targets.length > 0 && !targets.includes(user.id)) {
+    return { success: false, error: "Dieser Code ist nicht für dich bestimmt." };
+  }
+
+  const perUserLimit = Math.max(1, (row.per_user_limit as number) ?? 1);
+  // How often this user already redeemed it (per-user cap).
+  const { count: myCount } = await admin
+    .from("redemption_claims").select("*", { count: "exact", head: true }).eq("code", code).eq("user_id", user.id);
+  if ((myCount ?? 0) >= perUserLimit) {
+    return { success: false, error: perUserLimit === 1 ? "Du hast diesen Code bereits eingelöst." : "Du hast dein Einlöse-Limit für diesen Code erreicht." };
+  }
 
   const maxUses = (row.max_uses as number) ?? 0;
-  // Fast-path cap check (a definitive, race-safe re-check happens after insert).
+  // Fast-path total cap check (a definitive, race-safe re-check happens after insert).
   if (maxUses > 0) {
     const { count } = await admin
       .from("redemption_claims").select("*", { count: "exact", head: true }).eq("code", code);
     if ((count ?? 0) >= maxUses) return { success: false, error: "Dieser Code ist aufgebraucht." };
   }
 
-  // Reserve the claim FIRST (the UNIQUE(code,user_id) makes double-redeem impossible
-  // even under a double-click race). If this fails on conflict, they already claimed.
+  // Reserve the claim FIRST, then enforce BOTH caps race-safely by checking the row
+  // is within the earliest-N window (per-user and total). The count-then-insert TOCTOU
+  // can't over-issue: a loser under a concurrent race finds itself outside the window.
   const { data: claim, error: claimErr } = await admin
     .from("redemption_claims").insert({ code, user_id: user.id }).select("id").single();
   if (claimErr || !claim) {
-    return { success: false, error: "Du hast diesen Code bereits eingelöst." };
+    return { success: false, error: "Einlösen fehlgeschlagen. Bitte erneut versuchen." };
   }
+  const claimId = (claim as { id: string }).id;
 
-  // Race-safe cap enforcement: after reserving, keep only the earliest `maxUses`
-  // claims (deterministic by claimed_at,id). If two different users redeemed a
-  // limited code simultaneously, the later one finds itself outside the window
-  // and is rolled back — the count-then-insert TOCTOU can't over-issue.
-  if (maxUses > 0) {
-    const { data: earliest } = await admin
-      .from("redemption_claims")
-      .select("id")
-      .eq("code", code)
-      .order("claimed_at", { ascending: true })
-      .order("id", { ascending: true })
-      .limit(maxUses);
-    const within = (earliest ?? []).some((r) => (r as { id: string }).id === (claim as { id: string }).id);
-    if (!within) {
-      await admin.from("redemption_claims").delete().eq("id", (claim as { id: string }).id);
-      return { success: false, error: "Dieser Code ist aufgebraucht." };
-    }
+  const withinEarliest = async (limit: number, scopeUser: boolean): Promise<boolean> => {
+    let q = admin.from("redemption_claims").select("id").eq("code", code);
+    if (scopeUser) q = q.eq("user_id", user.id);
+    const { data } = await q.order("claimed_at", { ascending: true }).order("id", { ascending: true }).limit(limit);
+    return (data ?? []).some((r) => (r as { id: string }).id === claimId);
+  };
+  if (!(await withinEarliest(perUserLimit, true))) {
+    await admin.from("redemption_claims").delete().eq("id", claimId);
+    return { success: false, error: perUserLimit === 1 ? "Du hast diesen Code bereits eingelöst." : "Du hast dein Einlöse-Limit für diesen Code erreicht." };
+  }
+  if (maxUses > 0 && !(await withinEarliest(maxUses, false))) {
+    await admin.from("redemption_claims").delete().eq("id", claimId);
+    return { success: false, error: "Dieser Code ist aufgebraucht." };
   }
 
   // Grant the FULL bundle. Every reward must succeed; on any failure roll the
@@ -106,7 +121,7 @@ export async function claimRedemptionCode(
     abilityDurationHours: (row.ability_duration_hours as number) ?? 0,
   });
   if (rewards.length === 0) {
-    await admin.from("redemption_claims").delete().eq("code", code).eq("user_id", user.id);
+    await admin.from("redemption_claims").delete().eq("id", claimId);
     return { success: false, error: "Dieser Code hat keine Belohnungen." };
   }
 
@@ -114,14 +129,14 @@ export async function claimRedemptionCode(
   for (const r of rewards) {
     const grant = await grantVoucherReward(admin, user.id, r);
     if (!grant.ok) {
-      await admin.from("redemption_claims").delete().eq("code", code).eq("user_id", user.id);
+      await admin.from("redemption_claims").delete().eq("id", claimId);
       return { success: false, error: grant.error ?? "Belohnung konnte nicht vergeben werden." };
     }
     summaries.push(grant.summary);
   }
   const summary = summaries.join(" · ");
 
-  await admin.from("redemption_claims").update({ reward_summary: summary }).eq("code", code).eq("user_id", user.id);
+  await admin.from("redemption_claims").update({ reward_summary: summary }).eq("id", claimId);
 
   await notifyUser({
     userId: user.id,
@@ -211,10 +226,17 @@ export async function adminListRedemptionCodes(): Promise<RedemptionCode[]> {
   const admin = createAdminClient();
   const { data: codes } = await admin.from("redemption_codes").select("*").order("created_at", { ascending: false });
   if (!codes || codes.length === 0) return [];
-  const { data: claims } = await admin.from("redemption_claims").select("code");
+  const { data: claims } = await admin.from("redemption_claims").select("code, user_id");
   const counts = new Map<string, number>();
-  for (const c of (claims ?? []) as { code: string }[]) counts.set(c.code, (counts.get(c.code) ?? 0) + 1);
-  return (codes as Record<string, unknown>[]).map((r) => rowToCode(r, counts.get(r.code as string) ?? 0));
+  const users = new Map<string, Set<string>>();
+  for (const c of (claims ?? []) as { code: string; user_id: string }[]) {
+    counts.set(c.code, (counts.get(c.code) ?? 0) + 1);
+    if (!users.has(c.code)) users.set(c.code, new Set());
+    users.get(c.code)!.add(c.user_id);
+  }
+  return (codes as Record<string, unknown>[]).map((r) =>
+    rowToCode(r, counts.get(r.code as string) ?? 0, users.get(r.code as string)?.size ?? 0)
+  );
 }
 
 /** Validate + sanitise a reward bundle. Returns the cleaned rewards or an error. */
@@ -251,12 +273,29 @@ function bundleRow(rewards: VoucherReward[]): Record<string, unknown> {
   };
 }
 
-export async function adminCreateRedemptionCode(input: {
-  code: string;
+interface CodeSettings {
   label?: string;
-  rewards: VoucherReward[];
   maxUses?: number;
+  perUserLimit?: number;
+  targetUserIds?: string[] | null;
+  startsAt?: string | null;
   expiresAt?: string | null;
+}
+function settingsRow(s: CodeSettings): Record<string, unknown> {
+  const targets = Array.isArray(s.targetUserIds) && s.targetUserIds.length > 0 ? s.targetUserIds : null;
+  return {
+    label: s.label?.trim() || null,
+    max_uses: Math.max(0, Math.floor(s.maxUses ?? 0)),
+    per_user_limit: Math.max(1, Math.floor(s.perUserLimit ?? 1)),
+    target_user_ids: targets,
+    starts_at: s.startsAt || null,
+    expires_at: s.expiresAt || null,
+  };
+}
+
+export async function adminCreateRedemptionCode(input: CodeSettings & {
+  code: string;
+  rewards: VoucherReward[];
 }): Promise<{ success: boolean; error?: string }> {
   const adminUser = await requireAdminUser();
   if (!adminUser) return { success: false, error: "Kein Zugriff." };
@@ -272,10 +311,8 @@ export async function adminCreateRedemptionCode(input: {
   const admin = createAdminClient();
   const { error } = await admin.from("redemption_codes").insert({
     code,
-    label: input.label?.trim() || null,
+    ...settingsRow(input),
     ...bundleRow(bundle.rewards),
-    max_uses: Math.max(0, Math.floor(input.maxUses ?? 0)),
-    expires_at: input.expiresAt || null,
     created_by: adminUser.id,
   });
   if (error) {
@@ -288,12 +325,9 @@ export async function adminCreateRedemptionCode(input: {
 
 /** Full post-hoc edit of an existing code (label, bundle, limit, expiry, status).
  *  The code string itself is immutable — it's the redemption key claims reference. */
-export async function adminUpdateRedemptionCode(input: {
+export async function adminUpdateRedemptionCode(input: CodeSettings & {
   code: string;
-  label?: string;
   rewards: VoucherReward[];
-  maxUses?: number;
-  expiresAt?: string | null;
   enabled?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
   const adminUser = await requireAdminUser();
@@ -305,10 +339,8 @@ export async function adminUpdateRedemptionCode(input: {
 
   const admin = createAdminClient();
   const patch: Record<string, unknown> = {
-    label: input.label?.trim() || null,
+    ...settingsRow(input),
     ...bundleRow(bundle.rewards),
-    max_uses: Math.max(0, Math.floor(input.maxUses ?? 0)),
-    expires_at: input.expiresAt || null,
   };
   if (typeof input.enabled === "boolean") patch.enabled = input.enabled;
 
@@ -342,4 +374,135 @@ export async function adminDeleteRedemptionCode(
   if (error) return { success: false, error: error.message };
   revalidatePath("/admin");
   return { success: true };
+}
+
+// ─── Admin: direct grant (no code needed) ────────────────────────────────────
+
+/** Instantly apply a reward bundle to one or more players — no code, no redemption.
+ *  Each user is notified. Great for compensation, prizes, targeted gifts. */
+export async function adminGrantVoucherToUsers(input: {
+  userIds: string[];
+  rewards: VoucherReward[];
+  note?: string;
+}): Promise<{ success: boolean; error?: string; granted?: number }> {
+  const adminUser = await requireAdminUser();
+  if (!adminUser) return { success: false, error: "Kein Zugriff." };
+
+  const bundle = sanitizeBundle(input.rewards);
+  if ("error" in bundle) return { success: false, error: bundle.error };
+  const userIds = [...new Set((input.userIds ?? []).filter(Boolean))];
+  if (userIds.length === 0) return { success: false, error: "Keine Spieler ausgewählt." };
+
+  const admin = createAdminClient();
+  let granted = 0;
+  for (const userId of userIds) {
+    const summaries: string[] = [];
+    let ok = true;
+    for (const r of bundle.rewards) {
+      const g = await grantVoucherReward(admin, userId, r);
+      if (!g.ok) { ok = false; break; }
+      summaries.push(g.summary);
+    }
+    if (!ok) continue;
+    granted++;
+    const summary = summaries.join(" · ");
+    await notifyUser({
+      userId,
+      type: "admin_grant_item",
+      title: "🎁 Geschenk erhalten!",
+      message: input.note?.trim() ? `${input.note.trim()} — ${summary}` : summary,
+      link: "/garderobe",
+    });
+  }
+  void logActivity("voucher:grant", `Direkt-Vergabe an ${granted} Spieler`, { userId: adminUser.id, count: granted, rewards: bundle.rewards.length });
+  revalidatePath("/admin");
+  return { success: true, granted };
+}
+
+// ─── Admin: usage / claims management ────────────────────────────────────────
+
+export interface VoucherClaimRow {
+  id: string;
+  userId: string;
+  username: string;
+  claimedAt: string;
+  rewardSummary: string | null;
+}
+
+/** Who redeemed a code, when, and what they got. */
+export async function adminGetCodeClaims(code: string): Promise<VoucherClaimRow[]> {
+  const adminUser = await requireAdminUser();
+  if (!adminUser) return [];
+  const admin = createAdminClient();
+  const { data: claims } = await admin
+    .from("redemption_claims")
+    .select("id, user_id, claimed_at, reward_summary")
+    .eq("code", normalizeCode(code))
+    .order("claimed_at", { ascending: false });
+  if (!claims || claims.length === 0) return [];
+  const ids = [...new Set(claims.map((c) => c.user_id as string))];
+  const { data: profs } = await admin.from("profiles").select("id, username").in("id", ids);
+  const names = new Map((profs ?? []).map((p) => [p.id as string, p.username as string]));
+  return claims.map((c) => ({
+    id: c.id as string,
+    userId: c.user_id as string,
+    username: names.get(c.user_id as string) ?? "Unbekannt",
+    claimedAt: c.claimed_at as string,
+    rewardSummary: (c.reward_summary as string | null) ?? null,
+  }));
+}
+
+/** Remove a user's claim(s) for a code so they can redeem it again. */
+export async function adminResetUserClaim(code: string, userId: string): Promise<{ success: boolean; error?: string }> {
+  const adminUser = await requireAdminUser();
+  if (!adminUser) return { success: false, error: "Kein Zugriff." };
+  const admin = createAdminClient();
+  const { error } = await admin.from("redemption_claims").delete().eq("code", normalizeCode(code)).eq("user_id", userId);
+  if (error) return { success: false, error: error.message };
+  void logActivity("voucher:reset_claim", `Einlösung zurückgesetzt: ${code}`, { userId: adminUser.id, code, target: userId });
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+// ─── Admin: bulk code generation ─────────────────────────────────────────────
+
+/** Generate N unique random codes that all share the same bundle + settings —
+ *  perfect for giveaways where each winner gets a single-use one-of-a-kind code. */
+export async function adminBulkCreateCodes(input: CodeSettings & {
+  prefix: string;
+  count: number;
+  rewards: VoucherReward[];
+}): Promise<{ success: boolean; error?: string; codes?: string[] }> {
+  const adminUser = await requireAdminUser();
+  if (!adminUser) return { success: false, error: "Kein Zugriff." };
+
+  const bundle = sanitizeBundle(input.rewards);
+  if ("error" in bundle) return { success: false, error: bundle.error };
+
+  const count = Math.max(1, Math.min(200, Math.floor(input.count)));
+  const prefix = normalizeCode(input.prefix || "GIFT").slice(0, 16);
+  if (!/^[A-Z0-9-]*$/.test(prefix)) return { success: false, error: "Präfix nur A–Z, 0–9, Bindestrich." };
+
+  const ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I
+  const admin = createAdminClient();
+  const settings = settingsRow(input);
+  const bRow = bundleRow(bundle.rewards);
+  const created: string[] = [];
+  for (let i = 0; i < count; i++) {
+    let inserted = false;
+    for (let attempt = 0; attempt < 6 && !inserted; attempt++) {
+      let suffix = "";
+      for (let k = 0; k < 6; k++) suffix += ALPHA[Math.floor(Math.random() * ALPHA.length)];
+      const code = normalizeCode(`${prefix ? prefix + "-" : ""}${suffix}`).slice(0, 32);
+      const { error } = await admin.from("redemption_codes").insert({
+        code, ...settings, ...bRow, created_by: adminUser.id,
+      });
+      if (!error) { created.push(code); inserted = true; }
+      else if (error.code !== "23505") break; // non-duplicate error → stop trying this one
+    }
+  }
+  if (created.length === 0) return { success: false, error: "Konnte keine Codes erzeugen." };
+  void logActivity("voucher:bulk", `${created.length} Bulk-Codes erstellt`, { userId: adminUser.id, count: created.length });
+  revalidatePath("/admin");
+  return { success: true, codes: created };
 }
