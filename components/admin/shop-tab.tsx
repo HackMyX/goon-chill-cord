@@ -320,28 +320,39 @@ function AddListingForm({
   items: ItemRow[];
   onAdded: () => void;
 }) {
+  type LType = "item" | "ability" | "name_style" | "badge" | "voucher";
+  const [listingType, setListingType] = useState<LType>("item");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ItemRow | null>(null);
+  const [keyVal, setKeyVal] = useState("");
+  const [badgeText, setBadgeText] = useState("");
+  const [voucherKind, setVoucherKind] = useState<"case" | "game_bonus">("case");
+  const [voucherRarity, setVoucherRarity] = useState("selten");
+  const [voucherGame, setVoucherGame] = useState<"plinko" | "snake" | "don">("plinko");
+  const [voucherAmount, setVoucherAmount] = useState(3);
   const [priceCr, setPriceCr] = useState(500);
   const [open, setOpen] = useState(false);
   const sound = useSoundManager();
 
   const filtered = items.filter((i) => i.name.toLowerCase().includes(query.toLowerCase())).slice(0, 30);
+  const KEY_PLACEHOLDER: Record<string, string> = { ability: "ability_key", name_style: "style_key", badge: "badge_key" };
+  const canAdd = listingType === "item" ? !!selected : listingType === "voucher" ? true : keyVal.trim().length > 0;
 
   async function handleAdd() {
-    if (!selected) return;
+    if (!canAdd) return;
     sound.click();
-    const res = await addManualShopListing({
-      dateOffsetDays,
-      itemId: selected.id,
-      priceCr,
-      purchaseLimit: 1,
-      featured: false,
-    });
+    const input: Parameters<typeof addManualShopListing>[0] = { dateOffsetDays, priceCr, purchaseLimit: 1, featured: false, listingType };
+    if (listingType === "item") input.itemId = selected!.id;
+    else if (listingType === "ability") input.abilityKey = keyVal.trim();
+    else if (listingType === "name_style") input.nameStyleKey = keyVal.trim();
+    else if (listingType === "badge") { input.badgeKey = keyVal.trim(); input.badgeText = badgeText.trim() || undefined; }
+    else input.voucherConfig = voucherKind === "game_bonus"
+      ? { kind: "game_bonus", game: voucherGame, amount: voucherAmount, durationHours: 0 }
+      : { kind: "case", mode: "rarity", rarityFloor: voucherRarity };
+    const res = await addManualShopListing(input);
     if (res.success) {
       sound.win();
-      setSelected(null);
-      setQuery("");
+      setSelected(null); setQuery(""); setKeyVal(""); setBadgeText("");
       onAdded();
     } else {
       sound.error();
@@ -351,39 +362,84 @@ function AddListingForm({
   return (
     <div className="rounded-lg border border-dashed border-white/15 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+        <select
+          value={listingType}
+          onChange={(e) => { setListingType(e.target.value as LType); setSelected(null); setKeyVal(""); }}
+          className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+        >
+          <option value="item">Item</option>
+          <option value="ability">Fähigkeit</option>
+          <option value="name_style">Name-Style</option>
+          <option value="badge">Badge</option>
+          <option value="voucher">Gutschein</option>
+        </select>
+
+        {listingType === "item" && (
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+            <input
+              value={selected ? selected.name : query}
+              onChange={(e) => { setSelected(null); setQuery(e.target.value); setOpen(true); }}
+              onFocus={() => setOpen(true)}
+              placeholder="Item suchen..."
+              className="w-full rounded-lg border border-white/10 bg-black/30 py-1.5 pl-8 pr-3 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+            />
+            {open && !selected && query && (
+              <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-white/10 bg-[#0b0814] shadow-lg">
+                {filtered.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => { setSelected(item); setPriceCr(Math.max(50, item.price_cr * 4)); setOpen(false); }}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-zinc-300 hover:bg-purple-500/10"
+                  >
+                    <span className="truncate">{item.name}</span>
+                    <RarityBadge rarity={item.rarity} />
+                  </button>
+                ))}
+                {filtered.length === 0 && <p className="px-3 py-2 text-xs text-zinc-500">Keine Treffer.</p>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {(listingType === "ability" || listingType === "name_style" || listingType === "badge") && (
           <input
-            value={selected ? selected.name : query}
-            onChange={(e) => {
-              setSelected(null);
-              setQuery(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            placeholder="Item suchen..."
-            className="w-full rounded-lg border border-white/10 bg-black/30 py-1.5 pl-8 pr-3 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+            value={keyVal}
+            onChange={(e) => setKeyVal(e.target.value)}
+            placeholder={KEY_PLACEHOLDER[listingType]}
+            className="flex-1 min-w-[160px] rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
           />
-          {open && !selected && query && (
-            <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-white/10 bg-[#0b0814] shadow-lg">
-              {filtered.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setSelected(item);
-                    setPriceCr(Math.max(50, item.price_cr * 4));
-                    setOpen(false);
-                  }}
-                  className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-zinc-300 hover:bg-purple-500/10"
-                >
-                  <span className="truncate">{item.name}</span>
-                  <RarityBadge rarity={item.rarity} />
-                </button>
-              ))}
-              {filtered.length === 0 && <p className="px-3 py-2 text-xs text-zinc-500">Keine Treffer.</p>}
-            </div>
-          )}
-        </div>
+        )}
+        {listingType === "badge" && (
+          <input
+            value={badgeText}
+            onChange={(e) => setBadgeText(e.target.value)}
+            placeholder="Badge-Text (optional)"
+            className="w-40 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+          />
+        )}
+
+        {listingType === "voucher" && (
+          <>
+            <select value={voucherKind} onChange={(e) => setVoucherKind(e.target.value as "case" | "game_bonus")} className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60">
+              <option value="case">Gratis-Case</option>
+              <option value="game_bonus">Spiel-Bonus</option>
+            </select>
+            {voucherKind === "case" ? (
+              <select value={voucherRarity} onChange={(e) => setVoucherRarity(e.target.value)} className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60">
+                <option value="normal">Normal</option><option value="selten">Selten</option><option value="mythisch">Mythisch</option><option value="ultra">Ultra</option>
+              </select>
+            ) : (
+              <>
+                <select value={voucherGame} onChange={(e) => setVoucherGame(e.target.value as "plinko" | "snake" | "don")} className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60">
+                  <option value="plinko">Plinko</option><option value="snake">Snake</option><option value="don">DON</option>
+                </select>
+                <input type="number" min={1} value={voucherAmount} onChange={(e) => setVoucherAmount(Number(e.target.value))} placeholder="Züge" className="w-20 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60" />
+              </>
+            )}
+          </>
+        )}
+
         <input
           type="number"
           min={1}
@@ -394,7 +450,7 @@ function AddListingForm({
         <button
           onMouseEnter={sound.hover}
           onClick={handleAdd}
-          disabled={!selected}
+          disabled={!canAdd}
           className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-50"
         >
           <Plus className="h-4 w-4" />

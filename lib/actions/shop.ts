@@ -896,6 +896,8 @@ export async function purchaseShopItem(listingId: string): Promise<ShopPurchaseR
 
 export interface AdminShopListing extends ShopListingEntry {
   shopDate: string;
+  /** 'item' | 'ability' | 'name_style' | 'badge' | 'voucher' */
+  listingType: string;
 }
 
 async function requireAdmin(): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -922,77 +924,93 @@ export async function getAdminShopListings(dateOffsetDays: number): Promise<Admi
   const dateKey = shopDateKey(date);
 
   const admin = createAdminClient();
-  const withDamage = await admin
+  const { data: rawRows } = await admin
     .from("shop_listings")
-    .select(
-      "id, item_id, price_cr, purchase_limit, featured, source, category_id, shop_date, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)"
-    )
+    .select("id, item_id, listing_type, ability_key, name_style_key, badge_key, badge_text, voucher_config, price_cr, purchase_limit, featured, source, category_id, shop_date, item:items(id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec)")
     .eq("shop_date", dateKey)
     .order("featured", { ascending: false });
-  let data: { id: string; item_id: string; price_cr: number; purchase_limit: number; featured: boolean; source: string; category_id: string | null; shop_date: string; item: unknown }[] | null =
-    withDamage.data;
-  if (withDamage.error) {
-    const retry = await admin
-      .from("shop_listings")
-      .select("id, item_id, price_cr, purchase_limit, featured, source, shop_date, item:items(id, name, rarity, type)")
-      .eq("shop_date", dateKey)
-      .order("featured", { ascending: false });
-    data = (retry.data ?? []).map((row) => ({
-      ...row,
-      category_id: null,
-      item: row.item ? { ...row.item, damage: null, armor: null, perk_type: null, perk_magnitude: null, shield_hp: null, shield_regen_cooldown_sec: null } : null,
-    }));
-  }
+  const rows = (rawRows ?? []) as Record<string, unknown>[];
 
-  const categoryIds = Array.from(new Set((data ?? []).map((l) => l.category_id).filter((id): id is string => !!id)));
+  const categoryIds = Array.from(new Set(rows.map((l) => l.category_id as string | null).filter((id): id is string => !!id)));
   const { data: categoryRows } =
     categoryIds.length > 0
       ? await admin.from("shop_categories").select("id, name, icon, color, sort_order").in("id", categoryIds)
       : { data: [] as { id: string; name: string; icon: string; color: string; sort_order: number }[] };
   const categoryMeta = new Map((categoryRows ?? []).map((c: { id: string; name: string; icon: string; color: string; sort_order: number }) => [c.id, c]));
 
-  return (data ?? [])
-    .filter((l) => l.item)
-    .map((l) => {
-      const item = l.item as unknown as {
-        id: string; name: string; rarity: Rarity; type: string;
-        damage: number | null; armor: number | null;
-        perk_type: string | null; perk_magnitude: number | null;
-        shield_hp: number | null; shield_regen_cooldown_sec: number | null;
-      };
-      return {
-        id: l.id,
-        itemId: item.id,
-        itemName: item.name,
-        itemRarity: item.rarity,
-        itemType: item.type,
-        itemDamage: item.damage ?? null,
-        itemArmor: item.armor ?? null,
-        itemPerkType: item.perk_type ?? null,
-        itemPerkMagnitude: item.perk_magnitude ?? null,
-        itemShieldHp: item.shield_hp ?? null,
-        itemShieldCooldown: item.shield_regen_cooldown_sec ?? null,
-        priceCr: l.price_cr,
-        purchaseLimit: l.purchase_limit,
-        featured: l.featured,
-        source: l.source as "manual" | "auto",
-        purchasedByMe: 0,
-        categoryId: l.category_id,
-        categoryName: l.category_id ? categoryMeta.get(l.category_id)?.name ?? null : null,
-        categoryIcon: l.category_id ? categoryMeta.get(l.category_id)?.icon ?? null : null,
-        categoryColor: l.category_id ? categoryMeta.get(l.category_id)?.color ?? null : null,
-        categorySortOrder: l.category_id ? categoryMeta.get(l.category_id)?.sort_order ?? 999 : 999,
-        shopDate: l.shop_date,
-      };
-    });
+  // Labels für Nicht-Item-Listings auflösen (damit der Admin sie sieht + entfernen kann).
+  const abilityKeys = [...new Set(rows.filter((r) => r.listing_type === "ability" && r.ability_key).map((r) => r.ability_key as string))];
+  const styleKeys = [...new Set(rows.filter((r) => r.listing_type === "name_style" && r.name_style_key).map((r) => r.name_style_key as string))];
+  const badgeKeys = [...new Set(rows.filter((r) => r.listing_type === "badge" && r.badge_key).map((r) => r.badge_key as string))];
+  const [ab, st, ba] = await Promise.all([
+    abilityKeys.length ? admin.from("ability_definitions").select("key, name, rarity").in("key", abilityKeys) : Promise.resolve({ data: [] }),
+    styleKeys.length ? admin.from("name_styles").select("key, label, rarity").in("key", styleKeys) : Promise.resolve({ data: [] }),
+    badgeKeys.length ? admin.from("badge_definitions").select("key, label").in("key", badgeKeys) : Promise.resolve({ data: [] }),
+  ]);
+  const toMap = (d: unknown) => new Map(((d ?? []) as Record<string, unknown>[]).map((r) => [r.key as string, r]));
+  const abMap = toMap(ab.data); const stMap = toMap(st.data); const baMap = toMap(ba.data);
+
+  const catFields = (categoryId: string | null) => ({
+    categoryId,
+    categoryName: categoryId ? categoryMeta.get(categoryId)?.name ?? null : null,
+    categoryIcon: categoryId ? categoryMeta.get(categoryId)?.icon ?? null : null,
+    categoryColor: categoryId ? categoryMeta.get(categoryId)?.color ?? null : null,
+    categorySortOrder: categoryId ? categoryMeta.get(categoryId)?.sort_order ?? 999 : 999,
+  });
+
+  const out: AdminShopListing[] = [];
+  for (const l of rows) {
+    const lt = (l.listing_type as string) ?? "item";
+    const base = {
+      id: l.id as string,
+      priceCr: l.price_cr as number,
+      purchaseLimit: l.purchase_limit as number,
+      featured: l.featured as boolean,
+      source: l.source as "manual" | "auto",
+      purchasedByMe: 0,
+      shopDate: l.shop_date as string,
+      listingType: lt,
+      itemDamage: null, itemArmor: null, itemPerkType: null, itemPerkMagnitude: null, itemShieldHp: null, itemShieldCooldown: null,
+      ...catFields((l.category_id as string | null) ?? null),
+    };
+    if (lt === "item") {
+      const item = l.item as Record<string, unknown> | null;
+      if (!item) continue; // verwaistes Item-Listing
+      out.push({ ...base, itemId: item.id as string, itemName: item.name as string, itemRarity: item.rarity as Rarity, itemType: item.type as string,
+        itemDamage: (item.damage as number | null) ?? null, itemArmor: (item.armor as number | null) ?? null, itemPerkType: (item.perk_type as string | null) ?? null,
+        itemPerkMagnitude: (item.perk_magnitude as number | null) ?? null, itemShieldHp: (item.shield_hp as number | null) ?? null, itemShieldCooldown: (item.shield_regen_cooldown_sec as number | null) ?? null });
+    } else if (lt === "ability") {
+      const d = abMap.get(l.ability_key as string);
+      out.push({ ...base, itemId: "", itemName: `Fähigkeit: ${(d?.name as string) ?? l.ability_key}`, itemRarity: ((d?.rarity as Rarity) ?? "selten"), itemType: "ability" });
+    } else if (lt === "name_style") {
+      const d = stMap.get(l.name_style_key as string);
+      out.push({ ...base, itemId: "", itemName: `Name-Style: ${(d?.label as string) ?? l.name_style_key}`, itemRarity: ((d?.rarity as Rarity) ?? "selten"), itemType: "name_style" });
+    } else if (lt === "badge") {
+      const d = baMap.get(l.badge_key as string);
+      out.push({ ...base, itemId: "", itemName: `Badge: ${(l.badge_text as string) || (d?.label as string) || (l.badge_key as string)}`, itemRarity: "selten", itemType: "badge" });
+    } else if (lt === "voucher") {
+      const vc = (l.voucher_config ?? {}) as Record<string, unknown>;
+      const isBonus = vc.kind === "game_bonus";
+      const label = isBonus ? `Gutschein: +${vc.amount ?? 0} ${vc.game ?? "Spiel"}` : `Gutschein: Gratis-Case (${vc.rarityFloor ?? "?"})`;
+      out.push({ ...base, itemId: "", itemName: label, itemRarity: "selten", itemType: "voucher" });
+    }
+  }
+  return out;
 }
 
 export async function addManualShopListing(input: {
   dateOffsetDays: number;
-  itemId: string;
   priceCr: number;
   purchaseLimit: number;
   featured: boolean;
+  /** Default 'item' (rückwärtskompatibel). Sonst Fähigkeit/Name-Style/Badge/Gutschein. */
+  listingType?: ShopContentType;
+  itemId?: string;
+  abilityKey?: string;
+  nameStyleKey?: string;
+  badgeKey?: string;
+  badgeText?: string;
+  voucherConfig?: Record<string, unknown>;
 }): Promise<{ success: boolean; error?: string }> {
   const auth = await requireAdmin();
   if (!auth.ok) return { success: false, error: auth.error };
@@ -1001,27 +1019,49 @@ export async function addManualShopListing(input: {
     return { success: false, error: "Ungültiger Preis." };
   }
 
-  const date = new Date();
-  date.setUTCDate(date.getUTCDate() + input.dateOffsetDays);
-  const dateKey = shopDateKey(date);
-
-  const admin = createAdminClient();
-  const { error } = await admin.from("shop_listings").insert({
-    shop_date: dateKey,
-    item_id: input.itemId,
+  const lt = input.listingType ?? "item";
+  const row: Record<string, unknown> = {
     price_cr: Math.floor(input.priceCr),
     purchase_limit: Math.max(1, Math.floor(input.purchaseLimit)),
     featured: input.featured,
     source: "manual",
-  });
+    listing_type: lt,
+  };
+  let labelForLog = "";
+  if (lt === "item") {
+    if (!input.itemId) return { success: false, error: "Kein Item gewählt." };
+    row.item_id = input.itemId; labelForLog = `Item ${input.itemId}`;
+  } else if (lt === "ability") {
+    if (!input.abilityKey) return { success: false, error: "Keine Fähigkeit gewählt." };
+    row.ability_key = input.abilityKey; labelForLog = `Fähigkeit ${input.abilityKey}`;
+  } else if (lt === "name_style") {
+    if (!input.nameStyleKey) return { success: false, error: "Kein Name-Style gewählt." };
+    row.name_style_key = input.nameStyleKey; labelForLog = `Name-Style ${input.nameStyleKey}`;
+  } else if (lt === "badge") {
+    if (!input.badgeKey) return { success: false, error: "Kein Badge gewählt." };
+    row.badge_key = input.badgeKey; row.badge_text = input.badgeText ?? null; labelForLog = `Badge ${input.badgeKey}`;
+  } else if (lt === "voucher") {
+    if (!input.voucherConfig || !input.voucherConfig.kind) return { success: false, error: "Gutschein-Konfiguration fehlt." };
+    row.voucher_config = input.voucherConfig; labelForLog = `Gutschein ${String(input.voucherConfig.kind)}`;
+  } else {
+    return { success: false, error: "Unbekannter Listing-Typ." };
+  }
+
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + input.dateOffsetDays);
+  const dateKey = shopDateKey(date);
+  row.shop_date = dateKey;
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("shop_listings").insert(row);
 
   if (error) {
-    void logDebugEvent({ level: "error", scope: "admin:shop", message: "Shop-Listing Hinzufügen fehlgeschlagen", detail: error.message, context: { itemId: input.itemId, dateKey } });
+    void logDebugEvent({ level: "error", scope: "admin:shop", message: "Shop-Listing Hinzufügen fehlgeschlagen", detail: error.message, context: { listingType: lt, dateKey } });
     logServerError("Shop", "addManualShopListing failed", error.message);
     return { success: false, error: "Hinzufügen fehlgeschlagen." };
   }
 
-  void logActivity("admin:shop", `Manuelles Shop-Listing hinzugefügt: Item ${input.itemId} für ${input.priceCr} CR am ${dateKey}`, { itemId: input.itemId, priceCr: input.priceCr, dateKey });
+  void logActivity("admin:shop", `Manuelles Shop-Listing hinzugefügt: ${labelForLog} für ${input.priceCr} CR am ${dateKey}`, { listingType: lt, priceCr: input.priceCr, dateKey });
   revalidatePath("/admin");
   revalidatePath("/shop");
   return { success: true };
