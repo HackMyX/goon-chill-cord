@@ -121,12 +121,14 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
         winRef.current = [lo, hi];
         setWin([lo, hi]);
       }
-      // Draw window: a slot is drawn only while it is FULLY inside the box, so
-      // NOTHING ever overhangs the reel edges. That means no outer side bands are
-      // needed → no black bars against the page gradient. The wide inner edge
-      // masks fade the edge slot so the in/out is soft, not a hard pop.
-      const dLo = Math.ceil(-val / STEP);
-      const dHi = Math.floor((containerWidth - ITEM_WIDTH - val) / STEP);
+      // Draw window: a slot is drawn while it is inside the box EXPANDED by a
+      // ~half-slot overhang on each side, so its 3D appears ~a slot-distance
+      // earlier as it slides in and lingers ~a slot-distance longer as it slides
+      // out (instead of only while 100% inside). The bit that pokes past the reel
+      // edge is hidden by the soft side fades below — a gradient vignette.
+      const over = ITEM_WIDTH * 0.6;
+      const dLo = Math.ceil((-over - val) / STEP);
+      const dHi = Math.floor((containerWidth + over - ITEM_WIDTH - val) / STEP);
       const prevD = winDrawRef.current;
       if (prevD[0] !== dLo || prevD[1] !== dHi) {
         winDrawRef.current = [dLo, dHi];
@@ -260,9 +262,18 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
 
   return (
     <div className="relative w-full" style={{ height: REEL_HEIGHT }}>
-      {/* No outer side bands: full-containment culling means the 3D never reaches
-          past the reel edges, so there is nothing to mask outside the box → the
-          page gradient shows through cleanly with no black bars. */}
+      {/* Soft side fades just OUTSIDE the reel box that swallow the bit of an
+          edge item poking past the box while it slides in/out. Mostly transparent
+          and only opaque right next to the box, so they read as a gentle vignette
+          fading into the page — not a hard black bar. */}
+      <div
+        className="pointer-events-none absolute top-0 bottom-0 z-[45]"
+        style={{ right: "100%", width: ITEM_WIDTH * 0.72, background: "linear-gradient(to right, transparent 0%, rgba(8,6,15,0.9) 58%, #08060f 100%)" }}
+      />
+      <div
+        className="pointer-events-none absolute top-0 bottom-0 z-[45]"
+        style={{ left: "100%", width: ITEM_WIDTH * 0.72, background: "linear-gradient(to left, transparent 0%, rgba(8,6,15,0.9) 58%, #08060f 100%)" }}
+      />
       <div
         ref={containerRef}
         className={`relative h-full w-full overflow-hidden rounded-2xl bg-black/20 ${justLanded ? "animate-case-shake" : ""}`}
@@ -275,17 +286,16 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
         <div className="pointer-events-none absolute -top-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[9px] border-t-[12px] border-x-transparent border-t-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.85)]" />
         <div className="pointer-events-none absolute -bottom-[2px] left-1/2 z-[60] h-0 w-0 -translate-x-1/2 border-x-[9px] border-b-[12px] border-x-transparent border-b-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.85)]" />
 
-        {/* edge masks — sit ABOVE the canvas (z-58) and span a FULL item width so
-            the slot that pops in/out right at the boundary is already faded to
-            near-nothing as it enters/leaves: a soft vignette, never a hard pop.
-            Fades into the page (transparent) toward the centre. */}
+        {/* inner edge fades (z-58) — a LIGHT vignette right at the box boundary so
+            an entering/leaving item melts in/out softly. Kept narrow + gentle so
+            items one slot in from the edge stay bright and clearly visible. */}
         <div
           className="pointer-events-none absolute inset-y-0 left-0 z-[58]"
-          style={{ width: ITEM_WIDTH + 16, background: "linear-gradient(to right, #08060f 0%, rgba(8,6,15,0.85) 38%, transparent 100%)" }}
+          style={{ width: ITEM_WIDTH * 0.55, background: "linear-gradient(to right, #08060f 0%, rgba(8,6,15,0.5) 45%, transparent 100%)" }}
         />
         <div
           className="pointer-events-none absolute inset-y-0 right-0 z-[58]"
-          style={{ width: ITEM_WIDTH + 16, background: "linear-gradient(to left, #08060f 0%, rgba(8,6,15,0.85) 38%, transparent 100%)" }}
+          style={{ width: ITEM_WIDTH * 0.55, background: "linear-gradient(to left, #08060f 0%, rgba(8,6,15,0.5) 45%, transparent 100%)" }}
         />
 
         {warmup && (
