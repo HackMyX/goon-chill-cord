@@ -8,16 +8,10 @@ import { createClient } from "@/lib/supabase/client";
 import { MusicSynth } from "@/lib/music-synth";
 import { resolvePageVolume, resolveTrackId, clampVolume, type MusicConfig, type MusicPageKey } from "@/lib/music-config";
 import { setMusicVolume, setMusicMuted, subscribeClientSettings } from "@/lib/client-settings";
-import { subscribeMusicIntensity, getMusicIntensity, getMusicMode, subscribeMusicMode, getMusicTempoBoost, subscribeMusicTempoBoost } from "@/lib/music-dynamics";
+import { getMusicMode, subscribeMusicMode, getMusicTempoMult, subscribeMusicTempoMult } from "@/lib/music-dynamics";
 
 const LS_VOL   = "gn_music_vol";
 const LS_MUTED = "gn_music_muted";
-
-/** Map a 0–1 game intensity to a playback-tempo multiplier. `boost` is the max
- *  acceleration at full intensity (0.45 = +45%, set per game mode). */
-function intensityToMult(level: number, boost: number): number {
-  return 1 + Math.max(0, Math.min(1, level)) * Math.max(0, boost);
-}
 
 function getPageKey(pathname: string): MusicPageKey {
   if (pathname.startsWith("/snake"))      return "snake";
@@ -46,7 +40,9 @@ export function MusicPlayer() {
   // ── File-based audio (non-synth:// tracks) ─────────────────────────────────
   const audioRef       = useRef<HTMLAudioElement | null>(null);
   const fadeRef        = useRef<ReturnType<typeof setInterval> | null>(null);
-  const tempoBoostRef  = useRef(getMusicTempoBoost());
+  // Current absolute tempo multiplier (1 = normal). Mirrors the music-dynamics
+  // channel; a game steps it on events and we hold it until the next event.
+  const tempoMultRef   = useRef(getMusicTempoMult());
 
   // ── Synth tracks ────────────────────────────────────────────────────────────
   const synthRef       = useRef<MusicSynth | null>(null);
@@ -56,6 +52,13 @@ export function MusicPlayer() {
   const activeIsSynth  = useRef(false);
   const interactedRef  = useRef(false);
   const pendingUrlRef  = useRef<string | null>(null);
+  // Monotonic transition counter. Every (re)start of a track bumps it; a
+  // deferred loadAndPlay scheduled behind a fade-out only fires if it is still
+  // the latest transition. Without this, two near-simultaneous applyRoute()
+  // calls (route change + mode change + config reload can all land at once)
+  // each queue their own loadAndPlay behind the same fade-out → two tracks
+  // start at once. The token collapses concurrent transitions to "latest wins".
+  const transitionSeqRef = useRef(0);
   // User's manually-chosen volume (null = never set). Only honored when the
   // admin allows users to adjust volume; ignored in dictator mode.
   const userOverrideRef = useRef<number | null>(null);
@@ -185,7 +188,7 @@ export function MusicPlayer() {
 
       const targetVol = mutedRef.current ? 0 : volumeRef.current;
       synthRef.current?.start(url, targetVol, cfg.fadesEnabled ? cfg.fadeInMs : 0).then(() => {
-        synthRef.current?.setTempo(intensityToMult(getMusicIntensity(), tempoBoostRef.current));
+        synthRef.current?.setTempo(getMusicTempoMult());
         setIsPlaying(true);
       }).catch(() => {
         pendingUrlRef.current = url;
@@ -213,7 +216,7 @@ export function MusicPlayer() {
       audio.volume = 0;
       audio.play()
         .then(() => {
-          audio.playbackRate = intensityToMult(getMusicIntensity(), tempoBoostRef.current);
+          audio.playbackRate = getMusicTempoMult();
           fadeIn(audio, mutedRef.current ? 0 : volumeRef.current, cfg.fadesEnabled ? cfg.fadeInMs : 0);
           setIsPlaying(true);
         })
@@ -294,8 +297,15 @@ export function MusicPlayer() {
       if (stillPlaying) return;
     }
 
+    // Claim this transition. A fade-out can take hundreds of ms, during which
+    // another applyRoute() may run; only the latest transition's deferred
+    // loadAndPlay is allowed to actually start a track (latest wins, no overlap).
+    const seq = ++transitionSeqRef.current;
     if (activeUrlRef.current && activeUrlRef.current !== track.url) {
-      stopCurrent(cfg.fadesEnabled ? cfg.fadeOutMs : 0, () => loadAndPlay(track.url));
+      stopCurrent(cfg.fadesEnabled ? cfg.fadeOutMs : 0, () => {
+        if (seq !== transitionSeqRef.current) return; // superseded by a newer transition
+        loadAndPlay(track.url);
+      });
     } else {
       loadAndPlay(track.url);
     }
@@ -355,10 +365,11 @@ export function MusicPlayer() {
     }
   }, [volume, muted]);
 
-  // ── Dynamic tempo: a game (Snake) pushes live intensity → speed up the music.
-  //    Applies to both the synth (per-bar) and file audio (instant playbackRate).
-  const applyTempo = useCallback((level: number) => {
-    const mult = intensityToMult(level, tempoBoostRef.current);
+  // ── Dynamic tempo: a game (Snake) steps an absolute multiplier on events and
+  //    holds it. We apply it to the synth (takes effect at its next bar — smooth)
+  //    and to file audio (instant playbackRate). No decay, no settle-back: the
+  //    value stays put until the next event pushes a new one.
+  const applyTempo = useCallback((mult: number) => {
     if (activeIsSynth.current) {
       synthRef.current?.setTempo(mult);
     } else {
@@ -367,10 +378,7 @@ export function MusicPlayer() {
     }
   }, []);
 
-  useEffect(() => subscribeMusicIntensity(applyTempo), [applyTempo]);
-  // The active game can change the MAX tempo boost per mode (e.g. Snake Turbo is
-  // wilder than Classic) → re-apply the current intensity with the new ceiling.
-  useEffect(() => subscribeMusicTempoBoost((b) => { tempoBoostRef.current = b; applyTempo(getMusicIntensity()); }), [applyTempo]);
+  useEffect(() => subscribeMusicTempoMult((m) => { tempoMultRef.current = m; applyTempo(m); }), [applyTempo]);
 
   // Re-resolve the current page's track whenever the active game mode changes,
   // so a per-mode track override switches in live (e.g. Snake Classic → Turbo).

@@ -259,6 +259,9 @@ Karten), Welt-Modelle. Animationen: framer-motion + globals.css keyframes (`bonu
 - **Client-Komponente braucht eine Konstante aus server-only-Code** → Konstante in ein client-sicheres
   Modul auslagern + re-exportieren (NIE aus rewards-grant importieren).
 - **Neue Notification** → notifyUser + sinnvoller `link` (echte Route!) + ggf. Toggle in prefs-section.
+- **Neuer Sound (SFX)** → `FxSound`-Union + `DEFAULT_FX_SRC`/`DEFAULT_FX_VOL` (`lib/sound-manager.ts`) + Methode im
+  `useSoundManager`-Export + Aufruf am Event. **Neue BGM-Tempo-Quelle** → `setMusicTempoMult()` NUR auf
+  Events (siehe §19).
 
 ---
 
@@ -281,3 +284,39 @@ Funktionsketten geschlossen: Gutschein **konfigurieren → vergeben/gewinnen →
 Gutschein" abgeschlossen (Codes raus, Fähigkeits-Framing, eine Rubrik, Auto-Seltenheit/RGB,
 editierbare Stufen). Logging vollständig (Abdeckung/Gruppierung/24h-Retention/Cron/Mod-Recht).
 Detail-Historie der Sessions: siehe Memory `project_goon_chill.md` (KI-Memory, nicht im Repo).
+
+---
+
+## 19. Audio — BGM + SFX (Zero-Overlap & gestuftes Tempo)
+
+Zwei **vollständig getrennte** Audio-Wege, die sich nie gegenseitig wegdrücken:
+
+### SFX (Soundeffekte) — `lib/sound-manager.ts`
+- Client-Singleton `useSoundManager()`. **Interrupt-Kanäle** (`tick`/`hover`/`hit`) = je EIN
+  wiederverwendetes `<audio>`, restart-on-call, nie gequeuet. **Alle anderen** FX laufen durch eine
+  FIFO-Queue (`play()`), damit sich zwei Effekte nie überlappen. Datei/Volume pro Event aus
+  `DEFAULT_FX_SRC`/`DEFAULT_FX_VOL`, override via `SoundConfig` (Admin „Sound Manager"-Tab).
+- **Logging:** Schlägt ein Sound fehl (fehlende/defekte Datei, kein Autoplay-Reject), wird EINMAL pro
+  Event-Key in `debug_logs` geloggt — via `lib/actions/audio-log.ts` `reportAudioIssue` (Bridge zum
+  server-only `logDebugEvent`). Dedup-Set wird bei `loadConfig` zurückgesetzt.
+
+### BGM (Hintergrundmusik) — `components/global/music-player.tsx`
+- EINE Instanz (in `app/layout.tsx`). Synth-Tracks (`synth://…`) via `lib/music-synth.ts` (eigener
+  AudioContext), File-Tracks via einem `<audio>`. Track-/Volume-Zuweisung pro Seite/Modus aus
+  `MusicConfig` (`lib/music-config.ts`, Admin „Hintergrundmusik"-Tab, broadcastet auf `music-live`).
+- **Zero-Overlap (unzerstörbar):** (1) `MusicSynth` hat einen **`startToken`** — jedes `start()`/`stop()`
+  bumpt ihn; in-flight async-Starts und ausstehende Loop-Callbacks brechen ab, sobald ein neuerer Start
+  übernimmt → es kann nie ein **Geister-Loop** zwei Patterns gleichzeitig spielen. (2) Der Player hat
+  einen **`transitionSeqRef`** — überlappende `applyRoute`-Aufrufe (Route + Mode + Config gleichzeitig)
+  werden serialisiert, nur die **letzte** Transition startet einen Track (latest-wins).
+
+### Gestuftes, gehaltenes Tempo — `lib/music-dynamics.ts`
+- EIN Kanal: `setMusicTempoMult(mult)` / `getMusicTempoMult()` / `resetMusicTempoMult()` /
+  `subscribeMusicTempoMult()`. **Vertrag:** wird NUR bei einem echten Spiel-Event gesetzt (z.B. Apfel
+  gegessen), nie pro Frame; der Wert **hält** verbatim bis zum nächsten Event — kein Decay, kein Spike.
+- Snake (`snake-shell.tsx`) setzt in `doTick` beim Essen: `min(musicTempoMax, 1 + score·musicTempoPerApple)`
+  und `resetMusicTempoMult()` bei Start/Tod/Abbruch. Per-Modus-Config: `musicDynamicsEnabled`,
+  `musicTempoMax`, `musicTempoPerApple` (`lib/snake-config.ts`, persistiert in `snake_config.modes_config`
+  JSONB; Editor-UI im Snake-Tab „Musik-Dynamik"). `setMusicMode()` steuert separat die Per-Modus-Track-Wahl.
+- **Stolperfalle:** Tempo NIE im RAF-Loop pushen (verursachte den „überschlägt sich"-Bug) — immer nur
+  am diskreten Event.

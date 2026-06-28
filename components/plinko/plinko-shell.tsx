@@ -338,6 +338,7 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
       setBigWinOverlay({ mult: r.multiplier, payout: r.payout });
       setTimeout(() => setBigWinOverlay(null), 3000);
     }
+    sound.plinkoLand?.();
     if (r.multiplier >= 2) sound.save?.();
     sound.xpGain?.();
   }

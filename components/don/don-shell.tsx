@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, TrendingUp, TrendingDown, Coins, RotateCcw, Zap, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import { TopBar } from "@/components/layout/top-bar";
+import { useSoundManager } from "@/lib/sound-manager";
 import { flipDouble } from "@/lib/actions/double-or-nothing";
 import { purchaseDonUpgrade } from "@/lib/actions/don-upgrade";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
@@ -65,6 +66,7 @@ export function DonShell({
   const nextIdRef = useRef(0);
   const { currencyName } = useSiteConfig();
   const router = useRouter();
+  const sound = useSoundManager();
 
   useRealtimeProfile((row) => {
     if (typeof row.credits === "number") setCredits(row.credits);
@@ -119,6 +121,7 @@ export function DonShell({
   async function handleFlip() {
     if (!canFlip) return;
 
+    sound.donFlip();
     setPhase("loading");
     setError(null);
     setLastResult(null);
@@ -157,6 +160,9 @@ export function DonShell({
     setHourlyFlipsUsed((f) => f + 1);
     setHistory((h) => [entry, ...h].slice(0, 20));
     setPhase(res.won ? "won" : "lost");
+
+    if (res.won) sound.win();
+    else sound.error();
 
     if (res.won) {
       import("canvas-confetti").then(({ default: confetti }) => {
@@ -562,6 +568,7 @@ export function DonShell({
             {/* FLIP button */}
             <motion.button
               onClick={handleFlip}
+              onMouseEnter={sound.hover}
               disabled={!canFlip}
               whileTap={canFlip ? { scale: 0.97 } : {}}
               className={`relative w-full overflow-hidden rounded-2xl py-4 text-sm font-black uppercase tracking-widest transition-all duration-300 ${

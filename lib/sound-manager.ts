@@ -1,6 +1,7 @@
 "use client";
 
 import type { SoundConfig } from "@/lib/sound-config";
+import { reportAudioIssue } from "@/lib/actions/audio-log";
 
 export type FxSound =
   // UI
@@ -148,12 +149,31 @@ class SoundManager {
   private _volume = 1;
   private _config: SoundConfig | null = null;
   private _disabledEvents = new Set<string>();
+  // Event keys we've already reported as broken, so a missing/unplayable sound
+  // is logged to the admin Debug Log exactly ONCE instead of on every trigger.
+  private _reportedIssues = new Set<string>();
+
+  /** Log a missing/unplayable sound once per event key (best-effort, never throws). */
+  private reportIssue(key: string, src: string, reason: string): void {
+    if (this._reportedIssues.has(key)) return;
+    this._reportedIssues.add(key);
+    try {
+      void reportAudioIssue({
+        scope: "audio:sfx",
+        message: `Sound „${key}" konnte nicht abgespielt werden (${reason}).`,
+        detail: `Datei: ${src}`,
+        context: { event: key, src, reason },
+      });
+    } catch { /* logging must never break audio */ }
+  }
 
   loadConfig(config: SoundConfig): void {
     this._config = config;
     this.interruptAudio.clear();
     this.fxPool.clear();
     this._disabledEvents.clear();
+    // New config may point at fixed files → allow issues to be re-reported.
+    this._reportedIssues.clear();
     for (const [key, val] of Object.entries(config)) {
       if (!val.enabled) this._disabledEvents.add(key);
     }
@@ -214,7 +234,15 @@ class SoundManager {
       const audio = this.getInterruptAudio(name);
       if (!audio) return;
       audio.currentTime = 0;
-      void audio.play().catch(() => {});
+      void audio.play().catch((err: unknown) => {
+        // Autoplay-gesture rejections are normal (NotAllowedError) and not a
+        // broken file — only report genuine load/decode failures.
+        const reason = err instanceof Error ? err.name : "unknown";
+        if (reason !== "NotAllowedError" && reason !== "AbortError") {
+          const src = this._config?.[name]?.file ?? DEFAULT_INTERRUPT_SRC[name];
+          this.reportIssue(name, src, reason);
+        }
+      });
     } catch { /* Web Audio unavailable/blocked — purely cosmetic */ }
   }
 
@@ -240,13 +268,25 @@ class SoundManager {
         if (!audio) return resolve();
         const done = () => {
           audio.removeEventListener("ended", done);
-          audio.removeEventListener("error", done);
+          audio.removeEventListener("error", onError);
           resolve();
+        };
+        const onError = () => {
+          const src = this._config?.[name]?.file ?? DEFAULT_FX_SRC[name];
+          this.reportIssue(name, src, "load/decode error");
+          done();
         };
         audio.currentTime = 0;
         audio.addEventListener("ended", done);
-        audio.addEventListener("error", done);
-        audio.play().catch(() => resolve());
+        audio.addEventListener("error", onError);
+        audio.play().catch((err: unknown) => {
+          const reason = err instanceof Error ? err.name : "unknown";
+          if (reason !== "NotAllowedError" && reason !== "AbortError") {
+            const src = this._config?.[name]?.file ?? DEFAULT_FX_SRC[name];
+            this.reportIssue(name, src, reason);
+          }
+          resolve();
+        });
         setTimeout(done, 4000);
       } catch { resolve(); }
     });

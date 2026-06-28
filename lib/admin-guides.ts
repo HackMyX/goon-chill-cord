@@ -583,16 +583,25 @@ export const TAB_GUIDES: Record<string, AdminGuideContent> = {
 
   music: {
     title: "So funktioniert die Hintergrundmusik",
-    subtitle: "BGM pro Seite + Track-Bibliothek.",
-    blocks: [
-      { heading: "Zuweisung", lines: [
-        "Pro Seite/Bereich einen Track zuweisen; Fades + Lautstärke. In Snake kann die Musik mit dem Spieltempo dynamisch beschleunigen.",
-      ] },
+    subtitle: "BGM pro Seite + Track-Bibliothek + gestuftes Spiel-Tempo.",
+    steps: [
+      { title: "Track zuweisen", text: "Pro Seite/Bereich (und in Snake pro Modus) einen Track aus der Bibliothek wählen." },
+      { title: "Lautstärke & Fades", text: "Pro Seite exakte Lautstärke; global sanftes Ein-/Ausblenden beim Wechsel an/aus." },
+      { title: "Spiel-Tempo", text: "In Snake pro Modus einstellen: Erhöhung pro Apfel + Obergrenze (im Snake-Tab unter Musik-Dynamik)." },
     ],
+    howItWorks: {
+      heading: "Zero-Overlap & gestuftes Tempo",
+      lines: [
+        "Es läuft IMMER nur ein Track: überlappende Seiten-/Modus-Wechsel werden serialisiert (Token), Geister-Tracks sind ausgeschlossen.",
+        "Das Snake-Tempo ist eine reine Stufen-Kurve: jeder Apfel hebt das Tempo um den eingestellten Prozentwert und HÄLT es bis zum nächsten Apfel — kein Spike, kein Abfallen, egal wie schnell man tippt.",
+        "Musik (BGM) und Soundeffekte (SFX) laufen auf getrennten Audio-Wegen und drücken sich nie gegenseitig weg.",
+      ],
+    },
     glossary: [
       { term: "BGM", def: "Hintergrundmusik (Background Music) pro Seite/Bereich." },
       { term: "Fade", def: "Sanftes Ein-/Ausblenden beim Track-Wechsel." },
-      { term: "Dynamisches Tempo", def: "In Snake beschleunigt die Musik mit dem Spieltempo." },
+      { term: "Gestuftes Tempo", def: "In Snake steigt das Tempo pro Apfel um einen festen Prozentwert und hält dann konstant." },
+      { term: "Zero-Overlap", def: "Garantie, dass nie zwei Tracks gleichzeitig laufen." },
     ],
   },
 

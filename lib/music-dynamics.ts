@@ -1,37 +1,55 @@
 "use client";
 
 /**
- * Live "musical intensity" channel: a game (e.g. Snake) pushes a 0–1 value as
- * it speeds up, and the global <MusicPlayer/> maps it to a tempo multiplier so
- * the background music accelerates with the action. Tiny pub/sub, deduped so a
- * per-frame game loop can call it freely without spamming subscribers.
+ * ── Stepped, HELD background-music tempo ─────────────────────────────────────
+ *
+ * The ONE source of truth for how fast the background music plays. A game sets
+ * an absolute playback multiplier (1 = normal, 1.45 = +45 %) and the global
+ * <MusicPlayer/> applies it. The contract is deliberately strict so the music
+ * can never "overshoot then fall back":
+ *
+ *   • The value is set ONLY on a defined in-game event (e.g. an apple eaten),
+ *     never per animation frame.
+ *   • Once set, it is HELD verbatim until the next event sets a new value —
+ *     there is no decay, no transient spike, no automatic settle-back.
+ *   • The synth applies a change at its next bar boundary (smooth, in-time);
+ *     file audio applies it instantly via playbackRate. Either way the tempo
+ *     then stays put until the next event.
+ *
+ * This replaces the old per-frame intensity + event-spike model, whose decaying
+ * spikes were exactly the "tempo surges then drops" symptom.
  */
-let _level = 0;
-const listeners = new Set<(n: number) => void>();
+let _tempo = 1;
+const tempoListeners = new Set<(n: number) => void>();
 
-export function getMusicIntensity(): number {
-  return _level;
+/** The current absolute tempo multiplier (1 = normal speed). */
+export function getMusicTempoMult(): number {
+  return _tempo;
 }
 
-/** Push the current intensity (0 = calm, 1 = max). Ignored if barely changed. */
-export function setMusicIntensity(level: number): void {
-  const v = Math.max(0, Math.min(1, Number.isFinite(level) ? level : 0));
-  if (Math.abs(v - _level) < 0.02) return;
-  _level = v;
-  for (const fn of listeners) fn(v);
+/**
+ * Set the absolute tempo multiplier. Call this ONLY on a real game event so the
+ * value steps and then holds. Clamped to a musical 0.5×–3× range. Ignored when
+ * the value is effectively unchanged (so re-emitting the same step is free).
+ */
+export function setMusicTempoMult(mult: number): void {
+  const v = Math.max(0.5, Math.min(3, Number.isFinite(mult) ? mult : 1));
+  if (Math.abs(v - _tempo) < 0.0005) return;
+  _tempo = v;
+  for (const fn of tempoListeners) fn(v);
 }
 
-/** Snap back to calm (call on game end / leaving the page). */
-export function resetMusicIntensity(): void {
-  if (_level === 0) return;
-  _level = 0;
-  for (const fn of listeners) fn(0);
+/** Snap the tempo back to normal (call on game start / end / leaving a page). */
+export function resetMusicTempoMult(): void {
+  if (_tempo === 1) return;
+  _tempo = 1;
+  for (const fn of tempoListeners) fn(1);
 }
 
-export function subscribeMusicIntensity(fn: (n: number) => void): () => void {
-  listeners.add(fn);
+export function subscribeMusicTempoMult(fn: (n: number) => void): () => void {
+  tempoListeners.add(fn);
   return () => {
-    listeners.delete(fn);
+    tempoListeners.delete(fn);
   };
 }
 
@@ -54,39 +72,5 @@ export function subscribeMusicMode(fn: (m: string | null) => void): () => void {
   modeListeners.add(fn);
   return () => {
     modeListeners.delete(fn);
-  };
-}
-
-// ── Max tempo boost (per-mode configurable) ──────────────────────────────────
-// At intensity 1.0 the music tempo is multiplied by (1 + boost). A game sets this
-// from its per-mode config (e.g. Snake x2 = wilder boost than Classic). Default
-// 0.45 = the previous hardcoded +45%.
-const DEFAULT_TEMPO_BOOST = 0.45;
-let _tempoBoost = DEFAULT_TEMPO_BOOST;
-const tempoListeners = new Set<(n: number) => void>();
-
-export function getMusicTempoBoost(): number {
-  return _tempoBoost;
-}
-
-/** Set the max tempo boost (0 = no acceleration, 0.45 = +45%, 1 = up to 2× speed). */
-export function setMusicTempoBoost(boost: number): void {
-  const v = Math.max(0, Math.min(2, Number.isFinite(boost) ? boost : DEFAULT_TEMPO_BOOST));
-  if (v === _tempoBoost) return;
-  _tempoBoost = v;
-  for (const fn of tempoListeners) fn(v);
-}
-
-/** Reset to the default boost (call when leaving a game that customised it). */
-export function resetMusicTempoBoost(): void {
-  if (_tempoBoost === DEFAULT_TEMPO_BOOST) return;
-  _tempoBoost = DEFAULT_TEMPO_BOOST;
-  for (const fn of tempoListeners) fn(DEFAULT_TEMPO_BOOST);
-}
-
-export function subscribeMusicTempoBoost(fn: (n: number) => void): () => void {
-  tempoListeners.add(fn);
-  return () => {
-    tempoListeners.delete(fn);
   };
 }

@@ -396,6 +396,16 @@ export class MusicSynth {
   private patternStartTime = 0;
   private patternDuration = 0; // seconds
   private loopTimer: ReturnType<typeof setTimeout> | null = null;
+  // Monotonic generation token. Every start() bumps it; the in-flight async
+  // body of an older start() and any still-pending loop callback compare their
+  // captured token against this and bail the instant a newer start() (or a
+  // stop()) supersedes them. Without it, two start() calls that interleave at
+  // an `await` each spawn their OWN setTimeout loop chain — and because there
+  // is only one `loopTimer` field, the first chain's timer is orphaned (never
+  // cleared) and keeps scheduling a whole second track forever: the "two songs
+  // playing at once, permanently" bug. The token guarantees exactly one live
+  // loop chain at any time.
+  private startToken = 0;
   // Dynamic tempo multiplier (1 = normal). Applied to each newly-scheduled bar,
   // so changes take effect at the next loop boundary — smooth, never a glitch.
   private tempoMult = 1;
@@ -500,7 +510,12 @@ export class MusicSynth {
     const parsed = MusicSynth.parseSynthUrl(synthUrl);
     if (!parsed) return;
 
+    // Fast bus-kill of the previous track first (stop() also bumps the token,
+    // invalidating any older in-flight start/loop), THEN claim the newest token
+    // for ourselves. Order matters: claiming after stop() means this start is
+    // the one survivor even when several starts race through the `await` below.
     this.stop(0.05);   // fast bus-kill so the old track can't overlap the new one
+    const token = ++this.startToken;
     this.isRunning = true;
     this.currentVibe = parsed.vibe;
     this.currentVariant = parsed.variant;
@@ -509,6 +524,8 @@ export class MusicSynth {
     if (ctx.state === "suspended") {
       await ctx.resume().catch(() => {});
     }
+    // A newer start() (or a stop()) ran while we awaited → abandon this one.
+    if (token !== this.startToken) return;
 
     // Route the new track through a fresh bus (the old one was already fast-
     // killed by stop(0.05) above) → no overlap with the previous track.
@@ -532,15 +549,17 @@ export class MusicSynth {
     const dur = this.schedulePattern(ctx, pattern, this.patternStartTime);
     this.patternDuration = dur;
 
-    this.scheduleLoop(dur);
+    this.scheduleLoop(dur, token);
   }
 
-  private scheduleLoop(dur: number) {
-    if (!this.isRunning) return;
+  private scheduleLoop(dur: number, token: number) {
+    if (!this.isRunning || token !== this.startToken) return;
     // Schedule next loop 0.3s before current one ends
     const delayMs = Math.max(100, (dur - 0.3) * 1000);
     this.loopTimer = setTimeout(() => {
-      if (!this.isRunning || !this.ctx || !this.currentVibe) return;
+      // Bail if stopped or superseded by a newer start() — this is what kills a
+      // would-be orphan loop chain instead of letting it ring a second track.
+      if (!this.isRunning || token !== this.startToken || !this.ctx || !this.currentVibe) return;
       const ctx = this.ctx;
       const pattern = getPattern(this.currentVibe, this.currentVariant);
 
@@ -567,7 +586,7 @@ export class MusicSynth {
       this.patternStartTime = nextStart;
       const nextDur = this.schedulePattern(ctx, pattern, this.patternStartTime);
       this.patternDuration = nextDur;
-      this.scheduleLoop(nextDur);
+      this.scheduleLoop(nextDur, token);
     }, delayMs);
   }
 
@@ -592,6 +611,9 @@ export class MusicSynth {
   }
 
   stop(busFadeSec = 0.4) {
+    // Invalidate any in-flight start()/loop so a synth that is mid-`await` when
+    // we stop can't come back to life and schedule notes after the stop.
+    this.startToken++;
     this.isRunning = false;
     if (this.loopTimer) { clearTimeout(this.loopTimer); this.loopTimer = null; }
     if (this.masterGain) {

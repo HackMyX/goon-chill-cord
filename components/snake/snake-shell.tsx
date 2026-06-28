@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { useSoundManager } from "@/lib/sound-manager";
-import { setMusicIntensity, resetMusicIntensity, setMusicMode, setMusicTempoBoost, resetMusicTempoBoost } from "@/lib/music-dynamics";
+import { setMusicTempoMult, resetMusicTempoMult, setMusicMode } from "@/lib/music-dynamics";
 import { submitSnakeScore, getSnakeConfig } from "@/lib/actions/snake";
 import { useLiveConfig } from "@/lib/use-live-config";
 import type { SnakeConfig, SnakeMode, SnakeModeConfig, SnakeGrindConfig, SnakeModeTheme } from "@/lib/snake-config";
@@ -916,9 +916,6 @@ export function SnakeShell({
   // Equipped golden-apple-rate ability, read by the RAF loop via a ref.
   const goldAppleRateRef = useRef(goldAppleRate);
   goldAppleRateRef.current = goldAppleRate;
-  // Timestamp until which a temporary music-intensity spike is active (set on
-  // golden-apple / bonus events) — the music surges then settles back.
-  const audioPulseRef = useRef(0);
 
   // Canvas size depends on mode
   const CANVAS_SIZE = activeMode === "grind" ? 640 : 560;
@@ -950,7 +947,8 @@ export function SnakeShell({
       g.deathFlashFrames = 30;
       setPhase("dead");
       setShrinkWarning(false);
-      resetMusicIntensity(); resetMusicTempoBoost(); // music back to calm tempo on death
+      sound.snakeDie();
+      resetMusicTempoMult(); // music snaps back to normal tempo on death
       const finalScore = g.score;
       const finalCredits = g.creditsEarned;
       const finalMode = g.mode;
@@ -1002,6 +1000,13 @@ export function SnakeShell({
 
       if (ateApple || ateGolden) {
         g.score++;
+        sound.snakeEat();
+        // Stepped, HELD music tempo: each apple raises the tempo by a fixed
+        // percent and it stays there until the NEXT apple — set exactly once per
+        // event, never per frame, so it can never overshoot then drift back.
+        if (modeCfg.musicDynamicsEnabled) {
+          setMusicTempoMult(Math.min(modeCfg.musicTempoMax, 1 + g.score * modeCfg.musicTempoPerApple));
+        }
         let crBase = modeCfg.creditsPerApple;
         const goldenPos = g.goldenApple ? { ...g.goldenApple } : null;
         if (ateGolden) {
@@ -1017,7 +1022,6 @@ export function SnakeShell({
           if (modeCfg.goldenAppleSpeedReduction > 0) {
             g.speedBonusMs = Math.min(g.speedBonusMs + modeCfg.goldenAppleSpeedReduction, modeCfg.goldenAppleSpeedReduction * 4);
           }
-          audioPulseRef.current = now + modeCfg.musicEventSpikeMs; // music surge on golden pickup
         }
         if (g.comboMultLeft > 0) { crBase *= 2; g.comboMultLeft--; if (g.comboMultLeft === 0) setComboActive(false); }
         g.creditsEarned += crBase;
@@ -1039,7 +1043,6 @@ export function SnakeShell({
         if (modeCfg.bonusEveryN > 0 && g.score % modeCfg.bonusEveryN === 0) {
           g.creditsEarned += modeCfg.bonusCrFlat;
           g.bonusFlashFrames = 40;
-          audioPulseRef.current = now + modeCfg.musicEventSpikeMs; // music surge on bonus
           if (modeCfg.bonusMultiplierApples > 0) { g.comboMultLeft = modeCfg.bonusMultiplierApples; setComboActive(true); }
           if (modeCfg.particlesEnabled) spawnBonusBurst(g, W / 2, W / 2, theme);
           g.floatingTexts.push({ x: W / 2, y: W * 0.35, vy: -0.5, text: `BONUS! +${modeCfg.bonusCrFlat}`, life: 1, decay: 0.011, color: "#fbbf24", size: Math.max(12, cell * 0.65) });
@@ -1163,27 +1166,10 @@ export function SnakeShell({
       if (g.shrinkFlashFrames > 0) g.shrinkFlashFrames--;
 
       if (g.phase === "playing") {
+        // Music tempo is driven purely by the apple events inside doTick() (see
+        // setMusicTempoMult there) — the loop itself never touches the tempo, so
+        // a busy frame or rapid key input can't perturb it.
         const speedMs = getSpeedMs(g.score, modeCfg, g.speedBonusMs);
-        // Feed the live intensity to the music engine so the track accelerates with the
-        // game (deduped internally → safe to call every frame). FULLY per-mode configurable:
-        //  • musicDynamicsEnabled  — turn the whole effect off for this mode
-        //  • musicTempoMax         — how fast the music can get (boost at full intensity)
-        //  • musicIntensityPerApple— >0 drives intensity strictly per apple eaten,
-        //                            otherwise the speed-curve is used
-        //  • musicEventSpike/Ms    — height + length of the golden/bonus surge
-        if (!modeCfg.musicDynamicsEnabled) {
-          setMusicIntensity(0);
-        } else {
-          setMusicTempoBoost(Math.max(0, modeCfg.musicTempoMax - 1));
-          const base = modeCfg.musicIntensityPerApple > 0
-            ? Math.min(1, g.score * modeCfg.musicIntensityPerApple)
-            : (modeCfg.initialSpeedMs - modeCfg.minSpeedMs > 0
-                ? (modeCfg.initialSpeedMs - speedMs) / (modeCfg.initialSpeedMs - modeCfg.minSpeedMs)
-                : 0);
-          const spikeMs = Math.max(1, modeCfg.musicEventSpikeMs);
-          const spike = now < audioPulseRef.current ? modeCfg.musicEventSpike * ((audioPulseRef.current - now) / spikeMs) : 0;
-          setMusicIntensity(Math.min(1, base + spike));
-        }
         if (now - g.lastMoveTime >= speedMs) {
           doTick(g, modeCfg, W, cell, theme, now);
         }
@@ -1195,7 +1181,7 @@ export function SnakeShell({
     };
 
     rafRef.current = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(rafRef.current); resetMusicIntensity(); resetMusicTempoBoost(); };
+    return () => { cancelAnimationFrame(rafRef.current); resetMusicTempoMult(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Mount-only: reads configRef for fresh config, gameRef for mutable state
 
@@ -1328,6 +1314,7 @@ export function SnakeShell({
 
     setScore(0); setCreditsEarned(0); setPhase("playing");
     setLastResult(null); setBonusBannerText(null); setComboActive(false); setShrinkWarning(false);
+    resetMusicTempoMult(); // every run starts at the base tempo, then steps up per apple
     sound.click();
   }
 
@@ -1341,7 +1328,7 @@ export function SnakeShell({
     g.goldenApple = null;
     g.particles = []; g.floatingTexts = []; g.speedTrails = [];
     inputQueueRef.current = [];
-    resetMusicIntensity(); resetMusicTempoBoost();
+    resetMusicTempoMult();
     setPhase("idle");
     setScore(0); setCreditsEarned(0);
     setShrinkWarning(false); setComboActive(false); setBonusBannerText(null);

@@ -236,22 +236,24 @@ function ModeEditor<T extends SnakeModeConfig>({
         </Row>
       </Section>
 
-      {/* Music dynamics — per mode, drives the background music tempo */}
+      {/* Music dynamics — per mode. STEPPED & HELD: tempo rises one fixed step per
+          apple and stays there until the next apple. No spikes, no settle-back. */}
       <Section label="Musik-Dynamik" icon={<span className="text-base">🎵</span>}>
-        <Row label="Tempo-Dynamik aktiv" hint="Musik beschleunigt mit dem Spieltempo in diesem Modus (aus = konstantes Tempo)">
+        <p className="mb-3 rounded-lg border border-amber-500/25 bg-amber-500/[0.05] px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
+          <strong>So funktioniert das:</strong> Pro gegessenem Apfel steigt das Musik-Tempo um den
+          unten eingestellten Prozentwert und <strong>hält</strong> diese Geschwindigkeit dauerhaft –
+          bis zum nächsten Apfel. Kein kurzzeitiges Beschleunigen, kein Abfallen. Bei <em>„Max.
+          Tempo-Faktor"</em> ist Schluss. Beispiel: Erhöhung 1&nbsp;% + Max 1.45 → nach 45 Äpfeln am
+          Limit (+45&nbsp;%), danach konstant.
+        </p>
+        <Row label="Tempo-Dynamik aktiv" hint="Musik beschleunigt stufenweise pro Apfel in diesem Modus (aus = konstantes Tempo)">
           <Toggle checked={cfg.musicDynamicsEnabled} onChange={(v) => set("musicDynamicsEnabled" as keyof T, v as T[keyof T])} />
         </Row>
-        <Row label="Max. Tempo-Faktor" hint="Maximale Musik-Geschwindigkeit bei voller Intensität: 1.0 = keine Beschleunigung, 1.45 = +45 %, 2.0 = doppelt so schnell">
+        <Row label="Tempo-Erhöhung pro Apfel" hint="Multiplikator-Schritt pro gegessenem Apfel: 0.01 = +1 % pro Apfel. Wird beim Essen GESETZT und gehalten – nie pro Frame, nie mit Abklingen.">
+          <Num value={cfg.musicTempoPerApple} min={0} max={0.2} step={0.005} onChange={(v) => set("musicTempoPerApple" as keyof T, v as T[keyof T])} />
+        </Row>
+        <Row label="Max. Tempo-Faktor" hint="Obergrenze für das Tempo: 1.0 = keine Beschleunigung, 1.45 = +45 %, 2.0 = doppelt so schnell. Hier hört das Hochsteigen auf.">
           <Num value={cfg.musicTempoMax} min={1} max={3} step={0.05} onChange={(v) => set("musicTempoMax" as keyof T, v as T[keyof T])} />
-        </Row>
-        <Row label="Intensität pro Apfel" hint="0 = Intensität folgt der Spielgeschwindigkeit. >0 = exakt PRO gegessenem Apfel (z. B. 0.02 = volle Intensität nach 50 Äpfeln)">
-          <Num value={cfg.musicIntensityPerApple} min={0} max={1} step={0.01} onChange={(v) => set("musicIntensityPerApple" as keyof T, v as T[keyof T])} />
-        </Row>
-        <Row label="Event-Spike-Höhe" hint="Zusätzlicher Intensitäts-Schub bei goldenem Apfel / Bonus (0 = aus, 1 = maximal)">
-          <Num value={cfg.musicEventSpike} min={0} max={1} step={0.05} onChange={(v) => set("musicEventSpike" as keyof T, v as T[keyof T])} />
-        </Row>
-        <Row label="Event-Spike-Dauer (ms)" hint="Wie lange ein Spike braucht, um wieder abzuklingen">
-          <Num value={cfg.musicEventSpikeMs} min={50} max={5000} step={50} onChange={(v) => set("musicEventSpikeMs" as keyof T, v as T[keyof T])} />
         </Row>
       </Section>
 

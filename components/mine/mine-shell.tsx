@@ -246,6 +246,7 @@ export function MineShell({
       }));
       setAccumulated(0);
       flash(`+${(res.earned ?? 0).toLocaleString("de-DE")} CR abgebaut!`, true);
+      sound.mineCollect();
       sound.xpGain();
       router.refresh();
     } else {
