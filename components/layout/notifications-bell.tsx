@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Bell, CheckCheck, Repeat, Gavel, Sparkles, Swords, Flame, Gift, ShieldCheck, MessageCircle, ShoppingBag, Coins, Ban, Lightbulb, Dice5, PackageOpen, X, Trash2 } from "lucide-react";
+import { Bell, CheckCheck, Repeat, Gavel, Sparkles, Swords, Flame, Gift, ShieldCheck, MessageCircle, ShoppingBag, Coins, Ban, Lightbulb, Dice5, PackageOpen, X, Trash2, UserPlus, UserCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   getNotifications,
@@ -40,6 +40,8 @@ const TYPE_ICON: Record<string, typeof Bell> = {
   ticket_suggestion: Lightbulb,
   case_opened: PackageOpen,
   double_or_nothing: Dice5,
+  friend_request: UserPlus,
+  friend_accepted: UserCheck,
 };
 
 function timeAgo(iso: string): string {

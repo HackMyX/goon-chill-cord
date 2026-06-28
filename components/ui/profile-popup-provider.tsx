@@ -17,12 +17,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Loader2, ShieldCheck, BadgeCheck, Flame, Crown, Shield,
   Copy, Check, ExternalLink, Calendar, AlertTriangle, ChevronDown,
-  Ban, Ticket, Swords, ShieldAlert,
+  Ban, Ticket, Swords, ShieldAlert, UserPlus, UserCheck, Clock, UserX,
 } from "lucide-react";
 import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 import { getMinimalProfile, type MinimalProfile } from "@/lib/actions/community";
 import { getPopupModSummary, type PopupModSummary } from "@/lib/actions/mod";
 import { subscribeToPresence } from "@/lib/presence-client";
+import { useSoundManager } from "@/lib/sound-manager";
+import {
+  getRelationshipTo, sendFriendRequest, respondFriendRequest, blockUser, unblockUser,
+  type RelationshipKind,
+} from "@/lib/actions/friends";
 
 // ── Context ─────────────────────────────────────────────────────────────────────
 
@@ -96,6 +101,102 @@ const ACTION_LABEL: Record<string, string> = {
   chat_clear: "Chat geleert",
   note_add: "Notiz",
 };
+
+// ── Social: relationship-aware friend button ─────────────────────────────────────
+
+function FriendButton({ userId }: { userId: string }) {
+  const [rel, setRel] = useState<{ kind: RelationshipKind; requestId?: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const sound = useSoundManager();
+
+  const load = useCallback(() => {
+    getRelationshipTo(userId)
+      .then((r) => { if (r.ok) setRel({ kind: r.kind, requestId: r.requestId }); })
+      .catch(() => undefined);
+  }, [userId]);
+  useEffect(() => { load(); }, [load]);
+
+  if (!rel || rel.kind === "self" || rel.kind === "blocked_by") return null;
+
+  const act = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    setBusy(true);
+    sound.click();
+    try {
+      const res = await fn();
+      if (!res.ok) sound.error();
+      load();
+    } finally { setBusy(false); }
+  };
+
+  const Spinner = <Loader2 className="h-3.5 w-3.5 animate-spin" />;
+
+  // Primary action varies by relationship; a small block/unblock sits beside it.
+  let primary: ReactNode;
+  switch (rel.kind) {
+    case "friends":
+      primary = (
+        <span className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300">
+          <UserCheck className="h-3.5 w-3.5" /> Befreundet
+        </span>
+      );
+      break;
+    case "outgoing":
+      primary = (
+        <span className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-zinc-400">
+          <Clock className="h-3.5 w-3.5" /> Anfrage gesendet
+        </span>
+      );
+      break;
+    case "incoming":
+      primary = (
+        <button
+          onClick={() => rel.requestId && act(() => respondFriendRequest(rel.requestId!, true))}
+          disabled={busy}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500/90 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-400 disabled:opacity-60"
+        >
+          {busy ? Spinner : <><Check className="h-3.5 w-3.5" /> Anfrage annehmen</>}
+        </button>
+      );
+      break;
+    case "blocked":
+      primary = (
+        <button
+          onClick={() => act(() => unblockUser(userId))}
+          disabled={busy}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-zinc-300 transition-colors hover:bg-emerald-500/15 hover:text-emerald-300 disabled:opacity-60"
+        >
+          {busy ? Spinner : <><ShieldCheck className="h-3.5 w-3.5" /> Blockierung aufheben</>}
+        </button>
+      );
+      break;
+    default: // none
+      primary = (
+        <button
+          onClick={() => act(() => sendFriendRequest(userId))}
+          disabled={busy}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-violet-600/90 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-violet-500 disabled:opacity-60"
+        >
+          {busy ? Spinner : <><UserPlus className="h-3.5 w-3.5" /> Freund hinzufügen</>}
+        </button>
+      );
+  }
+
+  return (
+    <div className="mx-4 mb-2 flex items-center gap-2">
+      {primary}
+      {rel.kind !== "blocked" && (
+        <button
+          onClick={() => act(() => blockUser(userId))}
+          disabled={busy}
+          title="Blockieren"
+          className="shrink-0 rounded-xl border border-white/10 bg-white/5 p-2 text-zinc-500 transition-colors hover:bg-red-500/15 hover:text-red-400 disabled:opacity-60"
+        >
+          <UserX className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 function PopupCard({
   userId,
@@ -389,6 +490,9 @@ function PopupCard({
               </AnimatePresence>
             </div>
           )}
+
+          {/* ── Social: Freund-Aktion ─────────────────────────────────────── */}
+          <FriendButton userId={userId} />
 
           {/* ── Footer ───────────────────────────────────────────────────── */}
           <div className="border-t border-white/5 px-4 py-2.5">

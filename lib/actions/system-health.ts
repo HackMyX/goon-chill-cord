@@ -102,6 +102,8 @@ const REQUIRED_TABLES = [
   "ai_chat_sessions",
   // Daily Quest System (run scripts/add-daily-quests.cjs)
   "daily_quest_templates", "daily_quest_config", "user_daily_quests",
+  // Social / Friends System (run scripts/add-friends-system.cjs)
+  "friend_requests", "friendships", "blocked_users",
 ] as const;
 
 /** Tables that are optional (future features, not yet fully live). WARNUNG if missing. */
@@ -1154,6 +1156,33 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
           "Atomare, race-sichere XP-Verbuchung verfügbar."));
   } catch (e) {
     results.push(err("rpc_increment_xp", "Level & XP", "increment_xp RPC", String(e)));
+  }
+
+  // ── 37. Social / Freunde-System ───────────────────────────────────────────
+  // Tabellen: friend_requests, friendships, blocked_users (scripts/add-friends-system.cjs).
+  // "zuletzt online"/"in-game" werden aus user_sessions abgeleitet — keine eigene Spalte.
+  try {
+    const [{ error: frErr }, { error: fsErr, count: friendRows }, { error: buErr }, { count: pendingCount }] = await Promise.all([
+      admin.from("friend_requests").select("id").limit(0),
+      admin.from("friendships").select("*", { count: "exact", head: true }),
+      admin.from("blocked_users").select("id").limit(0),
+      admin.from("friend_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
+    ]);
+    if (frErr || fsErr || buErr) {
+      results.push(err("social_tables", "Social / Freunde", "Freundes-Tabellen",
+        `Tabelle(n) fehlen — Migration ausführen: node scripts/add-friends-system.cjs (${frErr?.message ?? fsErr?.message ?? buErr?.message})`));
+    } else {
+      // friendships werden bidirektional gespeichert → echte Freundschaften = Zeilen / 2.
+      results.push(ok("social_tables", "Social / Freunde", "Freundes-System",
+        `${Math.floor((friendRows ?? 0) / 2)} Freundschaft(en), ${pendingCount ?? 0} offene Anfrage(n)`));
+    }
+    // Konsistenz-Hinweis: friendships sollten paarweise (gerade Zeilenzahl) sein.
+    if (!fsErr && typeof friendRows === "number" && friendRows % 2 !== 0) {
+      results.push(warn("social_pairing", "Social / Freunde", "Freundschafts-Paarung",
+        "Ungerade Anzahl friendships-Zeilen — eine Richtung könnte verwaist sein."));
+    }
+  } catch (e) {
+    results.push(err("social_tables", "Social / Freunde", "Freundes-Tabellen", String(e)));
   }
 
   return results;

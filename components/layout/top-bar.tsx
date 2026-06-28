@@ -30,6 +30,7 @@ import { DEFAULT_TOPBAR_RIGHT_SLOTS } from "@/lib/site-config";
 import { LevelBadge } from "@/components/ui/level-badge";
 import { LevelMenuTrigger } from "@/components/ui/level-menu-modal";
 import { DailyQuestsTrigger } from "@/components/daily-quests/daily-quests-panel";
+import { FriendsTrigger } from "@/components/social/friends-panel";
 
 interface TopBarProps {
   credits: number;
@@ -203,6 +204,12 @@ export function TopBar({
         return (
           <div key="quests" className="hidden xl:flex">
             <DailyQuestsTrigger userId={resolvedUserId ?? undefined} />
+          </div>
+        );
+      case "friends":
+        return (
+          <div key="friends" className="hidden xl:flex">
+            <FriendsTrigger userId={resolvedUserId ?? undefined} />
           </div>
         );
       case "wardrobe":
