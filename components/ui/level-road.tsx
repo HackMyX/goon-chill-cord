@@ -118,8 +118,23 @@ export function LevelRoad({
 
       {/* The road */}
       <div ref={roadRef} className="relative">
-        {/* Central connecting line */}
-        <div aria-hidden className="absolute left-[27px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-white/5 via-white/10 to-white/5" />
+        {/* Central connecting line — a dim rail with a bright, animated progress
+            fill that grows down to the player's current position. */}
+        <div aria-hidden className="absolute left-[27px] top-2 bottom-2 w-0.5 rounded-full bg-white/[0.06]" />
+        {(() => {
+          const ci = sorted.findIndex((d) => d.level === currentLevel);
+          const pct = sorted.length > 1 ? Math.max(0, Math.min(1, (ci + 0.5) / sorted.length)) : 0;
+          return (
+            <motion.div
+              aria-hidden
+              className="absolute left-[27px] top-2 w-0.5 rounded-full"
+              style={{ background: "linear-gradient(to bottom, #c4b5fd, #7c3aed)", boxShadow: "0 0 10px rgba(167,139,250,0.55)" }}
+              initial={{ height: 0 }}
+              animate={{ height: `calc((100% - 16px) * ${pct})` }}
+              transition={{ duration: 0.9, ease: "easeOut" }}
+            />
+          );
+        })()}
 
         <div className="flex flex-col gap-3">
           {sorted.map((def, idx) => {
@@ -128,21 +143,32 @@ export function LevelRoad({
             const tier = resolveLevelRoadTier(def.level, roadConfig);
             const accent = tier.accent;
             const glow = tier.glow;
+            // Every 10th level is a milestone — crown badge, stronger glow, tag.
+            const isMilestone = def.level % 10 === 0 && def.level > 0;
             return (
               <motion.div
                 key={def.level}
                 data-road-level={def.level}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: Math.min(idx * 0.015, 0.4) }}
+                transition={{ delay: Math.min(idx * 0.015, 0.4), type: "spring", stiffness: 260, damping: 24 }}
+                whileHover={{ scale: 1.012 }}
                 className={`relative flex items-start gap-3 rounded-2xl border p-3 transition-colors ${
                   isCurrent
                     ? "border-white/20 bg-white/[0.05]"
+                    : isMilestone && reached
+                    ? "border-amber-400/20 bg-amber-500/[0.03]"
                     : reached
                     ? "border-white/[0.07] bg-white/[0.02]"
                     : "border-white/[0.04] bg-transparent opacity-70"
                 }`}
-                style={isCurrent ? { boxShadow: `0 0 24px -6px ${glow}` } : undefined}
+                style={
+                  isCurrent
+                    ? { boxShadow: `0 0 24px -6px ${glow}` }
+                    : isMilestone && reached
+                    ? { boxShadow: `0 0 20px -8px ${glow}` }
+                    : undefined
+                }
               >
                 {/* Node circle */}
                 <div className="relative z-10 shrink-0">
@@ -171,6 +197,16 @@ export function LevelRoad({
                       <Check className="h-2.5 w-2.5 text-white" />
                     </span>
                   )}
+                  {isMilestone && (
+                    <motion.span
+                      aria-hidden
+                      className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 ring-1 ring-amber-400/50"
+                      animate={reached ? { y: [0, -1.5, 0] } : undefined}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <Crown className="h-3 w-3 text-amber-300 drop-shadow-[0_0_4px_rgba(245,158,11,0.8)]" />
+                    </motion.span>
+                  )}
                 </div>
 
                 {/* Body */}
@@ -181,6 +217,11 @@ export function LevelRoad({
                     </span>
                     {isCurrent && (
                       <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-black text-white">DU</span>
+                    )}
+                    {isMilestone && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-300">
+                        <Crown className="h-2.5 w-2.5" /> Meilenstein
+                      </span>
                     )}
                   </div>
                   {roadConfig.showTitles && (
@@ -206,9 +247,9 @@ export function LevelRoad({
                             disabled={!interactive}
                             onClick={() => { if (interactive && subj) setPreview(subj); }}
                             title={interactive ? "In 3D ansehen" : undefined}
-                            className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                            className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-all ${
                               reached ? "border-white/10 bg-white/[0.04] text-zinc-200" : "border-white/[0.05] bg-white/[0.02] text-zinc-600"
-                            } ${interactive ? "cursor-pointer hover:border-violet-400/50 hover:bg-violet-500/10" : "cursor-default"}`}
+                            } ${interactive ? "cursor-pointer hover:scale-[1.06] hover:border-violet-400/50 hover:bg-violet-500/10 active:scale-95" : "cursor-default"}`}
                           >
                             {rich && r.type === "name_style" && r.nameStyleKey ? (
                               <StyledUsername name="DeinName" styleKey={r.nameStyleKey} size="sm" staticMode disablePopup />
