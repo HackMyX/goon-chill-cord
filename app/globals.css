@@ -260,6 +260,12 @@
 .animate-particle-e { animation: particle-rise 6.5s ease-in 2s infinite; }
 .animate-particle-f { animation: particle-rise 10s ease-in 5s infinite; }
 
+/* Bonus-Karten — durchlaufender Glanz-Sheen (theme.animated + theme.sheen) */
+@keyframes bonus-sheen {
+  0% { background-position: 150% 0; }
+  100% { background-position: -150% 0; }
+}
+
 /* Shimmer card sweep — trigger via group-hover */
 @keyframes card-shimmer-sweep {
   0% { transform: translateX(-100%) skewX(-20deg); }

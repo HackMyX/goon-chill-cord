@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Rarity } from "@/lib/cases";
 import { RARITY_LABELS } from "@/lib/cases";
+import { BONUS_GAMES, BONUS_GAME_LABELS, isBonusGame, type BonusGame } from "@/lib/bonus-games";
 
 /**
  * Central granter for the two cross-cutting reward kinds that can be embedded in
@@ -84,6 +85,11 @@ export interface RewardSpec {
   voucherRarityFloor?: Rarity;
   bonusGame?: BonusGame;
   durationHours?: number;
+  // ── Präsentation für game_bonus (wie die aktive Bonus-Karte im Spiel aussieht) ──
+  cardTheme?: string;     // BonusCardThemeId (lib/bonus-card-themes.ts)
+  cardRarity?: string;    // BonusCardRarity
+  cardTitle?: string;     // eigener Karten-Titel (sonst Default aus Spiel)
+  cardSubtitle?: string;  // eigene Unterzeile
 }
 
 export async function grantReward(
@@ -115,7 +121,10 @@ export async function grantReward(
     case "case_voucher":
       return grantCaseVoucher(admin, userId, { mode: spec.voucherMode ?? "rarity", tierId: spec.voucherTierId, rarityFloor: spec.voucherRarityFloor, durationHours: spec.durationHours, source });
     case "game_bonus":
-      return grantGameBonus(admin, userId, { game: spec.bonusGame ?? "plinko", amount: spec.amount ?? 1, durationHours: spec.durationHours, source });
+      return grantGameBonus(admin, userId, {
+        game: spec.bonusGame ?? "plinko", amount: spec.amount ?? 1, durationHours: spec.durationHours, source,
+        cardTheme: spec.cardTheme, cardRarity: spec.cardRarity, cardTitle: spec.cardTitle, cardSubtitle: spec.cardSubtitle,
+      });
     default:
       return { ok: false, error: "Unbekannter Reward-Typ.", summary: "" };
   }
@@ -123,18 +132,8 @@ export async function grantReward(
 
 // ── Game bonus ───────────────────────────────────────────────────────────────
 
-export const BONUS_GAMES = ["plinko", "snake", "don"] as const;
-export type BonusGame = (typeof BONUS_GAMES)[number];
-
-export const BONUS_GAME_LABELS: Record<BonusGame, string> = {
-  plinko: "Plinko-Bälle",
-  snake: "Snake-Spiele",
-  don: "DON-Spins",
-};
-
-export function isBonusGame(v: unknown): v is BonusGame {
-  return typeof v === "string" && (BONUS_GAMES as readonly string[]).includes(v);
-}
+// Client-sicher ausgelagert (lib/bonus-games.ts) + hier re-exportiert (back-compat).
+export { BONUS_GAMES, BONUS_GAME_LABELS, isBonusGame, type BonusGame };
 
 function expiryFromHours(durationHours?: number): string | null {
   const h = Math.max(0, Math.floor(durationHours ?? 0));
@@ -144,7 +143,10 @@ function expiryFromHours(durationHours?: number): string | null {
 export async function grantGameBonus(
   admin: Admin,
   userId: string,
-  opts: { game: BonusGame; amount: number; durationHours?: number; source?: string; label?: string },
+  opts: {
+    game: BonusGame; amount: number; durationHours?: number; source?: string; label?: string;
+    cardTheme?: string; cardRarity?: string; cardTitle?: string; cardSubtitle?: string;
+  },
 ): Promise<{ ok: boolean; error?: string; summary: string }> {
   const amount = Math.max(1, Math.floor(opts.amount));
   if (!isBonusGame(opts.game)) return { ok: false, error: "Unbekanntes Spiel für Bonus.", summary: "" };
@@ -155,6 +157,10 @@ export async function grantGameBonus(
     label: opts.label ?? null,
     source: opts.source ?? "voucher",
     expires_at: expiryFromHours(opts.durationHours),
+    card_theme: opts.cardTheme ?? null,
+    card_rarity: opts.cardRarity ?? null,
+    card_title: opts.cardTitle ?? null,
+    card_subtitle: opts.cardSubtitle ?? null,
   });
   if (error) return { ok: false, error: "Bonus konnte nicht vergeben werden.", summary: "" };
   const dur = (opts.durationHours ?? 0) > 0 ? ` (${Math.floor(opts.durationHours!)}h)` : "";

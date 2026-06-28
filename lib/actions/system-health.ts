@@ -356,6 +356,11 @@ const COLUMN_CHECKS: Array<{
   { id: "col_sess_last_ping",           category: "Sessions", table: "user_sessions",    col: "last_ping",                  detail: "node scripts/add-session-in-world.cjs" },
   // Profiles — Freundschaftsanfragen annehmen (2026-06-28)
   { id: "col_profiles_accept_friend_requests", category: "Social / Freunde", table: "profiles", col: "accept_friend_requests", detail: "node scripts/add-settings-chatmod.cjs" },
+  // Aktive-Boni-Karten — Präsentation pro Bonus-Gutschein (2026-06-28)
+  { id: "col_gba_card_theme",    category: "Spiel-Boni", table: "game_bonus_allowances", col: "card_theme",    detail: "node scripts/add-bonus-card-fields.cjs" },
+  { id: "col_gba_card_rarity",   category: "Spiel-Boni", table: "game_bonus_allowances", col: "card_rarity",   detail: "node scripts/add-bonus-card-fields.cjs" },
+  { id: "col_gba_card_title",    category: "Spiel-Boni", table: "game_bonus_allowances", col: "card_title",    detail: "node scripts/add-bonus-card-fields.cjs" },
+  { id: "col_gba_card_subtitle", category: "Spiel-Boni", table: "game_bonus_allowances", col: "card_subtitle", detail: "node scripts/add-bonus-card-fields.cjs" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

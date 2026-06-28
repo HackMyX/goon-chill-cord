@@ -16,7 +16,7 @@ import { useLiveConfig } from "@/lib/use-live-config";
 import type { SnakeConfig, SnakeMode, SnakeModeConfig, SnakeGrindConfig, SnakeModeTheme } from "@/lib/snake-config";
 import type { SnakeLeaderboardEntry } from "@/lib/actions/snake";
 import { StyledUsername } from "@/components/ui/styled-username";
-import { GameBonusBadge } from "@/components/rewards/game-bonus-badge";
+import { ActiveBonusDock } from "@/components/rewards/active-bonus-dock";
 import { ActiveAbilityBadge } from "@/components/rewards/active-ability-badge";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1510,7 +1510,7 @@ export function SnakeShell({
                     {dailyGamesRemaining} / {modeCfg.dailyGameLimit} Spiele übrig
                   </p>
                 )}
-                <div className="mt-0.5 flex flex-wrap justify-end gap-1.5"><ActiveAbilityBadge refreshKey={dailyGamesUsed} /><GameBonusBadge game="snake" suffix="Spiele" refreshKey={dailyGamesUsed} /></div>
+                <div className="mt-0.5 flex flex-wrap justify-end gap-1.5"><ActiveAbilityBadge refreshKey={dailyGamesUsed} /><ActiveBonusDock game="snake" suffix="Spiele" refreshKey={dailyGamesUsed} /></div>
               </div>
             )}
             {phase === "playing" && (

@@ -21,7 +21,7 @@ import { getPlinkoConfig } from "@/lib/actions/plinko";
 import { useLiveConfig } from "@/lib/use-live-config";
 import { useSoundManager } from "@/lib/sound-manager";
 import { StyledUsername } from "@/components/ui/styled-username";
-import { GameBonusBadge } from "@/components/rewards/game-bonus-badge";
+import { ActiveBonusDock } from "@/components/rewards/active-bonus-dock";
 import { ActiveAbilityBadge } from "@/components/rewards/active-ability-badge";
 
 interface Props {
@@ -409,7 +409,7 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
             {config.dailyBallLimit > 0 && <span className="ml-1">· {config.dailyBallLimit}/Tag</span>}
           </div>
           <ActiveAbilityBadge refreshKey={resultsVersion} />
-          <GameBonusBadge game="plinko" suffix="Bälle" refreshKey={resultsVersion} />
+          <ActiveBonusDock game="plinko" suffix="Bälle" refreshKey={resultsVersion} />
         </div>
       </header>
 

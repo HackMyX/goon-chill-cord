@@ -1,8 +1,13 @@
 "use client";
 
 import { Trash2, Plus } from "lucide-react";
-import type { RewardSpec } from "@/lib/rewards-grant";
+import type { RewardSpec, BonusGame } from "@/lib/rewards-grant";
 import { KeySelect } from "@/components/admin/key-select";
+import {
+  BONUS_CARD_THEME_LIST, BONUS_CARD_RARITY_LIST,
+  DEFAULT_BONUS_CARD_THEME, DEFAULT_BONUS_CARD_RARITY,
+} from "@/lib/bonus-card-themes";
+import { BonusCard } from "@/components/rewards/bonus-card";
 
 /**
  * Wiederverwendbarer Editor für eine Liste kanonischer Belohnungen (RewardSpec[]).
@@ -102,6 +107,65 @@ export function RewardSpecEditor({
               </select>
               <input type="number" min={1} value={r.amount ?? 1} onChange={(e) => set(idx, { amount: Number(e.target.value) })} placeholder="Züge" className={`w-16 ${INP}`} />
               <input type="number" min={0} value={r.durationHours ?? 0} onChange={(e) => set(idx, { durationHours: Number(e.target.value) })} placeholder="Std" title="Gültig (Std, 0=unbegrenzt)" className={`w-16 ${INP}`} />
+
+              {/* ── Präsentation: wie die aktive Bonus-Karte später im Spiel aussieht ── */}
+              <div className="mt-1 flex w-full flex-col gap-3 rounded-lg border border-white/5 bg-black/20 p-2.5 sm:flex-row sm:items-start">
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Karten-Darstellung</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={r.cardTheme ?? DEFAULT_BONUS_CARD_THEME}
+                      onChange={(e) => set(idx, { cardTheme: e.target.value })}
+                      title="Theme der Karte"
+                      className={INP}
+                    >
+                      {BONUS_CARD_THEME_LIST.map((t) => (
+                        <option key={t.id} value={t.id}>{t.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={r.cardRarity ?? DEFAULT_BONUS_CARD_RARITY}
+                      onChange={(e) => set(idx, { cardRarity: e.target.value })}
+                      title="Seltenheit (Ribbon)"
+                      className={INP}
+                    >
+                      {BONUS_CARD_RARITY_LIST.map((rr) => (
+                        <option key={rr.id} value={rr.id}>{rr.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      value={r.cardTitle ?? ""}
+                      onChange={(e) => set(idx, { cardTitle: e.target.value })}
+                      placeholder="Titel (Standard)"
+                      className={`flex-1 ${INP}`}
+                    />
+                    <input
+                      value={r.cardSubtitle ?? ""}
+                      onChange={(e) => set(idx, { cardSubtitle: e.target.value })}
+                      placeholder="Untertitel (Standard)"
+                      className={`flex-1 ${INP}`}
+                    />
+                  </div>
+                </div>
+                {/* LIVE-VORSCHAU */}
+                <div className="flex shrink-0 flex-col items-center gap-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Live-Vorschau</span>
+                  <BonusCard
+                    animateEntry={false}
+                    preview={{
+                      theme: r.cardTheme,
+                      rarity: r.cardRarity,
+                      title: r.cardTitle,
+                      subtitle: r.cardSubtitle,
+                      game: (r.bonusGame ?? "plinko") as BonusGame,
+                      amount: Math.max(1, r.amount ?? 1),
+                      durationHours: r.durationHours,
+                    }}
+                  />
+                </div>
+              </div>
             </>
           )}
 

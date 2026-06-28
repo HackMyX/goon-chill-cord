@@ -1,4 +1,5 @@
 import type { RewardSpec } from "@/lib/rewards-grant";
+import { getBonusCardTheme } from "@/lib/bonus-card-themes";
 
 export type VoucherRewardType = "credits" | "ability" | "badge" | "name_style" | "case_voucher" | "game_bonus";
 
@@ -199,7 +200,7 @@ export function describeRewardSpec(spec: RewardSpec): string {
         ? `🎟️ Gratis-Case (mind. ${VOUCHER_RARITY_LABELS[spec.voucherRarityFloor ?? "normal"]})${dur}`
         : `🎟️ Gratis-Case${dur}`;
     case "game_bonus":
-      return `🎮 +${spec.amount ?? 0} ${spec.bonusGame ? VOUCHER_BONUS_GAME_LABELS[spec.bonusGame] : "Spielzüge"}${dur}`;
+      return `🎮 +${spec.amount ?? 0} ${spec.bonusGame ? VOUCHER_BONUS_GAME_LABELS[spec.bonusGame] : "Spielzüge"}${dur} · Theme: ${getBonusCardTheme(spec.cardTheme).label}`;
   }
 }
 
