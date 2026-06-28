@@ -325,6 +325,16 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
             />
             Level (0 = aus)
           </label>
+          <label className="flex items-center gap-2 text-xs text-zinc-300">
+            Prestige-Bonus
+            <input
+              type="number" min={0} max={100}
+              value={road.prestigeXpBonusPercent ?? 5}
+              onChange={(e) => setRoad({ prestigeXpBonusPercent: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+              className="w-16 rounded-md border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            % XP pro Prestige
+          </label>
         </div>
 
         {/* Tier colours */}

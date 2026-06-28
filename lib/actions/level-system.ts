@@ -9,7 +9,7 @@ import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
 import { isAbilityActive } from "@/lib/actions/abilities";
 import { logDebugEvent } from "@/lib/debug-log-server";
 import {
-  calculateLevel, buildLevelInfo,
+  calculateLevel, buildLevelInfo, prestigeXpMultiplier,
   DEFAULT_XP_SOURCES, DEFAULT_LEVEL_ROAD_CONFIG,
   type XpConfig, type XpSourceConfig, type LevelDefinition,
   type LevelReward, type AwardXpResult, type UserLevelInfo, type XpEvent,
@@ -43,6 +43,7 @@ export async function getXpConfig(): Promise<XpConfig> {
           milestoneEvery: roadRaw.milestoneEvery ?? 10,
           ambientFx: roadRaw.ambientFx ?? true,
           celebrateMilestones: roadRaw.celebrateMilestones ?? true,
+          prestigeXpBonusPercent: roadRaw.prestigeXpBonusPercent ?? 5,
         }
       : DEFAULT_LEVEL_ROAD_CONFIG;
 
@@ -104,7 +105,7 @@ export async function awardXp(
 
   // Load user profile + XP config in parallel
   const [{ data: profile }, config] = await Promise.all([
-    admin.from("profiles").select("xp, level, equipped_ability_key").eq("id", userId).single(),
+    admin.from("profiles").select("xp, level, equipped_ability_key, prestige").eq("id", userId).single(),
     getXpConfig(),
   ]);
 
@@ -131,7 +132,12 @@ export async function awardXp(
     } catch { /* non-fatal */ }
   }
 
-  const amount = Math.max(1, Math.round(rawAmount * xpMultiplier));
+  // Permanent prestige XP boost (+bonus% per prestige level), on top of any
+  // equipped XP-boost ability.
+  const prestige = (profile.prestige as number) ?? 0;
+  const prestigeMult = prestigeXpMultiplier(prestige, config.levelRoadConfig.prestigeXpBonusPercent ?? 5);
+
+  const amount = Math.max(1, Math.round(rawAmount * xpMultiplier * prestigeMult));
 
   // Atomic XP increment — prevents lost updates AND double level-reward grants when
   // many `void awardXp(...)` run concurrently. The RPC serialises the increment under
@@ -162,7 +168,11 @@ export async function awardXp(
     for (let lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
       const def = config.levels.find((l) => l.level === lvl);
       if (def?.rewards?.length) {
-        collectedRewards.push(...def.rewards);
+        // After prestiging, re-climbing must NOT re-grant CREDIT rewards (that
+        // would be an infinite credit farm). Badges/name-styles/abilities are
+        // idempotent (already owned) so they stay harmless.
+        const rs = prestige > 0 ? def.rewards.filter((r) => r.type !== "credits") : def.rewards;
+        collectedRewards.push(...rs);
       }
     }
   }
@@ -272,7 +282,7 @@ export async function getMyLevelInfo(): Promise<UserLevelInfo | null> {
 
     const admin = createAdminClient();
     const [{ data: profile }, config] = await Promise.all([
-      admin.from("profiles").select("xp, level, equipped_ability_key").eq("id", user.id).single(),
+      admin.from("profiles").select("xp, level, equipped_ability_key, prestige").eq("id", user.id).single(),
       getXpConfig(),
     ]);
 
@@ -282,7 +292,8 @@ export async function getMyLevelInfo(): Promise<UserLevelInfo | null> {
       (profile.xp as number) ?? 0,
       (profile.level as number) ?? 1,
       profile.equipped_ability_key as string | null,
-      config.levels
+      config.levels,
+      (profile.prestige as number) ?? 0
     );
   } catch {
     return null;
@@ -293,7 +304,7 @@ export async function getUserLevelInfo(userId: string): Promise<UserLevelInfo | 
   try {
     const admin = createAdminClient();
     const [{ data: profile }, config] = await Promise.all([
-      admin.from("profiles").select("xp, level, equipped_ability_key").eq("id", userId).single(),
+      admin.from("profiles").select("xp, level, equipped_ability_key, prestige").eq("id", userId).single(),
       getXpConfig(),
     ]);
 
@@ -303,11 +314,58 @@ export async function getUserLevelInfo(userId: string): Promise<UserLevelInfo | 
       (profile.xp as number) ?? 0,
       (profile.level as number) ?? 1,
       profile.equipped_ability_key as string | null,
-      config.levels
+      config.levels,
+      (profile.prestige as number) ?? 0
     );
   } catch {
     return null;
   }
+}
+
+// ─── Prestige ────────────────────────────────────────────────────────────────
+
+/** Prestige: at max level, reset xp/level to 0/1 and bank a prestige rank for a
+ *  permanent XP boost. Re-climbing no longer re-grants credit rewards (anti-farm). */
+export async function prestigeUser(): Promise<{ success: boolean; error?: string; prestige?: number }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Nicht eingeloggt." };
+
+  const admin = createAdminClient();
+  const [{ data: profile }, config] = await Promise.all([
+    admin.from("profiles").select("level, prestige").eq("id", user.id).single(),
+    getXpConfig(),
+  ]);
+  if (!profile) return { success: false, error: "Profil nicht gefunden." };
+  if (!config.levels.length) return { success: false, error: "Kein Level-System konfiguriert." };
+
+  const maxLevel = Math.max(...config.levels.map((l) => l.level));
+  const curLevel = (profile.level as number) ?? 1;
+  if (curLevel < maxLevel) {
+    return { success: false, error: `Prestige erst ab Max-Level (${maxLevel}).` };
+  }
+
+  const newPrestige = ((profile.prestige as number) ?? 0) + 1;
+  const { error } = await admin
+    .from("profiles")
+    .update({ prestige: newPrestige, xp: 0, level: 1 })
+    .eq("id", user.id)
+    .gte("level", maxLevel); // guard: only if still at max (idempotent vs double-click)
+
+  if (error) return { success: false, error: error.message };
+
+  try {
+    await notifyUser({
+      userId: user.id,
+      type: "level_up",
+      title: `⭐ Prestige ${newPrestige}!`,
+      message: `Du hast prestiged! Dauerhafter XP-Bonus aktiv. Steige erneut auf.`,
+      link: "/account",
+    });
+  } catch { /* non-fatal */ }
+
+  revalidatePath("/", "layout");
+  return { success: true, prestige: newPrestige };
 }
 
 export async function getMyXpHistory(limit = 20): Promise<XpEvent[]> {

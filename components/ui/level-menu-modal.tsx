@@ -13,7 +13,7 @@ import { Sparkles, Rocket, Flame, Coins, Shirt } from "lucide-react";
 const ACH_ICON: Record<string, typeof Star> = {
   star: Star, crown: Crown, package: Package, flame: Flame, coins: Coins, zap: Zap, shirt: Shirt,
 };
-import { getXpConfig, getMyLevelInfo } from "@/lib/actions/level-system";
+import { getXpConfig, getMyLevelInfo, prestigeUser } from "@/lib/actions/level-system";
 import { getMyAchievements } from "@/lib/actions/achievements";
 import type { AchievementProgress } from "@/lib/achievements";
 import { LevelRoad } from "@/components/ui/level-road";
@@ -283,6 +283,7 @@ export function LevelMenuModal({
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"road" | "progress" | "preview" | "achievements" | "levels" | "sources">("road");
   const [achievements, setAchievements] = useState<AchievementProgress[] | null>(null);
+  const [prestigeBusy, setPrestigeBusy] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   // Lazy-load achievements the first time the tab is opened.
@@ -320,6 +321,19 @@ export function LevelMenuModal({
 
   const maxLevel = levels.length > 0 ? Math.max(...levels.map((l) => l.level)) : 50;
   const isMaxLevel = levelInfo.level >= maxLevel;
+  const prestigeBonus = roadConfig.prestigeXpBonusPercent ?? 5;
+
+  async function handlePrestige() {
+    if (prestigeBusy) return;
+    if (!confirm(
+      `Prestige durchführen?\n\nDein Level wird auf 1 zurückgesetzt. Dafür erhältst du dauerhaft +${prestigeBonus}% XP pro Prestige-Stufe und einen Prestige-Stern. Bereits erhaltene Belohnungen bleiben — Credit-Belohnungen gibt es beim Wiederaufstieg NICHT erneut.`
+    )) return;
+    setPrestigeBusy(true);
+    const res = await prestigeUser();
+    setPrestigeBusy(false);
+    if (res.success) onClose();
+    else alert(res.error ?? "Fehler beim Prestige.");
+  }
 
   // Render into <body> so the fixed overlay is positioned against the viewport.
   // Rendered inline (inside the TopBar) it gets trapped by the TopBar's
@@ -379,7 +393,17 @@ export function LevelMenuModal({
               >
                 {LEVEL_TITLES[levelInfo.level] ?? "Spieler"}
               </p>
-              <h2 className="text-2xl font-black text-white">Level {levelInfo.level}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl font-black text-white">Level {levelInfo.level}</h2>
+                {levelInfo.prestige > 0 && (
+                  <span
+                    className="inline-flex items-center gap-0.5 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[11px] font-black text-amber-300"
+                    title={`Prestige ${levelInfo.prestige} · +${prestigeBonus * levelInfo.prestige}% XP`}
+                  >
+                    <Star className="h-3 w-3 fill-amber-300" /> {levelInfo.prestige}
+                  </span>
+                )}
+              </div>
               <p className="mt-0.5 text-xs text-zinc-500">
                 {levelInfo.xp.toLocaleString("de-DE")} XP gesamt
               </p>
@@ -408,8 +432,18 @@ export function LevelMenuModal({
                 </div>
               )}
               {isMaxLevel && (
-                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1 text-[11px] font-black text-amber-300">
-                  <Crown className="h-3.5 w-3.5" /> MAX LEVEL
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1 text-[11px] font-black text-amber-300">
+                    <Crown className="h-3.5 w-3.5" /> MAX LEVEL
+                  </div>
+                  <button
+                    onClick={handlePrestige}
+                    disabled={prestigeBusy}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-fuchsia-400/50 bg-gradient-to-r from-fuchsia-600/30 to-amber-500/20 px-3 py-1 text-[11px] font-black text-fuchsia-100 shadow-[0_0_16px_-4px_rgba(217,70,239,0.7)] transition-all hover:scale-105 disabled:opacity-50"
+                    title={`Reset auf Level 1 für dauerhaft +${prestigeBonus}% XP pro Prestige`}
+                  >
+                    <Star className="h-3.5 w-3.5" /> {prestigeBusy ? "…" : `Prestige (+${prestigeBonus}% XP)`}
+                  </button>
                 </div>
               )}
             </div>
@@ -789,6 +823,7 @@ export function LevelMenuTrigger({
   const fallbackLevelInfo: UserLevelInfo = {
     xp: 0,
     level,
+    prestige: 0,
     equippedAbilityKey: null,
     currentLevelDef: null,
     nextLevelDef: null,

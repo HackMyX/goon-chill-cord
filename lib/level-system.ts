@@ -61,6 +61,8 @@ export interface LevelRoadConfig {
   ambientFx?: boolean;
   /** Show the milestone celebration banner in the level-menu header. */
   celebrateMilestones?: boolean;
+  /** Permanent XP bonus (%) granted per prestige level. e.g. 5 = +5% XP each. */
+  prestigeXpBonusPercent?: number;
 }
 
 export const DEFAULT_LEVEL_ROAD_CONFIG: LevelRoadConfig = {
@@ -77,6 +79,7 @@ export const DEFAULT_LEVEL_ROAD_CONFIG: LevelRoadConfig = {
   milestoneEvery: 10,
   ambientFx: true,
   celebrateMilestones: true,
+  prestigeXpBonusPercent: 5,
 };
 
 /** Is this level a celebrated milestone per the road config? */
@@ -113,6 +116,8 @@ export interface XpEvent {
 export interface UserLevelInfo {
   xp: number;
   level: number;
+  /** How many times the player has prestiged (reset for a permanent XP boost). */
+  prestige: number;
   equippedAbilityKey: string | null;
   currentLevelDef: LevelDefinition | null;
   nextLevelDef: LevelDefinition | null;
@@ -178,7 +183,8 @@ export function buildLevelInfo(
   xp: number,
   level: number,
   equippedAbilityKey: string | null,
-  levels: LevelDefinition[]
+  levels: LevelDefinition[],
+  prestige = 0
 ): UserLevelInfo {
   const currentLevelDef = levels.find((l) => l.level === level) ?? null;
   const nextLevelDef = levels.find((l) => l.level === level + 1) ?? null;
@@ -198,6 +204,7 @@ export function buildLevelInfo(
   return {
     xp,
     level,
+    prestige,
     equippedAbilityKey,
     currentLevelDef,
     nextLevelDef,
@@ -205,6 +212,13 @@ export function buildLevelInfo(
     xpForCurrentLevel,
     progressPercent,
   };
+}
+
+/** XP gain multiplier from prestige: +bonusPercent per prestige level. */
+export function prestigeXpMultiplier(prestige: number, bonusPercent: number): number {
+  const p = Math.max(0, prestige || 0);
+  const b = Math.max(0, bonusPercent || 0);
+  return 1 + p * (b / 100);
 }
 
 /** Level color gradient by tier. */

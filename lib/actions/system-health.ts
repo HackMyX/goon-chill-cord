@@ -160,6 +160,7 @@ const COLUMN_CHECKS: Array<{
   // XP config — Level Road appearance (2026-06-28)
   { id: "col_xp_reward_display",  category: "Level & XP",         table: "xp_config",           col: "level_reward_display",    detail: "node scripts/add-level-road-config.cjs" },
   { id: "col_xp_road_config",     category: "Level & XP",         table: "xp_config",           col: "level_road_config",       detail: "node scripts/add-level-road-config.cjs" },
+  { id: "col_profiles_prestige",  category: "Level & XP",         table: "profiles",            col: "prestige",                detail: "node scripts/add-prestige.cjs" },
   // DON config — upgrade feature (2026-06-25)
   { id: "col_don_upgradeenabled", category: "DON-System",         table: "don_config",          col: "upgrade_enabled",         detail: "ALTER TABLE don_config ADD COLUMN upgrade_enabled boolean NOT NULL DEFAULT false;" },
   { id: "col_don_upgradetiers",   category: "DON-System",         table: "don_config",          col: "upgrade_tiers",           detail: "ALTER TABLE don_config ADD COLUMN upgrade_tiers jsonb NOT NULL DEFAULT '[]'::jsonb;" },
