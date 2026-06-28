@@ -8,7 +8,7 @@ import { notifyUser } from "@/lib/notifications-internal";
 import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
 import { checkAndAwardNameStyleBadges } from "@/lib/actions/badges";
-import { normalizeCode, type RedemptionCode, type VoucherRewardType, type VoucherRewardValue } from "@/lib/vouchers";
+import { normalizeCode, parseVoucherRewards, type RedemptionCode, type VoucherReward, type VoucherRewardType, type VoucherRewardValue } from "@/lib/vouchers";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -25,9 +25,11 @@ function rowToCode(r: Record<string, unknown>, usedCount: number): RedemptionCod
   return {
     code: r.code as string,
     label: (r.label as string | null) ?? null,
-    rewardType: r.reward_type as VoucherRewardType,
-    rewardValue: (r.reward_value as VoucherRewardValue) ?? {},
-    abilityDurationHours: (r.ability_duration_hours as number) ?? 0,
+    rewards: parseVoucherRewards(r.rewards, {
+      rewardType: r.reward_type as VoucherRewardType | undefined,
+      rewardValue: (r.reward_value as VoucherRewardValue) ?? {},
+      abilityDurationHours: (r.ability_duration_hours as number) ?? 0,
+    }),
     maxUses: (r.max_uses as number) ?? 0,
     expiresAt: (r.expires_at as string | null) ?? null,
     enabled: (r.enabled as boolean) ?? true,
@@ -96,39 +98,53 @@ export async function claimRedemptionCode(
     }
   }
 
-  // Grant the reward. On failure, roll the claim back so they can retry.
-  const grant = await grantVoucherReward(
-    admin, user.id,
-    row.reward_type as VoucherRewardType,
-    (row.reward_value as VoucherRewardValue) ?? {},
-    (row.ability_duration_hours as number) ?? 0
-  );
-  if (!grant.ok) {
+  // Grant the FULL bundle. Every reward must succeed; on any failure roll the
+  // whole claim back so the user can retry (and isn't left half-rewarded).
+  const rewards = parseVoucherRewards(row.rewards, {
+    rewardType: row.reward_type as VoucherRewardType | undefined,
+    rewardValue: (row.reward_value as VoucherRewardValue) ?? {},
+    abilityDurationHours: (row.ability_duration_hours as number) ?? 0,
+  });
+  if (rewards.length === 0) {
     await admin.from("redemption_claims").delete().eq("code", code).eq("user_id", user.id);
-    return { success: false, error: grant.error ?? "Belohnung konnte nicht vergeben werden." };
+    return { success: false, error: "Dieser Code hat keine Belohnungen." };
   }
 
-  await admin.from("redemption_claims").update({ reward_summary: grant.summary }).eq("code", code).eq("user_id", user.id);
+  const summaries: string[] = [];
+  for (const r of rewards) {
+    const grant = await grantVoucherReward(admin, user.id, r);
+    if (!grant.ok) {
+      await admin.from("redemption_claims").delete().eq("code", code).eq("user_id", user.id);
+      return { success: false, error: grant.error ?? "Belohnung konnte nicht vergeben werden." };
+    }
+    summaries.push(grant.summary);
+  }
+  const summary = summaries.join(" · ");
+
+  await admin.from("redemption_claims").update({ reward_summary: summary }).eq("code", code).eq("user_id", user.id);
 
   await notifyUser({
     userId: user.id,
     type: "admin_grant_item",
     title: "🎁 Code eingelöst!",
-    message: grant.summary,
+    message: summary,
     link: "/garderobe",
   });
-  void logActivity("voucher:claim", `Code ${code} eingelöst`, { userId: user.id, code, reward: grant.summary });
+  void logActivity("voucher:claim", `Code ${code} eingelöst`, { userId: user.id, code, reward: summary });
   revalidatePath("/");
-  return { success: true, reward: grant.summary };
+  return { success: true, reward: summary };
 }
 
 async function grantVoucherReward(
   admin: Admin,
   userId: string,
-  type: VoucherRewardType,
-  value: VoucherRewardValue,
-  abilityDurationHours: number
+  reward: VoucherReward
 ): Promise<{ ok: boolean; error?: string; summary: string }> {
+  const type = reward.type;
+  const value: VoucherRewardValue = {
+    amount: reward.amount, abilityKey: reward.abilityKey, badgeKey: reward.badgeKey, styleKey: reward.styleKey,
+  };
+  const abilityDurationHours = Math.max(0, Math.floor(reward.durationHours ?? 0));
   try {
     if (type === "credits") {
       const amount = Math.max(0, Math.floor(value.amount ?? 0));
@@ -204,9 +220,7 @@ export async function adminListRedemptionCodes(): Promise<RedemptionCode[]> {
 export async function adminCreateRedemptionCode(input: {
   code: string;
   label?: string;
-  rewardType: VoucherRewardType;
-  rewardValue: VoucherRewardValue;
-  abilityDurationHours?: number;
+  rewards: VoucherReward[];
   maxUses?: number;
   expiresAt?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
@@ -218,20 +232,36 @@ export async function adminCreateRedemptionCode(input: {
     return { success: false, error: "Code muss 3–32 Zeichen sein (A–Z, 0–9, Bindestrich)." };
   }
 
-  // Validate the reward payload per type.
-  const v = input.rewardValue ?? {};
-  if (input.rewardType === "credits" && !(v.amount && v.amount > 0)) return { success: false, error: "Credits-Betrag fehlt." };
-  if (input.rewardType === "ability" && !v.abilityKey) return { success: false, error: "Fähigkeit fehlt." };
-  if (input.rewardType === "badge" && !v.badgeKey) return { success: false, error: "Badge fehlt." };
-  if (input.rewardType === "name_style" && !v.styleKey) return { success: false, error: "Name-Style fehlt." };
+  // Validate + sanitise every reward in the bundle.
+  const rewards: VoucherReward[] = [];
+  for (const raw of input.rewards ?? []) {
+    if (raw.type === "credits") {
+      const amount = Math.max(0, Math.floor(raw.amount ?? 0));
+      if (amount <= 0) return { success: false, error: "Eine Credits-Belohnung hat keinen Betrag." };
+      rewards.push({ type: "credits", amount });
+    } else if (raw.type === "ability") {
+      if (!raw.abilityKey) return { success: false, error: "Eine Fähigkeits-Belohnung hat keine Fähigkeit." };
+      rewards.push({ type: "ability", abilityKey: raw.abilityKey, durationHours: Math.max(0, Math.floor(raw.durationHours ?? 0)) });
+    } else if (raw.type === "badge") {
+      if (!raw.badgeKey) return { success: false, error: "Eine Badge-Belohnung hat kein Badge." };
+      rewards.push({ type: "badge", badgeKey: raw.badgeKey });
+    } else if (raw.type === "name_style") {
+      if (!raw.styleKey) return { success: false, error: "Eine Style-Belohnung hat keinen Name-Style." };
+      rewards.push({ type: "name_style", styleKey: raw.styleKey });
+    }
+  }
+  if (rewards.length === 0) return { success: false, error: "Mindestens eine Belohnung hinzufügen." };
 
+  // First reward also written to the legacy columns for backward compatibility.
+  const first = rewards[0];
   const admin = createAdminClient();
   const { error } = await admin.from("redemption_codes").insert({
     code,
     label: input.label?.trim() || null,
-    reward_type: input.rewardType,
-    reward_value: v,
-    ability_duration_hours: Math.max(0, Math.floor(input.abilityDurationHours ?? 0)),
+    rewards,
+    reward_type: first.type,
+    reward_value: { amount: first.amount, abilityKey: first.abilityKey, badgeKey: first.badgeKey, styleKey: first.styleKey },
+    ability_duration_hours: Math.max(0, Math.floor(first.durationHours ?? 0)),
     max_uses: Math.max(0, Math.floor(input.maxUses ?? 0)),
     expires_at: input.expiresAt || null,
     created_by: adminUser.id,
@@ -239,7 +269,7 @@ export async function adminCreateRedemptionCode(input: {
   if (error) {
     return { success: false, error: error.code === "23505" ? "Dieser Code existiert bereits." : error.message };
   }
-  void logActivity("voucher:create", `Code ${code} erstellt`, { userId: adminUser.id, code, rewardType: input.rewardType });
+  void logActivity("voucher:create", `Code ${code} erstellt`, { userId: adminUser.id, code, rewards: rewards.length });
   revalidatePath("/admin");
   return { success: true };
 }

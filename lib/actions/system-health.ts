@@ -229,6 +229,8 @@ const COLUMN_CHECKS: Array<{
   { id: "col_plinko_glow",        category: "Plinko",             table: "plinko_config",       col: "glow_intensity",          detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS glow_intensity numeric DEFAULT 1.5;" },
   { id: "col_plinko_animspeed",   category: "Plinko",             table: "plinko_config",       col: "animation_speed",         detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS animation_speed numeric DEFAULT 1.0;" },
   { id: "col_plinko_autobet",     category: "Plinko",             table: "plinko_config",       col: "auto_bet_enabled",        detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS auto_bet_enabled boolean DEFAULT true;" },
+  // Vouchers — reward bundles (mehrere Belohnungen pro Code)
+  { id: "col_rc_rewards", category: "Gutscheine", table: "redemption_codes", col: "rewards", detail: "ALTER TABLE redemption_codes ADD COLUMN IF NOT EXISTS rewards jsonb NOT NULL DEFAULT '[]'::jsonb;" },
   // Name Styles — new feature columns on profiles
   { id: "col_profiles_active_name_style", category: "Name Styles", table: "profiles", col: "active_name_style_key", detail: "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS active_name_style_key text;" },
   { id: "col_profiles_warning_strikes",   category: "Name Styles", table: "profiles", col: "warning_strikes",       detail: "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS warning_strikes integer NOT NULL DEFAULT 0;" },
