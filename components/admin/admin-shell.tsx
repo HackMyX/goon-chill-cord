@@ -209,6 +209,12 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Items", tab: "items", keywords: ["item", "waffe", "rüstung", "schild", "perk", "preis", "selten"], description: "Item-Katalog und Preise" },
   { label: "Pets", tab: "pets", keywords: ["pet", "tier", "haustier", "hund", "katze", "drache"], description: "Pet-Spezies und Stats" },
   { label: "Feintuning", tab: "fine_config", keywords: ["feintuning", "fine", "nametag", "lerp", "sync", "blut", "partikel", "chat", "polling", "badges", "limit", "höhe", "geschwindigkeit", "multiplayer", "dead reckoning", "swing"], description: "Alle feingranularen konfigurierbaren Werte: Nametag, MP-Sync, Hit-Effekte, Chat" },
+  { label: "Shop-Automatik & Kategorien", tab: "shop", keywords: ["automatik", "kategorie", "content", "inhalt", "typ", "fähigkeit", "name-style", "badge", "gutschein", "häufigkeit", "anzahl", "seltenheit", "tagesplan", "wochentag", "preisaufschlag", "rotation", "auto-generieren"], description: "Pro Kategorie: welcher Typ (Item/Fähigkeit/Style/Badge/Gutschein), Anzahl/Tag, Seltenheit, Preis, Wochentag-Regeln" },
+  { label: "Gutscheine im Shop (Gratis-Cases)", tab: "shop", keywords: ["gutschein", "voucher", "gratis case", "case", "shop", "kategorie", "seltenheit"], description: "Gutschein-Kategorie generiert automatisch Gratis-Case-Gutscheine nach Seltenheit" },
+  { label: "Fähigkeiten-Effekte & Kombo", tab: "abilities", keywords: ["effekt", "effecttype", "effectconfig", "kombo", "case_luck", "glück", "jackpot", "multiplikator", "loss", "rückgabe", "plinko", "snake", "don", "mine", "streak", "boost", "wert", "einheit", "prozent", "chance"], description: "Effekt-Typen (gruppiert + beschrieben), Wert/Einheit, Kombo-Effekte (effectConfig), Shop-Preis" },
+  { label: "Fähigkeit im Shop verkaufen", tab: "shop", keywords: ["fähigkeit", "ability", "shop", "verkaufen", "preis", "kategorie", "kaufen"], description: "Fähigkeiten über eine Shop-Kategorie (Inhalt=Fähigkeiten) automatisch verkaufen" },
+  { label: "Prestige", tab: "level_xp", keywords: ["prestige", "reset", "neustart", "stern", "xp boost", "max level"], description: "Prestige-System: Reset ab Max-Level für permanenten XP-Boost" },
+  { label: "Economy-Generator (Battle Pass)", tab: "battlepass", keywords: ["auto-fill", "generator", "economy", "rarity", "track", "meilenstein", "automatisch"], description: "Battle-Pass-Levels track-gerecht automatisch befüllen" },
 ];
 
 // ⚠️ KONVENTION FÜR ALLE KIs / ENTWICKLER: Die Admin-Tabs werden IMMER automatisch
@@ -253,6 +259,65 @@ const TABS = ([
   { id: "daily_quests",  label: "Daily Quests",          icon: ListChecks },
   { id: "synergy",       label: "Synergie & Boosts",     icon: Link2 },
 ] as { id: Tab; label: string; icon: typeof Coins }[]).sort((a, b) => tabSortKey(a.label).localeCompare(tabSortKey(b.label), "de"));
+
+const tabById = (id: Tab) => TABS.find((t) => t.id === id)!;
+
+// Kurzbeschreibung pro Tab — als Tooltip am Button + in den Such-Ergebnissen.
+const TAB_DESC: Record<Tab, string> = {
+  balance: "Schnelles Balancing aller Spiele in einer Tabelle (Credits, Limits, Multiplikatoren).",
+  economy: "Cases: Gruppen, Tiers, Seltenheits-Töpfe, Item-Pools, Extra-Drops.",
+  streak: "Tägliche Login-Belohnung, Meilensteine, Wochenend-/Event-Bonus, Gnadenzeit.",
+  shop: "Tages-Shop: Automatik (Items/Fähigkeiten/Styles/Badges/Gutscheine), Kategorien, Tagesplan, Preise.",
+  users: "Nutzer suchen & bearbeiten: Credits, Rolle, Verifizierung, Bans.",
+  items: "Item-Katalog: Werte (Schaden/Rüstung/Perks/Schild), Seltenheit, Preise.",
+  monsters: "Monster-Werte (HP, Schaden, Tempo, Spawn, Belohnung) + Kill-Streak-Multiplikator.",
+  pets: "Pet-Spezies, Stats und Aggro-Verhalten.",
+  games: "Alle Spiele einzeln: Snake, Plinko, DON, Mine, Welt/PvP, Charakter, Startseiten-Bestenlisten.",
+  branding: "Seitenname, Logo, Topbar-Slots, Startseiten-Karten, Ankündigungen.",
+  audit: "Verlauf aller Admin-Aktionen (live).",
+  chat: "Globaler Chat: Filter, Rate-Limits, Moderation, Prio-Badges.",
+  homepage_chat: "Chat-Sidebar auf der Startseite (Sichtbarkeit, Glas-Effekt).",
+  debug: "Server-Debug-Logs für Fehlersuche.",
+  backup: "Daten-Backups erstellen, ansehen, wiederherstellen.",
+  security: "Login-Events, Fingerprints, IP-Duplikate, Device-Bans.",
+  patchnotes: "Patch Notes schreiben + Update-Popup steuern.",
+  surveys: "Umfragen erstellen, Fragen, Antworten auswerten.",
+  ki: "KI-Assistent + API-Schlüssel (Groq).",
+  cleanup: "Automatische Bereinigung alter Logs/Chats/Daten (Retention).",
+  battlepass: "Battle Pass: Tracks, Tiers, Reward-Mix, Economy-Generator, Quests, Shop-Sichtbarkeit.",
+  badges: "Badge-Definitionen + Vergabe (auto & manuell).",
+  namestyles: "Name-Style-Katalog, Animationen, Shop-Verfügbarkeit, Case-Drops.",
+  level_xp: "Level-Kurve, XP-Quellen pro Aktion, Level-Belohnungen, Prestige.",
+  abilities: "Fähigkeiten: Effekt-Typen, Werte, Kombo-Effekte (effectConfig), Shop-Preis, Vergabe.",
+  vouchers: "Einlösbare Codes (Credits/Badge/Style) erstellen + Direkt-Vergabe.",
+  sounds: "Sound-Events und Lautstärken.",
+  music: "Hintergrundmusik pro Seite, Track-Bibliothek, Fades.",
+  theme: "Gesamt-Design der Seite (Farben, Glow, Presets) mit Live-Vorschau.",
+  preview_config: "3D-Vorschau-Engine: Rotation, Zoom, Partikel, Glow pro Subjekt.",
+  fine_config: "Feingranulare Werte: Nametags, Multiplayer-Sync, Hit-Effekte, Chat-Polling.",
+  daily_quests: "Tägliche Quests: Vorlagen, Ziele, Belohnungen, Schwierigkeit.",
+  synergy: "Verbindet Level/BP/Quests, Zeit-Boosts (Wochenende/Happy Hour), Level-Staffelung.",
+};
+
+// Logische Gruppierung der Tabs für eine aufgeräumte Übersicht.
+// NEUE TABS: in TABS oben einfügen UND hier in eine Gruppe aufnehmen (+ TAB_DESC).
+const TAB_GROUPS: { title: string; icon: typeof Coins; tabs: Tab[] }[] = [
+  { title: "Spiele & Welt", icon: Gamepad2, tabs: ["games", "monsters", "pets", "balance"] },
+  { title: "Wirtschaft", icon: Coins, tabs: ["economy", "shop", "items"] },
+  { title: "Belohnungen & Fortschritt", icon: Sparkles, tabs: ["battlepass", "daily_quests", "streak", "level_xp", "synergy", "abilities", "vouchers"] },
+  { title: "Kosmetik", icon: SwatchBook, tabs: ["badges", "namestyles", "preview_config"] },
+  { title: "Community & Inhalte", icon: MessageCircle, tabs: ["chat", "homepage_chat", "surveys", "patchnotes", "users"] },
+  { title: "Design & Medien", icon: Palette, tabs: ["branding", "theme", "sounds", "music"] },
+  { title: "System & Wartung", icon: Shield, tabs: ["security", "ki", "audit", "debug", "backup", "cleanup", "fine_config"] },
+];
+
+// Kombinierter Such-Index: die kuratierten Einträge (spezifische Einstellungen)
+// PLUS ein Basis-Eintrag pro Tab (Label + Beschreibung), damit JEDER Tab auch über
+// seine Beschreibung/Wörter gefunden wird — nicht nur über die kuratierten Keywords.
+const ADMIN_SEARCH: { label: string; tab: Tab; keywords: string[]; description: string }[] = [
+  ...SEARCH_INDEX,
+  ...TABS.map((t) => ({ label: t.label, tab: t.id, keywords: [t.id], description: TAB_DESC[t.id] })),
+];
 
 export function AdminShell({
   credits: initialCredits,
@@ -385,13 +450,21 @@ export function AdminShell({
       : profiles;
 
   const activeSearchQuery = adminSearch.trim().toLowerCase();
+  // Tokenize the query so "plinko bonus" matches an entry mentioning both words
+  // anywhere (label/description/keywords) — not only an exact substring.
+  const queryTokens = activeSearchQuery.split(/\s+/).filter(Boolean);
   const filteredSearch = activeSearchQuery
-    ? SEARCH_INDEX.filter(
-        (entry) =>
-          entry.label.toLowerCase().includes(activeSearchQuery) ||
-          entry.description.toLowerCase().includes(activeSearchQuery) ||
-          entry.keywords.some((kw) => kw.toLowerCase().includes(activeSearchQuery))
-      )
+    ? (() => {
+        const seen = new Set<string>();
+        return ADMIN_SEARCH.filter((entry) => {
+          const hay = `${entry.label} ${entry.description} ${entry.keywords.join(" ")}`.toLowerCase();
+          if (!queryTokens.every((tok) => hay.includes(tok))) return false;
+          const key = `${entry.label}|${entry.tab}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      })()
     : [];
   const matchingTabIds = new Set(filteredSearch.map((r) => r.tab));
   const displayedTabs = activeSearchQuery
@@ -449,7 +522,7 @@ export function AdminShell({
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-zinc-100">{result.label}</span>
-                      <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-300">{result.tab}</span>
+                      <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-300">{tabById(result.tab).label.replace(/^[^\p{L}\p{N}]+/u, "").trim()}</span>
                     </div>
                     <span className="text-xs text-zinc-500">{result.description}</span>
                   </button>
@@ -459,15 +532,13 @@ export function AdminShell({
           )}
         </div>
 
-        <div className="mb-6 flex flex-wrap gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-          {displayedTabs.map((t) => (
+        {(() => {
+          const TabBtn = (t: { id: Tab; label: string; icon: typeof Coins }) => (
             <button
               key={t.id}
+              title={TAB_DESC[t.id]}
               onMouseEnter={sound.hover}
-              onClick={() => {
-                sound.click();
-                setTab(t.id);
-              }}
+              onClick={() => { sound.click(); setTab(t.id); }}
               className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
                 tab === t.id
                   ? "border-purple-400 bg-purple-500/15 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.45)]"
@@ -477,8 +548,30 @@ export function AdminShell({
               <t.icon className="h-4 w-4" />
               {t.label}
             </button>
-          ))}
-        </div>
+          );
+          // Während der Suche: flache Liste der Treffer. Sonst: logische Gruppen.
+          if (activeSearchQuery) {
+            return (
+              <div className="mb-6 flex flex-wrap gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                {displayedTabs.map((t) => TabBtn(t))}
+              </div>
+            );
+          }
+          return (
+            <div className="mb-6 flex flex-col gap-4">
+              {TAB_GROUPS.map((group) => (
+                <div key={group.title}>
+                  <p className="mb-1.5 flex items-center gap-1.5 px-1 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
+                    <group.icon className="h-3.5 w-3.5" /> {group.title}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {group.tabs.map((id) => TabBtn(tabById(id)))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {tab === "balance" && <BalanceStudioTab />}
 
