@@ -112,3 +112,14 @@ Einzel-Granter: grantCredits/grantItem/grantAbility/grantNameStyle/grantBadge/gr
 - **Neuer Reward-Typ?** Zuerst in `RewardSpec` + `grantReward` ergänzen, DANN in den Surfaces
   (Typ-Union, Admin-Picker-UI, Mapping) verfügbar machen. So ist alles überall nutzbar.
 - Ziel des Nutzers: ÜBERALL, wo man etwas bekommen kann, müssen ALLE Belohnungs-Typen wählbar sein.
+
+## 10. Keys IMMER als Auto-Dropdown (kein Freitext)
+
+Jede Eingabe eines Keys (ability_key, name_style_key/styleKey, badge_key, item_id,
+case_tier_id) im Admin MUSS ein Dropdown mit allen verfügbaren Keys sein — NIE ein
+Freitext-Input. Nutze dafür `<KeySelect kind="ability|name_style|badge|item|case_tier" value onChange />`
+(`components/admin/key-select.tsx`). Die Optionen kommen aus `getAdminKeyOptions()`
+(`lib/actions/admin-key-options.ts`) und aktualisieren sich automatisch (geteilter
+Cache + TTL). **Neue Key-Kategorie?** Zuerst in `getAdminKeyOptions` + `AdminKeyOptions`
+ergänzen, dann `<KeySelect>` verwenden. So bekommt der Admin überall eine
+sich selbst aktualisierende Auswahl statt Tippfehler-anfälliger Freitext-Keys.
