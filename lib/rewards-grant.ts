@@ -18,6 +18,109 @@ import { RARITY_LABELS } from "@/lib/cases";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
+// ── Credits & Items (vorher in jeder Surface inline dupliziert) ───────────────
+
+export async function grantCredits(
+  admin: Admin,
+  userId: string,
+  amount: number,
+  _opts?: { source?: string },
+): Promise<{ ok: boolean; summary: string }> {
+  const amt = Math.floor(amount);
+  if (!amt) return { ok: true, summary: "" };
+  const { error } = await admin.rpc("increment_credits", { user_id: userId, amount: amt });
+  if (error) {
+    // Fallback, falls die RPC fehlt.
+    const { data: p } = await admin.from("profiles").select("credits").eq("id", userId).single();
+    if (p) await admin.from("profiles").update({ credits: (p.credits as number) + amt }).eq("id", userId);
+  }
+  return { ok: true, summary: `${amt.toLocaleString("de-DE")} CR` };
+}
+
+export async function grantItem(
+  admin: Admin,
+  userId: string,
+  opts: { itemId?: string; rarity?: string; quantity?: number },
+): Promise<{ ok: boolean; error?: string; summary: string }> {
+  let itemId = opts.itemId;
+  let name = "Item";
+  if (!itemId && opts.rarity) {
+    // Zufälliges Item der gewünschten Seltenheit.
+    const { data: items } = await admin.from("items").select("id, name").eq("rarity", opts.rarity).limit(100);
+    const pool = (items ?? []) as { id: string; name: string }[];
+    if (pool.length > 0) { const pick = pool[Math.floor(Math.random() * pool.length)]; itemId = pick.id; name = pick.name ?? name; }
+  } else if (itemId) {
+    const { data: it } = await admin.from("items").select("name").eq("id", itemId).maybeSingle();
+    name = (it?.name as string) ?? name;
+  }
+  if (!itemId) return { ok: false, error: "Kein passendes Item gefunden.", summary: "" };
+  const qty = Math.max(1, Math.floor(opts.quantity ?? 1));
+  const rows = Array.from({ length: qty }, () => ({ user_id: userId, item_id: itemId }));
+  const { error } = await admin.from("inventory").insert(rows);
+  if (error) return { ok: false, error: "Item konnte nicht vergeben werden.", summary: "" };
+  return { ok: true, summary: qty > 1 ? `${qty}× ${name}` : name };
+}
+
+// ── Zentraler Reward-Dispatcher ───────────────────────────────────────────────
+// Eine kanonische Belohnung, die JEDE Surface (Battle Pass, Level-Road, Daily
+// Quests, Streak, Shop, Gutschein-Codes, Admin-Vergabe) verwenden kann.
+// ⚠️ AGENTS: Neue Reward-Typen IMMER hier ergänzen, damit sie ÜBERALL nutzbar sind.
+
+export type RewardSpecType =
+  | "credits" | "xp" | "item" | "random_item"
+  | "ability" | "name_style" | "badge" | "case_voucher" | "game_bonus";
+
+export interface RewardSpec {
+  type: RewardSpecType;
+  /** credits-/xp-Betrag, game_bonus-Anzahl, item-Stückzahl. */
+  amount?: number;
+  itemId?: string;
+  itemRarity?: string;          // random_item / item ohne festes itemId
+  abilityKey?: string;
+  styleKey?: string;
+  badgeKey?: string;
+  voucherMode?: "tier" | "rarity";
+  voucherTierId?: string;
+  voucherRarityFloor?: Rarity;
+  bonusGame?: BonusGame;
+  durationHours?: number;
+}
+
+export async function grantReward(
+  admin: Admin,
+  userId: string,
+  spec: RewardSpec,
+  source = "reward",
+): Promise<{ ok: boolean; error?: string; summary: string }> {
+  switch (spec.type) {
+    case "credits":
+      return grantCredits(admin, userId, spec.amount ?? 0, { source });
+    case "xp": {
+      const amt = Math.floor(spec.amount ?? 0);
+      if (amt > 0) {
+        try { const m = await import("@/lib/actions/level-system"); await m.awardXp(userId, amt, source); } catch { /* non-fatal */ }
+      }
+      return { ok: true, summary: `${amt} XP` };
+    }
+    case "item":
+      return grantItem(admin, userId, { itemId: spec.itemId, rarity: spec.itemRarity, quantity: spec.amount });
+    case "random_item":
+      return grantItem(admin, userId, { rarity: spec.itemRarity, quantity: spec.amount });
+    case "ability":
+      return grantAbility(admin, userId, { abilityKey: spec.abilityKey ?? "", durationHours: spec.durationHours, source });
+    case "name_style":
+      return grantNameStyle(admin, userId, { styleKey: spec.styleKey ?? "", source });
+    case "badge":
+      return grantBadge(admin, userId, { badgeKey: spec.badgeKey ?? "" });
+    case "case_voucher":
+      return grantCaseVoucher(admin, userId, { mode: spec.voucherMode ?? "rarity", tierId: spec.voucherTierId, rarityFloor: spec.voucherRarityFloor, durationHours: spec.durationHours, source });
+    case "game_bonus":
+      return grantGameBonus(admin, userId, { game: spec.bonusGame ?? "plinko", amount: spec.amount ?? 1, durationHours: spec.durationHours, source });
+    default:
+      return { ok: false, error: "Unbekannter Reward-Typ.", summary: "" };
+  }
+}
+
 // ── Game bonus ───────────────────────────────────────────────────────────────
 
 export const BONUS_GAMES = ["plinko", "snake", "don"] as const;

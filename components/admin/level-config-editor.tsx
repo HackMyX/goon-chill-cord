@@ -455,18 +455,37 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
                           className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none"
                         >
                           <option value="credits">Credits</option>
+                          <option value="xp">XP</option>
+                          <option value="item">Item (fest)</option>
+                          <option value="random_item">Item (zufällig)</option>
                           <option value="ability">Fähigkeit</option>
                           <option value="badge">Badge</option>
                           <option value="name_style">Name-Style</option>
+                          <option value="case_voucher">Gutschein (Case)</option>
+                          <option value="game_bonus">Spiel-Bonus</option>
                         </select>
-                        {r.type === "credits" && (
+                        {(r.type === "credits" || r.type === "xp") && (
                           <input
                             type="number"
                             value={r.amount ?? 0}
                             onChange={(e) => setReward(lvl.level, idx, { amount: Number(e.target.value) })}
                             className="w-28 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                            placeholder="1000"
+                            placeholder={r.type === "xp" ? "XP" : "1000"}
                           />
+                        )}
+                        {r.type === "item" && (
+                          <>
+                            <input value={r.itemId ?? ""} onChange={(e) => setReward(lvl.level, idx, { itemId: e.target.value })} placeholder="item_id" className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
+                            <input type="number" min={1} value={r.amount ?? 1} onChange={(e) => setReward(lvl.level, idx, { amount: Number(e.target.value) })} placeholder="Anzahl" className="w-20 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
+                          </>
+                        )}
+                        {r.type === "random_item" && (
+                          <>
+                            <select value={r.itemRarity ?? "selten"} onChange={(e) => setReward(lvl.level, idx, { itemRarity: e.target.value })} className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none">
+                              <option value="normal">Normal</option><option value="selten">Selten</option><option value="mythisch">Mythisch</option><option value="ultra">Ultra</option>
+                            </select>
+                            <input type="number" min={1} value={r.amount ?? 1} onChange={(e) => setReward(lvl.level, idx, { amount: Number(e.target.value) })} placeholder="Anzahl" className="w-20 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
+                          </>
                         )}
                         {(r.type === "ability" || r.type === "badge" || r.type === "name_style") && (
                           <input
@@ -479,6 +498,30 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
                             placeholder={r.type === "ability" ? "ability_key" : r.type === "badge" ? "badge_key" : "style_key"}
                             className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none"
                           />
+                        )}
+                        {r.type === "case_voucher" && (
+                          <>
+                            <select value={r.voucherMode ?? "rarity"} onChange={(e) => setReward(lvl.level, idx, { voucherMode: e.target.value as "tier" | "rarity" })} className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none">
+                              <option value="rarity">nach Seltenheit</option><option value="tier">fester Case</option>
+                            </select>
+                            {(r.voucherMode ?? "rarity") === "rarity" ? (
+                              <select value={r.voucherRarityFloor ?? "selten"} onChange={(e) => setReward(lvl.level, idx, { voucherRarityFloor: e.target.value })} className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none">
+                                <option value="normal">Normal</option><option value="selten">Selten</option><option value="mythisch">Mythisch</option><option value="ultra">Ultra</option>
+                              </select>
+                            ) : (
+                              <input value={r.voucherTierId ?? ""} onChange={(e) => setReward(lvl.level, idx, { voucherTierId: e.target.value })} placeholder="tier_id" className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
+                            )}
+                            <input type="number" min={0} value={r.durationHours ?? 0} onChange={(e) => setReward(lvl.level, idx, { durationHours: Number(e.target.value) })} placeholder="Std" title="Gültig (Std, 0=unbegrenzt)" className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
+                          </>
+                        )}
+                        {r.type === "game_bonus" && (
+                          <>
+                            <select value={r.bonusGame ?? "plinko"} onChange={(e) => setReward(lvl.level, idx, { bonusGame: e.target.value as "plinko" | "snake" | "don" })} className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none">
+                              <option value="plinko">Plinko</option><option value="snake">Snake</option><option value="don">DON</option>
+                            </select>
+                            <input type="number" min={1} value={r.amount ?? 1} onChange={(e) => setReward(lvl.level, idx, { amount: Number(e.target.value) })} placeholder="Züge" className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
+                            <input type="number" min={0} value={r.durationHours ?? 0} onChange={(e) => setReward(lvl.level, idx, { durationHours: Number(e.target.value) })} placeholder="Std" title="Gültig (Std, 0=unbegrenzt)" className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
+                          </>
                         )}
                         <button onClick={() => removeReward(lvl.level, idx)} className="rounded-lg p-1 text-red-400 hover:bg-red-500/10">
                           <Trash2 className="h-3.5 w-3.5" />

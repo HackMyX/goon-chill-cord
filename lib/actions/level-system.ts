@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
 import { notifyUser } from "@/lib/notifications-internal";
-import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
+import { grantReward, type RewardSpec } from "@/lib/rewards-grant";
 import { isAbilityActive } from "@/lib/actions/abilities";
 import { getSynergyConfig, addBpXpToActivePass } from "@/lib/actions/economy-synergy";
 import { computeSynergyMultipliers } from "@/lib/economy-synergy";
@@ -243,45 +243,29 @@ async function grantLevelRewards(
 ): Promise<void> {
   for (const reward of rewards) {
     try {
+      // Alle Reward-Typen laufen über den zentralen Dispatcher — so unterstützt
+      // die Level-Road exakt dieselben Belohnungen wie Battle Pass / Shop / Daily.
+      const spec: RewardSpec = {
+        type: reward.type,
+        amount: reward.amount,
+        itemId: reward.itemId,
+        itemRarity: reward.itemRarity,
+        abilityKey: reward.abilityKey,
+        styleKey: reward.nameStyleKey,
+        badgeKey: reward.badgeKey,
+        voucherMode: reward.voucherMode,
+        voucherTierId: reward.voucherTierId,
+        voucherRarityFloor: reward.voucherRarityFloor as RewardSpec["voucherRarityFloor"],
+        bonusGame: reward.bonusGame,
+        durationHours: reward.durationHours,
+      };
+      await grantReward(admin, userId, spec, "level_reward");
       if (reward.type === "credits" && reward.amount) {
-        const rpcResult = await admin.rpc("increment_credits", { user_id: userId, amount: reward.amount });
-        if (rpcResult.error) {
-          // Fallback if RPC doesn't exist
-          const { data: p } = await admin.from("profiles").select("credits").eq("id", userId).single();
-          if (p) {
-            await admin.from("profiles")
-              .update({ credits: (p.credits as number) + reward.amount! })
-              .eq("id", userId);
-          }
-        }
-
-        // Log the credit grant
         await admin.from("audit_logs").insert({
           user_id: userId,
           action: "level_reward_credits",
           payload: { level: newLevel, amount: reward.amount },
         });
-      } else if (reward.type === "ability" && reward.abilityKey) {
-        await admin.from("user_abilities").insert({
-          user_id: userId,
-          ability_key: reward.abilityKey,
-          source: "level_reward",
-          source_detail: `Level ${newLevel}`,
-        });
-      } else if (reward.type === "badge" && reward.badgeKey) {
-        await admin.from("user_badges").upsert(
-          { user_id: userId, badge_key: reward.badgeKey, awarded_at: new Date().toISOString() },
-          { onConflict: "user_id,badge_key", ignoreDuplicates: true }
-        );
-        await recomputeAutoPrioBadges(userId);
-      } else if (reward.type === "name_style" && reward.nameStyleKey) {
-        const { ensureStyleInDb } = await import("@/lib/actions/name-styles");
-        await ensureStyleInDb(reward.nameStyleKey, admin);
-        await admin.from("user_name_styles").upsert(
-          { user_id: userId, style_key: reward.nameStyleKey, source: "level_reward" },
-          { onConflict: "user_id,style_key", ignoreDuplicates: true }
-        );
-        void import("@/lib/actions/badges").then((m) => m.checkAndAwardNameStyleBadges(userId)).catch(() => {});
       }
     } catch { /* never let reward failure break the XP award */ }
   }

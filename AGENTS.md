@@ -98,3 +98,17 @@ XP-/Level-/Streak-/Quest-/Battle-Pass-Belohnung, Gutschein-Wert, Monster-Belohnu
 **Diese Pflicht gilt absolut. Kein neuer Wert/Preis ohne Cockpit-Anbindung.** Alles, was die
 Wirtschaft der Seite betrifft, MUSS zentral im Balance-Cockpit sicht- und vergleichbar sein —
 einzeln (jeder Eintrag) UND im Gesamtbild (eine Quelle der Wahrheit).
+
+## 9. Belohnungen laufen über den ZENTRALEN Reward-Dispatcher
+
+`lib/rewards-grant.ts` ist die EINE Stelle, an der Belohnungen vergeben werden:
+`grantReward(admin, userId, spec: RewardSpec, source)` deckt ALLE Typen ab
+(credits, xp, item, random_item, ability, name_style, badge, case_voucher, game_bonus).
+Einzel-Granter: grantCredits/grantItem/grantAbility/grantNameStyle/grantBadge/grantCaseVoucher/grantGameBonus.
+
+- **Jede Surface, an der ein User etwas bekommt** (Battle Pass, Level-Road, Daily Quests, Streak,
+  Shop, Gutschein-Codes, Admin-Vergabe), soll ihre Belohnung auf `RewardSpec` mappen und
+  `grantReward(...)` aufrufen — NICHT die DB-Inserts neu implementieren.
+- **Neuer Reward-Typ?** Zuerst in `RewardSpec` + `grantReward` ergänzen, DANN in den Surfaces
+  (Typ-Union, Admin-Picker-UI, Mapping) verfügbar machen. So ist alles überall nutzbar.
+- Ziel des Nutzers: ÜBERALL, wo man etwas bekommen kann, müssen ALLE Belohnungs-Typen wählbar sein.

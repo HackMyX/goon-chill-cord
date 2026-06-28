@@ -1,13 +1,22 @@
 // ─── Level + XP System — Types & Helpers ──────────────────────────────────────
 
-export type LevelRewardType = "credits" | "ability" | "badge" | "name_style";
+export type LevelRewardType =
+  | "credits" | "xp" | "item" | "random_item"
+  | "ability" | "badge" | "name_style" | "case_voucher" | "game_bonus";
 
 export interface LevelReward {
   type: LevelRewardType;
-  amount?: number;         // credits
+  amount?: number;          // credits/xp-Betrag, item-Stückzahl, game_bonus-Anzahl
+  itemId?: string;
+  itemRarity?: string;      // random_item / item ohne festes itemId
   abilityKey?: string;
   badgeKey?: string;
   nameStyleKey?: string;
+  voucherMode?: "tier" | "rarity";
+  voucherTierId?: string;
+  voucherRarityFloor?: string;
+  bonusGame?: "plinko" | "snake" | "don";
+  durationHours?: number;
 }
 
 export interface LevelDefinition {
