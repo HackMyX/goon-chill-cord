@@ -120,14 +120,14 @@ export function LevelRoad({
       <div ref={roadRef} className="relative">
         {/* Central connecting line — a dim rail with a bright, animated progress
             fill that grows down to the player's current position. */}
-        <div aria-hidden className="absolute left-[27px] top-2 bottom-2 w-0.5 rounded-full bg-white/[0.06]" />
+        <div aria-hidden className="absolute left-[36px] top-2 bottom-2 w-0.5 rounded-full bg-white/[0.06]" />
         {(() => {
           const ci = sorted.findIndex((d) => d.level === currentLevel);
           const pct = sorted.length > 1 ? Math.max(0, Math.min(1, (ci + 0.5) / sorted.length)) : 0;
           return (
             <motion.div
               aria-hidden
-              className="absolute left-[27px] top-2 w-0.5 rounded-full"
+              className="absolute left-[36px] top-2 w-0.5 rounded-full"
               style={{ background: "linear-gradient(to bottom, #c4b5fd, #7c3aed)", boxShadow: "0 0 10px rgba(167,139,250,0.55)" }}
               initial={{ height: 0 }}
               animate={{ height: `calc((100% - 16px) * ${pct})` }}

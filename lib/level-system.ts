@@ -167,8 +167,12 @@ export const LEVEL_TITLES: Record<number, string> = {
 /** Given total XP, returns which level that corresponds to. */
 export function calculateLevel(totalXp: number, levels: LevelDefinition[]): number {
   if (!levels || levels.length === 0) return 1;
+  // Defensive sort by xpRequired — the loop breaks at the first unreached level,
+  // so an out-of-order config (e.g. after a manual admin edit) must not yield the
+  // wrong level. Cheap for ≤50 levels.
+  const sorted = [...levels].sort((a, b) => a.xpRequired - b.xpRequired);
   let currentLevel = 1;
-  for (const def of levels) {
+  for (const def of sorted) {
     if (totalXp >= def.xpRequired) {
       currentLevel = def.level;
     } else {
