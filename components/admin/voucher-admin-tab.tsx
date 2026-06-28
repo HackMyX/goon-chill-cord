@@ -6,6 +6,7 @@ import {
   Send, Users, Calendar, RotateCcw, ChevronDown, Search, Layers, Target, Clock, UserCheck,
 } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
+import { KeySelect } from "@/components/admin/key-select";
 import {
   adminListRedemptionCodes, adminCreateRedemptionCode, adminUpdateRedemptionCode,
   adminToggleRedemptionCode, adminDeleteRedemptionCode, adminGrantVoucherToUsers,
@@ -137,8 +138,8 @@ function BundleEditor({ rewards, setRewards, look, accent = "purple" }: {
             </select></div>
         )}
         {type === "name_style" && (
-          <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Name-Style-Key</span>
-            <input value={styleKey} onChange={(e) => setStyleKey(e.target.value)} placeholder="z.B. abyssal" className={`${INPUT} w-40`} /></div>
+          <div className="flex flex-col gap-1"><span className="text-xs text-zinc-400">Name-Style</span>
+            <KeySelect kind="name_style" value={styleKey} onChange={setStyleKey} placeholder="wählen…" className={`${INPUT} w-40`} /></div>
         )}
         {type === "case_voucher" && (
           <>

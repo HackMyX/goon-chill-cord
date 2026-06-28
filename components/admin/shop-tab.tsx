@@ -431,9 +431,10 @@ function AddListingForm({
         )}
 
         {(listingType === "ability" || listingType === "name_style" || listingType === "badge") && (
-          <input
+          <KeySelect
+            kind={listingType}
             value={keyVal}
-            onChange={(e) => setKeyVal(e.target.value)}
+            onChange={setKeyVal}
             placeholder={KEY_PLACEHOLDER[listingType]}
             className="flex-1 min-w-[160px] rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
           />
@@ -490,6 +491,7 @@ function AddListingForm({
 }
 
 import { ShopVisualPreview } from "@/components/admin/shop-visual-preview";
+import { KeySelect } from "@/components/admin/key-select";
 
 const R_COL: Record<string, string> = { normal: "#9ca3af", selten: "#3b82f6", mythisch: "#f59e0b", ultra: "#a855f7" };
 const R_LBL: Record<string, string> = { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" };

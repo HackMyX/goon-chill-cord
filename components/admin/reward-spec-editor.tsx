@@ -2,6 +2,7 @@
 
 import { Trash2, Plus } from "lucide-react";
 import type { RewardSpec } from "@/lib/rewards-grant";
+import { KeySelect } from "@/components/admin/key-select";
 
 /**
  * Wiederverwendbarer Editor für eine Liste kanonischer Belohnungen (RewardSpec[]).
@@ -50,7 +51,7 @@ export function RewardSpecEditor({
 
           {r.type === "item" && (
             <>
-              <input value={r.itemId ?? ""} onChange={(e) => set(idx, { itemId: e.target.value })} placeholder="item_id" className={`flex-1 ${INP}`} />
+              <KeySelect kind="item" value={r.itemId} onChange={(v) => set(idx, { itemId: v })} className={`flex-1 ${INP}`} placeholder="Item wählen…" />
               <input type="number" min={1} value={r.amount ?? 1} onChange={(e) => set(idx, { amount: Number(e.target.value) })} placeholder="Anzahl" className={`w-20 ${INP}`} />
             </>
           )}
@@ -65,15 +66,16 @@ export function RewardSpecEditor({
           )}
 
           {(r.type === "ability" || r.type === "badge" || r.type === "name_style") && (
-            <input
-              value={r.type === "ability" ? (r.abilityKey ?? "") : r.type === "badge" ? (r.badgeKey ?? "") : (r.styleKey ?? "")}
-              onChange={(e) => {
-                if (r.type === "ability") set(idx, { abilityKey: e.target.value });
-                else if (r.type === "badge") set(idx, { badgeKey: e.target.value });
-                else set(idx, { styleKey: e.target.value });
+            <KeySelect
+              kind={r.type}
+              value={r.type === "ability" ? r.abilityKey : r.type === "badge" ? r.badgeKey : r.styleKey}
+              onChange={(v) => {
+                if (r.type === "ability") set(idx, { abilityKey: v });
+                else if (r.type === "badge") set(idx, { badgeKey: v });
+                else set(idx, { styleKey: v });
               }}
-              placeholder={r.type === "ability" ? "ability_key" : r.type === "badge" ? "badge_key" : "style_key"}
               className={`flex-1 ${INP}`}
+              placeholder={r.type === "ability" ? "Fähigkeit wählen…" : r.type === "badge" ? "Badge wählen…" : "Name-Style wählen…"}
             />
           )}
 
@@ -87,7 +89,7 @@ export function RewardSpecEditor({
                   <option value="normal">Normal</option><option value="selten">Selten</option><option value="mythisch">Mythisch</option><option value="ultra">Ultra</option>
                 </select>
               ) : (
-                <input value={r.voucherTierId ?? ""} onChange={(e) => set(idx, { voucherTierId: e.target.value })} placeholder="tier_id" className={`flex-1 ${INP}`} />
+                <KeySelect kind="case_tier" value={r.voucherTierId} onChange={(v) => set(idx, { voucherTierId: v })} className={`flex-1 ${INP}`} placeholder="Case wählen…" />
               )}
               <input type="number" min={0} value={r.durationHours ?? 0} onChange={(e) => set(idx, { durationHours: Number(e.target.value) })} placeholder="Std" title="Gültig (Std, 0=unbegrenzt)" className={`w-16 ${INP}`} />
             </>

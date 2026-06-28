@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Save, RefreshCw, AlertTriangle, CheckCircle2, TrendingUp, Zap, Star, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { AdminTooltip } from "@/components/admin/admin-tooltip";
+import { KeySelect } from "@/components/admin/key-select";
 import { DEFAULT_LEVEL_ROAD_CONFIG, LEVEL_TITLES } from "@/lib/level-system";
 import type { XpConfig, LevelDefinition, XpSourceConfig, LevelReward, LevelRoadConfig, LevelRoadTier } from "@/lib/level-system";
 import { getXpConfig, updateXpConfig, adminGrantXp } from "@/lib/actions/level-system";
@@ -475,7 +476,7 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
                         )}
                         {r.type === "item" && (
                           <>
-                            <input value={r.itemId ?? ""} onChange={(e) => setReward(lvl.level, idx, { itemId: e.target.value })} placeholder="item_id" className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
+                            <KeySelect kind="item" value={r.itemId} onChange={(v) => setReward(lvl.level, idx, { itemId: v })} placeholder="Item wählen…" className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
                             <input type="number" min={1} value={r.amount ?? 1} onChange={(e) => setReward(lvl.level, idx, { amount: Number(e.target.value) })} placeholder="Anzahl" className="w-20 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
                           </>
                         )}
@@ -488,14 +489,15 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
                           </>
                         )}
                         {(r.type === "ability" || r.type === "badge" || r.type === "name_style") && (
-                          <input
-                            value={r.type === "ability" ? (r.abilityKey ?? "") : r.type === "badge" ? (r.badgeKey ?? "") : (r.nameStyleKey ?? "")}
-                            onChange={(e) => {
-                              if (r.type === "ability") setReward(lvl.level, idx, { abilityKey: e.target.value });
-                              else if (r.type === "badge") setReward(lvl.level, idx, { badgeKey: e.target.value });
-                              else setReward(lvl.level, idx, { nameStyleKey: e.target.value });
+                          <KeySelect
+                            kind={r.type}
+                            value={r.type === "ability" ? r.abilityKey : r.type === "badge" ? r.badgeKey : r.nameStyleKey}
+                            onChange={(v) => {
+                              if (r.type === "ability") setReward(lvl.level, idx, { abilityKey: v });
+                              else if (r.type === "badge") setReward(lvl.level, idx, { badgeKey: v });
+                              else setReward(lvl.level, idx, { nameStyleKey: v });
                             }}
-                            placeholder={r.type === "ability" ? "ability_key" : r.type === "badge" ? "badge_key" : "style_key"}
+                            placeholder={r.type === "ability" ? "Fähigkeit wählen…" : r.type === "badge" ? "Badge wählen…" : "Name-Style wählen…"}
                             className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none"
                           />
                         )}
@@ -509,7 +511,7 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
                                 <option value="normal">Normal</option><option value="selten">Selten</option><option value="mythisch">Mythisch</option><option value="ultra">Ultra</option>
                               </select>
                             ) : (
-                              <input value={r.voucherTierId ?? ""} onChange={(e) => setReward(lvl.level, idx, { voucherTierId: e.target.value })} placeholder="tier_id" className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
+                              <KeySelect kind="case_tier" value={r.voucherTierId} onChange={(v) => setReward(lvl.level, idx, { voucherTierId: v })} placeholder="Case wählen…" className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
                             )}
                             <input type="number" min={0} value={r.durationHours ?? 0} onChange={(e) => setReward(lvl.level, idx, { durationHours: Number(e.target.value) })} placeholder="Std" title="Gültig (Std, 0=unbegrenzt)" className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-200 outline-none" />
                           </>
