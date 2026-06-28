@@ -1020,15 +1020,15 @@ function TrackTileCard({
       const er = el.getBoundingClientRect();
       const rr = root.getBoundingClientRect();
       if (er.width <= 0) { setInView(false); return; }
-      // Render 3D ONLY when the tile is fully inside the carousel PLUS a ~1-card
-      // buffer on each side. So the model fades out a whole card before the tile
-      // reaches the edge (both directions) — and the generous buffer absorbs the
-      // 1-frame cull lag, so nothing ever pops past the rim no matter how fast you
-      // scroll. The masked outer card just shows its CSS fallback instead of 3D.
-      // Clamp the buffer so a centred tile still renders on narrow/mobile rails
-      // (never hide ALL 3D): the inset can't exceed the side-space of a centred tile.
+      // Render 3D while the tile is fully inside the carousel with only a SMALL
+      // safety buffer (~20% of a card). The buffer just covers the 1-frame cull
+      // lag, so the tile is culled while still a hair INSIDE the rim → it never
+      // pokes past the edge (no fly-out), yet every fully-visible card — including
+      // the outermost ones — keeps its 3D. A card only loses its 3D once it's
+      // actually starting to clip the edge.
+      // Clamp so a centred tile still renders on narrow/mobile rails.
       const maxInset = Math.max(0, (rr.width - er.width) / 2 - 1);
-      const inset = Math.min(er.width * 0.85, maxInset);
+      const inset = Math.min(er.width * 0.2, maxInset);
       setInView(er.left >= rr.left + inset && er.right <= rr.right - inset);
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(compute); };
