@@ -77,7 +77,13 @@ export async function getShopExtras(): Promise<ShopExtra[]> {
     } else if (lt === "voucher") {
       const vc = (r.voucher_config ?? {}) as Record<string, unknown>;
       const isBonus = (vc.kind as string) === "game_bonus";
-      out.push({ listingId: r.id as string, type: "voucher", key: r.id as string, name: isBonus ? `+${vc.amount ?? 0} ${vc.game ?? "Spiel"}-Bonus` : "Gratis-Case", description: "Gutschein", priceCr: price, rarity: "selten", icon: "Ticket", category: "voucher", owned: false });
+      const floor = (vc.rarityFloor as string) ?? "selten";
+      const rLabel: Record<string, string> = { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" };
+      out.push({
+        listingId: r.id as string, type: "voucher", key: r.id as string,
+        name: isBonus ? `+${vc.amount ?? 0} ${vc.game ?? "Spiel"}-Bonus` : `Gratis-Case (mind. ${rLabel[floor] ?? floor})`,
+        description: "Gutschein", priceCr: price, rarity: isBonus ? "selten" : floor, icon: "Ticket", category: "voucher", owned: false,
+      });
     }
   }
   return out;

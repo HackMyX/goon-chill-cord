@@ -37,7 +37,7 @@ export interface ShopCategoryDayRule {
   itemCountOverride: number | null;
 }
 
-export type ShopContentType = "item" | "ability" | "name_style" | "badge";
+export type ShopContentType = "item" | "ability" | "name_style" | "badge" | "voucher";
 
 export interface ShopCategory {
   id: string;
@@ -551,10 +551,25 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
           });
           excludeIds.add(item.id);
         }
+      } else if (category.contentType === "voucher") {
+        // Vouchers have no definition pool — the category GENERATES free-case
+        // vouchers, one per slot, with a rarity floor drawn from its rarity filter.
+        const rarities = (rule.rarityFilter && rule.rarityFilter.length > 0)
+          ? rule.rarityFilter
+          : (["normal", "selten", "mythisch", "ultra"] as Rarity[]);
+        for (let i = 0; i < rule.itemCount; i++) {
+          const rarity = rarities[Math.floor(Math.random() * rarities.length)];
+          newRows.push({
+            shop_date: dateKey, listing_type: "voucher",
+            voucher_config: { kind: "case", mode: "rarity", rarityFloor: rarity },
+            price_cr: roundToNicePrice((RARITY_BASE_PRICE[rarity] ?? 6000) * priceMult()),
+            purchase_limit: 1, featured: rarity === "mythisch" || rarity === "ultra", source: "auto", category_id: category.id,
+          });
+        }
       } else {
-        // Non-item: auto-draws from ALL enabled definitions of this type — no
-        // per-definition "Im Shop verfügbar" flag required (the category IS the gate).
-        const pool = await fetchGivablePool(admin, category.contentType);
+        // Non-item definition pool — auto-draws from ALL enabled definitions of
+        // this type — no per-definition "Im Shop verfügbar" flag (the category IS the gate).
+        const pool = await fetchGivablePool(admin, category.contentType as "ability" | "name_style" | "badge");
         const candidates = pool.filter(
           (p) => !excludeIds.has(`${category.contentType}:${p.key}`) &&
             (rule.rarityFilter === null || rule.rarityFilter.includes(p.rarity)),
