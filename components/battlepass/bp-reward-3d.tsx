@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useRef, useMemo } from "react";
-import type { RefObject } from "react";
+import type { RefObject, ReactNode } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { View, PerspectiveCamera, ContactShadows } from "@react-three/drei";
@@ -369,6 +369,41 @@ function BpRewardScene({
   }
 }
 
+// ── Carousel clip — per-FRAME visibility (no React lag) ───────────────────────
+
+/**
+ * Toggles its children's visibility every render frame based on how much of the
+ * tracked tile is inside the carousel viewport. Because it runs in the WebGL
+ * render loop (useFrame) — NOT via React state / IntersectionObserver — there is
+ * ZERO lag: the model is hidden the exact instant the tile would start to clip
+ * the carousel edge, so a 3D reward can never poke past / fly out of the rail,
+ * yet every sufficiently-visible tile keeps its model. A binary clip (not a
+ * partial scissor), tuned so the centred model is fully inside while shown.
+ */
+export function ClipToCarousel({
+  tileRef, rootRef, threshold = 0.82, children,
+}: {
+  tileRef?: RefObject<HTMLElement | null>;
+  rootRef?: RefObject<HTMLElement | null>;
+  threshold?: number;
+  children: ReactNode;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(() => {
+    const g = ref.current;
+    if (!g) return;
+    const tile = tileRef?.current;
+    const root = rootRef?.current;
+    if (!tile || !root) { if (!g.visible) g.visible = true; return; }
+    const t = tile.getBoundingClientRect();
+    const r = root.getBoundingClientRect();
+    const overlap = Math.max(0, Math.min(t.right, r.right) - Math.max(t.left, r.left));
+    const vis = t.width > 0 ? overlap >= t.width * threshold : true;
+    if (g.visible !== vis) g.visible = vis;
+  });
+  return <group ref={ref}>{children}</group>;
+}
+
 // ── Public component — wrap in a View for BP tiles ────────────────────────────
 
 export function BpRewardView3D({
@@ -379,6 +414,8 @@ export function BpRewardView3D({
   visible = true,
   lightColor,
   track,
+  clipTileRef,
+  clipRootRef,
 }: {
   rewardType: string;
   rarity?: string;
@@ -390,6 +427,9 @@ export function BpRewardView3D({
    *  path) and scissors to this tracked DOM box — physically clipped to the
    *  canvas framebuffer. Used by the box-clipped reel canvas. */
   track?: RefObject<HTMLElement | null>;
+  /** Carousel clip refs: hide the model per-frame once its tile clips the rail. */
+  clipTileRef?: RefObject<HTMLElement | null>;
+  clipRootRef?: RefObject<HTMLElement | null>;
 }) {
   return (
     <View
@@ -401,8 +441,10 @@ export function BpRewardView3D({
       <PerspectiveCamera makeDefault position={[0, 0.15, 2.8]} fov={42} />
       <BpLights color={lightColor} />
       <Suspense fallback={null}>
-        <BpRewardScene rewardType={rewardType} rarity={rarity} creditsAmount={creditsAmount} />
-        <ContactShadows position={[0, -0.65, 0]} opacity={0.25} scale={3} blur={2.5} far={2} />
+        <ClipToCarousel tileRef={clipTileRef} rootRef={clipRootRef}>
+          <BpRewardScene rewardType={rewardType} rarity={rarity} creditsAmount={creditsAmount} />
+          <ContactShadows position={[0, -0.65, 0]} opacity={0.25} scale={3} blur={2.5} far={2} />
+        </ClipToCarousel>
       </Suspense>
     </View>
   );

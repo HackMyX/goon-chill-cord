@@ -23,7 +23,7 @@ import {
   type CamCfg,
 } from "@/components/shop/shop-character-view";
 import { CharacterModel } from "@/components/world/character-model";
-import { BpRewardView3D } from "@/components/battlepass/bp-reward-3d";
+import { BpRewardView3D, ClipToCarousel } from "@/components/battlepass/bp-reward-3d";
 import type { PreviewSubject } from "@/components/ui/universal-preview-modal";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -120,6 +120,10 @@ export interface CaseItem3DProps {
    *  this tracked DOM box — physically clipped to the canvas framebuffer (the
    *  box-clipped reel). When absent it uses the shared full-viewport canvas. */
   track?: RefObject<HTMLElement | null>;
+  /** Carousel clip refs (BP season-road): hide the model per-frame once its tile
+   *  clips the rail → no fly-out, zero lag. Absent elsewhere = no clipping. */
+  clipTileRef?: RefObject<HTMLElement | null>;
+  clipRootRef?: RefObject<HTMLElement | null>;
 }
 
 export function CaseItem3D({
@@ -133,6 +137,8 @@ export function CaseItem3D({
   character = false,
   scale = 1,
   track,
+  clipTileRef,
+  clipRootRef,
 }: CaseItem3DProps) {
   const baseCfg = character ? getCharCam(item.type) : getCam(item.type);
   const z = Math.max(0.4, scale || 1);
@@ -151,22 +157,24 @@ export function CaseItem3D({
       <CameraRig cfg={cfg} />
       <ItemLights />
       <Suspense fallback={null}>
-        <AutoSpin enabled={rotate} speed={rotateSpeed}>
-          {character ? (
-            <CharacterPreviewScene item={item} gender={gender} />
-          ) : (
-            <ItemSceneContent item={item} gender={gender} />
+        <ClipToCarousel tileRef={clipTileRef} rootRef={clipRootRef}>
+          <AutoSpin enabled={rotate} speed={rotateSpeed}>
+            {character ? (
+              <CharacterPreviewScene item={item} gender={gender} />
+            ) : (
+              <ItemSceneContent item={item} gender={gender} />
+            )}
+          </AutoSpin>
+          {shadow && !character && (
+            <ContactShadows
+              position={[0, -0.6, 0]}
+              opacity={0.28}
+              scale={3}
+              blur={2.4}
+              far={2}
+            />
           )}
-        </AutoSpin>
-        {shadow && !character && (
-          <ContactShadows
-            position={[0, -0.6, 0]}
-            opacity={0.28}
-            scale={3}
-            blur={2.4}
-            far={2}
-          />
-        )}
+        </ClipToCarousel>
       </Suspense>
     </View>
   );
@@ -240,6 +248,9 @@ export interface CaseDropViewProps {
   rootRef?: RefObject<Element | null>;
   /** Tracked DOM box for the in-canvas (box-clipped reel) render path. */
   track?: RefObject<HTMLElement | null>;
+  /** Carousel clip refs (BP season-road) — per-frame hide once the tile clips. */
+  clipTileRef?: RefObject<HTMLElement | null>;
+  clipRootRef?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -263,6 +274,8 @@ export function CaseDropView({
   scale = 1,
   rootRef,
   track,
+  clipTileRef,
+  clipRootRef,
 }: CaseDropViewProps) {
   let node: ReactNode;
   if (subject.kind === "item") {
@@ -278,6 +291,8 @@ export function CaseDropView({
         character={character}
         scale={scale}
         track={track}
+        clipTileRef={clipTileRef}
+        clipRootRef={clipRootRef}
       />
     );
   } else {
@@ -290,6 +305,8 @@ export function CaseDropView({
         viewIndex={viewIndex}
         visible={visible}
         track={track}
+        clipTileRef={clipTileRef}
+        clipRootRef={clipRootRef}
       />
     );
   }

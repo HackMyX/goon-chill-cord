@@ -1020,16 +1020,12 @@ function TrackTileCard({
       const er = el.getBoundingClientRect();
       const rr = root.getBoundingClientRect();
       if (er.width <= 0) { setInView(false); return; }
-      // Render 3D while the tile is fully inside the carousel with only a SMALL
-      // safety buffer (~20% of a card). The buffer just covers the 1-frame cull
-      // lag, so the tile is culled while still a hair INSIDE the rim → it never
-      // pokes past the edge (no fly-out), yet every fully-visible card — including
-      // the outermost ones — keeps its 3D. A card only loses its 3D once it's
-      // actually starting to clip the edge.
-      // Clamp so a centred tile still renders on narrow/mobile rails.
-      const maxInset = Math.max(0, (rr.width - er.width) / 2 - 1);
-      const inset = Math.min(er.width * 0.2, maxInset);
-      setInView(er.left >= rr.left + inset && er.right <= rr.right - inset);
+      // GENEROUS perf gate only: mount/render the View whenever the tile is even
+      // slightly visible, so no visible card is ever blank. The PRECISE, lag-free
+      // hide is done per-frame inside <ClipToCarousel> (useFrame) — that's what
+      // guarantees nothing ever pokes past the rail.
+      const overlap = Math.max(0, Math.min(er.right, rr.right) - Math.max(er.left, rr.left));
+      setInView(overlap > 0);
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(compute); };
     compute();
@@ -1271,6 +1267,8 @@ function TrackTileCard({
                     lazy
                     rootRef={scrollRootRef}
                     fallbackColor={effectiveTrackColor}
+                    clipTileRef={cardRef}
+                    clipRootRef={scrollRootRef}
                   />
                 ) : (
                   <BpRewardView3D
@@ -1279,6 +1277,8 @@ function TrackTileCard({
                     creditsAmount={(tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1)}
                     viewIndex={viewIndex}
                     visible={inView}
+                    clipTileRef={cardRef}
+                    clipRootRef={scrollRootRef}
                   />
                 )}
               </div>
