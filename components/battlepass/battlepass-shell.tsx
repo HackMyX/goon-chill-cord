@@ -1006,18 +1006,32 @@ function TrackTileCard({
   const [inView, setInView] = useState(true);
   useEffect(() => {
     const el = cardRef.current;
-    if (!el || typeof IntersectionObserver === "undefined") return;
-    const root = scrollRootRef?.current ?? null;
-    const obs = new IntersectionObserver(
-      // Radical clip: 3D renders ONLY when the tile is ≥90% inside the carousel.
-      // A tile crossing the edge stops drawing its 3D entirely (no scissor rect
-      // poking past the carousel) — the opaque edge masks cover the brief
-      // pop-in/out zone, so nothing ever overhangs the box.
-      (entries) => setInView((entries[0]?.intersectionRatio ?? 1) >= 0.9),
-      { root, rootMargin: "0px", threshold: [0, 0.5, 0.85, 0.9, 0.95, 1] },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
+    const root = scrollRootRef?.current;
+    if (!el || !root) return;
+    // SYNCHRONOUS cull on the scroll event (NOT IntersectionObserver). IO is async
+    // and lags a smooth/arrow scroll by several frames, during which a tile sliding
+    // out keeps drawing its 3D on the shared full-viewport canvas at its now
+    // off-container position → the "models fly out of the box before they vanish".
+    // Comparing rects on every scroll event culls the 3D the instant the tile is
+    // less than ~78% inside the carousel — no lag, no fly-out. rAF-coalesced.
+    let raf = 0;
+    const compute = () => {
+      raf = 0;
+      const er = el.getBoundingClientRect();
+      const rr = root.getBoundingClientRect();
+      if (er.width <= 0) { setInView(false); return; }
+      const overlap = Math.max(0, Math.min(er.right, rr.right) - Math.max(er.left, rr.left));
+      setInView(overlap >= er.width * 0.78);
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(compute); };
+    compute();
+    root.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      root.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [scrollRootRef]);
 
   // Track type detection for richer visual treatment
