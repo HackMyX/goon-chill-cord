@@ -1080,14 +1080,20 @@ export function SnakeShell({
           g.goldenAppleMovesLeft = modeCfg.goldenAppleLifeApples;
         }
 
-        // Body growth. Farm never grows. A golden apple with tail-loss NET
-        // shrinks the snake by exactly goldenAppleTailLoss (prepend head, then
-        // drop tailLoss+1 from the tail). Otherwise the snake grows by one.
+        // Body growth. Farm never grows. A golden apple with tail-loss NET-removes
+        // EXACTLY goldenAppleTailLoss segments: the head always advances by one, so
+        // we compute the desired final length (oldLen − tailLoss) and rebuild the
+        // snake to exactly that length. Floored at the mode's startLength so a golden
+        // can never shrink the snake below where it began (and never below 1). When
+        // the snake is shorter than startLength + tailLoss the floor caps the loss —
+        // you simply can't lose more blocks than you have above the start length.
         if (g.mode === "farm") {
           g.snake = [newHead, ...g.snake.slice(0, -1)];
         } else if (ateGolden && modeCfg.goldenAppleTailLoss > 0) {
-          const keep = Math.max(1, g.snake.length - modeCfg.goldenAppleTailLoss - 1);
-          g.snake = [newHead, ...g.snake.slice(0, keep)];
+          const floorLen = Math.max(1, modeCfg.startLength);
+          const targetLen = Math.max(floorLen, g.snake.length - modeCfg.goldenAppleTailLoss);
+          // slice keeps (targetLen − 1) old segments; prepend head → exactly targetLen.
+          g.snake = [newHead, ...g.snake.slice(0, Math.max(0, targetLen - 1))];
         } else {
           g.snake = [newHead, ...g.snake];
         }

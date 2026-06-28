@@ -218,8 +218,8 @@ function ModeEditor<T extends SnakeModeConfig>({
         <Row label="Haltbarkeit (Äpfel)" hint="Verschwindet nach N normalen Äpfeln ohne Essen">
           <Num value={cfg.goldenAppleLifeApples} min={1} max={100} onChange={(v) => set("goldenAppleLifeApples" as keyof T, v as T[keyof T])} />
         </Row>
-        <Row label="Schwanz-Verlust (Blöcke)" hint="Anzahl Schwanzblöcke die beim Essen verloren gehen (0 = kein Verlust)">
-          <Num value={cfg.goldenAppleTailLoss} min={0} max={20} onChange={(v) => set("goldenAppleTailLoss" as keyof T, v as T[keyof T])} />
+        <Row label="Schwanz-Verlust (Blöcke)" hint="Genau so viele Blöcke werden beim Essen NETTO entfernt (1 = exakt 1 kürzer). Nie unter die Startlänge. 0 = kein Verlust.">
+          <Num value={cfg.goldenAppleTailLoss} min={0} max={50} onChange={(v) => set("goldenAppleTailLoss" as keyof T, v as T[keyof T])} />
         </Row>
         <Row label="Verlangsamung beim Essen (ms)" hint="Tempo wird nach dem Essen um diesen Wert verlangsamt (0 = kein Effekt, höher = langsamer)">
           <Num value={cfg.goldenAppleSpeedReduction} min={0} max={300} step={5} onChange={(v) => set("goldenAppleSpeedReduction" as keyof T, v as T[keyof T])} />
