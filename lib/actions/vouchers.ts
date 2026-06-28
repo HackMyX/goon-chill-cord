@@ -217,6 +217,40 @@ export async function adminListRedemptionCodes(): Promise<RedemptionCode[]> {
   return (codes as Record<string, unknown>[]).map((r) => rowToCode(r, counts.get(r.code as string) ?? 0));
 }
 
+/** Validate + sanitise a reward bundle. Returns the cleaned rewards or an error. */
+function sanitizeBundle(raw: VoucherReward[] | undefined): { rewards: VoucherReward[] } | { error: string } {
+  const rewards: VoucherReward[] = [];
+  for (const r of raw ?? []) {
+    if (r.type === "credits") {
+      const amount = Math.max(0, Math.floor(r.amount ?? 0));
+      if (amount <= 0) return { error: "Eine Credits-Belohnung hat keinen Betrag." };
+      rewards.push({ type: "credits", amount });
+    } else if (r.type === "ability") {
+      if (!r.abilityKey) return { error: "Eine Fähigkeits-Belohnung hat keine Fähigkeit." };
+      rewards.push({ type: "ability", abilityKey: r.abilityKey, durationHours: Math.max(0, Math.floor(r.durationHours ?? 0)) });
+    } else if (r.type === "badge") {
+      if (!r.badgeKey) return { error: "Eine Badge-Belohnung hat kein Badge." };
+      rewards.push({ type: "badge", badgeKey: r.badgeKey });
+    } else if (r.type === "name_style") {
+      if (!r.styleKey) return { error: "Eine Style-Belohnung hat keinen Name-Style." };
+      rewards.push({ type: "name_style", styleKey: r.styleKey });
+    }
+  }
+  if (rewards.length === 0) return { error: "Mindestens eine Belohnung hinzufügen." };
+  return { rewards };
+}
+
+/** The DB row patch (bundle + mirrored legacy columns) for a reward bundle. */
+function bundleRow(rewards: VoucherReward[]): Record<string, unknown> {
+  const first = rewards[0];
+  return {
+    rewards,
+    reward_type: first.type,
+    reward_value: { amount: first.amount, abilityKey: first.abilityKey, badgeKey: first.badgeKey, styleKey: first.styleKey },
+    ability_duration_hours: Math.max(0, Math.floor(first.durationHours ?? 0)),
+  };
+}
+
 export async function adminCreateRedemptionCode(input: {
   code: string;
   label?: string;
@@ -232,36 +266,14 @@ export async function adminCreateRedemptionCode(input: {
     return { success: false, error: "Code muss 3–32 Zeichen sein (A–Z, 0–9, Bindestrich)." };
   }
 
-  // Validate + sanitise every reward in the bundle.
-  const rewards: VoucherReward[] = [];
-  for (const raw of input.rewards ?? []) {
-    if (raw.type === "credits") {
-      const amount = Math.max(0, Math.floor(raw.amount ?? 0));
-      if (amount <= 0) return { success: false, error: "Eine Credits-Belohnung hat keinen Betrag." };
-      rewards.push({ type: "credits", amount });
-    } else if (raw.type === "ability") {
-      if (!raw.abilityKey) return { success: false, error: "Eine Fähigkeits-Belohnung hat keine Fähigkeit." };
-      rewards.push({ type: "ability", abilityKey: raw.abilityKey, durationHours: Math.max(0, Math.floor(raw.durationHours ?? 0)) });
-    } else if (raw.type === "badge") {
-      if (!raw.badgeKey) return { success: false, error: "Eine Badge-Belohnung hat kein Badge." };
-      rewards.push({ type: "badge", badgeKey: raw.badgeKey });
-    } else if (raw.type === "name_style") {
-      if (!raw.styleKey) return { success: false, error: "Eine Style-Belohnung hat keinen Name-Style." };
-      rewards.push({ type: "name_style", styleKey: raw.styleKey });
-    }
-  }
-  if (rewards.length === 0) return { success: false, error: "Mindestens eine Belohnung hinzufügen." };
+  const bundle = sanitizeBundle(input.rewards);
+  if ("error" in bundle) return { success: false, error: bundle.error };
 
-  // First reward also written to the legacy columns for backward compatibility.
-  const first = rewards[0];
   const admin = createAdminClient();
   const { error } = await admin.from("redemption_codes").insert({
     code,
     label: input.label?.trim() || null,
-    rewards,
-    reward_type: first.type,
-    reward_value: { amount: first.amount, abilityKey: first.abilityKey, badgeKey: first.badgeKey, styleKey: first.styleKey },
-    ability_duration_hours: Math.max(0, Math.floor(first.durationHours ?? 0)),
+    ...bundleRow(bundle.rewards),
     max_uses: Math.max(0, Math.floor(input.maxUses ?? 0)),
     expires_at: input.expiresAt || null,
     created_by: adminUser.id,
@@ -269,7 +281,41 @@ export async function adminCreateRedemptionCode(input: {
   if (error) {
     return { success: false, error: error.code === "23505" ? "Dieser Code existiert bereits." : error.message };
   }
-  void logActivity("voucher:create", `Code ${code} erstellt`, { userId: adminUser.id, code, rewards: rewards.length });
+  void logActivity("voucher:create", `Code ${code} erstellt`, { userId: adminUser.id, code, rewards: bundle.rewards.length });
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+/** Full post-hoc edit of an existing code (label, bundle, limit, expiry, status).
+ *  The code string itself is immutable — it's the redemption key claims reference. */
+export async function adminUpdateRedemptionCode(input: {
+  code: string;
+  label?: string;
+  rewards: VoucherReward[];
+  maxUses?: number;
+  expiresAt?: string | null;
+  enabled?: boolean;
+}): Promise<{ success: boolean; error?: string }> {
+  const adminUser = await requireAdminUser();
+  if (!adminUser) return { success: false, error: "Kein Zugriff." };
+
+  const code = normalizeCode(input.code);
+  const bundle = sanitizeBundle(input.rewards);
+  if ("error" in bundle) return { success: false, error: bundle.error };
+
+  const admin = createAdminClient();
+  const patch: Record<string, unknown> = {
+    label: input.label?.trim() || null,
+    ...bundleRow(bundle.rewards),
+    max_uses: Math.max(0, Math.floor(input.maxUses ?? 0)),
+    expires_at: input.expiresAt || null,
+  };
+  if (typeof input.enabled === "boolean") patch.enabled = input.enabled;
+
+  const { data, error } = await admin.from("redemption_codes").update(patch).eq("code", code).select("code").maybeSingle();
+  if (error) return { success: false, error: error.message };
+  if (!data) return { success: false, error: "Code nicht gefunden." };
+  void logActivity("voucher:update", `Code ${code} bearbeitet`, { userId: adminUser.id, code, rewards: bundle.rewards.length });
   revalidatePath("/admin");
   return { success: true };
 }

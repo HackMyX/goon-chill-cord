@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Gift, Loader2, Plus, Trash2, Check, X, Ticket, Sparkles, Info } from "lucide-react";
+import { Gift, Loader2, Plus, Trash2, Check, X, Ticket, Sparkles, Info, Pencil, Save } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 import {
-  adminListRedemptionCodes, adminCreateRedemptionCode,
+  adminListRedemptionCodes, adminCreateRedemptionCode, adminUpdateRedemptionCode,
   adminToggleRedemptionCode, adminDeleteRedemptionCode,
 } from "@/lib/actions/vouchers";
 import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
@@ -30,6 +30,8 @@ export function VoucherAdminTab() {
   const [expiresAt, setExpiresAt] = useState("");
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  // When set, the form edits an existing code instead of creating a new one.
+  const [editing, setEditing] = useState<RedemptionCode | null>(null);
 
   // The reward BUNDLE being built + the draft reward being configured.
   const [rewards, setRewards] = useState<VoucherReward[]>([]);
@@ -80,19 +82,38 @@ export function VoucherAdminTab() {
     setTimeout(() => setMsg(null), 4000);
   }
 
-  async function handleCreate() {
+  function resetForm() {
+    setEditing(null);
+    setCode(""); setLabel(""); setMaxUses(0); setExpiresAt(""); setRewards([]);
+  }
+
+  function startEdit(c: RedemptionCode) {
+    setEditing(c);
+    setCode(c.code);
+    setLabel(c.label ?? "");
+    setMaxUses(c.maxUses);
+    // ISO (UTC) → local value for <input type="datetime-local">
+    setExpiresAt(c.expiresAt ? new Date(new Date(c.expiresAt).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "");
+    setRewards(c.rewards);
+    setMsg(null);
+    sound.click();
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function handleSave() {
     if (rewards.length === 0) { flash("Mindestens eine Belohnung hinzufügen.", false); return; }
     setCreating(true);
     setMsg(null);
     sound.click();
-    const res = await adminCreateRedemptionCode({
-      code, label: label.trim() || undefined, rewards, maxUses, expiresAt: expiresAt || null,
-    });
+    const res = editing
+      ? await adminUpdateRedemptionCode({ code: editing.code, label: label.trim() || undefined, rewards, maxUses, expiresAt: expiresAt || null, enabled: editing.enabled })
+      : await adminCreateRedemptionCode({ code, label: label.trim() || undefined, rewards, maxUses, expiresAt: expiresAt || null });
     setCreating(false);
     if (res.success) {
       sound.save();
-      flash("Code erstellt.", true);
-      setCode(""); setLabel(""); setRewards([]);
+      flash(editing ? "Code gespeichert." : "Code erstellt.", true);
+      resetForm();
+      void reload();
     } else {
       sound.error();
       flash(res.error ?? "Fehler.", false);
@@ -145,15 +166,17 @@ export function VoucherAdminTab() {
       {/* Create */}
       <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
         <h3 className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
-          <Plus className="h-3.5 w-3.5 text-purple-400" /> Code erstellen
+          {editing ? <Pencil className="h-3.5 w-3.5 text-amber-400" /> : <Plus className="h-3.5 w-3.5 text-purple-400" />}
+          {editing ? <>Code bearbeiten: <span className="font-mono text-amber-300">{editing.code}</span></> : "Code erstellen"}
         </h3>
 
         {/* Code-level */}
         <div className="flex flex-wrap gap-3">
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-400">Code (A–Z, 0–9, -)</span>
+            <span className="text-xs text-zinc-400">Code (A–Z, 0–9, -){editing ? " — fest" : ""}</span>
             <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="SUMMER2026"
-              className={`${inputCls} w-44 font-bold uppercase tracking-wider`} />
+              readOnly={!!editing}
+              className={`${inputCls} w-44 font-bold uppercase tracking-wider ${editing ? "cursor-not-allowed opacity-60" : ""}`} />
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-xs text-zinc-400">Notiz (optional)</span>
@@ -242,10 +265,17 @@ export function VoucherAdminTab() {
         </div>
 
         <div className="mt-4 flex items-center gap-3">
-          <button onClick={handleCreate} disabled={creating || !code.trim() || rewards.length === 0}
-            className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-40">
-            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Code erstellen
+          <button onClick={handleSave} disabled={creating || !code.trim() || rewards.length === 0}
+            className={`flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-sm font-bold text-white disabled:opacity-40 ${editing ? "bg-amber-600 hover:bg-amber-500" : "bg-purple-600 hover:bg-purple-500"}`}>
+            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {editing ? "Änderungen speichern" : "Code erstellen"}
           </button>
+          {editing && (
+            <button onClick={() => { resetForm(); sound.click(); }}
+              className="flex items-center gap-1.5 rounded-xl border border-white/10 px-4 py-1.5 text-sm font-bold text-zinc-400 hover:text-zinc-200">
+              <X className="h-4 w-4" /> Abbrechen
+            </button>
+          )}
           {msg && <p className={`text-sm font-semibold ${msg.ok ? "text-emerald-400" : "text-red-400"}`}>{msg.text}</p>}
         </div>
       </div>
@@ -281,6 +311,10 @@ export function VoucherAdminTab() {
                   {expired && <span className="text-[10px] font-bold text-red-400">abgelaufen</span>}
                   {exhausted && <span className="text-[10px] font-bold text-amber-400">aufgebraucht</span>}
                   <div className="ml-auto flex items-center gap-1.5">
+                    <button onClick={() => startEdit(c)} title="Bearbeiten"
+                      className="rounded-lg border border-white/10 p-1.5 text-zinc-400 transition-colors hover:border-amber-500/40 hover:text-amber-300">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
                     <button onClick={() => toggle(c)} title={c.enabled ? "Deaktivieren" : "Aktivieren"}
                       className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold transition-colors ${
                         c.enabled ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-zinc-600/40 text-zinc-500"
