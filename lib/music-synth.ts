@@ -545,49 +545,65 @@ export class MusicSynth {
     gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + Math.max(0, fadeInMs) / 1000);
 
     const pattern = getPattern(parsed.vibe, parsed.variant);
+    // `patternStartTime` is the audio-clock time at which the NEXT bar must
+    // begin. Schedule the first bar a hair in the future, then advance the
+    // pointer to its end so the lookahead poll picks up exactly where it left
+    // off — every following bar starts precisely at the previous one's end.
     this.patternStartTime = ctx.currentTime + 0.1;
     const dur = this.schedulePattern(ctx, pattern, this.patternStartTime);
     this.patternDuration = dur;
+    this.patternStartTime += dur;
 
-    this.scheduleLoop(dur, token);
+    this.scheduleLoop(token);
   }
 
-  private scheduleLoop(dur: number, token: number) {
+  // Lookahead window + poll cadence for the bar scheduler. A short poll with a
+  // generous lookahead means even a main-thread stall (e.g. the Snake RAF loop)
+  // of up to ~LOOKAHEAD seconds can't starve the scheduler.
+  private static readonly LOOKAHEAD_SEC = 0.3;
+  private static readonly POLL_MS = 50;
+
+  /**
+   * Lookahead scheduler (the canonical Web-Audio "tale of two clocks" pattern).
+   * A frequent poll schedules every bar whose start falls within a short window
+   * ahead of the audio clock, and `patternStartTime` is only ever advanced by a
+   * just-scheduled bar's exact duration.
+   *
+   * The ONE catch-up rule is a FORWARD resync: if we've fallen behind the audio
+   * clock (tab backgrounded, context auto-suspended, main thread stalled), snap
+   * `patternStartTime` forward to just after `now`. It can never move backward,
+   * so a bar is never scheduled overlapping the previous one — which is exactly
+   * what the old `setTimeout`-per-bar scheduler did when wall-clock and audio
+   * clock drifted apart (it pulled the next bar back onto a still-playing one →
+   * the "music randomly speeds up for a few seconds then settles" bug). Worst
+   * case here is a single short gap on resync, never a pile-up and never a
+   * transient speed-up.
+   */
+  private scheduleLoop(token: number) {
     if (!this.isRunning || token !== this.startToken) return;
-    // Schedule next loop 0.3s before current one ends
-    const delayMs = Math.max(100, (dur - 0.3) * 1000);
     this.loopTimer = setTimeout(() => {
-      // Bail if stopped or superseded by a newer start() — this is what kills a
-      // would-be orphan loop chain instead of letting it ring a second track.
       if (!this.isRunning || token !== this.startToken || !this.ctx || !this.currentVibe) return;
       const ctx = this.ctx;
-      const pattern = getPattern(this.currentVibe, this.currentVariant);
+      const now = ctx.currentTime;
 
-      // Reconcile the hand-advanced audio-clock pointer against the real
-      // audio clock before scheduling the next bar. `setTimeout` is
-      // wall-clock and only ever fires *late* (it's throttled hard when the
-      // tab is backgrounded, and the AudioContext can auto-suspend), so
-      // `patternStartTime` — which we advance by a fixed `patternDuration`
-      // each loop regardless of how much real time actually passed — drifts
-      // out of step with `ctx.currentTime`. Left unchecked it eventually
-      // lands in the *past*, and Web Audio fires an entire pattern's worth
-      // of notes simultaneously the instant they're scheduled: the
-      // crackling/clipping "music crashes after a while" symptom, getting
-      // worse the longer the page stays open. Snapping back whenever it has
-      // drifted outside a tight window around `now` keeps every note
-      // scheduled slightly in the future (clean playback) and caps recovery
-      // at a single seam instead of an ever-growing pile-up.
-      let nextStart = this.patternStartTime + this.patternDuration;
-      const minStart = ctx.currentTime + 0.05;
-      const maxStart = ctx.currentTime + this.patternDuration + 1;
-      if (nextStart < minStart || nextStart > maxStart) {
-        nextStart = minStart;
+      // Forward-only resync: if the next bar would land in the past (we fell
+      // behind), move it to just ahead of now. NEVER pulls a future bar back.
+      if (this.patternStartTime < now + 0.02) {
+        this.patternStartTime = now + 0.05;
       }
-      this.patternStartTime = nextStart;
-      const nextDur = this.schedulePattern(ctx, pattern, this.patternStartTime);
-      this.patternDuration = nextDur;
-      this.scheduleLoop(nextDur, token);
-    }, delayMs);
+
+      // Schedule every bar starting within the lookahead window. Normally 0 or 1
+      // per poll; the loop only ever schedules forward and is bounded because
+      // each bar's duration (>0.3s) far exceeds the window growth per poll.
+      while (this.patternStartTime < now + MusicSynth.LOOKAHEAD_SEC) {
+        const pattern = getPattern(this.currentVibe, this.currentVariant);
+        const dur = this.schedulePattern(ctx, pattern, this.patternStartTime);
+        this.patternDuration = dur;
+        this.patternStartTime += dur;
+      }
+
+      this.scheduleLoop(token);
+    }, MusicSynth.POLL_MS);
   }
 
   /** Fade out the current track's bus and disconnect it shortly after, so its
