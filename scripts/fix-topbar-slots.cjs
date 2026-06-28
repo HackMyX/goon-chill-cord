@@ -1,9 +1,10 @@
-// Ergänzt fehlende Feature-Topbar-Slots (friends/quests) in der gespeicherten
-// site_config, behält die bestehende Reihenfolge bei. Idempotent.
-// Bewusst OHNE level (Dup zu profile_avatar), rewards (Gutscheine -> Garderobe), surveys.
+// Ergänzt den fehlenden Feature-Topbar-Slot (friends, als Link zur /friends-Seite)
+// in der gespeicherten site_config, behält die bestehende Reihenfolge bei. Idempotent.
+// Bewusst OHNE quests/level/rewards/surveys: quests-Trigger als globaler Popover
+// brach auf Mobile die Interaktivität; level=Dup zu profile_avatar; rewards=Garderobe.
 const { Client } = require("pg");
 const DB_URL = process.env.DATABASE_URL || "postgresql://postgres.dkgcovxypnwpwlfxmknw:kM*%5EX9ka7s15ecjsfBU@aws-0-eu-west-1.pooler.supabase.com:6543/postgres";
-const WANT = ["games","shop","auctions","trading","community","quests","friends","wardrobe","notifications","profile_avatar"];
+const WANT = ["games","shop","auctions","trading","community","friends","wardrobe","notifications","profile_avatar"];
 (async () => {
   const c = new Client({ connectionString: DB_URL, ssl: { rejectUnauthorized: false } });
   await c.connect();
