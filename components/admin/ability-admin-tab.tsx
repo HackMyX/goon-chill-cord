@@ -19,6 +19,10 @@ interface AbilityAdminTabProps {
 
 // Derived from the single source of truth — new effect types appear automatically.
 const EFFECT_TYPES = Object.keys(ABILITY_EFFECT_META) as AbilityEffectType[];
+// Gültige effectConfig-Kombo-Keys = alle Effekt-Typ-Namen + die Mine-Sonder-Keys.
+const EFFECT_CONFIG_KEYS: string[] = [...EFFECT_TYPES, "storage_bonus", "double_chance", "upgrade_discount"];
+const effectConfigKeyLabel = (k: string): string =>
+  (ABILITY_EFFECT_META as Record<string, { label?: string }>)[k]?.label ?? k;
 const CATEGORIES: AbilityCategory[] = ["mine", "snake", "plinko", "don", "world", "global"];
 // Effect types grouped by their category for the <optgroup> selector.
 const EFFECTS_BY_CATEGORY = CATEGORIES.map((cat) => ({
@@ -278,8 +282,8 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
                   onClick={() => setEditing((prev) => {
                     if (!prev) return prev;
                     const cfg = { ...(prev.effectConfig ?? {}) };
-                    let i = 1; let k = "bonus";
-                    while (cfg[k] !== undefined) k = `bonus_${i++}`;
+                    const used = new Set(Object.keys(cfg));
+                    const k = EFFECT_CONFIG_KEYS.find((ck) => !used.has(ck)) ?? "credit_bonus";
                     return { ...prev, effectConfig: { ...cfg, [k]: 0 } };
                   })}
                   className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-zinc-300 hover:bg-white/10"
@@ -294,19 +298,26 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
                 <div className="space-y-1.5">
                   {Object.entries(editing.effectConfig ?? {}).map(([k, v]) => (
                     <div key={k} className="flex items-center gap-2">
-                      <input
+                      <select
                         value={k}
                         onChange={(e) => setEditing((prev) => {
                           if (!prev) return prev;
                           const cfg = { ...(prev.effectConfig ?? {}) };
                           const val = cfg[k]; delete cfg[k];
-                          const nk = e.target.value.trim();
+                          const nk = e.target.value;
                           if (nk) cfg[nk] = val ?? 0;
                           return { ...prev, effectConfig: cfg };
                         })}
-                        placeholder="schlüssel"
                         className="flex-1 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
-                      />
+                      >
+                        {/* aktueller (evtl. unbekannter) Key bleibt sichtbar */}
+                        {!EFFECT_CONFIG_KEYS.includes(k) && <option value={k}>{k} (eigen)</option>}
+                        {EFFECT_CONFIG_KEYS.map((ck) => (
+                          <option key={ck} value={ck} disabled={ck !== k && editing.effectConfig?.[ck] !== undefined}>
+                            {effectConfigKeyLabel(ck)}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         type="number" step="any"
                         value={String(v ?? 0)}
