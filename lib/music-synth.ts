@@ -384,6 +384,12 @@ function getPattern(vibe: VibeKey, variant: number): TrackPattern {
 export class MusicSynth {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  // Per-track "bus" all of a track's oscillators/noise connect to. On a track
+  // switch the OLD bus is faded out fast and disconnected, so the previous
+  // track's still-scheduled notes can't bleed through the (re-used) masterGain
+  // into the new track — the "you hear two songs at once for a few seconds"
+  // bug. masterGain stays purely for user volume + the fade-in/out envelope.
+  private busGain: GainNode | null = null;
   private isRunning = false;
   private currentVibe: VibeKey | null = null;
   private currentVariant = 1;
@@ -434,7 +440,7 @@ export class MusicSynth {
     const melodyScale = buildScale(pattern.rootMidi + pattern.melodyOct * 12, pattern.scaleIntervals, 4);
     const bassScale   = buildScale(pattern.rootMidi + (pattern.bassOct + 1) * 12, pattern.scaleIntervals, 4);
 
-    const dest = this.masterGain!;
+    const dest = this.busGain ?? this.masterGain!;
 
     // Melody
     for (let step = 0; step < totalSteps; step++) {
@@ -494,7 +500,7 @@ export class MusicSynth {
     const parsed = MusicSynth.parseSynthUrl(synthUrl);
     if (!parsed) return;
 
-    this.stop();
+    this.stop(0.05);   // fast bus-kill so the old track can't overlap the new one
     this.isRunning = true;
     this.currentVibe = parsed.vibe;
     this.currentVariant = parsed.variant;
@@ -503,6 +509,13 @@ export class MusicSynth {
     if (ctx.state === "suspended") {
       await ctx.resume().catch(() => {});
     }
+
+    // Route the new track through a fresh bus (the old one was already fast-
+    // killed by stop(0.05) above) → no overlap with the previous track.
+    const bus = ctx.createGain();
+    bus.gain.value = 1;
+    bus.connect(this.masterGain!);
+    this.busGain = bus;
 
     const gain = this.masterGain!;
     // Wipe any leftover automation (e.g. a still-running fade-out ramp from
@@ -558,7 +571,27 @@ export class MusicSynth {
     }, delayMs);
   }
 
-  stop() {
+  /** Fade out the current track's bus and disconnect it shortly after, so its
+   *  remaining scheduled notes go silent instead of ringing into whatever plays
+   *  next. A standalone stop() keeps the graceful 0.4s masterGain fade; a track
+   *  switch (start → killBus) cuts the old bus in 50ms so there is no overlap. */
+  private killBus(fadeSec: number) {
+    const old = this.busGain;
+    this.busGain = null;
+    if (!old) return;
+    const f = Math.max(0.02, fadeSec);
+    if (this.ctx) {
+      const now = this.ctx.currentTime;
+      try {
+        old.gain.cancelScheduledValues(now);
+        old.gain.setValueAtTime(old.gain.value, now);
+        old.gain.linearRampToValueAtTime(0, now + f);
+      } catch { /* param already detached */ }
+    }
+    setTimeout(() => { try { old.disconnect(); } catch { /* already gone */ } }, f * 1000 + 80);
+  }
+
+  stop(busFadeSec = 0.4) {
     this.isRunning = false;
     if (this.loopTimer) { clearTimeout(this.loopTimer); this.loopTimer = null; }
     if (this.masterGain) {
@@ -567,6 +600,10 @@ export class MusicSynth {
       this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
       this.masterGain.gain.linearRampToValueAtTime(0, now + 0.4);
     }
+    // Fade + disconnect the track's bus so its scheduled notes don't outlive the
+    // stop. Standalone stop() = graceful 0.4s; a track switch passes 0.05s so the
+    // old track is silenced before the new one fades in (no overlap/doubling).
+    this.killBus(busFadeSec);
   }
 
   async fadeIn(volume: number, durationMs: number) {
