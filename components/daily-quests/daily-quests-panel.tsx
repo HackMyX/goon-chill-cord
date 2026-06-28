@@ -343,13 +343,11 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
 
   useEffect(() => { void load(); }, []);
 
-  // Outside click
+  // Close on Escape (backdrop click is handled by the overlay below).
   useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   async function handleClaim(questId: string) {
@@ -404,9 +402,14 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div
+      className="fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-5"
+      style={{ background: "rgba(4,4,10,0.66)", backdropFilter: "blur(7px)", WebkitBackdropFilter: "blur(7px)" }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+    <div
       ref={panelRef}
-      className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 z-[140] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-white/[0.08] bg-zinc-950/95 backdrop-blur-xl shadow-2xl"
-      style={{ width: "min(100vw, 400px)", maxHeight: "min(100dvh - 80px, 600px)" }}
+      className="relative flex w-full max-w-[440px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-zinc-950/95 shadow-2xl"
+      style={{ maxHeight: "min(100dvh - 24px, 640px)" }}
     >
       {/* Toast */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
@@ -575,6 +578,7 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
       <div className="border-t border-white/[0.04] px-5 py-2.5 text-center text-[10px] text-zinc-600">
         <ResetCountdown />
       </div>
+    </div>
     </div>
   );
 }
