@@ -757,14 +757,35 @@ export function CaseOpeningSection({
   // covers it (otherwise reel items render on top of the overlay).
   const reelSuppressed = anyModalOpen || phase === "result";
 
+  // Stable index of the target slot inside the spin strip built on click.
+  const targetIdxRef = useRef(0);
+
   async function handleOpen(tier: CaseTier) {
     if (fetchingRef.current || phase !== "idle") return;
     fetchingRef.current = true;
     setActiveTier(tier);
-    setPhase("pending");   // → warmup kicks in immediately in CaseReel
     setError(null);
     setWonDrop(null);
     sound.click();
+    sound.caseOpen();
+
+    // ── ONE continuous spin, ZERO restarts ───────────────────────────────────
+    // Build the FINAL spin strip UP FRONT (with a placeholder target slot) and
+    // start the warmup scroll on THAT strip right now. The server result later
+    // only RELABELS the (still far-ahead, unseen) target slot — same array
+    // length, same keys ⇒ React patches one slot in place, the reel is never
+    // swapped or torn down, so warmup flows straight into the deceleration as a
+    // single uninterrupted motion. The placeholder is never seen because the
+    // decel only begins AFTER the result lands.
+    const idle = idleReelRef.current;
+    const filler = buildFiller(60, "spin", previewPool, extraPoolEntries, group.itemTypes);
+    const after = buildFiller(8, "after", previewPool, extraPoolEntries, group.itemTypes);
+    const targetIdx = idle.length + filler.length;
+    targetIdxRef.current = targetIdx;
+    const placeholder: ReelEntry = { key: "target", rarity: "normal", type: group.itemTypes[0] ?? "weapon" };
+    setReel([...idle, ...filler, placeholder, ...after]);
+    setTargetIndex(targetIdx);
+    setPhase("pending");   // warmup scroll starts immediately on the final strip
 
     const result = await openCase(tier.id);
     fetchingRef.current = false;
@@ -773,7 +794,10 @@ export function CaseOpeningSection({
     if (!result.success || !result.drop) {
       setError(result.error ?? "Unbekannter Fehler.");
       sound.error();
+      setReel(idleReelRef.current);
+      setTargetIndex(Math.floor(PLACEHOLDER_COUNT / 2));
       setPhase("idle");
+      setActiveTier(null);
       return;
     }
 
@@ -781,10 +805,18 @@ export function CaseOpeningSection({
     setWonDrop(drop);
     onCreditsChange(result.newCredits!);
 
-    // User clicked SOFORT while server was in-flight — skip spin entirely and
-    // go straight to the result overlay. Charge the preview fee if applicable.
-    // NOTE: skipOnResultRef may also be cleared by the useEffect when spinning
-    // starts, so we read it here before any async gaps.
+    // Relabel ONLY the target slot in place (same length & key) — the spin
+    // effect does NOT re-run and x is untouched.
+    const wonEntry: ReelEntry = {
+      key: "target",
+      rarity: drop.rarity as Rarity,
+      type: drop.kind === "item" ? drop.item.type : drop.kind,
+      name: drop.name,
+      subject: dropToSubject(drop),
+    };
+    setReel((prev) => prev.map((e, i) => (i === targetIdxRef.current ? wonEntry : e)));
+
+    // SOFORT pressed during warmup — skip straight to the reveal (charge fee).
     if (skipOnResultRef.current) {
       skipOnResultRef.current = false;
       setSofortQueued(false);
@@ -800,24 +832,7 @@ export function CaseOpeningSection({
       return;
     }
 
-    const target: ReelEntry = {
-      key: "target",
-      rarity: drop.rarity as Rarity,
-      type: drop.kind === "item" ? drop.item.type : drop.kind,
-      name: drop.name,
-      subject: dropToSubject(drop),
-    };
-    // CLEAN, POP-FREE START: prepend the EXACT current idle strip (twice) so the
-    // items already visible during the warmup stay identical at the same indices
-    // when we switch to the spin strip — no content swap, no flicker, no restart.
-    // Then a long filler run + the target guarantees a long continuous spin.
-    const idle = idleReelRef.current;
-    const before = buildFiller(48, "before", previewPool, extraPoolEntries, group.itemTypes);
-    const after = buildFiller(8, "after", previewPool, extraPoolEntries, group.itemTypes);
-    const spinReel = [...idle, ...idle, ...before, target, ...after];
-    setReel(spinReel);
-    setTargetIndex(idle.length * 2 + before.length);
-    sound.caseOpen();
+    // Hand the warmup over to the single decelerating spin (same strip → no swap).
     setPhase("spinning");
     setSpinToken((t) => t + 1);
   }

@@ -121,10 +121,13 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
         winRef.current = [lo, hi];
         setWin([lo, hi]);
       }
-      // Containment window (draw): a slot i occupies [i*STEP + val, +ITEM_WIDTH]
-      // in container space. Fully inside ⇒ left ≥ 0 AND right ≤ containerWidth.
-      const dLo = Math.ceil(-val / STEP);
-      const dHi = Math.floor((containerWidth - ITEM_WIDTH - val) / STEP);
+      // Draw window: a slot is drawn while its CENTRE is inside the box, so it
+      // slides smoothly in/out to the edge instead of popping a full slot early.
+      // Centre of slot i = i*STEP + val + ITEM_WIDTH/2; inside ⇒ 0 … containerWidth.
+      // Max overhang is then ITEM_WIDTH/2, fully hidden under the edge/band masks.
+      const half = ITEM_WIDTH / 2;
+      const dLo = Math.ceil((-val - half) / STEP);
+      const dHi = Math.floor((containerWidth - half - val) / STEP);
       const prevD = winDrawRef.current;
       if (prevD[0] !== dLo || prevD[1] !== dHi) {
         winDrawRef.current = [dLo, dHi];
@@ -263,11 +266,11 @@ export const CaseReel = forwardRef<CaseReelHandle, CaseReelProps>(function CaseR
           outside the box anyway; these stay as a safety belt + clean page blend. */}
       <div
         className="pointer-events-none absolute top-0 bottom-0 z-[45]"
-        style={{ right: "100%", width: ITEM_WIDTH + 48, background: "linear-gradient(to right, transparent, #08060f 78%)" }}
+        style={{ right: "100%", width: ITEM_WIDTH + 48, background: "linear-gradient(to right, transparent, #08060f 45%)" }}
       />
       <div
         className="pointer-events-none absolute top-0 bottom-0 z-[45]"
-        style={{ left: "100%", width: ITEM_WIDTH + 48, background: "linear-gradient(to left, transparent, #08060f 78%)" }}
+        style={{ left: "100%", width: ITEM_WIDTH + 48, background: "linear-gradient(to left, transparent, #08060f 45%)" }}
       />
 
       <div
