@@ -4,6 +4,8 @@
  * panel (components/admin/streak-config-editor.tsx), same "code defaults,
  * DB overrides" pattern as lib/cases.ts / lib/cases-config.ts.
  */
+import type { RewardSpec } from "@/lib/rewards-grant";
+
 export interface StreakConfig {
   enabled: boolean;
   /** Reward on day 1 of a streak. */
@@ -43,6 +45,10 @@ export interface StreakConfig {
   /** Whether to show the "Streak: X Tage 🔥" line in the TopBar center.
    * Defaults to true; admin can hide it. */
   showStreakCounter: boolean;
+  /** Extra canonical givables (credits/xp/item/ability/badge/voucher/…)
+   * granted ON TOP of the credit reward, but ONLY on milestone days, via
+   * the central reward dispatcher (lib/rewards-grant.ts grantReward). */
+  milestoneRewards: RewardSpec[];
 }
 
 export const DEFAULT_STREAK_CONFIG: StreakConfig = {
@@ -60,6 +66,7 @@ export const DEFAULT_STREAK_CONFIG: StreakConfig = {
   specialEventLabel: "Sonder-Event",
   showCountdown: false,
   showStreakCounter: true,
+  milestoneRewards: [],
 };
 
 export interface StreakRewardResult {

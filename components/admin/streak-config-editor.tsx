@@ -4,9 +4,11 @@ import { useState } from "react";
 import { Flame, Save, Loader2, Zap, Calendar, TrendingUp, Star, Eye, EyeOff } from "lucide-react";
 import { updateStreakConfig } from "@/lib/actions/streak";
 import { computeStreakReward, type StreakConfig } from "@/lib/streak";
+import type { RewardSpec } from "@/lib/rewards-grant";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { AdminTooltip } from "@/components/admin/admin-tooltip";
+import { RewardSpecEditor } from "@/components/admin/reward-spec-editor";
 
 const NUMBER_FIELDS: {
   key: keyof StreakConfig;
@@ -130,6 +132,35 @@ export function StreakConfigEditor({ config }: { config: StreakConfig }) {
             onClick={handleSave}
             disabled={saving}
             className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-purple-500 disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Speichern
+          </button>
+          {message && <span className="text-sm text-zinc-400">{message}</span>}
+        </div>
+      </div>
+
+      {/* Milestone rewards card — beliebige Givables an Meilenstein-Tagen */}
+      <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
+        <h3 className="mb-2 flex items-center gap-2 text-base font-bold text-zinc-100">
+          <Star className="h-5 w-5 text-amber-400" />
+          Meilenstein-Belohnungen (Givables)
+          <AdminTooltip text="Zusätzliche Belohnungen, die NUR an Meilenstein-Tagen (jeder Nte Streak-Tag) zusätzlich zum Credit-Bonus vergeben werden. Es sind ALLE Belohnungstypen wählbar (Credits, XP, Items, Fähigkeiten, Name-Styles, Badges, Case-Gutscheine, Spiel-Boni). Vergeben über den zentralen Reward-Dispatcher." />
+        </h3>
+        <p className="mb-4 text-[11px] text-zinc-500">
+          Werden zusätzlich zum Credit-Bonus an jedem Meilenstein-Tag (Intervall oben) ausgeschüttet.
+        </p>
+        <RewardSpecEditor
+          value={form.milestoneRewards ?? []}
+          onChange={(next: RewardSpec[]) => setField("milestoneRewards", next)}
+          label="Meilenstein-Belohnungen (Givables)"
+        />
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onMouseEnter={sound.hover}
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-amber-500 disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Speichern

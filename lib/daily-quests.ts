@@ -1,5 +1,7 @@
 // Daily Quest System — types
 
+import type { RewardSpec } from "@/lib/rewards-grant";
+
 export type QuestDifficulty = "easy" | "medium" | "hard" | "legendary";
 export type QuestRewardType = "credits" | "xp" | "bp_xp" | "item" | "mixed";
 
@@ -17,6 +19,7 @@ export interface DailyQuestTemplate {
   baseRewardXp: number;
   baseRewardBpXp: number;
   rewardItemRarity: string | null;
+  rewardExtra: RewardSpec[];
   icon: string;
   category: string;
   enabled: boolean;
@@ -66,6 +69,7 @@ export interface UserDailyQuest {
   rewardXp: number;
   rewardBpXp: number;
   rewardItemRarity: string | null;
+  rewardExtra: RewardSpec[];
   rewardClaimed: boolean;
   claimedAt: string | null;
   createdAt: string;

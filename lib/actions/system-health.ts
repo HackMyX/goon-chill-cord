@@ -193,6 +193,9 @@ const COLUMN_CHECKS: Array<{
   { id: "col_case_nsstyles",      category: "Cases",              table: "case_tiers",          col: "name_styles_eligible",    detail: "node scripts/add-case-groups.cjs" },
   { id: "col_case_tiersublabel",  category: "Cases",              table: "case_tiers",          col: "tier_sublabel",           detail: "node scripts/add-case-groups.cjs" },
   { id: "col_case_extra_drops",   category: "Cases",              table: "case_tiers",          col: "extra_drops",             detail: "node scripts/add-case-extra-drops.cjs" },
+  // Daily Quests — zusätzliche Givables (RewardSpec[]) via zentralem Dispatcher (node scripts/add-quest-reward-extra.cjs)
+  { id: "col_dq_tmpl_rewardextra", category: "Daily Quests",       table: "daily_quest_templates", col: "reward_extra",          detail: "node scripts/add-quest-reward-extra.cjs" },
+  { id: "col_dq_user_rewardextra", category: "Daily Quests",       table: "user_daily_quests",     col: "reward_extra",          detail: "node scripts/add-quest-reward-extra.cjs" },
   // Shop settings — MOTD
   { id: "col_shop_motd",          category: "Shop",               table: "shop_settings",       col: "motd",                    detail: "ALTER TABLE shop_settings ADD COLUMN motd text;" },
   { id: "col_shop_motdenabled",   category: "Shop",               table: "shop_settings",       col: "motd_enabled",            detail: "ALTER TABLE shop_settings ADD COLUMN motd_enabled boolean DEFAULT false;" },
@@ -203,6 +206,7 @@ const COLUMN_CHECKS: Array<{
   // Streak config — special event
   { id: "col_streak_special",     category: "Streak",             table: "streak_config",       col: "special_event_enabled",   detail: "ALTER TABLE streak_config ADD COLUMN special_event_enabled boolean DEFAULT false;" },
   { id: "col_streak_specialmult", category: "Streak",             table: "streak_config",       col: "special_event_multiplier",detail: "ALTER TABLE streak_config ADD COLUMN special_event_multiplier numeric(4,2) DEFAULT 2.0;" },
+  { id: "col_streak_milestonerewards", category: "Streak",        table: "streak_config",       col: "milestone_rewards",       detail: "node scripts/add-streak-milestone-rewards.cjs" },
   // World config — spawn params
   { id: "col_world_maxmonsters",  category: "World",              table: "world_config",        col: "max_alive_monsters",      detail: "ALTER TABLE world_config ADD COLUMN max_alive_monsters integer;" },
   // Tickets — reward pin system (2026-06-25)

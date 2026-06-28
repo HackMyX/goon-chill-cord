@@ -9,6 +9,7 @@ import { awardXp } from "@/lib/actions/level-system";
 import { incrementBpQuestProgress } from "@/lib/actions/bp-quests";
 import { getSynergyConfig } from "@/lib/actions/economy-synergy";
 import { dailyQuestLevelScale } from "@/lib/economy-synergy";
+import { grantReward, type RewardSpec } from "@/lib/rewards-grant";
 import {
   DEFAULT_DAILY_QUEST_CONFIG,
   levelScaleFactor,
@@ -25,6 +26,16 @@ async function requireUser() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Nicht eingeloggt.");
   return { user, supabase };
+}
+
+/** Normalisiert eine reward_extra-Spalte (jsonb) zu RewardSpec[]. */
+function parseRewardExtra(raw: unknown): RewardSpec[] {
+  if (Array.isArray(raw)) return raw as RewardSpec[];
+  if (typeof raw === "string") {
+    try { const v = JSON.parse(raw); return Array.isArray(v) ? (v as RewardSpec[]) : []; }
+    catch { return []; }
+  }
+  return [];
 }
 
 async function requireAdmin_() {
@@ -108,6 +119,7 @@ function rowToTemplate(row: Record<string, unknown>): DailyQuestTemplate {
     baseRewardXp:        Number(row.base_reward_xp) ?? 0,
     baseRewardBpXp:      Number(row.base_reward_bp_xp) ?? 0,
     rewardItemRarity:    (row.reward_item_rarity as string | null) ?? null,
+    rewardExtra:         parseRewardExtra(row.reward_extra),
     icon:                String(row.icon ?? "Star"),
     category:            String(row.category ?? "allgemein"),
     enabled:             Boolean(row.enabled ?? true),
@@ -126,6 +138,7 @@ export async function adminUpsertQuestTemplate(t: DailyQuestTemplate): Promise<{
       reward_type: t.rewardType, base_reward_credits: t.baseRewardCredits,
       base_reward_xp: t.baseRewardXp, base_reward_bp_xp: t.baseRewardBpXp,
       reward_item_rarity: t.rewardItemRarity, icon: t.icon,
+      reward_extra: t.rewardExtra ?? [],
       category: t.category, enabled: t.enabled, sort_order: t.sortOrder,
     }, { onConflict: "key" });
     if (error) return { success: false, error: error.message };
@@ -271,6 +284,7 @@ async function generateQuestsForUser(
     reward_xp: Math.round(t.baseRewardXp * rewardScale * cfg.xpRewardMultiplier),
     reward_bp_xp: Math.round(t.baseRewardBpXp * rewardScale * cfg.bpXpRewardMultiplier),
     reward_item_rarity: t.rewardItemRarity,
+    reward_extra: t.rewardExtra ?? [],
   }));
 
   const { data: inserted, error } = await admin
@@ -304,6 +318,7 @@ function rowToUserQuest(row: Record<string, unknown>): UserDailyQuest {
     rewardXp:         Number(row.reward_xp) ?? 0,
     rewardBpXp:       Number(row.reward_bp_xp) ?? 0,
     rewardItemRarity: (row.reward_item_rarity as string | null) ?? null,
+    rewardExtra:      parseRewardExtra(row.reward_extra),
     rewardClaimed:    Boolean(row.reward_claimed),
     claimedAt:        (row.claimed_at as string | null) ?? null,
     createdAt:        String(row.created_at),
@@ -434,6 +449,17 @@ export async function claimDailyQuestReward(
           await admin.from("inventory").insert({ user_id: user.id, item_id: item.id });
         }
       } catch { /* non-fatal */ }
+    }
+
+    // Zusätzliche Givables (Fähigkeit/Name-Style/Badge/Gutschein/Spiel-Bonus/Item/XP/Credits)
+    // über den zentralen Dispatcher vergeben. Fehler dürfen den Claim NICHT brechen.
+    const rewardExtra = parseRewardExtra(q.reward_extra);
+    for (const spec of rewardExtra) {
+      try {
+        await grantReward(admin, user.id, spec, "daily_quest");
+      } catch (e) {
+        void logDebugEvent({ level: "error", scope: "daily-quests:claim:extra", message: String(e), context: { questId, type: spec?.type } });
+      }
     }
 
     void logDebugEvent({

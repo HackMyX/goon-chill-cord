@@ -16,6 +16,7 @@ import {
   DEFAULT_STREAK_CONFIG,
   type StreakConfig,
 } from "@/lib/streak";
+import { grantReward, type RewardSpec } from "@/lib/rewards-grant";
 import { advanceBattlePassProgress } from "@/lib/actions/battle-pass";
 
 interface StreakConfigRow {
@@ -33,6 +34,7 @@ interface StreakConfigRow {
   special_event_label: string | null;
   show_countdown: boolean | null;
   show_streak_counter: boolean | null;
+  milestone_rewards: RewardSpec[] | null;
 }
 
 function rowToConfig(row: StreakConfigRow): StreakConfig {
@@ -51,6 +53,7 @@ function rowToConfig(row: StreakConfigRow): StreakConfig {
     specialEventLabel: row.special_event_label ?? DEFAULT_STREAK_CONFIG.specialEventLabel,
     showCountdown: row.show_countdown ?? DEFAULT_STREAK_CONFIG.showCountdown,
     showStreakCounter: row.show_streak_counter ?? DEFAULT_STREAK_CONFIG.showStreakCounter,
+    milestoneRewards: Array.isArray(row.milestone_rewards) ? row.milestone_rewards : [],
   };
 }
 
@@ -75,24 +78,33 @@ export async function getStreakConfig(): Promise<StreakConfig> {
   // just because one newer column isn't migrated yet.
   let { data, error } = await admin
     .from("streak_config")
-    .select(`${baseColumns}, weekend_multiplier, special_event_enabled, special_event_multiplier, special_event_label, show_countdown, show_streak_counter`)
+    .select(`${baseColumns}, weekend_multiplier, special_event_enabled, special_event_multiplier, special_event_label, show_countdown, show_streak_counter, milestone_rewards`)
     .eq("id", "default")
     .single();
   if (error) {
+    // `milestone_rewards` is the newest column — try the rest without it
+    // first so an un-migrated milestone column doesn't drop every other
+    // saved setting; rowToConfig falls back to [] when it's absent.
+    const withCounters = await admin.from("streak_config").select(`${baseColumns}, weekend_multiplier, special_event_enabled, special_event_multiplier, special_event_label, show_countdown, show_streak_counter`).eq("id", "default").single();
+    if (!withCounters.error) {
+      data = withCounters.data ? { ...withCounters.data, milestone_rewards: null } : null;
+      error = withCounters.error;
+    } else {
     const withWeekend = await admin.from("streak_config").select(`${baseColumns}, weekend_multiplier, special_event_enabled, special_event_multiplier, special_event_label`).eq("id", "default").single();
     if (!withWeekend.error) {
-      data = withWeekend.data ? { ...withWeekend.data, show_countdown: null, show_streak_counter: null } : null;
+      data = withWeekend.data ? { ...withWeekend.data, show_countdown: null, show_streak_counter: null, milestone_rewards: null } : null;
       error = withWeekend.error;
     } else {
       const withOldWeekend = await admin.from("streak_config").select(`${baseColumns}, weekend_multiplier`).eq("id", "default").single();
       if (!withOldWeekend.error) {
-        data = withOldWeekend.data ? { ...withOldWeekend.data, special_event_enabled: null, special_event_multiplier: null, special_event_label: null, show_countdown: null, show_streak_counter: null } : null;
+        data = withOldWeekend.data ? { ...withOldWeekend.data, special_event_enabled: null, special_event_multiplier: null, special_event_label: null, show_countdown: null, show_streak_counter: null, milestone_rewards: null } : null;
         error = withOldWeekend.error;
       } else {
         const retry = await admin.from("streak_config").select(baseColumns).eq("id", "default").single();
-        data = retry.data ? { ...retry.data, weekend_multiplier: null, special_event_enabled: null, special_event_multiplier: null, special_event_label: null, show_countdown: null, show_streak_counter: null } : null;
+        data = retry.data ? { ...retry.data, weekend_multiplier: null, special_event_enabled: null, special_event_multiplier: null, special_event_label: null, show_countdown: null, show_streak_counter: null, milestone_rewards: null } : null;
         error = retry.error;
       }
+    }
     }
   }
 
@@ -309,6 +321,19 @@ export async function claimDailyReward(): Promise<ClaimResult> {
     // audit_logs is best-effort, never blocks the claim itself.
   }
 
+  // On milestone days, hand out any configured extra givables on top of the
+  // credit reward via the central dispatcher. Each spec is isolated in its own
+  // try/catch so one bad reward can never break the (already-committed) claim.
+  if (result.isMilestone && config.milestoneRewards.length > 0) {
+    for (const spec of config.milestoneRewards) {
+      try {
+        await grantReward(streakAdmin, user.id, spec, "streak_milestone");
+      } catch {
+        // non-fatal — claim already succeeded.
+      }
+    }
+  }
+
   // Advance battle-pass progress — fire-and-forget, never blocks the streak claim.
   void advanceBattlePassProgress(user.id);
 
@@ -402,6 +427,7 @@ export async function updateStreakConfig(input: StreakConfig): Promise<{ success
     special_event_label: input.specialEventLabel,
     show_countdown: input.showCountdown,
     show_streak_counter: input.showStreakCounter,
+    milestone_rewards: input.milestoneRewards ?? [],
   });
   if (error) {
     const withEvent = await admin.from("streak_config").upsert({

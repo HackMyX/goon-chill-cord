@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, RefreshCw, ListChecks, BarChart3, Star, Settings, Users, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
+import { RewardSpecEditor } from "@/components/admin/reward-spec-editor";
 import { useSoundManager } from "@/lib/sound-manager";
 import {
   getDailyQuestTemplates,
@@ -265,6 +266,7 @@ const EMPTY_TEMPLATE: DailyQuestTemplate = {
   key: "", label: "", description: "", targetAction: "snake_game", baseTarget: 1,
   difficulty: "easy", minLevel: 1, maxLevel: 999, rewardType: "credits",
   baseRewardCredits: 500, baseRewardXp: 0, baseRewardBpXp: 0, rewardItemRarity: null,
+  rewardExtra: [],
   icon: "Star", category: "allgemein", enabled: true, sortOrder: 0,
 };
 
@@ -387,6 +389,15 @@ function TemplateModal({ template, onSave, onClose }: {
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-widest text-zinc-600 mb-1">Item-Belohnung (Rarität)<Tip text="Leer lassen wenn kein Item-Drop. Sonst: normal / selten / mythisch / ultra" /></label>
             <input value={t.rewardItemRarity ?? ""} onChange={e => set("rewardItemRarity", e.target.value || null)} placeholder="leer = kein Item" className="w-full rounded-lg border border-white/[0.08] bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-fuchsia-500" />
+          </div>
+
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+            <RewardSpecEditor
+              value={t.rewardExtra ?? []}
+              onChange={v => set("rewardExtra", v)}
+              label="Zusätzliche Belohnungen (Givables)"
+            />
+            <p className="text-[10px] text-zinc-600 mt-1.5">Werden ZUSÄTZLICH zu den obigen Belohnungen beim Einlösen vergeben (Fähigkeit, Name-Style, Badge, Case-Gutschein, Spiel-Bonus, Item, XP, Credits).</p>
           </div>
 
           <div className="flex items-center gap-3">
