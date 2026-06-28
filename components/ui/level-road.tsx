@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Boxes, Grid3x3, Lock, Check, Crown, ListChecks, Trophy, Palette, Gift, Coins } from "lucide-react";
+import { Boxes, Grid3x3, Lock, Check, Crown, ListChecks, Trophy, Palette, Gift, Coins, Zap, Package, Ticket, Gamepad2 } from "lucide-react";
 import { DEFAULT_LEVEL_ROAD_CONFIG, resolveLevelRoadTier, isMilestoneLevel, type LevelDefinition, type LevelReward, type LevelRewardDisplay, type LevelRoadConfig } from "@/lib/level-system";
 import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
 import { StyledUsername } from "@/components/ui/styled-username";
@@ -18,27 +18,40 @@ const LS_3D = "gn_level_reward_3d";
 function rewardIcon(type: string) {
   switch (type) {
     case "credits": return <Coins className="h-3.5 w-3.5 text-amber-300" />;
+    case "xp": return <Zap className="h-3.5 w-3.5 text-sky-300" />;
+    case "item": case "random_item": return <Package className="h-3.5 w-3.5 text-fuchsia-300" />;
     case "ability": return <Crown className="h-3.5 w-3.5 text-fuchsia-300" />;
     case "badge": return <Trophy className="h-3.5 w-3.5 text-amber-300" />;
     case "name_style": return <Palette className="h-3.5 w-3.5 text-cyan-300" />;
+    case "case_voucher": return <Ticket className="h-3.5 w-3.5 text-pink-300" />;
+    case "game_bonus": return <Gamepad2 className="h-3.5 w-3.5 text-teal-300" />;
     default: return <Gift className="h-3.5 w-3.5 text-purple-300" />;
   }
 }
 
 function rewardLabel(r: LevelReward): string {
   if (r.type === "credits") return `${r.amount?.toLocaleString("de-DE") ?? "?"} CR`;
+  if (r.type === "xp") return `+${r.amount ?? 0} XP`;
+  if (r.type === "item") return "Item";
+  if (r.type === "random_item") return `Zufalls-Item${r.itemRarity ? ` (${r.itemRarity})` : ""}`;
   if (r.type === "ability") return r.abilityKey ?? "Fähigkeit";
   if (r.type === "badge") return r.badgeKey ?? "Badge";
   if (r.type === "name_style") return r.nameStyleKey ?? "Style";
+  if (r.type === "case_voucher") return "Gratis-Case";
+  if (r.type === "game_bonus") return `+${r.amount ?? 1} ${r.bonusGame ?? "Spiel"}`;
   return r.type;
 }
 
 /** Map a level reward to a 3D-previewable subject (same engine as the shop). */
 function rewardToSubject(r: LevelReward): PreviewSubject | null {
   if (r.type === "credits") return { kind: "credits", amount: r.amount ?? 0 };
+  if (r.type === "xp") return { kind: "generic", icon: "⭐", name: `+${r.amount ?? 0} XP`, accent: "#38bdf8" };
+  if (r.type === "item" || r.type === "random_item") return { kind: "random_item", rarity: r.itemRarity ?? "selten" };
   if (r.type === "ability" && r.abilityKey) return { kind: "ability", abilityKey: r.abilityKey, name: r.abilityKey };
   if (r.type === "badge" && r.badgeKey) return { kind: "badge", badgeKey: r.badgeKey };
   if (r.type === "name_style" && r.nameStyleKey) return { kind: "name_style", styleKey: r.nameStyleKey };
+  if (r.type === "case_voucher") return { kind: "case_voucher", mode: (r.voucherMode ?? "rarity"), rarityFloor: r.voucherRarityFloor, tierLabel: r.voucherTierId };
+  if (r.type === "game_bonus") return { kind: "game_bonus", game: (r.bonusGame ?? "plinko"), amount: r.amount ?? 1 };
   return null;
 }
 

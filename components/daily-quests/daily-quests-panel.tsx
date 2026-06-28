@@ -57,17 +57,33 @@ const DIFFICULTY_ICON_RING: Record<string, string> = {
 
 // ── Reward summary ────────────────────────────────────────────────────────────
 
+/** Maps a RewardSpec (rewardExtra givable) to a display pill. */
+function rewardSpecPill(spec: UserDailyQuest["rewardExtra"][number]): { label: string; color: string; icon: typeof Coins } | null {
+  switch (spec.type) {
+    case "credits": return spec.amount ? { label: `${spec.amount.toLocaleString("de-DE")} CR`, color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Coins } : null;
+    case "xp": return spec.amount ? { label: `+${spec.amount} XP`, color: "bg-sky-500/20 text-sky-300 border-sky-500/30", icon: Zap } : null;
+    case "item": case "random_item": return { label: "Item", color: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30", icon: Package };
+    case "ability": return { label: "Fähigkeit", color: "bg-violet-500/20 text-violet-300 border-violet-500/30", icon: Sparkles };
+    case "name_style": return { label: "Name-Style", color: "bg-pink-500/20 text-pink-300 border-pink-500/30", icon: Sparkles };
+    case "badge": return { label: "Badge", color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Crown };
+    case "case_voucher": return { label: "Gratis-Case", color: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30", icon: Gift };
+    case "game_bonus": return { label: `+${spec.amount ?? 1} ${spec.bonusGame ?? "Spiel"}`, color: "bg-teal-500/20 text-teal-300 border-teal-500/30", icon: Joystick };
+    default: return null;
+  }
+}
+
 function RewardPills({ quest, currencyName }: { quest: UserDailyQuest; currencyName: string }) {
   const pills: { label: string; color: string; icon: typeof Coins }[] = [];
   if (quest.rewardCredits > 0) pills.push({ label: `${quest.rewardCredits.toLocaleString("de-DE")} ${currencyName}`, color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Coins });
   if (quest.rewardXp > 0)      pills.push({ label: `+${quest.rewardXp} XP`, color: "bg-sky-500/20 text-sky-300 border-sky-500/30", icon: Zap });
   if (quest.rewardBpXp > 0)    pills.push({ label: `+${quest.rewardBpXp} BP-XP`, color: "bg-violet-500/20 text-violet-300 border-violet-500/30", icon: Sparkles });
   if (quest.rewardItemRarity)  pills.push({ label: `${quest.rewardItemRarity} Item`, color: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30", icon: Package });
+  for (const spec of quest.rewardExtra ?? []) { const p = rewardSpecPill(spec); if (p) pills.push(p); }
 
   return (
     <div className="flex flex-wrap gap-1.5 mt-2">
-      {pills.map(p => (
-        <span key={p.label} className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${p.color}`}>
+      {pills.map((p, i) => (
+        <span key={i} className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${p.color}`}>
           <p.icon className="h-2.5 w-2.5" />
           {p.label}
         </span>
