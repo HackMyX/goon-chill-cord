@@ -177,7 +177,10 @@ export function LevelRoad({
                     style={{
                       borderColor: reached ? accent : "rgba(255,255,255,0.1)",
                       color: reached ? accent : "#52525b",
-                      background: reached ? `${accent}1a` : "rgba(255,255,255,0.02)",
+                      // OPAQUE disc (solid #0b0a14 base = modal bg) so the central
+                      // rail/progress line is occluded BEHIND each node and only shows
+                      // in the gaps between nodes — never visually crossing a circle.
+                      background: reached ? `linear-gradient(${accent}26, ${accent}26), #0b0a14` : "#0b0a14",
                       boxShadow: reached ? `0 0 14px -2px ${glow}` : undefined,
                     }}
                   >
