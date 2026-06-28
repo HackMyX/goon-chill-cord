@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Boxes, Grid3x3, Lock, Check, Crown, ListChecks, Trophy, Palette, Gift, Coins } from "lucide-react";
-import { DEFAULT_LEVEL_ROAD_CONFIG, resolveLevelRoadTier, type LevelDefinition, type LevelReward, type LevelRewardDisplay, type LevelRoadConfig } from "@/lib/level-system";
+import { DEFAULT_LEVEL_ROAD_CONFIG, resolveLevelRoadTier, isMilestoneLevel, type LevelDefinition, type LevelReward, type LevelRewardDisplay, type LevelRoadConfig } from "@/lib/level-system";
 import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { BadgePill } from "@/components/ui/badge-pill";
@@ -143,8 +143,8 @@ export function LevelRoad({
             const tier = resolveLevelRoadTier(def.level, roadConfig);
             const accent = tier.accent;
             const glow = tier.glow;
-            // Every 10th level is a milestone — crown badge, stronger glow, tag.
-            const isMilestone = def.level % 10 === 0 && def.level > 0;
+            // Admin-configurable milestone interval — crown badge, glow, tag.
+            const isMilestone = isMilestoneLevel(def.level, roadConfig);
             return (
               <motion.div
                 key={def.level}

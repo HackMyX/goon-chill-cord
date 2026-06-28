@@ -7,7 +7,8 @@ import {
   X, Star, Zap, Trophy, Package, Palette, Crown, Lock,
   ChevronUp, ChevronDown, TrendingUp, Gift, Info,
 } from "lucide-react";
-import { getLevelColor, getLevelBgColor, LEVEL_TITLES, DEFAULT_LEVEL_ROAD_CONFIG, type UserLevelInfo, type LevelDefinition, type LevelRewardDisplay, type LevelRoadConfig } from "@/lib/level-system";
+import { getLevelColor, getLevelBgColor, LEVEL_TITLES, DEFAULT_LEVEL_ROAD_CONFIG, isMilestoneLevel, type UserLevelInfo, type LevelDefinition, type LevelReward, type LevelRewardDisplay, type LevelRoadConfig } from "@/lib/level-system";
+import { Sparkles, Rocket } from "lucide-react";
 import { getXpConfig, getMyLevelInfo } from "@/lib/actions/level-system";
 import { LevelRoad } from "@/components/ui/level-road";
 
@@ -56,6 +57,56 @@ function RewardIcon({ type }: { type: string }) {
     case "name_style": return <Palette className="h-3.5 w-3.5 text-cyan-400" />;
     default:           return <Gift className="h-3.5 w-3.5 text-purple-400" />;
   }
+}
+
+function rewardLabel(r: LevelReward): string {
+  if (r.type === "credits") return `${r.amount?.toLocaleString("de-DE") ?? "?"} CR`;
+  if (r.type === "ability") return r.abilityKey ?? "Fähigkeit";
+  if (r.type === "badge") return r.badgeKey ?? "Badge";
+  if (r.type === "name_style") return r.nameStyleKey ?? "Style";
+  return r.type;
+}
+
+// ── Ambient animated backdrop (aurora orbs + drifting particles) ──────────────
+
+// Fixed positions so the field is stable across re-renders (no hydration churn).
+const PARTICLES = [
+  { left: "12%", top: "22%", size: 3, dur: 6.5, delay: 0 },
+  { left: "82%", top: "14%", size: 2, dur: 7.5, delay: 0.6 },
+  { left: "48%", top: "8%",  size: 2, dur: 5.5, delay: 1.1 },
+  { left: "68%", top: "34%", size: 3, dur: 8.0, delay: 0.3 },
+  { left: "28%", top: "44%", size: 2, dur: 6.0, delay: 1.4 },
+  { left: "92%", top: "48%", size: 2, dur: 7.0, delay: 0.9 },
+  { left: "6%",  top: "60%", size: 2, dur: 6.8, delay: 0.2 },
+  { left: "58%", top: "62%", size: 3, dur: 7.8, delay: 1.7 },
+];
+
+function AmbientFx({ accent, glow }: { accent: string; glow: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <motion.div
+        className="absolute -top-16 -left-10 h-56 w-56 rounded-full blur-3xl"
+        style={{ background: glow }}
+        animate={{ x: [0, 26, 0], y: [0, 18, 0], opacity: [0.16, 0.30, 0.16] }}
+        transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="absolute top-8 -right-12 h-64 w-64 rounded-full blur-3xl"
+        style={{ background: `${accent}22` }}
+        animate={{ x: [0, -22, 0], y: [0, 26, 0], opacity: [0.10, 0.24, 0.10] }}
+        transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
+      />
+      {PARTICLES.map((p, i) => (
+        <motion.span
+          key={i}
+          className="absolute rounded-full"
+          style={{ left: p.left, top: p.top, width: p.size, height: p.size, background: accent }}
+          animate={{ y: [0, -14, 0], opacity: [0.12, 0.5, 0.12] }}
+          transition={{ duration: p.dur, repeat: Infinity, ease: "easeInOut", delay: p.delay }}
+        />
+      ))}
+    </div>
+  );
 }
 
 // ── XP Ring ───────────────────────────────────────────────────────────────────
@@ -224,7 +275,7 @@ export function LevelMenuModal({
   const [rewardDisplay, setRewardDisplay] = useState<LevelRewardDisplay>("3d");
   const [roadConfig, setRoadConfig] = useState<LevelRoadConfig>(DEFAULT_LEVEL_ROAD_CONFIG);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"road" | "progress" | "levels" | "sources">("road");
+  const [tab, setTab] = useState<"road" | "progress" | "preview" | "levels" | "sources">("road");
   const listRef = useRef<HTMLDivElement>(null);
 
   const accent = levelAccent(levelInfo.level);
@@ -293,6 +344,8 @@ export function LevelMenuModal({
             className="pointer-events-none absolute -top-24 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full blur-3xl"
             style={{ background: glow, opacity: 0.25 }}
           />
+          {/* Animated ambient backdrop (admin-toggleable) */}
+          {roadConfig.ambientFx !== false && <AmbientFx accent={accent} glow={glow} />}
 
           {/* Close */}
           <button
@@ -348,21 +401,42 @@ export function LevelMenuModal({
             </div>
           </div>
 
+          {/* Milestone celebration banner (admin-toggleable) */}
+          {isMilestoneLevel(levelInfo.level, roadConfig) && roadConfig.celebrateMilestones !== false && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative mx-4 mb-2 flex items-center gap-2 overflow-hidden rounded-xl border border-amber-400/30 bg-gradient-to-r from-amber-500/15 via-fuchsia-500/10 to-amber-500/15 px-3 py-2"
+            >
+              <motion.span
+                aria-hidden
+                className="absolute inset-y-0 -left-1/3 w-1/3 skew-x-[-20deg] bg-white/10 blur-md"
+                animate={{ x: ["0%", "420%"] }}
+                transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.2 }}
+              />
+              <Crown className="relative h-4 w-4 text-amber-300 animate-crown-bob drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
+              <span className="relative text-xs font-black text-amber-100">
+                Meilenstein erreicht — Level {levelInfo.level}!
+              </span>
+              <Sparkles className="relative ml-auto h-3.5 w-3.5 text-fuchsia-300" />
+            </motion.div>
+          )}
+
           {/* Tabs */}
-          <div className="flex border-b border-white/[0.06] px-4">
-            {(["road", "progress", "levels", "sources"] as const).map((t) => (
+          <div className="flex overflow-x-auto border-b border-white/[0.06] px-4" style={{ scrollbarWidth: "none" }}>
+            {(["road", "progress", "preview", "levels", "sources"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
-                className={`flex-1 py-2.5 text-xs font-bold transition-colors ${
+                className={`flex-1 whitespace-nowrap py-2.5 text-[11px] font-bold transition-colors sm:text-xs ${
                   tab === t
                     ? "border-b-2 text-white"
                     : "text-zinc-500 hover:text-zinc-300"
                 }`}
                 style={tab === t ? { borderColor: accent, color: accent } : undefined}
               >
-                {t === "road" ? "🛣️ Road" : t === "progress" ? "📊 Fortschritt" : t === "levels" ? "🏆 Alle Level" : "⚡ XP-Quellen"}
+                {t === "road" ? "🛣️ Road" : t === "progress" ? "📊 Fortschritt" : t === "preview" ? "🔮 Vorschau" : t === "levels" ? "🏆 Alle Level" : "⚡ XP-Quellen"}
               </button>
             ))}
           </div>
@@ -472,6 +546,71 @@ export function LevelMenuModal({
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Upcoming rewards preview tab */}
+            {tab === "preview" && (
+              loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+                </div>
+              ) : (() => {
+                const upcoming = levels.filter((l) => l.level > levelInfo.level).sort((a, b) => a.level - b.level).slice(0, 6);
+                if (upcoming.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center gap-3 py-12 text-center">
+                      <Crown className="h-10 w-10 text-amber-400" />
+                      <p className="text-sm font-bold text-amber-200">Maximales Level erreicht!</p>
+                      <p className="text-xs text-zinc-500">Du hast alle Level-Belohnungen freigeschaltet.</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="flex flex-col gap-2.5">
+                    <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
+                      <Rocket className="h-3.5 w-3.5" style={{ color: accent }} /> Was als Nächstes auf dich wartet
+                    </p>
+                    {upcoming.map((def, idx) => {
+                      const dist = def.level - levelInfo.level;
+                      const mile = isMilestoneLevel(def.level, roadConfig);
+                      return (
+                        <motion.div
+                          key={def.level}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.05 }}
+                          className={`flex items-start gap-3 rounded-xl border p-3 ${mile ? "border-amber-400/25 bg-amber-500/[0.04]" : "border-white/8 bg-white/[0.02]"}`}
+                        >
+                          <div
+                            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border text-sm font-black"
+                            style={{ borderColor: `${accent}40`, color: accent, background: `${accent}10` }}
+                          >
+                            {def.level}
+                            {mile && <Crown className="absolute -top-2 -right-2 h-3.5 w-3.5 text-amber-300 drop-shadow-[0_0_4px_rgba(245,158,11,0.8)]" />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-sm font-bold text-zinc-100 truncate">{def.title}</span>
+                              <span className="shrink-0 rounded-full bg-white/8 px-1.5 py-0.5 text-[9px] font-bold text-zinc-400">in {dist} Lvl</span>
+                            </div>
+                            {def.rewards.length > 0 ? (
+                              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                {def.rewards.map((r, i) => (
+                                  <span key={i} className="flex items-center gap-1 rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1 text-[11px] font-semibold text-zinc-300">
+                                    <RewardIcon type={r.type} /> {rewardLabel(r)}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-1 text-[10px] italic text-zinc-600">Keine Belohnung</p>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
             )}
 
             {/* All levels tab */}

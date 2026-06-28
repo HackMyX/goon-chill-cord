@@ -218,6 +218,24 @@ export function LevelConfigEditor({ initialConfig, profiles }: LevelConfigEditor
             <input type="checkbox" checked={road.showTitles} onChange={(e) => setRoad({ showTitles: e.target.checked })} className="accent-violet-500" />
             Level-Titel anzeigen
           </label>
+          <label className="flex items-center gap-2 text-xs text-zinc-300">
+            <input type="checkbox" checked={road.ambientFx !== false} onChange={(e) => setRoad({ ambientFx: e.target.checked })} className="accent-violet-500" />
+            Animierter Ambient-Hintergrund
+          </label>
+          <label className="flex items-center gap-2 text-xs text-zinc-300">
+            <input type="checkbox" checked={road.celebrateMilestones !== false} onChange={(e) => setRoad({ celebrateMilestones: e.target.checked })} className="accent-violet-500" />
+            Meilenstein-Banner zeigen
+          </label>
+          <label className="flex items-center gap-2 text-xs text-zinc-300">
+            Meilenstein alle
+            <input
+              type="number" min={0} max={100}
+              value={road.milestoneEvery ?? 10}
+              onChange={(e) => setRoad({ milestoneEvery: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+              className="w-16 rounded-md border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            Level (0 = aus)
+          </label>
         </div>
 
         {/* Tier colours */}

@@ -55,6 +55,12 @@ export interface LevelRoadConfig {
   tiers: LevelRoadTier[];
   showXp: boolean;
   showTitles: boolean;
+  /** Every Nth level is a celebrated "milestone" (crown, glow, tag). 0 = off. */
+  milestoneEvery?: number;
+  /** Animated ambient backdrop (aurora orbs + drifting particles) in the menu. */
+  ambientFx?: boolean;
+  /** Show the milestone celebration banner in the level-menu header. */
+  celebrateMilestones?: boolean;
 }
 
 export const DEFAULT_LEVEL_ROAD_CONFIG: LevelRoadConfig = {
@@ -68,7 +74,16 @@ export const DEFAULT_LEVEL_ROAD_CONFIG: LevelRoadConfig = {
   ],
   showXp: true,
   showTitles: true,
+  milestoneEvery: 10,
+  ambientFx: true,
+  celebrateMilestones: true,
 };
+
+/** Is this level a celebrated milestone per the road config? */
+export function isMilestoneLevel(level: number, cfg: LevelRoadConfig): boolean {
+  const every = cfg.milestoneEvery ?? 10;
+  return every > 0 && level > 0 && level % every === 0;
+}
 
 /** Resolve a level's accent/glow from the road config (highest matching tier wins). */
 export function resolveLevelRoadTier(level: number, cfg: LevelRoadConfig): LevelRoadTier {

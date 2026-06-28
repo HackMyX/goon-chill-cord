@@ -36,7 +36,14 @@ export async function getXpConfig(): Promise<XpConfig> {
     const display = (data.level_reward_display === "icon" ? "icon" : "3d") as LevelRewardDisplay;
     const roadRaw = (data.level_road_config as Partial<LevelRoadConfig> | null) ?? null;
     const levelRoadConfig: LevelRoadConfig = roadRaw && Array.isArray(roadRaw.tiers) && roadRaw.tiers.length
-      ? { tiers: roadRaw.tiers, showXp: roadRaw.showXp ?? true, showTitles: roadRaw.showTitles ?? true }
+      ? {
+          tiers: roadRaw.tiers,
+          showXp: roadRaw.showXp ?? true,
+          showTitles: roadRaw.showTitles ?? true,
+          milestoneEvery: roadRaw.milestoneEvery ?? 10,
+          ambientFx: roadRaw.ambientFx ?? true,
+          celebrateMilestones: roadRaw.celebrateMilestones ?? true,
+        }
       : DEFAULT_LEVEL_ROAD_CONFIG;
 
     return {
