@@ -205,6 +205,34 @@ function SettingsCard({ settings }: { settings: ShopSettings }) {
         ))}
       </div>
 
+      <p className="mb-2 mt-4 text-xs font-semibold text-zinc-400">
+        Seltenheits-Gewichte <span className="font-normal text-zinc-600">(höher = häufiger · die %-Angabe zeigt live die effektive Häufigkeit)</span>
+      </p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {(["normal", "selten", "mythisch", "ultra"] as const).map((r) => {
+          const w = form.rarityWeights;
+          const total = w.normal + w.selten + w.mythisch + w.ultra;
+          const pct = total > 0 ? Math.round((w[r] / total) * 100) : 0;
+          const label = { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" }[r];
+          const col = { normal: "#9ca3af", selten: "#3b82f6", mythisch: "#f59e0b", ultra: "#a855f7" }[r];
+          return (
+            <label key={r} className="flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: col }}>
+                {label} <span className="text-zinc-500">· ~{pct}%</span>
+              </span>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={w[r]}
+                onChange={(e) => setForm((f) => ({ ...f, rarityWeights: { ...f.rarityWeights, [r]: Math.max(0, Number(e.target.value)) } }))}
+                className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+              />
+            </label>
+          );
+        })}
+      </div>
+
       <div className="mt-5 flex items-center gap-3">
         <button
           onMouseEnter={sound.hover}
@@ -461,6 +489,10 @@ function AddListingForm({
   );
 }
 
+const R_COL: Record<string, string> = { normal: "#9ca3af", selten: "#3b82f6", mythisch: "#f59e0b", ultra: "#a855f7" };
+const R_LBL: Record<string, string> = { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" };
+const LT_LBL: Record<string, string> = { item: "Items", ability: "Fähigkeiten", name_style: "Styles", badge: "Badges", voucher: "Gutscheine" };
+
 function DayShopPanel({
   label,
   dateOffsetDays,
@@ -499,6 +531,22 @@ function DayShopPanel({
           Automatik neu würfeln
         </button>
       </div>
+
+      {listings.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-lg border border-white/5 bg-black/20 px-2.5 py-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">{listings.length} Angebote ·</span>
+          {(["normal", "selten", "mythisch", "ultra"] as const).map((r) => {
+            const n = listings.filter((l) => l.itemRarity === r).length;
+            return n > 0 ? (
+              <span key={r} className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: `${R_COL[r]}22`, color: R_COL[r] }}>{R_LBL[r]} {n}</span>
+            ) : null;
+          })}
+          <span className="mx-0.5 text-zinc-700">|</span>
+          {Object.entries(listings.reduce((acc, l) => { acc[l.listingType] = (acc[l.listingType] ?? 0) + 1; return acc; }, {} as Record<string, number>)).map(([t, n]) => (
+            <span key={t} className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-zinc-300">{LT_LBL[t] ?? t} {n}</span>
+          ))}
+        </div>
+      )}
 
       <div className="mb-3 flex flex-col gap-1.5">
         {listings.length === 0 && <p className="text-xs text-zinc-500">Noch keine Items für diesen Tag.</p>}

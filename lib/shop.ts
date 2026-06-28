@@ -11,6 +11,8 @@ export interface ShopSettings {
   autoGeneratePriceMultiplierMin: number;
   autoGeneratePriceMultiplierMax: number;
   autoGenerateItemTypes: string[];
+  /** Konfigurierbare Seltenheits-Gewichte für die Automatik (höher = häufiger). */
+  rarityWeights: Record<Rarity, number>;
   motd: string | null;
   motdEnabled: boolean;
 }
@@ -20,6 +22,7 @@ export const DEFAULT_SHOP_SETTINGS: ShopSettings = {
   autoGenerateItemCount: 8,
   autoGeneratePriceMultiplierMin: 1.5,
   autoGeneratePriceMultiplierMax: 2.5,
+  rarityWeights: { normal: 10, selten: 5, mythisch: 1.5, ultra: 0.4 },
   motd: null,
   motdEnabled: false,
   autoGenerateItemTypes: [

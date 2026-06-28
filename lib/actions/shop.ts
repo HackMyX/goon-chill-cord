@@ -284,17 +284,25 @@ interface ShopSettingsRow {
   auto_generate_price_multiplier_min: number;
   auto_generate_price_multiplier_max: number;
   auto_generate_item_types: string[] | null;
+  rarity_weights: Record<string, number> | null;
   motd: string | null;
   motd_enabled: boolean | null;
 }
 
 function rowToSettings(row: ShopSettingsRow): ShopSettings {
+  const rw = row.rarity_weights;
   return {
     autoGenerateEnabled: row.auto_generate_enabled,
     autoGenerateItemCount: row.auto_generate_item_count,
     autoGeneratePriceMultiplierMin: row.auto_generate_price_multiplier_min,
     autoGeneratePriceMultiplierMax: row.auto_generate_price_multiplier_max,
     autoGenerateItemTypes: row.auto_generate_item_types ?? DEFAULT_SHOP_SETTINGS.autoGenerateItemTypes,
+    rarityWeights: {
+      normal: Number(rw?.normal ?? DEFAULT_SHOP_SETTINGS.rarityWeights.normal),
+      selten: Number(rw?.selten ?? DEFAULT_SHOP_SETTINGS.rarityWeights.selten),
+      mythisch: Number(rw?.mythisch ?? DEFAULT_SHOP_SETTINGS.rarityWeights.mythisch),
+      ultra: Number(rw?.ultra ?? DEFAULT_SHOP_SETTINGS.rarityWeights.ultra),
+    },
     motd: row.motd ?? null,
     motdEnabled: row.motd_enabled ?? false,
   };
@@ -308,7 +316,7 @@ export async function getShopSettings(): Promise<ShopSettings> {
   const { data, error } = await admin
     .from("shop_settings")
     .select(
-      "auto_generate_enabled, auto_generate_item_count, auto_generate_price_multiplier_min, auto_generate_price_multiplier_max, auto_generate_item_types, motd, motd_enabled"
+      "auto_generate_enabled, auto_generate_item_count, auto_generate_price_multiplier_min, auto_generate_price_multiplier_max, auto_generate_item_types, rarity_weights, motd, motd_enabled"
     )
     .eq("id", "default")
     .single();
@@ -351,6 +359,7 @@ export async function updateShopSettings(
     auto_generate_price_multiplier_min: input.autoGeneratePriceMultiplierMin,
     auto_generate_price_multiplier_max: input.autoGeneratePriceMultiplierMax,
     auto_generate_item_types: input.autoGenerateItemTypes,
+    rarity_weights: input.rarityWeights,
     motd: input.motd ?? null,
     motd_enabled: input.motdEnabled,
     updated_at: new Date().toISOString(),
@@ -375,11 +384,15 @@ export async function updateShopSettings(
  * ever fully excluding rarer ones — so a Mythisch/Ultra item turning up
  * in the shop feels like a small event, not noise and not impossible.
  */
-function pickWeightedItems<T extends { id: string; rarity: Rarity }>(pool: T[], count: number): T[] {
+function pickWeightedItems<T extends { id: string; rarity: Rarity }>(
+  pool: T[],
+  count: number,
+  rarityWeights: Record<Rarity, number> = SHOP_RARITY_PICK_WEIGHT,
+): T[] {
   const remaining = [...pool];
   const picked: T[] = [];
   for (let i = 0; i < count && remaining.length > 0; i++) {
-    const weights = remaining.map((item) => SHOP_RARITY_PICK_WEIGHT[item.rarity] ?? 1);
+    const weights = remaining.map((item) => rarityWeights[item.rarity] ?? 1);
     const total = weights.reduce((sum, w) => sum + w, 0);
     let roll = Math.random() * total;
     let index = 0;
@@ -527,7 +540,7 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
     if (needed > 0) {
       const { data: candidatePool } = await admin.from("items").select("id, rarity, price_cr").in("type", settings.autoGenerateItemTypes);
       const pool = (candidatePool ?? []).filter((item) => !excludeIds.has(item.id));
-      const chosen = pickWeightedItems(pool as { id: string; rarity: Rarity; price_cr: number }[], needed);
+      const chosen = pickWeightedItems(pool as { id: string; rarity: Rarity; price_cr: number }[], needed, settings.rarityWeights);
       for (const item of chosen) {
         const multiplier =
           settings.autoGeneratePriceMultiplierMin +
@@ -565,7 +578,7 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
             (rule.typeFilter === null || rule.typeFilter.includes(item.type))
         );
         if (candidates.length === 0) continue;
-        for (const item of pickWeightedItems(candidates, rule.itemCount)) {
+        for (const item of pickWeightedItems(candidates, rule.itemCount, settings.rarityWeights)) {
           const basePrice = Math.max(item.price_cr, 50);
           newRows.push({
             shop_date: dateKey, listing_type: "item", item_id: item.id,
@@ -613,7 +626,7 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
             (rule.rarityFilter === null || rule.rarityFilter.includes(p.rarity)),
         );
         if (candidates.length === 0) continue;
-        for (const c of pickWeightedItems(candidates.map((p) => ({ id: p.key, rarity: p.rarity, base: p.base, text: p.text })), rule.itemCount)) {
+        for (const c of pickWeightedItems(candidates.map((p) => ({ id: p.key, rarity: p.rarity, base: p.base, text: p.text })), rule.itemCount, settings.rarityWeights)) {
           const row: Record<string, unknown> = {
             shop_date: dateKey, listing_type: category.contentType,
             price_cr: roundToNicePrice(Math.max(c.base, 100) * priceMult()), purchase_limit: 1,
