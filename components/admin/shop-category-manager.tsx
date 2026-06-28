@@ -376,6 +376,10 @@ function CategoryCard({ category, onChanged }: { category: ShopCategory; onChang
       enabled: form.enabled,
       sortOrder: form.sortOrder,
       contentType: form.contentType,
+      voucherKind: form.voucherKind,
+      voucherGame: form.voucherGame,
+      voucherAmount: form.voucherAmount,
+      voucherDurationHours: form.voucherDurationHours,
       rarityFilter: form.rarityFilter,
       typeFilter: form.typeFilter,
       itemCount: form.itemCount,
@@ -477,9 +481,58 @@ function CategoryCard({ category, onChanged }: { category: ShopCategory; onChang
               <option value="ability">Fähigkeiten</option>
               <option value="name_style">Name-Styles</option>
               <option value="badge">Badges</option>
-              <option value="voucher">Gutscheine (Gratis-Cases)</option>
+              <option value="voucher">Gutscheine</option>
             </select>
           </label>
+          {form.contentType === "voucher" && (
+            <label className="flex flex-col gap-1 text-xs text-zinc-400">
+              Gutschein-Typ
+              <select
+                value={form.voucherKind ?? "case"}
+                onChange={(e) => setForm((f) => ({ ...f, voucherKind: e.target.value as "case" | "game_bonus" }))}
+                className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+              >
+                <option value="case">Gratis-Case (Seltenheit)</option>
+                <option value="game_bonus">Spiel-Bonus (Extra-Züge)</option>
+              </select>
+            </label>
+          )}
+          {form.contentType === "voucher" && form.voucherKind === "game_bonus" && (
+            <>
+              <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                Spiel
+                <select
+                  value={form.voucherGame ?? "plinko"}
+                  onChange={(e) => setForm((f) => ({ ...f, voucherGame: e.target.value }))}
+                  className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+                >
+                  <option value="plinko">Plinko</option>
+                  <option value="snake">Snake</option>
+                  <option value="don">Double or Nothing</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                Extra-Züge
+                <input
+                  type="number"
+                  min={1}
+                  value={form.voucherAmount ?? 1}
+                  onChange={(e) => setForm((f) => ({ ...f, voucherAmount: Number(e.target.value) }))}
+                  className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-zinc-400">
+                Gültig (Std, 0=unbegrenzt)
+                <input
+                  type="number"
+                  min={0}
+                  value={form.voucherDurationHours ?? 0}
+                  onChange={(e) => setForm((f) => ({ ...f, voucherDurationHours: Number(e.target.value) }))}
+                  className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+                />
+              </label>
+            </>
+          )}
           <label className="flex flex-col gap-1 text-xs text-zinc-400">
             Anzahl/Tag
             <input

@@ -199,6 +199,7 @@ const COLUMN_CHECKS: Array<{
   // Unified Shop — beliebige Givable-Typen verkaufbar (node scripts/add-unified-shop.cjs)
   { id: "col_shop_listing_type",  category: "Shop",               table: "shop_listings",       col: "listing_type",            detail: "node scripts/add-unified-shop.cjs" },
   { id: "col_shop_cat_content",   category: "Shop",               table: "shop_categories",     col: "content_type",            detail: "node scripts/add-unified-shop.cjs" },
+  { id: "col_shop_cat_vkind",     category: "Shop",               table: "shop_categories",     col: "voucher_kind",            detail: "node scripts/add-shop-voucher-config.cjs" },
   // Streak config — special event
   { id: "col_streak_special",     category: "Streak",             table: "streak_config",       col: "special_event_enabled",   detail: "ALTER TABLE streak_config ADD COLUMN special_event_enabled boolean DEFAULT false;" },
   { id: "col_streak_specialmult", category: "Streak",             table: "streak_config",       col: "special_event_multiplier",detail: "ALTER TABLE streak_config ADD COLUMN special_event_multiplier numeric(4,2) DEFAULT 2.0;" },

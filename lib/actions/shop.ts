@@ -48,6 +48,11 @@ export interface ShopCategory {
   sortOrder: number;
   /** Which pool this category auto-draws from (default 'item'). */
   contentType: ShopContentType;
+  /** For contentType 'voucher': 'case' = Gratis-Case (Seltenheits-Floor), 'game_bonus' = Extra-Spielzüge. */
+  voucherKind: ShopVoucherKind;
+  voucherGame: string | null;
+  voucherAmount: number;
+  voucherDurationHours: number;
   rarityFilter: Rarity[] | null;
   typeFilter: string[] | null;
   itemCount: number;
@@ -55,6 +60,8 @@ export interface ShopCategory {
   priceMultiplierMax: number;
   dayRules: ShopCategoryDayRule[];
 }
+
+export type ShopVoucherKind = "case" | "game_bonus";
 
 /** Fallback price (before the category multiplier) for non-item givables that
  *  don't carry their own price — keyed by rarity. */
@@ -109,6 +116,10 @@ export async function listShopCategories(): Promise<ShopCategory[]> {
     enabled: c.enabled,
     sortOrder: c.sort_order,
     contentType: ((c.content_type as ShopContentType) ?? "item"),
+    voucherKind: ((c.voucher_kind as ShopVoucherKind) ?? "case"),
+    voucherGame: (c.voucher_game as string | null) ?? null,
+    voucherAmount: Number(c.voucher_amount ?? 1),
+    voucherDurationHours: Number(c.voucher_duration_hours ?? 0),
     rarityFilter: (c.rarity_filter as Rarity[] | null) ?? null,
     typeFilter: c.type_filter,
     itemCount: c.item_count,
@@ -126,6 +137,10 @@ export interface UpsertShopCategoryInput {
   enabled: boolean;
   sortOrder: number;
   contentType?: ShopContentType;
+  voucherKind?: ShopVoucherKind;
+  voucherGame?: string | null;
+  voucherAmount?: number;
+  voucherDurationHours?: number;
   rarityFilter: Rarity[] | null;
   typeFilter: string[] | null;
   itemCount: number;
@@ -151,6 +166,10 @@ export async function upsertShopCategory(input: UpsertShopCategoryInput): Promis
     enabled: input.enabled,
     sort_order: Math.floor(input.sortOrder),
     content_type: input.contentType ?? "item",
+    voucher_kind: input.voucherKind ?? "case",
+    voucher_game: input.voucherKind === "game_bonus" ? (input.voucherGame ?? "plinko") : null,
+    voucher_amount: Math.max(1, Math.floor(input.voucherAmount ?? 1)),
+    voucher_duration_hours: Math.max(0, Math.floor(input.voucherDurationHours ?? 0)),
     rarity_filter: input.rarityFilter,
     type_filter: input.typeFilter,
     item_count: Math.floor(input.itemCount),
@@ -488,6 +507,10 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
     enabled: c.enabled,
     sortOrder: c.sort_order,
     contentType: ((c.content_type as ShopContentType) ?? "item"),
+    voucherKind: ((c.voucher_kind as ShopVoucherKind) ?? "case"),
+    voucherGame: (c.voucher_game as string | null) ?? null,
+    voucherAmount: Number(c.voucher_amount ?? 1),
+    voucherDurationHours: Number(c.voucher_duration_hours ?? 0),
     rarityFilter: (c.rarity_filter as Rarity[] | null) ?? null,
     typeFilter: c.type_filter,
     itemCount: c.item_count,
@@ -552,19 +575,34 @@ async function ensureShopGenerated(dateKey: string): Promise<void> {
           excludeIds.add(item.id);
         }
       } else if (category.contentType === "voucher") {
-        // Vouchers have no definition pool — the category GENERATES free-case
-        // vouchers, one per slot, with a rarity floor drawn from its rarity filter.
-        const rarities = (rule.rarityFilter && rule.rarityFilter.length > 0)
-          ? rule.rarityFilter
-          : (["normal", "selten", "mythisch", "ultra"] as Rarity[]);
-        for (let i = 0; i < rule.itemCount; i++) {
-          const rarity = rarities[Math.floor(Math.random() * rarities.length)];
-          newRows.push({
-            shop_date: dateKey, listing_type: "voucher",
-            voucher_config: { kind: "case", mode: "rarity", rarityFloor: rarity },
-            price_cr: roundToNicePrice((RARITY_BASE_PRICE[rarity] ?? 6000) * priceMult()),
-            purchase_limit: 1, featured: rarity === "mythisch" || rarity === "ultra", source: "auto", category_id: category.id,
-          });
+        // Vouchers have no definition pool — the category GENERATES them.
+        if (category.voucherKind === "game_bonus") {
+          // Extra-Spielzüge für ein Spiel (Plinko/Snake/DON). Preis skaliert mit Anzahl.
+          const game = (category.voucherGame === "snake" || category.voucherGame === "don") ? category.voucherGame : "plinko";
+          const amount = Math.max(1, Math.floor(category.voucherAmount || 1));
+          const durationHours = Math.max(0, Math.floor(category.voucherDurationHours || 0));
+          for (let i = 0; i < rule.itemCount; i++) {
+            newRows.push({
+              shop_date: dateKey, listing_type: "voucher",
+              voucher_config: { kind: "game_bonus", game, amount, durationHours },
+              price_cr: roundToNicePrice(Math.max(amount * 1200, 500) * priceMult()),
+              purchase_limit: 1, featured: false, source: "auto", category_id: category.id,
+            });
+          }
+        } else {
+          // Gratis-Case mit Seltenheits-Floor aus dem Rarity-Filter.
+          const rarities = (rule.rarityFilter && rule.rarityFilter.length > 0)
+            ? rule.rarityFilter
+            : (["normal", "selten", "mythisch", "ultra"] as Rarity[]);
+          for (let i = 0; i < rule.itemCount; i++) {
+            const rarity = rarities[Math.floor(Math.random() * rarities.length)];
+            newRows.push({
+              shop_date: dateKey, listing_type: "voucher",
+              voucher_config: { kind: "case", mode: "rarity", rarityFloor: rarity },
+              price_cr: roundToNicePrice((RARITY_BASE_PRICE[rarity] ?? 6000) * priceMult()),
+              purchase_limit: 1, featured: rarity === "mythisch" || rarity === "ultra", source: "auto", category_id: category.id,
+            });
+          }
         }
       } else {
         // Non-item definition pool — auto-draws from ALL enabled definitions of
