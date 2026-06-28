@@ -1020,8 +1020,16 @@ function TrackTileCard({
       const er = el.getBoundingClientRect();
       const rr = root.getBoundingClientRect();
       if (er.width <= 0) { setInView(false); return; }
-      const overlap = Math.max(0, Math.min(er.right, rr.right) - Math.max(er.left, rr.left));
-      setInView(overlap >= er.width * 0.78);
+      // Render 3D ONLY when the tile is fully inside the carousel PLUS a ~1-card
+      // buffer on each side. So the model fades out a whole card before the tile
+      // reaches the edge (both directions) — and the generous buffer absorbs the
+      // 1-frame cull lag, so nothing ever pops past the rim no matter how fast you
+      // scroll. The masked outer card just shows its CSS fallback instead of 3D.
+      // Clamp the buffer so a centred tile still renders on narrow/mobile rails
+      // (never hide ALL 3D): the inset can't exceed the side-space of a centred tile.
+      const maxInset = Math.max(0, (rr.width - er.width) / 2 - 1);
+      const inset = Math.min(er.width * 0.85, maxInset);
+      setInView(er.left >= rr.left + inset && er.right <= rr.right - inset);
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(compute); };
     compute();
