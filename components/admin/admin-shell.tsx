@@ -40,6 +40,7 @@ import { PreviewConfigTab } from "@/components/admin/preview-config-tab";
 import { DailyQuestsTab } from "@/components/admin/daily-quests-tab";
 import HomepageChatConfigEditor from "@/components/admin/homepage-chat-config-editor";
 import { FineConfigEditor } from "@/components/admin/fine-config-editor";
+import { FriendsLogsTab } from "@/components/admin/friends-logs-tab";
 import { AdminGuide } from "@/components/admin/admin-guide";
 import { TAB_GUIDES, guideSearchText } from "@/lib/admin-guides";
 import type { FineConfig } from "@/lib/fine-config-types";
@@ -170,7 +171,7 @@ interface AdminShellProps {
   fineConfig: FineConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "givables" | "sounds" | "music" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "givables" | "sounds" | "music" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy" | "friends";
 
 const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string; anchor?: string }[] = [
   { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
@@ -259,6 +260,7 @@ const TABS = ([
   { id: "cleanup",        label: "Verlaufs-Bereinigung", icon: Trash2 },
   { id: "daily_quests",  label: "Daily Quests",          icon: ListChecks },
   { id: "synergy",       label: "Synergie & Boosts",     icon: Link2 },
+  { id: "friends",       label: "Freunde",               icon: Users },
 ] as { id: Tab; label: string; icon: typeof Coins }[]).sort((a, b) => tabSortKey(a.label).localeCompare(tabSortKey(b.label), "de"));
 
 const tabById = (id: Tab) => TABS.find((t) => t.id === id)!;
@@ -297,6 +299,7 @@ const TAB_DESC: Record<Tab, string> = {
   fine_config: "Feingranulare Werte: Nametags, Multiplayer-Sync, Hit-Effekte, Chat-Polling.",
   daily_quests: "Tägliche Quests: Vorlagen, Ziele, Belohnungen, Schwierigkeit.",
   synergy: "Verbindet Level/BP/Quests, Zeit-Boosts (Wochenende/Happy Hour), Level-Staffelung.",
+  friends: "Freunde-System: Statistik, Anfragen-Verlauf, Blockierungen (read-only Übersicht).",
 };
 
 // Logische Gruppierung der Tabs für eine aufgeräumte Übersicht.
@@ -306,7 +309,7 @@ const TAB_GROUPS: { title: string; icon: typeof Coins; tabs: Tab[] }[] = [
   { title: "Wirtschaft", icon: Coins, tabs: ["economy", "shop", "items"] },
   { title: "Belohnungen & Fortschritt", icon: Sparkles, tabs: ["battlepass", "daily_quests", "streak", "level_xp", "synergy", "givables"] },
   { title: "Kosmetik", icon: SwatchBook, tabs: ["badges", "namestyles", "preview_config"] },
-  { title: "Community & Inhalte", icon: MessageCircle, tabs: ["chat", "homepage_chat", "surveys", "patchnotes", "users"] },
+  { title: "Community & Inhalte", icon: MessageCircle, tabs: ["chat", "homepage_chat", "surveys", "patchnotes", "users", "friends"] },
   { title: "Design & Medien", icon: Palette, tabs: ["branding", "theme", "sounds", "music"] },
   { title: "System & Wartung", icon: Shield, tabs: ["security", "ki", "audit", "debug", "backup", "cleanup", "fine_config"] },
 ];
@@ -759,6 +762,7 @@ export function AdminShell({
 
         {tab === "daily_quests" && <DailyQuestsTab currencyName={siteConfig.currencyName} />}
         {tab === "synergy" && <EconomySynergyEditor />}
+        {tab === "friends" && <FriendsLogsTab />}
 
         {tab === "ki" && (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">

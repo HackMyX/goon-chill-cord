@@ -450,8 +450,14 @@ function RemotePlayerAvatar({
             </div>
           )}
 
-          {/* Name pill */}
-          <div style={{
+          {/* Name pill — anklickbar: öffnet das Profil-Popup (mit Freund-hinzufügen-Button) */}
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(new CustomEvent("gnc:open-profile-popup", { detail: { userId } }));
+            }}
+            title="Profil ansehen / Freund hinzufügen"
+            style={{
             display: "flex",
             alignItems: "center",
             gap: "4px",
@@ -462,6 +468,8 @@ function RemotePlayerAvatar({
             border: pillBorder,
             boxShadow: pillShadow,
             whiteSpace: "nowrap",
+            pointerEvents: "auto",
+            cursor: "pointer",
           }}>
             {roleColor && (
               <span style={{

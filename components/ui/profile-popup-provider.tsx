@@ -525,6 +525,17 @@ export function ProfilePopupProvider({ children }: { children: ReactNode }) {
 
   const closePopup = useCallback(() => setPopup(null), []);
 
+  // Globale Event-Bridge: die 3D-Welt (R3F-Canvas hat keinen Zugriff auf diesen
+  // React-Context) öffnet das Profil-Popup per window-CustomEvent.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { userId?: string } | undefined;
+      if (detail?.userId) openPopup(detail.userId);
+    };
+    window.addEventListener("gnc:open-profile-popup", onOpen as EventListener);
+    return () => window.removeEventListener("gnc:open-profile-popup", onOpen as EventListener);
+  }, [openPopup]);
+
   // Close on Escape
   useEffect(() => {
     if (!popup) return;

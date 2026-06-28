@@ -696,4 +696,33 @@ export const TAB_GUIDES: Record<string, AdminGuideContent> = {
       { term: "Level-Staffelung", def: "Boost-Stärke abhängig vom Spieler-Level." },
     ],
   },
+
+  friends: {
+    title: "So funktioniert das Freunde-System",
+    subtitle: "Read-only Übersicht: Statistik, Anfragen-Verlauf, Blockierungen.",
+    hierarchy: [
+      { label: "Anfrage", text: "Ein Spieler schickt einem anderen eine Freundschaftsanfrage." },
+      { label: "Antwort", text: "Der Empfänger nimmt an oder lehnt ab; der Absender kann zurückziehen." },
+      { label: "Freundschaft", text: "Bei Annahme entsteht eine beidseitige Freundschaft." },
+      { label: "Blockieren", text: "Ein Spieler kann einen anderen blockieren — beendet Freundschaft + Anfragen." },
+    ],
+    howItWorks: { heading: "Datenmodell in einem Satz", lines: [
+      "friend_requests speichert jede Anfrage mit Status (pending, accepted, declined, cancelled) plus Zeitstempel.",
+      "friendships hat zwei Zeilen pro Freundschaft (eine je Richtung) — die Statistik teilt die Zeilenzahl daher durch 2.",
+      "blocked_users haelt jede Blockierung als blocker zu blocked; Blockieren loescht Freundschaft und offene Anfragen.",
+    ] },
+    blocks: [
+      { heading: "Was dieser Tab zeigt", lines: [
+        "Drei Kennzahlen: aktive Freundschaften, offene Anfragen, aktive Blockierungen.",
+        "Anfragen-Verlauf: die letzten Anfragen mit Von, An, Status und Zeit.",
+        "Blockierungen: wer wen blockiert hat, mit Zeit.",
+        "Reine Lese-Ansicht — hier wird nichts veraendert; das Freunde-System steuern die Spieler selbst im Overlay.",
+      ] },
+    ],
+    glossary: [
+      { term: "Anfrage-Status", def: "pending (offen), accepted (angenommen), declined (abgelehnt), cancelled (zurueckgezogen)." },
+      { term: "Beidseitig", def: "Eine Freundschaft wird als zwei Zeilen gespeichert, je eine pro Richtung." },
+      { term: "Blockierung", def: "Beendet Freundschaft und offene Anfragen und verhindert neue Anfragen." },
+    ],
+  },
 };

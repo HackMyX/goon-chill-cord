@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdmin } from "@/lib/admin";
 import { broadcastLive } from "@/lib/realtime-broadcast";
 import { notifyUser } from "@/lib/notifications-internal";
 
@@ -454,4 +455,119 @@ export async function unblockUser(targetUserId: string): Promise<ActionResult> {
   await admin.from("blocked_users").delete().eq("blocker_id", me).eq("blocked_id", targetUserId);
   await broadcastLive(`friends:${me}`);
   return { ok: true };
+}
+
+// ── Admin-Übersicht (read-only) ─────────────────────────────────────────────────
+
+export type FriendRequestStatus = "pending" | "accepted" | "declined" | "cancelled";
+
+export interface AdminFriendRequest {
+  id: string;
+  fromUsername: string;
+  toUsername: string;
+  status: FriendRequestStatus;
+  createdAt: string;
+  respondedAt: string | null;
+}
+
+export interface AdminFriendBlock {
+  blockerUsername: string;
+  blockedUsername: string;
+  createdAt: string;
+}
+
+export interface FriendsAdminData {
+  stats: { friendships: number; pending: number; blocks: number };
+  requests: AdminFriendRequest[];
+  blocks: AdminFriendBlock[];
+}
+
+const EMPTY_ADMIN: FriendsAdminData = {
+  stats: { friendships: 0, pending: 0, blocks: 0 },
+  requests: [],
+  blocks: [],
+};
+
+/**
+ * Read-only Snapshot des Freunde-Systems für den Admin-Tab "Freunde".
+ * Liefert bei fehlender Admin-Berechtigung ein leeres Resultat (kein Throw).
+ */
+export async function getFriendsAdminData(): Promise<FriendsAdminData> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return EMPTY_ADMIN;
+  const { data: profile } = await supabase
+    .from("profiles").select("username, role").eq("id", user.id).single();
+  if (!isAdmin(profile)) return EMPTY_ADMIN;
+
+  const admin = createAdminClient();
+
+  const [
+    { count: friendshipRows },
+    { count: pendingCount },
+    { count: blockCount },
+    { data: reqRows },
+    { data: blockRows },
+  ] = await Promise.all([
+    admin.from("friendships").select("id", { count: "exact", head: true }),
+    admin.from("friend_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    admin.from("blocked_users").select("id", { count: "exact", head: true }),
+    admin
+      .from("friend_requests")
+      .select("id, from_user_id, to_user_id, status, created_at, responded_at")
+      .order("created_at", { ascending: false })
+      .limit(100),
+    admin
+      .from("blocked_users")
+      .select("blocker_id, blocked_id, created_at")
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
+
+  const requests = (reqRows ?? []) as {
+    id: string;
+    from_user_id: string;
+    to_user_id: string;
+    status: string;
+    created_at: string;
+    responded_at: string | null;
+  }[];
+  const blocks = (blockRows ?? []) as {
+    blocker_id: string;
+    blocked_id: string;
+    created_at: string;
+  }[];
+
+  // Alle beteiligten IDs in EINEM profiles-Select auflösen (id → username).
+  const ids = new Set<string>();
+  requests.forEach((r) => { ids.add(r.from_user_id); ids.add(r.to_user_id); });
+  blocks.forEach((b) => { ids.add(b.blocker_id); ids.add(b.blocked_id); });
+
+  const nameMap = new Map<string, string>();
+  if (ids.size > 0) {
+    const { data: profs } = await admin.from("profiles").select("id, username").in("id", [...ids]);
+    for (const p of (profs ?? []) as { id: string; username: string }[]) nameMap.set(p.id, p.username);
+  }
+  const nameOf = (id: string) => nameMap.get(id) ?? `${id.slice(0, 8)}…`;
+
+  return {
+    stats: {
+      friendships: Math.floor((friendshipRows ?? 0) / 2),
+      pending: pendingCount ?? 0,
+      blocks: blockCount ?? 0,
+    },
+    requests: requests.map((r) => ({
+      id: r.id,
+      fromUsername: nameOf(r.from_user_id),
+      toUsername: nameOf(r.to_user_id),
+      status: r.status as FriendRequestStatus,
+      createdAt: r.created_at,
+      respondedAt: r.responded_at,
+    })),
+    blocks: blocks.map((b) => ({
+      blockerUsername: nameOf(b.blocker_id),
+      blockedUsername: nameOf(b.blocked_id),
+      createdAt: b.created_at,
+    })),
+  };
 }
