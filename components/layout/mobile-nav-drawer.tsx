@@ -155,15 +155,8 @@ export function MobileNavDrawer({
               />
             );
           })}
-          {/* Freunde — öffnet das Freunde-Panel (Popover, kein eigener Page-Pfad). */}
-          <button
-            onMouseEnter={sound.hover}
-            onClick={() => { sound.click(); onClose(); window.dispatchEvent(new Event("gn:open-friends")); }}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-zinc-300 transition-colors hover:bg-white/5"
-          >
-            <Users className="h-5 w-5 shrink-0" />
-            <span className="flex-1 text-left text-sm font-medium">Freunde</span>
-          </button>
+          {/* Freunde — eigene Seite (mobil-sicher, kein globaler Popover-Trigger). */}
+          <NavItem icon={Users} label="Freunde" href="/friends" onClose={onClose} />
 
           {/* Admin/Mod */}
           {(isAdmin || isModerator) && (

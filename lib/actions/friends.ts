@@ -457,6 +457,91 @@ export async function unblockUser(targetUserId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+// ── Spieler-Suche (Freunde-Seite) ───────────────────────────────────────────────
+
+/** Beziehungs-Status eines Suchtreffers (ohne "self" — Self ist ausgeschlossen). */
+export type AddableRelationship =
+  | "none"
+  | "friends"
+  | "incoming"   // der Treffer hat MIR eine Anfrage geschickt
+  | "outgoing"   // ICH habe dem Treffer eine Anfrage geschickt
+  | "blocked"    // ICH habe den Treffer blockiert
+  | "blocked_by"; // der Treffer hat MICH blockiert
+
+export interface AddableUserResult {
+  id: string;
+  username: string;
+  avatarUrl: string | null;
+  relationship: AddableRelationship;
+  /** Nur bei relationship === "incoming" gesetzt — für respondFriendRequest(). */
+  requestId?: string;
+}
+
+/**
+ * Sucht hinzufügbare Spieler per Username (case-insensitive Teiltreffer) und
+ * bestimmt die Beziehung des Viewers zu jedem Treffer in EINEM Batch
+ * (keine N+1-Queries). Self wird ausgeschlossen, leere/kurze Query → [].
+ */
+export async function searchAddableUsers(query: string): Promise<AddableUserResult[]> {
+  const me = await getViewer();
+  if (!me) return [];
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const admin = createAdminClient();
+
+  // ilike-Wildcards im User-Input neutralisieren, Teiltreffer selbst anhängen.
+  const safe = q.replace(/[\\%_]/g, (m) => `\\${m}`);
+  const { data: rows } = await admin
+    .from("profiles")
+    .select("id, username, avatar_url")
+    .ilike("username", `%${safe}%`)
+    .neq("id", me)
+    .limit(20);
+
+  const candidates = (rows ?? []) as { id: string; username: string; avatar_url: string | null }[];
+  if (candidates.length === 0) return [];
+  const ids = candidates.map((c) => c.id);
+  const idList = ids.join(",");
+
+  const [{ data: friendRows }, { data: blockMine }, { data: blockTheirs }, { data: reqRows }] =
+    await Promise.all([
+      admin.from("friendships").select("friend_id").eq("user_id", me).in("friend_id", ids),
+      admin.from("blocked_users").select("blocked_id").eq("blocker_id", me).in("blocked_id", ids),
+      admin.from("blocked_users").select("blocker_id").eq("blocked_id", me).in("blocker_id", ids),
+      admin
+        .from("friend_requests")
+        .select("id, from_user_id, to_user_id")
+        .eq("status", "pending")
+        .or(
+          `and(from_user_id.eq.${me},to_user_id.in.(${idList})),and(to_user_id.eq.${me},from_user_id.in.(${idList}))`,
+        ),
+    ]);
+
+  const friendSet = new Set((friendRows ?? []).map((r) => (r as { friend_id: string }).friend_id));
+  const blockedSet = new Set((blockMine ?? []).map((r) => (r as { blocked_id: string }).blocked_id));
+  const blockedBySet = new Set((blockTheirs ?? []).map((r) => (r as { blocker_id: string }).blocker_id));
+  const outgoingSet = new Set<string>();
+  const incomingReq = new Map<string, string>(); // from_user_id → requestId
+  for (const r of (reqRows ?? []) as { id: string; from_user_id: string; to_user_id: string }[]) {
+    if (r.from_user_id === me) outgoingSet.add(r.to_user_id);
+    else if (r.to_user_id === me) incomingReq.set(r.from_user_id, r.id);
+  }
+
+  return candidates.map((c): AddableUserResult => {
+    let relationship: AddableRelationship = "none";
+    let requestId: string | undefined;
+    if (friendSet.has(c.id)) relationship = "friends";
+    else if (blockedSet.has(c.id)) relationship = "blocked";
+    else if (blockedBySet.has(c.id)) relationship = "blocked_by";
+    else if (outgoingSet.has(c.id)) relationship = "outgoing";
+    else if (incomingReq.has(c.id)) {
+      relationship = "incoming";
+      requestId = incomingReq.get(c.id);
+    }
+    return { id: c.id, username: c.username, avatarUrl: c.avatar_url, relationship, requestId };
+  });
+}
+
 // ── Admin-Übersicht (read-only) ─────────────────────────────────────────────────
 
 export type FriendRequestStatus = "pending" | "accepted" | "declined" | "cancelled";

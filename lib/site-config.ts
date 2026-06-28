@@ -85,7 +85,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   armorLabel: "AP",
   rarityLabels: { normal: "Normal", selten: "Selten", mythisch: "Mythisch", ultra: "Ultra" },
   perkLabels: { speed: "Tempo", jump: "Sprung", regen: "Regen" },
-  topbarRightSlots: ["games", "shop", "auctions", "trading", "community", "quests", "friends", "wardrobe", "notifications", "profile_avatar"],
+  topbarRightSlots: ["games", "shop", "auctions", "trading", "community", "friends", "wardrobe", "notifications", "profile_avatar"],
   siteVersion: "v1.0.0",
   topbarShowLabels: false,
   topbarButtonStyle: "icon",

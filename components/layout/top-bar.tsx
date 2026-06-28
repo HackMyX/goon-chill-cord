@@ -30,7 +30,6 @@ import { DEFAULT_TOPBAR_RIGHT_SLOTS } from "@/lib/site-config";
 import { LevelBadge } from "@/components/ui/level-badge";
 import { LevelMenuTrigger } from "@/components/ui/level-menu-modal";
 import { DailyQuestsTrigger } from "@/components/daily-quests/daily-quests-panel";
-import { FriendsTrigger } from "@/components/social/friends-panel";
 import { RewardWalletTrigger } from "@/components/rewards/reward-wallet";
 
 interface TopBarProps {
@@ -208,10 +207,17 @@ export function TopBar({
           </div>
         );
       case "friends":
+        // Link zur /friends-Seite (KEIN globaler Popover-Trigger — der brach auf
+        // Mobile die Interaktivität, wenn er auf jeder Seite gemountet wurde).
         return (
-          <div key="friends" className="hidden xl:flex">
-            <FriendsTrigger userId={resolvedUserId ?? undefined} />
-          </div>
+          <IconButton
+            key="friends"
+            icon={Users}
+            label="Freunde"
+            href="/friends"
+            showLabel={topbarShowLabels}
+            className="hidden xl:flex"
+          />
         );
       case "rewards":
         return (

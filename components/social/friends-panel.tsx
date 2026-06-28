@@ -23,7 +23,7 @@ type Tab = "friends" | "requests" | "blocked";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 
-function relativeTime(iso: string | null): string {
+export function relativeTime(iso: string | null): string {
   if (!iso) return "noch nie online";
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diff / 60000);
@@ -42,7 +42,7 @@ const ROLE_TINT: Record<string, string> = {
   moderator: "text-sky-300",
 };
 
-function Avatar({ url, name, size = 40 }: { url: string | null; name: string; size?: number }) {
+export function Avatar({ url, name, size = 40 }: { url: string | null; name: string; size?: number }) {
   return url ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -78,7 +78,7 @@ function StatusDot({ online, inWorld }: { online: boolean; inWorld: boolean }) {
 
 // ── Friend row ────────────────────────────────────────────────────────────────
 
-function FriendRow({
+export function FriendRow({
   f, online, busy, onOpen, onFav, onRemove,
 }: {
   f: FriendSummary;
@@ -308,7 +308,7 @@ function FriendsPanel({
   );
 }
 
-function RequestsTab({
+export function RequestsTab({
   data, busyId, run, openPopup,
 }: {
   data: FriendData;

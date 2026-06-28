@@ -105,7 +105,10 @@ const ACTION_LABEL: Record<string, string> = {
 // ── Social: relationship-aware friend button ─────────────────────────────────────
 
 function FriendButton({ userId }: { userId: string }) {
-  const [rel, setRel] = useState<{ kind: RelationshipKind; requestId?: string } | null>(null);
+  // Default "none": der „Freund hinzufügen"-Button ist sofort sichtbar, auch
+  // während getRelationshipTo noch lädt oder fehlschlägt. Lädt die echte
+  // Beziehung → ersetzt den Default; nur "self"/"blocked_by" blenden aus.
+  const [rel, setRel] = useState<{ kind: RelationshipKind; requestId?: string }>({ kind: "none" });
   const [busy, setBusy] = useState(false);
   const sound = useSoundManager();
 
@@ -116,7 +119,7 @@ function FriendButton({ userId }: { userId: string }) {
   }, [userId]);
   useEffect(() => { load(); }, [load]);
 
-  if (!rel || rel.kind === "self" || rel.kind === "blocked_by") return null;
+  if (rel.kind === "self" || rel.kind === "blocked_by") return null;
 
   const act = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     setBusy(true);
