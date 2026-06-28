@@ -70,6 +70,7 @@ export interface BalanceStudioData {
     dailyCrLimit: number;
     bonusCrFlat: number;
     goldenAppleCrMultiplier: number;
+    goldenAppleEveryN: number;
     dailyGameLimit: number | null;
   }>;
   // Plinko
@@ -196,6 +197,7 @@ export async function getBalanceStudioData(): Promise<BalanceStudioData | null> 
       dailyCrLimit: Number(v.dailyCrLimit ?? 0),
       bonusCrFlat: Number(v.bonusCrFlat ?? 0),
       goldenAppleCrMultiplier: Number(v.goldenAppleCrMultiplier ?? 1),
+      goldenAppleEveryN: Number(v.goldenAppleEveryN ?? 5),
       dailyGameLimit: v.dailyGameLimit != null ? Number(v.dailyGameLimit) : null,
     };
   }
@@ -319,6 +321,7 @@ export async function saveGamesSettings(data: {
         currentModes[key].dailyCrLimit = vals.dailyCrLimit;
         currentModes[key].bonusCrFlat = vals.bonusCrFlat;
         currentModes[key].goldenAppleCrMultiplier = vals.goldenAppleCrMultiplier;
+        currentModes[key].goldenAppleEveryN = Math.max(1, Math.min(100, Math.round(vals.goldenAppleEveryN)));
         if (vals.dailyGameLimit !== null) currentModes[key].dailyGameLimit = vals.dailyGameLimit;
       }
     }

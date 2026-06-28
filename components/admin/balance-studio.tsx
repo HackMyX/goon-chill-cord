@@ -311,7 +311,8 @@ function GamesSection({ data, onChange }: {
                 <th className="pb-2 pr-3">CR/Apfel</th>
                 <th className="pb-2 pr-3">Tages-Limit (CR)</th>
                 <th className="pb-2 pr-3">Bonus-CR (flat)</th>
-                <th className="pb-2">Golden Apple ×</th>
+                <th className="pb-2 pr-3">Golden Apple ×</th>
+                <th className="pb-2">Gold alle N Äpfel</th>
               </tr>
             </thead>
             <tbody>
@@ -332,9 +333,13 @@ function GamesSection({ data, onChange }: {
                       <input type="number" value={m.bonusCrFlat} onChange={(e) => setSnakeMode(key, "bonusCrFlat", Number(e.target.value))}
                         className="w-20 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60" />
                     </td>
-                    <td className="py-1.5">
+                    <td className="py-1.5 pr-3">
                       <input type="number" value={m.goldenAppleCrMultiplier} step={0.5} onChange={(e) => setSnakeMode(key, "goldenAppleCrMultiplier", Number(e.target.value))}
                         className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60" />
+                    </td>
+                    <td className="py-1.5" title="Goldener Apfel erscheint EXAKT alle N normalen Äpfel (pro Modus, deterministisch).">
+                      <input type="number" min={1} max={100} value={m.goldenAppleEveryN} onChange={(e) => setSnakeMode(key, "goldenAppleEveryN", Number(e.target.value))}
+                        className="w-16 rounded-lg border border-amber-500/20 bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/60" />
                     </td>
                   </tr>
                 );
