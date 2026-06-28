@@ -148,7 +148,7 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
           />
           <Toggle
             label="Ticket-Status ändern"
-            description="Moderatoren können Status (Offen / In Bearbeitung / Gelöst / Geschlossen) setzen"
+            description="Moderatoren können Status (Offen / In Bearbeitung / Pausiert / Geschlossen) setzen"
             value={perms.canUpdateTicketStatus}
             onChange={(v) => set("canUpdateTicketStatus", v)}
           />

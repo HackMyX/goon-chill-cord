@@ -714,7 +714,7 @@ function PriorityBadge({ priority }: { priority: string }) {
 
 const ALL_TICKET_STATUSES = ["open", "in_progress", "paused", "closed"] as const;
 const ALL_TICKET_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
-const STATUS_LABEL: Record<string, string> = { open: "Offen", in_progress: "In Bearb.", paused: "Pausiert", resolved: "Gelöst", closed: "Geschlossen" };
+const STATUS_LABEL: Record<string, string> = { open: "Offen", in_progress: "In Bearb.", paused: "Pausiert", resolved: "Geschlossen", closed: "Geschlossen" };
 const PRIORITY_LABEL: Record<string, string> = { low: "Niedrig", normal: "Normal", high: "Hoch", urgent: "Dringend" };
 
 function TicketItem({ t, perms, onRefresh, defaultOpen, isSelected, onToggleSelect }: {
@@ -1933,7 +1933,7 @@ function TicketsTab({ tickets, perms, onRefresh, openTicketId, onTicketOpened }:
                         : "border-white/10 text-zinc-600 hover:text-zinc-400"
                     }`}
                   >
-                    {s === "closed" ? "Geschlossen" : s === "resolved" ? "Gelöst" : s === "open" ? "Offen" : "In Bearb."}
+                    {s === "closed" ? "Geschlossen" : s === "resolved" ? "Geschl. (Bel.)" : s === "open" ? "Offen" : "In Bearb."}
                   </button>
                 ))}
               </div>

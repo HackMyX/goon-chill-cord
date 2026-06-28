@@ -20,7 +20,7 @@ const PERM_LABELS: {
   { key: "canCloseTickets",       label: "Tickets schließen",         description: "Kann Tickets als erledigt markieren",                         section: "Tickets" },
   { key: "canDeleteTickets",      label: "Tickets löschen",           description: "Kann Tickets permanent löschen",                              section: "Tickets" },
   { key: "canSetTicketPriority",  label: "Ticket-Priorität",          description: "Kann Priorität (Niedrig/Normal/Hoch/Dringend) ändern",        section: "Tickets" },
-  { key: "canUpdateTicketStatus", label: "Ticket-Status",             description: "Kann Status (Offen/Bearbeitung/Gelöst) setzen",               section: "Tickets" },
+  { key: "canUpdateTicketStatus", label: "Ticket-Status",             description: "Kann Status (Offen/Bearbeitung/Geschlossen) setzen",          section: "Tickets" },
   { key: "canRewardTickets",      label: "Ticketbelohnungen",         description: "Kann Credits-Belohnungen für hilfreiche Reports vergeben",     section: "Tickets" },
   { key: "canPauseTickets",       label: "Tickets pausieren",         description: "Kann Tickets auf 'Pausiert' setzen und wieder fortsetzen",    section: "Tickets" },
   { key: "maxRewardPerTicket",    label: "Max. Belohnung/Ticket (CR)",description: "Maximale Credits pro Ticketbelohnung (0 = kein Limit)",       section: "Tickets", isNumber: true, min: 0, max: 1000000 },
@@ -330,16 +330,20 @@ export function ModUserPermissionsEditor({ globalPerms }: { globalPerms: ModPerm
     );
   }
 
-  if (mods.length === 0) {
-    return <p className="text-sm text-zinc-500">Keine Moderatoren oder Admins gefunden.</p>;
+  // Admins always have full access and are NOT configurable here — only show
+  // moderators in the individual-permissions list.
+  const modsOnly = mods.filter((m) => m.role !== "admin");
+
+  if (modsOnly.length === 0) {
+    return <p className="text-sm text-zinc-500">Keine Moderatoren gefunden.</p>;
   }
 
   return (
     <div className="flex flex-col gap-2">
       <p className="mb-1 text-xs text-zinc-500">
-        Individuelle Berechtigungen überschreiben <span className="text-purple-400 font-semibold">immer</span> die globalen Gruppen-Einstellungen. Beim Zuweisen der Mod-Rolle werden die aktuellen Gruppen-Defaults automatisch als Startpunkt gesetzt.
+        Individuelle Berechtigungen überschreiben <span className="text-purple-400 font-semibold">immer</span> die globalen Gruppen-Einstellungen. Beim Zuweisen der Mod-Rolle werden die aktuellen Gruppen-Defaults automatisch als Startpunkt gesetzt. Admins haben immer vollen Zugriff und sind hier nicht aufgeführt.
       </p>
-      {mods.map((mod) => (
+      {modsOnly.map((mod) => (
         <ModRow key={mod.id} mod={mod} globalPerms={globalPerms} />
       ))}
     </div>

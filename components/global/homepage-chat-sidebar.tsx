@@ -22,9 +22,20 @@ import {
   type GlobalChatMessage,
 } from "@/lib/actions/global-chat";
 import { BadgePill } from "@/components/ui/badge-pill";
+import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 import { StyledUsername } from "@/components/ui/styled-username";
+import { badgeRank } from "@/lib/badges";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { HomepageChatConfig } from "@/lib/homepage-chat-config-types";
+
+/** Single highest-prestige owned badge — fallback when a user set no prio badges
+ *  (mirrors the global chat / resolveDisplayBadges everywhere else). */
+function pickDisplayBadge(badges: string[], role: string): string | null {
+  if (role === "admin" && badges.includes("admin")) return "admin";
+  if (role === "moderator" && badges.includes("mod")) return "mod";
+  if (badges.length === 0) return null;
+  return [...badges].sort((a, b) => badgeRank(a) - badgeRank(b))[0] ?? null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -212,11 +223,16 @@ function MessageRow({
     return content;
   }
 
-  const badges = msg.metadata?.badges as string[] | undefined;
-  const nameStyleKey = msg.metadata?.name_style_key as string | undefined;
-  const displayBadges = config.showBadges && badges && badges.length > 0
-    ? badges.slice(0, config.maxBadgeCount)
-    : [];
+  const nameStyleKey = msg.nameStyleKey ?? (msg.metadata?.name_style_key as string | undefined);
+  // Respect the user's chosen PRIORITY badges (exactly like every other chat /
+  // profile), not a random slice of all owned badges. Prio badges win; otherwise
+  // fall back to the single highest-prestige owned badge.
+  const prioBadges = config.showBadges && msg.prioBadges && msg.prioBadges.length > 0
+    ? msg.prioBadges.slice(0, config.maxBadgeCount)
+    : null;
+  const fallbackBadge = config.showBadges && !prioBadges && msg.badges && msg.badges.length > 0
+    ? pickDisplayBadge(msg.badges, msg.role)
+    : null;
 
   const inner = (
     <div
@@ -245,9 +261,9 @@ function MessageRow({
               staticMode
             />
           </span>
-          {displayBadges.map((bk) => (
-            <BadgePill key={bk} badgeKey={bk} />
-          ))}
+          {prioBadges
+            ? <PrioBadgeRow badgeKeys={prioBadges} size="xs" max={config.maxBadgeCount} />
+            : fallbackBadge && <BadgePill badgeKey={fallbackBadge} />}
           {config.showTimestamps && (
             <span className="text-[9px] text-zinc-600 ml-auto shrink-0 tabular-nums">
               {isOptimistic
@@ -392,6 +408,7 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
       const optId = pendingOptimisticRef.current;
       const metadata = (row.metadata as Record<string, unknown>) ?? null;
       const badges = metadata?.badges as string[] | undefined;
+      const prioBadges = metadata?.prio_badges as string[] | undefined;
       const nameStyleKey = metadata?.name_style_key as string | undefined;
 
       setMessages((prev) => {
@@ -410,6 +427,7 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
             createdAt: row.created_at as string,
             avatarUrl: (row.avatar_url as string) ?? null,
             badges: Array.isArray(badges) ? badges : undefined,
+            prioBadges: Array.isArray(prioBadges) ? prioBadges : undefined,
             nameStyleKey,
           },
         ];
@@ -453,7 +471,11 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
     [config.maxMessages, config.messageAnimation, config.mentionSound, scrollToBottom]
   );
 
-  // ── Realtime subscription ─────────────────────────────────────────────────
+  // ── Realtime subscription + polling fallback ──────────────────────────────
+  // Realtime alone can silently drop INSERTs (backgrounded tab, transient
+  // socket loss), which is why messages "only showed up once I typed". A poll
+  // re-syncs from the server so nothing is ever missed — exactly like the big
+  // chat panel.
   useEffect(() => {
     const client = supabase.current;
     const channel = client
@@ -463,11 +485,42 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
         { event: "INSERT", schema: "public", table: "global_chat_messages" },
         (payload) => appendMessage(payload.new as Record<string, unknown>)
       )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "global_chat_messages" },
+        () => {
+          getGlobalChatMessages(config.maxMessages).then((msgs) => {
+            setMessages(msgs);
+            latestIdRef.current = msgs.length > 0 ? msgs[msgs.length - 1].id : null;
+          });
+        }
+      )
       .subscribe();
+
+    const pollMs = 4000;
+    const poll = setInterval(async () => {
+      const fresh = await getGlobalChatMessages(config.maxMessages);
+      if (fresh.length === 0) { setMessages([]); latestIdRef.current = null; return; }
+      const newestId = fresh[fresh.length - 1].id;
+      if (newestId === latestIdRef.current) return;
+      setMessages((prev) => {
+        const withoutOpt = pendingOptimisticRef.current
+          ? prev.filter((m) => m.id !== pendingOptimisticRef.current)
+          : prev;
+        const existing = new Set(withoutOpt.map((m) => m.id));
+        const added = fresh.filter((m) => !existing.has(m.id));
+        if (added.length === 0) return withoutOpt;
+        return [...withoutOpt, ...added].slice(-config.maxMessages);
+      });
+      latestIdRef.current = newestId;
+      if (isOpenRef.current) setTimeout(scrollToBottom, 30);
+    }, pollMs);
+
     return () => {
       client.removeChannel(channel);
+      clearInterval(poll);
     };
-  }, [appendMessage]);
+  }, [appendMessage, config.maxMessages, scrollToBottom]);
 
   // ── Toggle sidebar ────────────────────────────────────────────────────────
   function toggleOpen() {

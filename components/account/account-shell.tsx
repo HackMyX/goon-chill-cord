@@ -13,6 +13,7 @@ import { ClientSettingsSection } from "@/components/account/client-settings-sect
 import { RedeemCodeCard } from "@/components/account/redeem-code-card";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { LevelBadge } from "@/components/ui/level-badge";
+import { LevelMenuTrigger } from "@/components/ui/level-menu-modal";
 import { getLevelColor } from "@/lib/level-system";
 
 interface AccountShellProps {
@@ -232,12 +233,14 @@ export function AccountShell({
           </div>
         </div>
 
-        {/* Level & XP Card */}
-        <div className="mt-4 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-900/10 to-purple-900/10 p-4">
+        {/* Level & XP Card — click to open the full level menu */}
+        <LevelMenuTrigger level={level}>
+        <div className="mt-4 cursor-pointer rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-900/10 to-purple-900/10 p-4 text-left transition-all hover:border-amber-400/40 hover:from-amber-900/20 hover:to-purple-900/20">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-amber-400" />
               <span className="text-sm font-bold text-zinc-200">Level &amp; XP</span>
+              <span className="text-[10px] font-semibold text-amber-400/60">— Menü öffnen</span>
             </div>
             <LevelBadge level={level} size="sm" />
           </div>
@@ -265,6 +268,7 @@ export function AccountShell({
             )}
           </div>
         </div>
+        </LevelMenuTrigger>
 
         <div className="mt-4 flex flex-wrap gap-3">
           <Link

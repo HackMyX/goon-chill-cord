@@ -47,7 +47,7 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   open: "Offen",
   in_progress: "In Bearbeitung",
   paused: "Pausiert",
-  resolved: "Gelöst",
+  resolved: "Geschlossen",
   closed: "Geschlossen",
 };
 
@@ -588,7 +588,7 @@ function SupportButtonInner() {
                             { f: "all" as TicketListFilter, label: "Alle" },
                             { f: "open" as TicketListFilter, label: "Offen" },
                             { f: "in_progress" as TicketListFilter, label: "In Bearb." },
-                            { f: "closed" as TicketListFilter, label: "Gelöst" },
+                            { f: "closed" as TicketListFilter, label: "Geschlossen" },
                           ]).map(({ f, label }) => {
                             const cnt = countFor(f);
                             return (

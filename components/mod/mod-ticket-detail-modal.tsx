@@ -29,8 +29,10 @@ const STATUS_LABEL: Record<string, string> = {
   open: "Offen",
   in_progress: "In Bearbeitung",
   paused: "Pausiert",
-  resolved: "Gelöst",
-  closed: "Geschlossen",
+  // "resolved" is an internal sub-state of closed (closed with a pending reward);
+  // it is NOT a separately selectable status anymore — both read the same.
+  resolved: "Gelöst/Geschlossen",
+  closed: "Gelöst/Geschlossen",
 };
 
 const STATUS_STYLE: Record<string, string> = {
@@ -86,7 +88,9 @@ const PRIORITY_GLOW: Record<string, string> = {
   urgent: "shadow-[0_0_16px_rgba(239,68,68,0.45)]",
 };
 
-const ALL_STATUSES = ["open", "in_progress", "paused", "resolved", "closed"] as const;
+// "resolved" removed as a manual choice — closing a ticket is one action
+// ("Gelöst/Geschlossen"); the backend may still store it as resolved internally.
+const ALL_STATUSES = ["open", "in_progress", "paused", "closed"] as const;
 const ALL_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

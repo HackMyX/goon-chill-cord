@@ -39,8 +39,10 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   open: "Offen",
   in_progress: "In Bearbeitung",
   paused: "Pausiert",
-  resolved: "Gelöst",
-  closed: "Geschlossen",
+  // "resolved" is an internal sub-state of closed — both read the same; it is
+  // no longer a separately selectable status.
+  resolved: "Gelöst/Geschlossen",
+  closed: "Gelöst/Geschlossen",
 };
 
 const STATUS_STYLE: Record<TicketStatus, string> = {
@@ -75,7 +77,8 @@ const STATUS_GLOW: Record<TicketStatus, string> = {
   closed: "shadow-[0_0_12px_rgba(113,113,122,0.25)]",
 };
 
-const ALL_STATUSES: TicketStatus[] = ["open", "in_progress", "paused", "resolved", "closed"];
+// "resolved" removed as a manual choice — one close action ("Gelöst/Geschlossen").
+const ALL_STATUSES: TicketStatus[] = ["open", "in_progress", "paused", "closed"];
 
 const PRIORITY_LABEL: Record<TicketPriority, string> = {
   low: "Niedrig",
