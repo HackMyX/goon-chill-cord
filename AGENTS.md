@@ -67,10 +67,34 @@ Die Datei `lib/actions/system-health.ts` ist der zentrale System-Prüfbericht de
 - Admin-Prüfung: `isAdmin(profile)` vor jeder sensiblen Operation.
 - Mod-Prüfung: `requireMod()` vor jeder Mod-Operation.
 
-## 7. Admin-Tabs IMMER alphabetisch
+## 7. Admin-Tabs sind GRUPPIERT (nicht mehr nur alphabetisch)
 
-- Die Tab-Buttons im Admin-Panel (`components/admin/admin-shell.tsx`, `const TABS`) werden
-  AUTOMATISCH alphabetisch (de) sortiert — das `.sort(...)` am Ende des Arrays erledigt das.
-- Neue Tabs einfach IRGENDWO ins `TABS`-Array einfügen; sie ordnen sich von selbst ein.
-  NIE manuell umsortieren und die `.sort(...)`-Zeile NICHT entfernen.
-- Führende Emojis/Symbole im Label werden beim Sortieren ignoriert (`tabSortKey`).
+Das Admin-Panel (`components/admin/admin-shell.tsx`) ist in logische Gruppen unterteilt (`TAB_GROUPS`).
+Wenn du einen NEUEN Tab hinzufügst, musst du ihn an ALLEN diesen Stellen eintragen:
+- `Tab`-Union (oben) → neue ID ergänzen
+- `TABS`-Array → `{ id, label, icon }` (bleibt für Suche/Validierung `.sort(...)`-sortiert — Zeile NICHT entfernen)
+- `TAB_GROUPS` → die ID in die passende Gruppe einsortieren (sonst erscheint der Tab nirgends!)
+- `TAB_DESC` → eine Kurzbeschreibung (Tooltip + Suche)
+- `lib/admin-guides.ts` `TAB_GUIDES` → einen Guide (Cases-Tiefe: hierarchy/steps/howItWorks/glossary)
+- Den Render-Block `{tab === "…" && <… />}`
+
+## 8. Balance-Cockpit ist PFLICHT bei jedem neuen Wert/Preis
+
+Das **Balance-Cockpit** (`components/admin/balance-cockpit.tsx`, Daten via `getBalanceSnapshot()`
+in `lib/actions/balance-studio.ts`) ist die zentrale Übersicht ALLER Werte, Preise, Belohnungen,
+Kosten und Auszahlungen der gesamten Seite — inkl. „wie lange muss man dafür grinden"-Analyse.
+
+**Jedes Mal wenn du IRGENDWO einen Wert mit wirtschaftlicher Bedeutung hinzufügst oder änderst**
+(Item-Preis, Shop-Preis/Multiplikator, Fähigkeits-/Style-/Badge-Preis, Case-Preis, Spiel-Auszahlung,
+XP-/Level-/Streak-/Quest-/Battle-Pass-Belohnung, Gutschein-Wert, Monster-Belohnung, Upgrade-Kosten …):
+
+1. **Anbinden ans Cockpit:** Den neuen Wert/Preis in `getBalanceSnapshot()` als Kategorie/Eintrag
+   ergänzen, sodass er im Cockpit erscheint UND in die Verdienst-vs-Preis-Analyse einfließt.
+2. **Sprung ermöglichen:** Der Cockpit-Eintrag muss per `onJump(tab, anchor)` zum echten Editor
+   springen (Anker `id="…"` im Ziel-Editor setzen, wo möglich — virtualisierte Listen = Tab-Anfang).
+3. **Verdienst-Quellen:** Neue Einnahme-/Verdienst-Quellen (neues Spiel, neue Belohnung) als
+   Baseline-Option ins Cockpit aufnehmen.
+
+**Diese Pflicht gilt absolut. Kein neuer Wert/Preis ohne Cockpit-Anbindung.** Alles, was die
+Wirtschaft der Seite betrifft, MUSS zentral im Balance-Cockpit sicht- und vergleichbar sein —
+einzeln (jeder Eintrag) UND im Gesamtbild (eine Quelle der Wahrheit).

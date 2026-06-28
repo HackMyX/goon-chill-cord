@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import type { MineLevel } from "@/lib/mine-config";
 import type { Rarity } from "@/lib/cases";
+import { parseVoucherRewards, type VoucherRewardType, type VoucherRewardValue } from "@/lib/vouchers";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -271,17 +272,75 @@ async function requireAdmin() {
 
 export interface BalancePriceRow { key: string; name: string; rarity: string; price: number; }
 
-/** Preis-Listen fürs Balance-Cockpit: Fähigkeiten + Name-Styles (Shop-Preise).
- *  Items + Case-Tiers liegen dem Client bereits als Props vor. */
-export async function getBalancePrices(): Promise<{ abilities: BalancePriceRow[]; nameStyles: BalancePriceRow[] }> {
+/** Vollständiger DB-Snapshot fürs Balance-Cockpit — nur die Werte, die dem
+ *  Client NICHT bereits als Props vorliegen (Items, Case-Tiers, Configs sind
+ *  schon da). Liefert Shop-Preise (Fähigkeiten, Name-Styles), Badges sowie
+ *  Gutschein-Credit-Werte. */
+export interface BalanceSnapshot {
+  abilities: BalancePriceRow[];
+  nameStyles: BalancePriceRow[];
+  badges: BalancePriceRow[];
+  vouchers: BalancePriceRow[];
+}
+
+export async function getBalanceSnapshot(): Promise<BalanceSnapshot> {
   const admin = await requireAdmin();
-  const [{ data: ab }, { data: st }] = await Promise.all([
+  const [{ data: ab }, { data: st }, { data: bd }, { data: vc }] = await Promise.all([
     admin.from("ability_definitions").select("key, name, rarity, shop_price_cr").eq("enabled", true),
     admin.from("name_styles").select("key, label, rarity, shop_price_cr"),
+    admin.from("badge_definitions").select("key, label").order("key", { ascending: true }),
+    admin.from("redemption_codes").select("code, label, rewards, reward_type, reward_value, ability_duration_hours, enabled").order("created_at", { ascending: false }),
   ]);
-  const abilities = (ab ?? []).map((r) => ({ key: r.key as string, name: (r.name as string) ?? (r.key as string), rarity: (r.rarity as string) ?? "selten", price: Number(r.shop_price_cr ?? 0) }));
-  const nameStyles = (st ?? []).map((r) => ({ key: r.key as string, name: (r.label as string) ?? (r.key as string), rarity: (r.rarity as string) ?? "selten", price: Number(r.shop_price_cr ?? 0) }));
-  return { abilities, nameStyles };
+
+  const abilities: BalancePriceRow[] = (ab ?? []).map((r) => ({
+    key: r.key as string,
+    name: (r.name as string) ?? (r.key as string),
+    rarity: (r.rarity as string) ?? "selten",
+    price: Number(r.shop_price_cr ?? 0),
+  }));
+
+  const nameStyles: BalancePriceRow[] = (st ?? []).map((r) => ({
+    key: r.key as string,
+    name: (r.label as string) ?? (r.key as string),
+    rarity: (r.rarity as string) ?? "selten",
+    price: Number(r.shop_price_cr ?? 0),
+  }));
+
+  // badge_definitions hat keine Preis-Spalte → price 0 (rein informativ).
+  const badges: BalancePriceRow[] = (bd ?? []).map((r) => ({
+    key: r.key as string,
+    name: (r.label as string) ?? (r.key as string),
+    rarity: "normal",
+    price: 0,
+  }));
+
+  // Gutscheine: Summe aller enthaltenen Credit-Belohnungen als „Wert".
+  const vouchers: BalancePriceRow[] = (vc ?? []).map((r) => {
+    const rewards = parseVoucherRewards((r as Record<string, unknown>).rewards, {
+      rewardType: (r.reward_type as VoucherRewardType | undefined) ?? undefined,
+      rewardValue: (r.reward_value as VoucherRewardValue) ?? {},
+      abilityDurationHours: Number(r.ability_duration_hours ?? 0),
+    });
+    const credits = rewards
+      .filter((x) => x.type === "credits")
+      .reduce((s, x) => s + Number(x.amount ?? 0), 0);
+    const code = r.code as string;
+    const label = (r.label as string | null) ?? null;
+    return {
+      key: code,
+      name: label ? `${code} · ${label}` : code,
+      rarity: (r.enabled as boolean) === false ? "normal" : "selten",
+      price: credits,
+    };
+  });
+
+  return { abilities, nameStyles, badges, vouchers };
+}
+
+/** Dünner Rückwärtskompat-Alias — nur Fähigkeiten + Name-Styles. */
+export async function getBalancePrices(): Promise<{ abilities: BalancePriceRow[]; nameStyles: BalancePriceRow[] }> {
+  const snap = await getBalanceSnapshot();
+  return { abilities: snap.abilities, nameStyles: snap.nameStyles };
 }
 
 export async function saveEconomySettings(data: {

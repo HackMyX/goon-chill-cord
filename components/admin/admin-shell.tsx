@@ -603,6 +603,13 @@ export function AdminShell({
               caseTiers={caseTiers}
               mineConfig={mineConfig}
               snakeConfig={snakeConfig}
+              donConfig={donConfig}
+              plinkoConfig={plinkoConfig}
+              streakConfig={streakConfig}
+              shopSettings={shopSettings}
+              xpConfig={xpConfig}
+              battlePasses={battlePasses}
+              monsterTypes={monsterTypes}
             />
             <BalanceStudioTab />
           </>
