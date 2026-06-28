@@ -112,7 +112,7 @@ const PROJECTILE_HIT_RADIUS = 0.9;
  * comes from `type.attackDamage`/`throwDamage` regardless of what's
  * rendered in-hand. Reuses the same "minimal extra geometry, not a whole
  * new asset" approach as the tusks/horns in the render branch below. */
-function MonsterWeapon({ kind, color }: { kind: "skeleton" | "demon" | "club"; color: string }) {
+export function MonsterWeapon({ kind, color }: { kind: "skeleton" | "demon" | "club"; color: string }) {
   if (kind === "skeleton") {
     return (
       <group position={[0, -0.78, 0.1]}>

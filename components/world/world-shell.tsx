@@ -246,6 +246,19 @@ export function WorldShell({
   const [portalMounted, setPortalMounted] = useState(false);
   // iOS doesn't support requestFullscreen — dismiss after scroll-trick tap
   const [iosDismissed, setIosDismissed] = useState(false);
+  // Monotonic "the player has actually entered the game" latch (only ever
+  // flips false→true) — gates monster spawning so mobs don't appear behind
+  // the semi-transparent "Click to play" overlay before the player engages.
+  // Desktop latches on pointer-lock; mobile (which never locks) latches when
+  // the fullscreen/iOS start portal is dismissed. Latched, not live, so
+  // pausing (Esc/Alt-Tab → lock lost) does NOT despawn the world.
+  const [hasEnteredWorld, setHasEnteredWorld] = useState(false);
+  useEffect(() => {
+    if (cameraControls.locked) setHasEnteredWorld(true);
+  }, [cameraControls.locked]);
+  useEffect(() => {
+    if (isMobile && (isFullscreen || iosDismissed)) setHasEnteredWorld(true);
+  }, [isMobile, isFullscreen, iosDismissed]);
   useEffect(() => { setPortalMounted(true); }, []);
   useEffect(() => {
     const onChange = () => {
@@ -1135,6 +1148,7 @@ export function WorldShell({
               characterConfig={characterConfig}
               spawnConfig={spawnConfig}
               streakKillCount={streakKillCount}
+              active={hasEnteredWorld}
               onAttack={handleAttack}
               onStatsChange={handleStatsChange}
               onMonsterKilled={handleMonsterKilled}

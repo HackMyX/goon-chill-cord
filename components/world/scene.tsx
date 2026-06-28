@@ -40,6 +40,10 @@ interface SceneProps {
    * spawns even if it wanted to — nor would it need to, since other
    * players never see this client's monster pool either. */
   streakKillCount: number;
+  /** True once the player has actually entered the game (pointer-lock on
+   * desktop, start-portal dismissed on mobile) — gates monster spawning so
+   * nothing appears behind the "Click to play" overlay. Latched upstream. */
+  active?: boolean;
   onAttack?: (damage: number, hit: boolean) => void;
   onStatsChange?: (stats: PlayerStatsSnapshot) => void;
   onMonsterKilled?: (typeId: string) => void;
@@ -137,6 +141,7 @@ export function Scene({
   characterConfig,
   spawnConfig,
   streakKillCount,
+  active = false,
   onAttack,
   onStatsChange,
   onMonsterKilled,
@@ -254,6 +259,7 @@ export function Scene({
         streakKillCount={streakKillCount}
         characterConfig={characterConfig}
         spawnConfig={spawnConfig}
+        active={active}
         onMonsterKilled={(typeId) => onMonsterKilled?.(typeId)}
       />
     </>

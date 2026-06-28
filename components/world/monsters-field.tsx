@@ -60,6 +60,10 @@ interface MonstersFieldProps {
   onMonsterKilled: (typeId: string) => void;
   characterConfig: CharacterConfig;
   spawnConfig: WorldSpawnConfig;
+  /** Gates spawning on the player having actually entered the game — no mobs
+   * appear (and none are broadcast) until the "Click to play" overlay is
+   * dismissed. Latched upstream, so it never flips back to false mid-session. */
+  active: boolean;
 }
 
 let spawnSeq = 0;
@@ -101,6 +105,7 @@ export function MonstersField({
   onMonsterKilled,
   characterConfig,
   spawnConfig,
+  active,
 }: MonstersFieldProps) {
   const [spawns, setSpawns] = useState<MonsterSpawn[]>([]);
   // Owned here, not by each Monster — see monster.tsx's onThrow doc
@@ -149,6 +154,18 @@ export function MonstersField({
   // one-shot lunge. A ref (not state) so an incoming attack never re-renders
   // the whole field; RemoteMonster polls its own id.
   const remoteAttackPulseRef = useRef<Map<string, number>>(new Map());
+  // Own monsters that started a swing this flush window — buffered here (a
+  // cheap Set.add in useFrame) and flushed as ONE batched broadcast on a
+  // timer below, so the fetch POST never runs inside the render loop. This
+  // is the fix for the frame-hitch a per-swing httpSend introduced.
+  const pendingAttacksRef = useRef<Set<string>>(new Set());
+  // Last time we heard a monster_sync from each remote owner — drives a
+  // staleness despawn so a player who hard-drops (tab crash, network loss,
+  // mobile background/sleep) doesn't leave their ghost monsters frozen for
+  // the 30s+ Supabase takes to expire them from presence. A cleanly-dying or
+  // idle but connected owner keeps broadcasting (even an empty list at 8 Hz),
+  // so only a true disconnect goes stale.
+  const lastMonsterSyncRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     spawnsRef.current = spawns;
@@ -211,6 +228,7 @@ export function MonstersField({
       // Drop snapshots from a player who already left the roster — a late
       // REST packet must not resurrect ghosts the leave-cleanup just pruned.
       if (!onlineIdsRef.current.has(payload.ownerId)) return;
+      lastMonsterSyncRef.current.set(payload.ownerId, Date.now());
       setRemoteMonsters((prev) => {
         const updated = new Map(prev);
         // Keep dead monsters too (alive:false) so RemoteMonster can play the
@@ -222,6 +240,30 @@ export function MonstersField({
       });
     });
   }, [userId]);
+
+  // Staleness despawn: drop a remote owner's ghost monsters if we haven't
+  // heard a monster_sync from them in STALE_MS (hard-drop, not a clean
+  // leave). 2500ms = 20 missed 8 Hz ticks — far beyond normal jitter.
+  useEffect(() => {
+    const STALE_MS = 2500;
+    const intervalId = setInterval(() => {
+      const now = Date.now();
+      const last = lastMonsterSyncRef.current;
+      setRemoteMonsters((prev) => {
+        let changed = false;
+        const updated = new Map(prev);
+        for (const ownerId of updated.keys()) {
+          if (now - (last.get(ownerId) ?? 0) > STALE_MS) {
+            updated.delete(ownerId);
+            last.delete(ownerId);
+            changed = true;
+          }
+        }
+        return changed ? updated : prev;
+      });
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Apply incoming hits from other players on our own monsters.
   useEffect(() => {
@@ -243,6 +285,20 @@ export function MonstersField({
     });
   }, [userId, onMonsterKilled]);
 
+  // Flush buffered own-monster attacks as one batched broadcast, off the
+  // render loop. Skip entirely when alone in the room (nobody to animate for).
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const pending = pendingAttacksRef.current;
+      if (pending.size === 0) return;
+      if (playerCount.current > 1) {
+        broadcastMonsterAttack({ ownerId: userId, monsterIds: Array.from(pending) });
+      }
+      pending.clear();
+    }, 100);
+    return () => clearInterval(intervalId);
+  }, [userId]);
+
   // Receive remote monster-attack pulses → record a timestamp the matching
   // RemoteMonster reads each frame to play its lunge.
   useEffect(() => {
@@ -258,7 +314,7 @@ export function MonstersField({
           if (now - t > 5000) map.delete(mid);
         }
       }
-      map.set(payload.monsterId, now);
+      for (const mid of payload.monsterIds) map.set(mid, now);
     });
   }, [userId]);
 
@@ -289,6 +345,11 @@ export function MonstersField({
   }, []);
 
   useFrame((_, delta) => {
+    // No spawning / AI ticking until the player has entered the game — keeps
+    // the world empty behind the "Click to play" overlay. Latched, so this is
+    // only ever true before the very first entry.
+    if (!active) return;
+
     const isDead = combatRef.current.dead;
 
     // When the local player dies, instantly despawn all their mobs and
@@ -413,7 +474,7 @@ export function MonstersField({
           characterConfig={characterConfig}
           aggroTargetRef={aggroTargetRef}
           onRemoteAttack={handleRemoteAttack}
-          onAttack={() => broadcastMonsterAttack({ ownerId: userId, monsterId: s.id })}
+          onAttack={() => pendingAttacksRef.current.add(s.id)}
         />
       ))}
       {projectiles.map((p) => (

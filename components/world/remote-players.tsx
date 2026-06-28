@@ -81,12 +81,54 @@ interface RemotePlayersProps {
  */
 export function RemotePlayers({ selfUserId, registryRef, maxHp = 100 }: RemotePlayersProps) {
   const [peerIds, setPeerIds] = useState<string[]>([]);
+  // Current presence roster (minus self) and the last time each peer's
+  // transform was heard — an avatar is rendered only while it's in the roster
+  // AND has broadcast within STALE_MS. This is the belt to presence's
+  // suspenders: a hard-dropped peer (tab crash, network loss, mobile sleep)
+  // lingers in Supabase presence for 30s+, leaving a frozen "standing" avatar;
+  // staleness removes it in ≤STALE_MS instead. A connected peer broadcasts
+  // its transform every 20 Hz tick unconditionally (even idle), so the living
+  // are never falsely despawned.
+  const rosterRef = useRef<Set<string>>(new Set());
+  const lastSeenRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
-    return subscribeToWorldRoster((onlineUserIds) => {
-      const ids = [...onlineUserIds].filter((id) => id !== selfUserId);
-      setPeerIds(ids);
+    const STALE_MS = 2500;
+    const recompute = () => {
+      const now = Date.now();
+      const live = [...rosterRef.current].filter(
+        (id) => now - (lastSeenRef.current.get(id) ?? 0) < STALE_MS
+      );
+      setPeerIds((prev) =>
+        prev.length === live.length && prev.every((id) => live.includes(id)) ? prev : live
+      );
+    };
+
+    const unsubRoster = subscribeToWorldRoster((onlineUserIds) => {
+      const now = Date.now();
+      rosterRef.current = new Set([...onlineUserIds].filter((id) => id !== selfUserId));
+      // Seed lastSeen for freshly-joined peers so they aren't instantly judged
+      // stale before their first transform arrives; prune ids that left.
+      for (const id of rosterRef.current) {
+        if (!lastSeenRef.current.has(id)) lastSeenRef.current.set(id, now);
+      }
+      for (const id of [...lastSeenRef.current.keys()]) {
+        if (!rosterRef.current.has(id)) lastSeenRef.current.delete(id);
+      }
+      recompute();
     });
+
+    const unsubTransform = subscribeToWorldTransforms((p) => {
+      if (p.id === selfUserId) return;
+      lastSeenRef.current.set(p.id, Date.now());
+    });
+
+    const intervalId = setInterval(recompute, 1000);
+    return () => {
+      unsubRoster();
+      unsubTransform();
+      clearInterval(intervalId);
+    };
   }, [selfUserId]);
 
   return (

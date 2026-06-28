@@ -8,7 +8,7 @@ import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import type { CharacterConfig } from "@/lib/character-config";
 import { broadcastMonsterHit } from "@/lib/world-realtime";
-import { FloatingDamageNumber, DEATH_SINK_DURATION } from "@/components/world/monster";
+import { FloatingDamageNumber, DEATH_SINK_DURATION, MonsterWeapon } from "@/components/world/monster";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 
 interface RemoteMonsterProps {
@@ -38,6 +38,12 @@ interface RemoteMonsterProps {
 // without colliding across instances — same idiom as monster.tsx.
 let remotePopupSeq = 0;
 let remoteBurstSeq = 0;
+
+/** Max dead-reckoning extrapolation window — ~1.5× the 8 Hz monster_sync
+ * interval (125 ms). Bridges a couple of late/dropped REST packets so the
+ * mob keeps gliding, without flinging it so far ahead that a resumed packet
+ * snaps it back (rubber-banding). */
+const DR_MAX_LOOKAHEAD = 0.18;
 
 /**
  * Ghost visual of another player's monster — rendered by MonstersField on
@@ -84,11 +90,17 @@ export function RemoteMonster({
   const legR = useRef<THREE.Group>(null);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
 
-  // Lerp target — updated via useEffect when sync arrives, animated in useFrame.
+  // Dead-reckoning interpolation (mirrors remote-players.tsx, which is already
+  // smooth). Instead of lerping toward the last raw snapshot — which visibly
+  // stalls then snaps because monster_sync arrives over REST at 8 Hz with
+  // jittery timing — we derive a velocity from consecutive snapshots and
+  // extrapolate the position forward (capped) so the mob keeps gliding during
+  // the gap between packets. The result is continuous motion, not a step.
   const targetPos = useRef(new THREE.Vector3(x, y, z));
-  // Track previous sync position to infer movement state.
-  const lastSyncX = useRef(x);
-  const lastSyncZ = useRef(z);
+  const prevSyncPos = useRef({ x, z });
+  const lastSyncTime = useRef(0);
+  const velocity = useRef({ vx: 0, vz: 0 });
+  const hasReceivedFirst = useRef(false);
   const movingRef = useRef(false);
   const walkClock = useRef(0);
   const walkAmplitude = useRef(0);
@@ -116,10 +128,31 @@ export function RemoteMonster({
   const [bloodBursts, setBloodBursts] = useState<{ id: number }[]>([]);
 
   useEffect(() => {
-    const dist = Math.hypot(x - lastSyncX.current, z - lastSyncZ.current);
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (!hasReceivedFirst.current) {
+      // First snapshot: snap straight to it, no extrapolation yet.
+      hasReceivedFirst.current = true;
+      prevSyncPos.current = { x, z };
+      lastSyncTime.current = now;
+      velocity.current = { vx: 0, vz: 0 };
+      movingRef.current = false;
+      targetPos.current.set(x, y, z);
+      if (group.current) group.current.position.set(x, y, z);
+      return;
+    }
+    const dtSec = Math.max(0.05, (now - lastSyncTime.current) / 1000);
+    const dist = Math.hypot(x - prevSyncPos.current.x, z - prevSyncPos.current.z);
     movingRef.current = dist > 0.05;
-    lastSyncX.current = x;
-    lastSyncZ.current = z;
+    if (movingRef.current) {
+      // Velocity (units/sec) from the delta between this and the last snapshot.
+      velocity.current.vx = (x - prevSyncPos.current.x) / dtSec;
+      velocity.current.vz = (z - prevSyncPos.current.z) / dtSec;
+    } else {
+      // Stopped — zero velocity so we don't keep drifting past the target.
+      velocity.current = { vx: 0, vz: 0 };
+    }
+    prevSyncPos.current = { x, z };
+    lastSyncTime.current = now;
     targetPos.current.set(x, y, z);
   }, [x, y, z]);
 
@@ -155,9 +188,19 @@ export function RemoteMonster({
       return;
     }
 
-    // Smooth position interpolation — rate 14 instead of 8 so the avatar
-    // stays close to the owner's real position at 8Hz updates.
-    group.current.position.lerp(targetPos.current, Math.min(1, delta * 14));
+    // Dead-reckoned position: extrapolate forward from the last snapshot using
+    // the derived velocity (capped at ~1.5× the 8 Hz interval so a late packet
+    // can't fling the mob into a rubber-band), then lerp toward that predicted
+    // point. Keeps remote mobs gliding continuously between REST snapshots
+    // instead of stalling-then-snapping. Y is lerped without extrapolation
+    // (it carries the owner's hover/hop bob, which shouldn't overshoot).
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const lookahead = Math.min(DR_MAX_LOOKAHEAD, (now - lastSyncTime.current) / 1000);
+    const predX = targetPos.current.x + velocity.current.vx * lookahead;
+    const predZ = targetPos.current.z + velocity.current.vz * lookahead;
+    group.current.position.x = THREE.MathUtils.lerp(group.current.position.x, predX, Math.min(1, delta * 16));
+    group.current.position.z = THREE.MathUtils.lerp(group.current.position.z, predZ, Math.min(1, delta * 16));
+    group.current.position.y = THREE.MathUtils.lerp(group.current.position.y, targetPos.current.y, Math.min(1, delta * 10));
 
     // Walk + idle animation. walkClock keeps advancing even while idle (slow)
     // so the limbs sway subtly instead of snapping to a dead-still rest pose —
@@ -168,8 +211,10 @@ export function RemoteMonster({
       movingRef.current ? 1 : 0,
       Math.min(1, delta * 8)
     );
-    walkClock.current += delta * (movingRef.current ? 7 : 1.2);
-    const swing = Math.sin(walkClock.current) * (0.06 + walkAmplitude.current * (0.42 - 0.06));
+    // Match the owner-local Monster.tsx walk exactly (6.5 step rate, 0.45 walk
+    // amplitude, 0.06 idle sway) so a remote mob's gait is visually identical.
+    walkClock.current += delta * (movingRef.current ? 6.5 : 1.2);
+    const swing = Math.sin(walkClock.current) * (0.06 + walkAmplitude.current * (0.45 - 0.06));
 
     // Consume a fresh attack pulse → fire a one-shot lunge, then decay it
     // (same rate/arm bias as the owner's local Monster.tsx lunge).
@@ -240,7 +285,23 @@ export function RemoteMonster({
 
   const isSlime = type.visualKind === "slime";
   const isGhost = type.visualKind === "ghost";
+  const isOrc = type.visualKind === "orc";
+  const isDemon = type.visualKind === "demon";
   const REMOTE_OPACITY = 0.65;
+  // Glowing eyes per visualKind — mirrors monster.tsx so a remote mob reads as
+  // an alive creature, not a faceless dummy. Same colors as the local rig.
+  const eyeColor =
+    type.visualKind === "skeleton"
+      ? "#7dd3fc"
+      : isGhost
+        ? "#e0f2fe"
+        : isDemon
+          ? "#ff2424"
+          : isOrc
+            ? "#fbbf24"
+            : isSlime
+              ? "#dcfce7"
+              : "#fca5a5";
 
   return (
     <group ref={group} position={[x, y, z]} scale={type.scale}>
@@ -257,6 +318,14 @@ export function RemoteMonster({
               emissive={type.colorHex}
               emissiveIntensity={0.1}
             />
+          </mesh>
+          <mesh position={[-0.13, 0.08, 0.32]}>
+            <sphereGeometry args={[0.05, 8, 8]} />
+            <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
+          </mesh>
+          <mesh position={[0.13, 0.08, 0.32]}>
+            <sphereGeometry args={[0.05, 8, 8]} />
+            <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
           </mesh>
         </group>
       ) : (
@@ -280,6 +349,15 @@ export function RemoteMonster({
               opacity={isGhost ? REMOTE_OPACITY * 0.6 : REMOTE_OPACITY}
             />
           </mesh>
+          {/* Glowing eyes */}
+          <mesh position={[-0.07, 2.07, 0.18]}>
+            <sphereGeometry args={[0.035, 8, 8]} />
+            <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
+          </mesh>
+          <mesh position={[0.07, 2.07, 0.18]}>
+            <sphereGeometry args={[0.035, 8, 8]} />
+            <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
+          </mesh>
           {/* Arms — animated groups */}
           <group ref={armL} position={[-0.32, 1.72, 0]}>
             <mesh position={[0, -0.3, 0]} castShadow>
@@ -292,17 +370,24 @@ export function RemoteMonster({
               <boxGeometry args={[0.2, 0.6, 0.2]} />
               <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
             </mesh>
+            {type.hasWeapon && (
+              <MonsterWeapon
+                kind={isDemon ? "demon" : type.visualKind === "skeleton" ? "skeleton" : "club"}
+                color={isOrc ? "#3f4a26" : "#4a3a28"}
+              />
+            )}
           </group>
-          {/* Legs — animated groups (not for ghost) */}
+          {/* Legs — animated groups (not for ghost). Pivot at 0.85 (feet on
+              ground), matching monster.tsx — at 1.1 they visibly floated. */}
           {!isGhost && (
             <>
-              <group ref={legL} position={[-0.15, 1.1, 0]}>
+              <group ref={legL} position={[-0.15, 0.85, 0]}>
                 <mesh position={[0, -0.42, 0]} castShadow>
                   <boxGeometry args={[0.22, 0.85, 0.22]} />
                   <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
                 </mesh>
               </group>
-              <group ref={legR} position={[0.15, 1.1, 0]}>
+              <group ref={legR} position={[0.15, 0.85, 0]}>
                 <mesh position={[0, -0.42, 0]} castShadow>
                   <boxGeometry args={[0.22, 0.85, 0.22]} />
                   <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
@@ -327,7 +412,7 @@ export function RemoteMonster({
       )}
 
       {/* Health bar + name — purple name tint marks it as a remote monster */}
-      <Billboard ref={healthGroup} position={[0, isSlime ? 1.15 : 2.55, 0]}>
+      <Billboard ref={healthGroup} position={[0, isSlime ? 1.15 : 2.35, 0]}>
         <mesh>
           <planeGeometry args={[1, 0.12]} />
           <meshBasicMaterial color="#1a1a1a" transparent opacity={0.85} />

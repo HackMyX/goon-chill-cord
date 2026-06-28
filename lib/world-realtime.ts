@@ -139,16 +139,22 @@ export interface MonsterCrossAttackPayload {
   amount: number;
 }
 
-/** Fire-and-forget pulse the moment one of an owner's monsters starts a
- * melee swing — purely a "play the lunge animation on this monster now" cue
- * for everyone else's RemoteMonster ghost of it (the actual damage rides the
+/** Fire-and-forget cue that one or more of an owner's monsters started a
+ * melee swing — purely a "play the lunge animation on these monsters now"
+ * hint for everyone else's RemoteMonster ghosts (the actual damage rides the
  * existing cross_attack/applyIncomingDamage paths, never this). Sent as a
  * discrete event rather than a flag on the 8 Hz monster_sync snapshot
  * because the lunge lasts only ~0.14 s and would routinely fall between two
- * snapshot ticks and be missed. Same pattern as pvp_damage/cross_attack. */
+ * snapshot ticks and be missed.
+ *
+ * `monsterIds` is a BATCH: MonstersField buffers attack ids and flushes them
+ * on a ~100 ms timer OUTSIDE the render loop, so a swarm of simultaneous
+ * swings is a single broadcast and the fetch POST never runs inside a
+ * useFrame frame (which caused frame hitches). Same pattern as
+ * pvp_damage/cross_attack, just coalesced. */
 export interface MonsterAttackPayload {
   ownerId: string;
-  monsterId: string;
+  monsterIds: string[];
 }
 
 let channel: RealtimeChannel | null = null;

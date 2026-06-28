@@ -741,7 +741,11 @@ export function Player({
     if (combatRef.current.hp < prevHp.current) hpRegenTimer.current = 0;
     else hpRegenTimer.current += delta;
     prevHp.current = combatRef.current.hp;
-    if (hpRegenTimer.current >= characterConfig.hpRegenDelayAfterHitSec) {
+    if (!combatRef.current.dead && hpRegenTimer.current >= characterConfig.hpRegenDelayAfterHitSec) {
+      // Don't regen a corpse — without this guard a dead player's hp creeps
+      // back up (hp>0), which un-sets the isDead derivation on observers and
+      // shows a "standing corpse with a full green HP bar". Respawn resets hp
+      // itself, so gating regen here changes nothing for the living.
       const totalRegenMult = hpRegenMultiplier * (1 + abilityHpRegenBoost.current);
       combatRef.current.hp = Math.min(
         combatRef.current.maxHp,
