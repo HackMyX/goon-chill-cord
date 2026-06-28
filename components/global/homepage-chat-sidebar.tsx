@@ -358,18 +358,16 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  // ── Hydrate open state from localStorage ─────────────────────────────────
+  // ── Open state beim (Neu-)Laden der Startseite ───────────────────────────
+  // Gewünscht: der Chat soll sich auf der Startseite IMMER öffnen, sobald sie
+  // neu/erstmals lädt — der gemerkte (zugeklappte) localStorage-Zustand wird
+  // dafür bewusst IGNORIERT. Auf Desktop also immer offen; auf Mobile bleibt es
+  // beim Config-Default, damit der Chat nicht den ganzen Handy-Bildschirm verdeckt.
   useEffect(() => {
-    const stored = localStorage.getItem(LS_KEY);
-    if (stored !== null) {
-      setIsOpen(stored === "true");
-    } else {
-      // Use config defaults based on mobile/desktop
-      const mobile = window.matchMedia("(max-width: 1023px)").matches;
-      setIsOpen(mobile ? config.defaultOpenMobile : config.defaultOpenDesktop);
-    }
+    const mobile = window.matchMedia("(max-width: 1023px)").matches;
+    setIsOpen(mobile ? config.defaultOpenMobile : true);
     setHydrated(true);
-  }, [config.defaultOpenDesktop, config.defaultOpenMobile]);
+  }, [config.defaultOpenMobile]);
 
   // ── Check auth + load own username ───────────────────────────────────────
   useEffect(() => {
