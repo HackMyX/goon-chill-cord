@@ -1293,6 +1293,7 @@ function TrackTileCard({
                     rewardType={tier.rewardType}
                     rarity={tier.rewardItemRarity ?? "normal"}
                     creditsAmount={(tier.rewardCredits ?? 0) * (tier.rewardQuantity ?? 1)}
+                    game={tier.rewardGameBonusGame ?? undefined}
                     viewIndex={viewIndex}
                     visible={inView}
                     clipTileRef={cardRef}

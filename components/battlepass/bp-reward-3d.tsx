@@ -3,8 +3,8 @@
 import { Suspense, useRef, useMemo } from "react";
 import type { RefObject, ReactNode } from "react";
 import * as THREE from "three";
-import { useFrame } from "@react-three/fiber";
-import { View, PerspectiveCamera, ContactShadows } from "@react-three/drei";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { View, PerspectiveCamera, ContactShadows, OrbitControls } from "@react-three/drei";
 
 // ── Shared lights ─────────────────────────────────────────────────────────────
 
@@ -339,16 +339,113 @@ function SpinningGem({ color = "#7c3aed" }: { color?: string }) {
   );
 }
 
+// ── Case-Gutschein: eigenes 3D-Ticket ─────────────────────────────────────────
+
+function SpinningTicket({ color = "#e879f9" }: { color?: string }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    const t = clock.elapsedTime;
+    ref.current.rotation.y = Math.sin(t * 0.85) * 0.55;
+    ref.current.rotation.z = Math.cos(t * 0.6) * 0.05;
+    ref.current.position.y = Math.sin(t * 1.2) * 0.06;
+  });
+  return (
+    <group ref={ref}>
+      {/* Ticket-Körper */}
+      <mesh>
+        <boxGeometry args={[1.1, 0.64, 0.06]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} metalness={0.5} roughness={0.3} />
+      </mesh>
+      {/* Stub-Trennlinie (perforierte Punkte) */}
+      {Array.from({ length: 6 }).map((_, i) => (
+        <mesh key={i} position={[-0.28, 0.24 - i * 0.096, 0.035]}>
+          <sphereGeometry args={[0.028, 8, 8]} />
+          <meshStandardMaterial color="#0b0814" />
+        </mesh>
+      ))}
+      {/* Emblem */}
+      <mesh position={[0.18, 0, 0.04]}>
+        <sphereGeometry args={[0.13, 18, 18]} />
+        <meshStandardMaterial color="#fffbeb" emissive="#fde68a" emissiveIntensity={1.1} />
+      </mesh>
+      {/* Glow-Rahmen */}
+      <mesh>
+        <torusGeometry args={[0.68, 0.022, 8, 44]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} />
+      </mesh>
+    </group>
+  );
+}
+
+// ── Spiel-Bonus: pro Spiel ein eigenes 3D-Modell ──────────────────────────────
+
+function GameBonusModel({ game }: { game?: string }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    ref.current.rotation.y = clock.elapsedTime * 0.9;
+    ref.current.position.y = Math.sin(clock.elapsedTime * 1.2) * 0.06;
+  });
+  if (game === "snake") {
+    return (
+      <group ref={ref}>
+        {[0, 1, 2, 3].map((i) => (
+          <mesh key={i} position={[Math.cos(i * 0.7) * 0.32, i * 0.13 - 0.2, Math.sin(i * 0.7) * 0.32]}>
+            <sphereGeometry args={[0.17 - i * 0.018, 16, 16]} />
+            <meshStandardMaterial color="#34d399" emissive="#10b981" emissiveIntensity={0.6} metalness={0.3} roughness={0.3} />
+          </mesh>
+        ))}
+        <mesh position={[Math.cos(4 * 0.7) * 0.32, 4 * 0.13 - 0.2, Math.sin(4 * 0.7) * 0.32]}>
+          <sphereGeometry args={[0.19, 18, 18]} />
+          <meshStandardMaterial color="#a7f3d0" emissive="#34d399" emissiveIntensity={0.8} />
+        </mesh>
+      </group>
+    );
+  }
+  if (game === "don") {
+    return (
+      <group ref={ref}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.46, 0.46, 0.13, 32]} />
+          <meshStandardMaterial color="#f472b6" emissive="#db2777" emissiveIntensity={0.5} metalness={0.6} roughness={0.3} />
+        </mesh>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.46, 0.04, 12, 40]} />
+          <meshStandardMaterial color="#fce7f3" emissive="#f9a8d4" emissiveIntensity={0.85} />
+        </mesh>
+      </group>
+    );
+  }
+  // Plinko (Default): Ball + Pegs
+  return (
+    <group ref={ref}>
+      <mesh position={[0, 0.28, 0]}>
+        <sphereGeometry args={[0.23, 24, 24]} />
+        <meshStandardMaterial color="#22d3ee" emissive="#06b6d4" emissiveIntensity={0.7} metalness={0.5} roughness={0.2} />
+      </mesh>
+      {([[-0.3, -0.05], [0.3, -0.05], [0, -0.3], [-0.5, -0.42], [0.5, -0.42], [-0.18, -0.42], [0.18, -0.42]] as [number, number][]).map(([x, y], i) => (
+        <mesh key={i} position={[x, y, 0]}>
+          <sphereGeometry args={[0.05, 8, 8]} />
+          <meshStandardMaterial color="#67e8f9" emissive="#22d3ee" emissiveIntensity={0.8} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 // ── Reward type → 3D scene ────────────────────────────────────────────────────
 
 function BpRewardScene({
   rewardType,
   rarity,
   creditsAmount,
+  game,
 }: {
   rewardType: string;
   rarity: string;
   creditsAmount?: number;
+  game?: string;
 }) {
   const rarityColors: Record<string, string> = {
     normal: "#94a3b8",
@@ -365,10 +462,9 @@ function BpRewardScene({
     case "xp_boost": return <SpinningBolt />;
     case "name_style": return <SpinningStyleOrb />;
     case "ability": return <SpinningAbilityOrb />;
-    // Vouchers reuse existing geometry (no blind new R3F): a glowing orb for the
-    // case voucher, a die for the game-bonus — both tinted to the reward rarity.
-    case "case_voucher": return <SpinningStyleOrb />;
-    case "game_bonus": return <SpinningDice rarityColor={rc} />;
+    // Eigene Modelle: Ticket für Case-Gutscheine, pro-Spiel-Modell für Spiel-Bonus.
+    case "case_voucher": return <SpinningTicket color={rc} />;
+    case "game_bonus": return <GameBonusModel game={game} />;
     default: return <SpinningGem color={rc} />;
   }
 }
@@ -414,6 +510,7 @@ export function BpRewardView3D({
   rewardType,
   rarity = "normal",
   creditsAmount,
+  game,
   viewIndex,
   visible = true,
   lightColor,
@@ -424,6 +521,7 @@ export function BpRewardView3D({
   rewardType: string;
   rarity?: string;
   creditsAmount?: number;
+  game?: string;
   viewIndex: number;
   visible?: boolean;
   lightColor?: string;
@@ -446,10 +544,51 @@ export function BpRewardView3D({
       <BpLights color={lightColor} />
       <Suspense fallback={null}>
         <ClipToCarousel tileRef={clipTileRef} rootRef={clipRootRef}>
-          <BpRewardScene rewardType={rewardType} rarity={rarity} creditsAmount={creditsAmount} />
+          <BpRewardScene rewardType={rewardType} rarity={rarity} creditsAmount={creditsAmount} game={game} />
           <ContactShadows position={[0, -0.65, 0]} opacity={0.25} scale={3} blur={2.5} far={2} />
         </ClipToCarousel>
       </Suspense>
     </View>
+  );
+}
+
+const RARITY_HERO_COLORS: Record<string, string> = {
+  normal: "#94a3b8", selten: "#a78bfa", mythisch: "#f59e0b", ultra: "#e879f9",
+};
+
+/**
+ * Eigenständiger 3D-Hero (eigene Canvas, kein <View> nötig) — rendert eine
+ * Belohnung als echtes, rotierendes 3D-Modell. Genutzt vom UniversalPreviewModal
+ * (Shop, Level-Road, Daily, Streak …), damit ÜBERALL beim Ziehen/Gewinnen ein
+ * 3D-Preview erscheint — nicht nur ein 2D-Emoji.
+ */
+export function RewardHero3D({
+  rewardType,
+  rarity = "selten",
+  creditsAmount,
+  game,
+  autoRotate = true,
+}: {
+  rewardType: string;
+  rarity?: string;
+  creditsAmount?: number;
+  game?: string;
+  autoRotate?: boolean;
+}) {
+  const light = RARITY_HERO_COLORS[rarity] ?? "#7c3aed";
+  return (
+    <Canvas
+      camera={{ position: [0, 0.18, 2.9], fov: 42 }}
+      dpr={[1, 2]}
+      gl={{ antialias: true, alpha: true }}
+      style={{ width: "100%", height: "100%" }}
+    >
+      <BpLights color={light} />
+      <Suspense fallback={null}>
+        <BpRewardScene rewardType={rewardType} rarity={rarity} creditsAmount={creditsAmount} game={game} />
+        <ContactShadows position={[0, -0.7, 0]} opacity={0.22} scale={3} blur={2.5} far={2} />
+      </Suspense>
+      <OrbitControls enablePan={false} enableZoom={false} autoRotate={autoRotate} autoRotateSpeed={1.4} />
+    </Canvas>
   );
 }

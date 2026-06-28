@@ -4,7 +4,7 @@
 // previewable object type on the platform: items (3D), name styles, badges,
 // abilities, credits, XP boosts, random items, and generic fallbacks.
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Zap } from "lucide-react";
@@ -20,6 +20,23 @@ import { getBadgeStyle } from "@/lib/badges";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import type { Rarity } from "@/lib/cases";
 import { DEFAULT_PREVIEW_CONFIG, type PreviewConfig } from "@/lib/preview-config-types";
+import { RewardHero3D } from "@/components/battlepass/bp-reward-3d";
+
+/** Shared 3D hero shell — renders a reward as a real rotating 3D model (eigene
+ *  Canvas, wie ItemHero). Damit zeigen Shop/Level-Road/Daily/Streak echtes 3D. */
+function Reward3DHero({
+  rewardType, rarity = "selten", game, creditsAmount, accent = "#7c3aed", overlay,
+}: {
+  rewardType: string; rarity?: string; game?: string; creditsAmount?: number; accent?: string; overlay?: ReactNode;
+}) {
+  return (
+    <div className="relative h-full w-full bg-black/50">
+      <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle at 50% 50%, ${accent}1f 0%, transparent 70%)` }} />
+      <RewardHero3D rewardType={rewardType} rarity={rarity} game={game} creditsAmount={creditsAmount} />
+      {overlay && <div className="pointer-events-none absolute inset-x-0 bottom-5 z-10 flex justify-center">{overlay}</div>}
+    </div>
+  );
+}
 
 // ─── PreviewSubject discriminated union ──────────────────────────────────────
 
@@ -274,53 +291,22 @@ function AbilityHero({
   subject: Extract<PreviewSubject, { kind: "ability" }>;
   config: PreviewConfig;
 }) {
-  const icon = subject.icon ?? "⚡";
   const rc = getRarityColor(subject.rarity);
-
+  void config;
   return (
-    <div className="relative flex h-full w-full flex-col items-center justify-center gap-6 bg-black/50">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: `radial-gradient(circle at 50% 45%, ${rc}14 0%, transparent 70%)` }}
-      />
-
-      <div className="relative z-10 flex flex-col items-center gap-5">
-        <motion.div
-          className="relative flex h-28 w-28 items-center justify-center rounded-2xl border-2 text-5xl"
-          style={{
-            borderColor: `${rc}60`,
-            background: `radial-gradient(circle, ${rc}18 0%, transparent 70%)`,
-          }}
-          animate={{
-            boxShadow: [
-              `0 0 20px ${rc}25, 0 0 40px ${rc}08`,
-              `0 0 45px ${rc}55, 0 0 90px ${rc}22`,
-              `0 0 20px ${rc}25, 0 0 40px ${rc}08`,
-            ],
-          }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+    <Reward3DHero
+      rewardType="ability"
+      rarity={subject.rarity ?? "selten"}
+      accent={rc}
+      overlay={subject.category ? (
+        <span
+          className="rounded-full border px-3 py-0.5 text-[10px] font-black uppercase tracking-widest"
+          style={{ borderColor: `${rc}40`, color: rc, background: `${rc}15` }}
         >
-          {icon}
-          {config.particleEffectsEnabled && (
-            <motion.div
-              className="absolute inset-0 rounded-2xl border-2"
-              style={{ borderColor: `${rc}40` }}
-              animate={{ scale: [1, 1.18, 1], opacity: [0.6, 0, 0.6] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            />
-          )}
-        </motion.div>
-
-        {subject.category && (
-          <span
-            className="rounded-full border px-3 py-0.5 text-[10px] font-black uppercase tracking-widest"
-            style={{ borderColor: `${rc}40`, color: rc, background: `${rc}15` }}
-          >
-            {subject.category}
-          </span>
-        )}
-      </div>
-    </div>
+          {subject.category}
+        </span>
+      ) : undefined}
+    />
   );
 }
 
@@ -410,44 +396,17 @@ function XpBoostHero({ subject }: { subject: Extract<PreviewSubject, { kind: "xp
 function RandomItemHero({ subject }: { subject: Extract<PreviewSubject, { kind: "random_item" }> }) {
   const rc = getRarityColor(subject.rarity);
   return (
-    <div className="relative flex h-full w-full flex-col items-center justify-center bg-black/50">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: `radial-gradient(circle at 50% 40%, ${rc}12 0%, transparent 70%)` }}
-      />
-      <div className="relative z-10 flex flex-col items-center gap-6">
-        <motion.div
-          className="relative flex h-28 w-28 items-center justify-center rounded-2xl border-2"
-          style={{
-            borderColor: `${rc}60`,
-            background: `radial-gradient(circle at 50% 30%, ${rc}20 0%, transparent 70%)`,
-          }}
-          animate={{
-            boxShadow: [`0 0 30px ${rc}30`, `0 0 70px ${rc}60`, `0 0 30px ${rc}30`],
-          }}
-          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <motion.span
-            className="text-5xl"
-            animate={{ rotateY: [0, 180, 360] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-          >
-            🎲
-          </motion.span>
-        </motion.div>
-        <div className="text-center">
-          <p className="text-xl font-black text-white">Zufalls-Item</p>
-          {subject.rarity && (
-            <span
-              className="mt-2 inline-block rounded-full px-3 py-0.5 text-xs font-black uppercase tracking-widest"
-              style={{ background: `${rc}20`, color: rc, border: `1px solid ${rc}40` }}
-            >
-              {subject.rarity}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
+    <Reward3DHero
+      rewardType="random_item"
+      rarity={subject.rarity ?? "selten"}
+      accent={rc}
+      overlay={subject.rarity ? (
+        <span className="rounded-full px-3 py-0.5 text-xs font-black uppercase tracking-widest"
+          style={{ background: `${rc}20`, color: rc, border: `1px solid ${rc}40` }}>
+          {subject.rarity}
+        </span>
+      ) : undefined}
+    />
   );
 }
 
@@ -479,50 +438,34 @@ const VOUCHER_GAME_INFO: Record<"plinko" | "snake" | "don", { label: string; emo
 function CaseVoucherHero({ subject }: { subject: Extract<PreviewSubject, { kind: "case_voucher" }> }) {
   const col = subject.rarityFloor ? getRarityColor(subject.rarityFloor) : "#e879f9";
   return (
-    <div className="relative flex h-full w-full flex-col items-center justify-center bg-black/50">
-      <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle at 50% 40%, ${col}1c 0%, transparent 70%)` }} />
-      <div className="relative z-10 flex flex-col items-center gap-6">
-        <motion.div
-          className="relative flex h-28 w-28 items-center justify-center rounded-2xl border-2"
-          style={{ borderColor: `${col}60`, background: `radial-gradient(circle at 50% 30%, ${col}22 0%, transparent 70%)` }}
-          animate={{ boxShadow: [`0 0 30px ${col}30`, `0 0 70px ${col}66`, `0 0 30px ${col}30`], rotate: [0, 3, -3, 0] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <span className="text-5xl">🎟️</span>
-        </motion.div>
-        <div className="text-center">
-          <p className="text-xl font-black text-white">{subject.label || "Gratis-Case"}</p>
-          <span className="mt-2 inline-block rounded-full px-3 py-0.5 text-xs font-black uppercase tracking-widest"
-            style={{ background: `${col}20`, color: col, border: `1px solid ${col}40` }}>
-            {subject.mode === "rarity" ? `mind. ${subject.rarityFloor ?? "?"}` : (subject.tierLabel ?? "Case")}
-          </span>
-        </div>
-      </div>
-    </div>
+    <Reward3DHero
+      rewardType="case_voucher"
+      rarity={subject.rarityFloor ?? "selten"}
+      accent={col}
+      overlay={
+        <span className="rounded-full px-3 py-0.5 text-xs font-black uppercase tracking-widest"
+          style={{ background: `${col}20`, color: col, border: `1px solid ${col}40` }}>
+          {subject.mode === "rarity" ? `mind. ${subject.rarityFloor ?? "?"}` : (subject.tierLabel ?? "Gratis-Case")}
+        </span>
+      }
+    />
   );
 }
 
 function GameBonusHero({ subject }: { subject: Extract<PreviewSubject, { kind: "game_bonus" }> }) {
   const info = VOUCHER_GAME_INFO[subject.game];
-  const col = info.color;
   return (
-    <div className="relative flex h-full w-full flex-col items-center justify-center bg-black/50">
-      <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle at 50% 40%, ${col}1c 0%, transparent 70%)` }} />
-      <div className="relative z-10 flex flex-col items-center gap-6">
-        <motion.div
-          className="relative flex h-28 w-28 items-center justify-center rounded-2xl border-2"
-          style={{ borderColor: `${col}60`, background: `radial-gradient(circle at 50% 30%, ${col}22 0%, transparent 70%)` }}
-          animate={{ boxShadow: [`0 0 30px ${col}30`, `0 0 70px ${col}66`, `0 0 30px ${col}30`], y: [0, -4, 0] }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <span className="text-5xl">{info.emoji}</span>
-        </motion.div>
-        <div className="text-center">
-          <p className="text-2xl font-black tabular-nums" style={{ color: col }}>+{subject.amount}</p>
-          <p className="mt-1 text-sm font-bold text-white">{subject.label || info.label}</p>
-        </div>
-      </div>
-    </div>
+    <Reward3DHero
+      rewardType="game_bonus"
+      game={subject.game}
+      accent={info.color}
+      overlay={
+        <span className="rounded-full px-3 py-1 text-sm font-black"
+          style={{ background: `${info.color}20`, color: info.color, border: `1px solid ${info.color}40` }}>
+          +{subject.amount} {subject.label || info.label}
+        </span>
+      }
+    />
   );
 }
 

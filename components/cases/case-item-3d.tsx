@@ -187,7 +187,7 @@ export function CaseItem3D({
 
 /** Maps a non-item PreviewSubject to the Battle-Pass reward geometry props. */
 function subjectToReward(subject: Exclude<PreviewSubject, { kind: "item" }>): {
-  rewardType: string; rarity: string; creditsAmount?: number;
+  rewardType: string; rarity: string; creditsAmount?: number; game?: string;
 } {
   switch (subject.kind) {
     case "credits":     return { rewardType: "credits", rarity: "mythisch", creditsAmount: subject.amount };
@@ -197,7 +197,7 @@ function subjectToReward(subject: Exclude<PreviewSubject, { kind: "item" }>): {
     case "xp_boost":    return { rewardType: "xp_boost", rarity: "selten" };
     case "random_item": return { rewardType: "random_item", rarity: subject.rarity ?? "normal" };
     case "case_voucher": return { rewardType: "case_voucher", rarity: subject.rarityFloor ?? "selten" };
-    case "game_bonus":  return { rewardType: "game_bonus", rarity: "selten" };
+    case "game_bonus":  return { rewardType: "game_bonus", rarity: "selten", game: subject.game };
     case "generic":     return { rewardType: "default", rarity: "normal" };
   }
 }
@@ -304,6 +304,7 @@ export function CaseDropView({
         rewardType={r.rewardType}
         rarity={r.rarity}
         creditsAmount={r.creditsAmount}
+        game={r.game}
         viewIndex={viewIndex}
         visible={visible}
         track={track}
