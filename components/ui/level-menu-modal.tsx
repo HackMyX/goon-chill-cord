@@ -8,8 +8,14 @@ import {
   ChevronUp, ChevronDown, TrendingUp, Gift, Info,
 } from "lucide-react";
 import { getLevelColor, getLevelBgColor, LEVEL_TITLES, DEFAULT_LEVEL_ROAD_CONFIG, isMilestoneLevel, type UserLevelInfo, type LevelDefinition, type LevelReward, type LevelRewardDisplay, type LevelRoadConfig } from "@/lib/level-system";
-import { Sparkles, Rocket } from "lucide-react";
+import { Sparkles, Rocket, Flame, Coins, Shirt } from "lucide-react";
+
+const ACH_ICON: Record<string, typeof Star> = {
+  star: Star, crown: Crown, package: Package, flame: Flame, coins: Coins, zap: Zap, shirt: Shirt,
+};
 import { getXpConfig, getMyLevelInfo } from "@/lib/actions/level-system";
+import { getMyAchievements } from "@/lib/actions/achievements";
+import type { AchievementProgress } from "@/lib/achievements";
 import { LevelRoad } from "@/components/ui/level-road";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -275,8 +281,16 @@ export function LevelMenuModal({
   const [rewardDisplay, setRewardDisplay] = useState<LevelRewardDisplay>("3d");
   const [roadConfig, setRoadConfig] = useState<LevelRoadConfig>(DEFAULT_LEVEL_ROAD_CONFIG);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"road" | "progress" | "preview" | "levels" | "sources">("road");
+  const [tab, setTab] = useState<"road" | "progress" | "preview" | "achievements" | "levels" | "sources">("road");
+  const [achievements, setAchievements] = useState<AchievementProgress[] | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Lazy-load achievements the first time the tab is opened.
+  useEffect(() => {
+    if (tab === "achievements" && achievements === null) {
+      getMyAchievements().then(setAchievements).catch(() => setAchievements([]));
+    }
+  }, [tab, achievements]);
 
   const accent = levelAccent(levelInfo.level);
   const glow = levelGlow(levelInfo.level);
@@ -424,7 +438,7 @@ export function LevelMenuModal({
 
           {/* Tabs */}
           <div className="flex overflow-x-auto border-b border-white/[0.06] px-4" style={{ scrollbarWidth: "none" }}>
-            {(["road", "progress", "preview", "levels", "sources"] as const).map((t) => (
+            {(["road", "progress", "preview", "achievements", "levels", "sources"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -436,7 +450,7 @@ export function LevelMenuModal({
                 }`}
                 style={tab === t ? { borderColor: accent, color: accent } : undefined}
               >
-                {t === "road" ? "🛣️ Road" : t === "progress" ? "📊 Fortschritt" : t === "preview" ? "🔮 Vorschau" : t === "levels" ? "🏆 Alle Level" : "⚡ XP-Quellen"}
+                {t === "road" ? "🛣️ Road" : t === "progress" ? "📊 Fortschritt" : t === "preview" ? "🔮 Vorschau" : t === "achievements" ? "🏅 Erfolge" : t === "levels" ? "🏆 Alle Level" : "⚡ XP-Quellen"}
               </button>
             ))}
           </div>
@@ -608,6 +622,70 @@ export function LevelMenuModal({
                         </motion.div>
                       );
                     })}
+                  </div>
+                );
+              })()
+            )}
+
+            {/* Achievements tab */}
+            {tab === "achievements" && (
+              achievements === null ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+                </div>
+              ) : (() => {
+                const earnedCount = achievements.filter((a) => a.earned).length;
+                return (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
+                        <Trophy className="h-3.5 w-3.5 text-amber-400" /> Erfolge
+                      </p>
+                      <span className="rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-black tabular-nums" style={{ color: accent }}>
+                        {earnedCount} / {achievements.length}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {achievements.map((a, idx) => {
+                        const Icon = ACH_ICON[a.iconKey] ?? Trophy;
+                        return (
+                          <motion.div
+                            key={a.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: Math.min(idx * 0.03, 0.3) }}
+                            className={`relative flex items-center gap-3 overflow-hidden rounded-xl border p-3 ${a.earned ? "border-white/12 bg-white/[0.04]" : "border-white/[0.05] bg-white/[0.01]"}`}
+                          >
+                            <div
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border"
+                              style={{
+                                borderColor: a.earned ? `${a.color}60` : "rgba(255,255,255,0.08)",
+                                background: a.earned ? `${a.color}1a` : "transparent",
+                                color: a.earned ? a.color : "#52525b",
+                                boxShadow: a.earned ? `0 0 14px -3px ${a.color}` : undefined,
+                              }}
+                            >
+                              {a.earned ? <Icon className="h-5 w-5" /> : <Lock className="h-4 w-4" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <p className={`text-sm font-bold ${a.earned ? "text-zinc-100" : "text-zinc-400"}`}>{a.title}</p>
+                                {a.earned && <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-300">✓</span>}
+                              </div>
+                              <p className="text-[11px] text-zinc-500">{a.description}</p>
+                              {!a.earned && (
+                                <div className="mt-1.5">
+                                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/8">
+                                    <div className="h-full rounded-full" style={{ width: `${a.progress * 100}%`, background: a.color }} />
+                                  </div>
+                                  <p className="mt-0.5 text-[9px] tabular-nums text-zinc-600">{a.current.toLocaleString("de-DE")} / {a.threshold.toLocaleString("de-DE")}</p>
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })()
