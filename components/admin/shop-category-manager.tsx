@@ -15,6 +15,10 @@ import { RARITY_ORDER, RARITY_LABELS, type Rarity } from "@/lib/cases";
 import { ALL_SHOP_ITEM_TYPES, SHOP_ITEM_TYPE_LABELS } from "@/lib/shop";
 import { SHOP_CATEGORY_ICONS, SHOP_CATEGORY_COLORS, resolveShopCategoryIcon } from "@/lib/shop-category-icons";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
+
+const CONTENT_LABEL: Record<string, string> = {
+  item: "Items", ability: "Fähigkeiten", name_style: "Name-Styles", badge: "Badges",
+};
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
 import { useSoundManager } from "@/lib/sound-manager";
 
@@ -410,8 +414,17 @@ function CategoryCard({ category, onChanged }: { category: ShopCategory; onChang
         <div className="flex flex-wrap items-center gap-3">
           <Icon className="h-5 w-5 shrink-0 text-purple-300" />
           <div className="min-w-[120px] flex-1">
-            <p className="font-semibold text-zinc-100">{form.name || "Unbenannt"}</p>
-            <p className="text-xs text-zinc-500">{form.itemCount} Items/Tag · {form.priceMultiplierMin}–{form.priceMultiplierMax}x</p>
+            <p className="flex items-center gap-2 font-semibold text-zinc-100">
+              {form.name || "Unbenannt"}
+              {(form.contentType ?? "item") !== "item" && (
+                <span className="rounded-full border border-purple-400/40 bg-purple-500/15 px-2 py-0.5 text-[10px] font-bold text-purple-200">
+                  {CONTENT_LABEL[form.contentType ?? "item"]}
+                </span>
+              )}
+            </p>
+            <p className="text-xs text-zinc-500">
+              {CONTENT_LABEL[form.contentType ?? "item"]} · {form.itemCount}/Tag · {form.priceMultiplierMin}–{form.priceMultiplierMax}x
+            </p>
           </div>
           <button
             onMouseEnter={sound.hover}
