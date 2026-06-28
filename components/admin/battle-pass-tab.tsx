@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, Trash2, Zap, Eye, EyeOff, ChevronDown, ChevronUp,
@@ -8,6 +8,7 @@ import {
   Gift, Coins, Trophy, Package, Sparkles, TrendingUp, Users,
   ShoppingBag, Crown, Palette, Search, BarChart2, Calendar, Wand2, Pencil,
   Target, RotateCcw, RefreshCw, CheckCircle2, Lock,
+  BookOpen, Gem, ChevronRight,
 } from "lucide-react";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { BpTimelineEditor } from "@/components/admin/bp-timeline-editor";
@@ -2736,6 +2737,122 @@ function MigrationBanner() {
 
 // ── Main tab ──────────────────────────────────────────────────────────────────
 
+// ── Onboarding guide — "So funktioniert der Battle Pass" ─────────────────────
+
+function BpGuideStep({ n, icon: Icon, title, accent, children }: {
+  n: number; icon: typeof Crown; title: string; accent: string; children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-3 rounded-xl border border-white/8 bg-black/20 p-3">
+      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-sm font-black"
+        style={{ background: `${accent}1f`, color: accent, border: `1px solid ${accent}40` }}>{n}</div>
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-sm font-bold text-zinc-100">
+          <Icon className="h-4 w-4" style={{ color: accent }} />{title}
+        </p>
+        <div className="mt-1 text-[11.5px] leading-relaxed text-zinc-400">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function BpGuide() {
+  const [open, setOpen] = useState(true);
+  const sound = useSoundManager();
+
+  const TRACKS = [
+    { icon: Gift, label: "FREE", hex: "#a855f7", desc: "Jeder Spieler. Schaltet sich allein durch Fortschritt frei (Login-Tage oder BP-XP). Kostenlos." },
+    { icon: Crown, label: "PREMIUM", hex: "#f59e0b", desc: "Pass-Kauf (Preis CR). Schaltet ZUSÄTZLICH alle Premium-Levels frei + Spin-Bonus." },
+    { icon: Gem, label: "ELITE", hex: "#a78bfa", desc: "Elite-Upgrade (Elite-Preis CR). Beinhaltet Premium + exklusive Elite-Levels. Top-Track." },
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-purple-400/25 bg-gradient-to-b from-purple-500/[0.07] to-fuchsia-500/[0.02]">
+      <button onMouseEnter={sound.hover} onClick={() => { sound.click(); setOpen((v) => !v); }}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.02]">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10">
+          <BookOpen className="h-4 w-4 text-fuchsia-300" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-black tracking-tight text-zinc-50">So funktioniert der Battle Pass</p>
+          <p className="text-[11px] text-zinc-400">Tracks, Levels, Belohnungen, Economy-Generator &amp; Elite — alles erklärt.</p>
+        </div>
+        <ChevronDown className={`h-5 w-5 flex-shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="space-y-5 border-t border-white/8 px-4 py-4">
+          {/* Track hierarchy */}
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-purple-300">Die 3 Tracks — FREE ⊂ PREMIUM ⊂ ELITE</p>
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+              {TRACKS.map((t, i, arr) => (
+                <div key={t.label} className="flex flex-1 items-center gap-2">
+                  <div className="flex-1 rounded-xl border bg-black/25 p-3" style={{ borderColor: `${t.hex}33` }}>
+                    <p className="flex items-center gap-1.5 text-xs font-black" style={{ color: t.hex }}>
+                      <t.icon className="h-4 w-4" />{t.label}
+                    </p>
+                    <p className="mt-1 text-[10.5px] leading-snug text-zinc-400">{t.desc}</p>
+                  </div>
+                  {i < arr.length - 1 && <ChevronRight className="hidden h-4 w-4 flex-shrink-0 text-zinc-600 sm:block" />}
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-400/20 bg-amber-500/[0.04] px-3 py-2 text-[11px] text-amber-200/80">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              <span><strong>Elite = Superset:</strong> Wer Elite kauft, bekommt automatisch auch den Premium-Track. Ein reiner Free-Spieler holt nur Free-Levels, ein Premium-Käufer Free+Premium, ein Elite-Käufer ALLES. Jedes Level gehört genau EINEM Track.</span>
+            </p>
+          </div>
+
+          {/* 4 steps */}
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-purple-300">In 4 Schritten zur fertigen Season</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <BpGuideStep n={1} icon={Calendar} title="Pass erstellen" accent="#a855f7">
+                „Neuer Pass" → Name, Season-Label, <strong className="text-zinc-300">Preis</strong> (Premium) und <strong className="text-zinc-300">Elite-Preis</strong>, Anzahl Levels, Fortschrittsart (Login-Tage oder BP-XP).
+              </BpGuideStep>
+              <BpGuideStep n={2} icon={Users} title="Track-Verteilung" accent="#f59e0b">
+                Free-/Elite-Anteil setzen (Premium = Rest). Reward-Mix bestimmt, wie viele Tiers Credits/Items/XP/Badge werden (Summe 100 %).
+              </BpGuideStep>
+              <BpGuideStep n={3} icon={Wand2} title="Auto-Fill (Economy-Gehirn)" accent="#34d399">
+                Generiert alle Levels mit <strong className="text-zinc-300">track-gerechter</strong> Seltenheit: Free → normal/selten, Premium → bis mythisch, Elite → bis ultra. Meilensteine = Track-Bestwert. Nie Ultra im Free-Track.
+              </BpGuideStep>
+              <BpGuideStep n={4} icon={Pencil} title="Feinschliff & Aktiv" accent="#e879f9">
+                Einzelne Tiers überschreiben (3D/Icon, Item pinnen, Credits, Badge…). Dann Pass <strong className="text-zinc-300">aktiv</strong> + im Shop sichtbar schalten.
+              </BpGuideStep>
+            </div>
+          </div>
+
+          {/* Economy box */}
+          <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/[0.04] p-3.5">
+            <p className="mb-1.5 flex items-center gap-2 text-sm font-bold text-emerald-200">
+              <BarChart2 className="h-4 w-4" /> Economy-Regeln (automatisch erzwungen)
+            </p>
+            <ul className="space-y-1 text-[11.5px] leading-relaxed text-zinc-300">
+              <li><strong>Rarity ist pro Track gedeckelt:</strong> Free max <span className="text-purple-300">selten</span>, Premium max <span className="text-amber-300">mythisch</span>, Elite bis <span className="text-fuchsia-300">ultra</span>. Innerhalb des Tracks steigt der Wert mit dem Level.</li>
+              <li><strong>Meilenstein-Tiers</strong> (alle N) bekommen den besten Wert IHRES Tracks (nicht global ultra) + verdoppelte Credits.</li>
+              <li><strong>Items werden konkret ausgewürfelt</strong> (echtes 3D-Modell + Name in der Kachel); gibt es keine passende Rarität, fällt der Slot auf Credits zurück — nie auf ein zu wertvolles Item.</li>
+            </ul>
+          </div>
+
+          {/* Reward types */}
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-purple-300">Belohnungs-Typen</p>
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              {[
+                { i: "💰", t: "Credits" }, { i: "📦", t: "Item (konkret)" }, { i: "🎲", t: "Zufalls-Item (nach Rarität)" },
+                { i: "🏆", t: "Badge/Titel" }, { i: "⚡", t: "XP-/Fortschritts-Boost" }, { i: "✨", t: "Name-Style" }, { i: "🔮", t: "Fähigkeit" },
+              ].map((r) => (
+                <span key={r.t} className="rounded-lg border border-white/8 bg-white/[0.03] px-2.5 py-1 font-semibold text-zinc-300">{r.i} {r.t}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BattlePassTab({ initialPasses, migrationNeeded = false }: { initialPasses: BattlePass[]; migrationNeeded?: boolean }) {
   const [passes, setPasses] = useState(initialPasses);
   const sound = useSoundManager();
@@ -2750,14 +2867,7 @@ export function BattlePassTab({ initialPasses, migrationNeeded = false }: { init
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-        <h2 className="mb-1 text-base font-bold text-zinc-100">Battle Pass System</h2>
-        <p className="text-xs text-zinc-500">
-          Erstelle saisonale Pässe mit Level-Belohnungen. Premium-Käufer schalten alle Levels frei und erhalten Spin-Bonus.
-          Belohnungstypen: Credits, spezifische Items, zufällige Items nach Seltenheit, Badges/Titel, Fortschritts-Boosts.
-          Elite-Track: optionaler dritter Track mit eigenem Preis und violetten Levels.
-        </p>
-      </div>
+      <BpGuide />
 
       {migrationNeeded && <MigrationBanner />}
 
