@@ -254,9 +254,12 @@ export async function claimDailyReward(): Promise<ClaimResult> {
 
   const decision = decideStreak(lastClaimDate, profile.streak_days ?? 0, now, effConfig);
   const result = computeStreakReward(decision.newStreak, config, now);
-  const totalCreditsAwarded = streakEff?.effectType === "credit_bonus" && streakEff.effectValue > 0
-    ? Math.floor(result.totalCredits * (1 + streakEff.effectValue))
-    : result.totalCredits;
+  // credit_bonus OR streak_reward_multiplier boost the reward (mutually exclusive).
+  const streakRewardMult =
+    streakEff?.effectType === "credit_bonus" && streakEff.effectValue > 0 ? 1 + streakEff.effectValue
+    : streakEff?.effectType === "streak_reward_multiplier" && streakEff.effectValue > 0 ? 1 + streakEff.effectValue
+    : 1;
+  const totalCreditsAwarded = Math.floor(result.totalCredits * streakRewardMult);
   const newCredits = profile.credits + totalCreditsAwarded;
   const newBestStreak = Math.max(profile.best_streak_days ?? 0, decision.newStreak);
 

@@ -9,7 +9,7 @@ import { findCaseTier, pickRarity, RARITY_LABELS, type CaseExtraDrop, type Rarit
 const RARITY_ORDER: Rarity[] = ["normal", "selten", "mythisch", "ultra"];
 import { getCaseConfig } from "@/lib/cases-config";
 import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
-import { applyCreditBonus } from "@/lib/actions/abilities";
+import { applyCreditBonus, getActiveEquippedAbilityEffect } from "@/lib/actions/abilities";
 import { notifyUser } from "@/lib/notifications-internal";
 import { broadcastSystemWin } from "@/lib/actions/global-chat";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -307,6 +307,12 @@ export async function openCase(tierId: string, tokenId?: string): Promise<OpenCa
   // Rarity-floor voucher: guarantee at least the configured minimum rarity.
   if (free && rarityFloor && RARITY_ORDER.indexOf(rolledRarity as Rarity) < RARITY_ORDER.indexOf(rarityFloor)) {
     rolledRarity = rarityFloor;
+  }
+  // case_luck ability: a chance to bump the roll up one rarity tier.
+  const luckEff = await getActiveEquippedAbilityEffect(admin, user.id);
+  if (luckEff?.effectType === "case_luck" && luckEff.effectValue > 0 && Math.random() < luckEff.effectValue) {
+    const li = RARITY_ORDER.indexOf(rolledRarity as Rarity);
+    if (li >= 0 && li < RARITY_ORDER.length - 1) rolledRarity = RARITY_ORDER[li + 1];
   }
 
   // Item pool resolution (priority order):

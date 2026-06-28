@@ -153,6 +153,8 @@ export async function collectMineCredits(): Promise<CollectResult> {
   let upgradeDiscountRate = 0.0;
   let speedMultiplier = 1.0;
 
+  let storageMultiplier = 1; // mine_storage_multiplier
+  let jackpotChance = 0;      // mine_jackpot_chance
   if (equippedKey && await isAbilityActive(admin, user.id, equippedKey)) {
     try {
       const { data: abilityDef } = await admin
@@ -182,12 +184,16 @@ export async function collectMineCredits(): Promise<CollectResult> {
           // Faster effective mining: scale credits-per-hour AND the storage cap
           // so a full mine actually yields more (not just fills sooner).
           speedMultiplier = 1 + ev;
+        } else if (et === "mine_storage_multiplier") {
+          storageMultiplier = 1 + ev;
+        } else if (et === "mine_jackpot_chance") {
+          jackpotChance = ev;
         }
       }
     } catch { /* non-fatal */ }
   }
 
-  const effectiveMaxStorageHours = levelCfg.maxStorageHours + storageHoursBonus;
+  const effectiveMaxStorageHours = (levelCfg.maxStorageHours + storageHoursBonus) * storageMultiplier;
   const effectiveRate = levelCfg.crPerHour * speedMultiplier;
   const elapsedMs = Date.now() - new Date(mineProgress.lastCollectedAt).getTime();
   const elapsedHours = elapsedMs / 3600000;
@@ -198,6 +204,10 @@ export async function collectMineCredits(): Promise<CollectResult> {
   // Double chance roll
   if (doubleChance > 0 && Math.random() < doubleChance) {
     earned *= 2;
+  }
+  // Jackpot roll — triples a collection.
+  if (jackpotChance > 0 && Math.random() < jackpotChance) {
+    earned *= 3;
   }
 
   // Global credit_bonus ability (no-op unless that's the equipped ability).

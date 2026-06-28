@@ -301,6 +301,10 @@ export async function dropPlinkoBall(input: {
   if (plinkoEff?.effectType === "plinko_multiplier_boost" && plinkoEff.effectValue > 0) {
     multiplier = multiplier * (1 + plinkoEff.effectValue);
   }
+  // Minimum-multiplier guarantee: the result can never be worse than this value.
+  if (plinkoEff?.effectType === "plinko_min_multiplier" && plinkoEff.effectValue > 0) {
+    multiplier = Math.max(multiplier, plinkoEff.effectValue);
+  }
 
   let payout = Math.floor(input.betAmount * multiplier);
   if (config.maxWinCr > 0) payout = Math.min(payout, config.maxWinCr);
@@ -308,6 +312,10 @@ export async function dropPlinkoBall(input: {
   // Loss recovery: refund a fraction of the bet when landing on the lowest slot.
   if (plinkoEff?.effectType === "plinko_loss_recovery" && plinkoEff.effectValue > 0
       && payout < input.betAmount && multiplier <= Math.min(...multipliers)) {
+    payout = Math.min(input.betAmount, payout + Math.floor(input.betAmount * plinkoEff.effectValue));
+  }
+  // Loss cushion: refund a fraction of the bet on ANY losing drop.
+  if (plinkoEff?.effectType === "plinko_loss_cushion" && plinkoEff.effectValue > 0 && payout < input.betAmount) {
     payout = Math.min(input.betAmount, payout + Math.floor(input.betAmount * plinkoEff.effectValue));
   }
   // credit_bonus boosts only the winnings (not the staked bet).

@@ -370,7 +370,12 @@ export async function submitSnakeScore(
   // the base BEFORE the daily/sanity clamps so they still respect the limits.
   const snakeEff = await getActiveEquippedAbilityEffect(admin, user.id);
   const abilityFlat = snakeEff?.effectType === "snake_cr_per_apple" ? Math.round(score * snakeEff.effectValue) : 0;
-  const abilityMult = snakeEff?.effectType === "credit_bonus" && snakeEff.effectValue > 0 ? 1 + snakeEff.effectValue : 1;
+  // credit_bonus OR snake_score_multiplier multiply the whole earning (mutually
+  // exclusive — only one ability is equipped at a time).
+  const abilityMult =
+    snakeEff?.effectType === "credit_bonus" && snakeEff.effectValue > 0 ? 1 + snakeEff.effectValue
+    : snakeEff?.effectType === "snake_score_multiplier" && snakeEff.effectValue > 0 ? 1 + snakeEff.effectValue
+    : 1;
 
   // Daily CR limit check
   let actualCredits = Math.round((creditsEarned + abilityFlat) * abilityMult);

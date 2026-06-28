@@ -164,6 +164,9 @@ export async function flipDouble(amount: number): Promise<FlipResult> {
       delta = 0;        // shield won — no credits lost
       shielded = true;
     }
+  } else if (!won && donEff?.effectType === "don_loss_refund" && donEff.effectValue > 0) {
+    // Loss refund: give back a fraction of the staked amount on every loss.
+    delta = -stake + Math.floor(stake * Math.min(1, donEff.effectValue));
   } else if (won && donEff?.effectType === "credit_bonus" && donEff.effectValue > 0) {
     // credit_bonus boosts the winnings.
     delta = Math.floor(stake * (1 + donEff.effectValue));

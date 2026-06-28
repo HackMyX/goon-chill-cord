@@ -6,6 +6,7 @@ import type { AbilityDefinition, AbilityCategory, AbilityEffectType, AbilityRari
 import {
   ABILITY_CATEGORY_LABELS, ABILITY_CATEGORY_COLORS,
   ABILITY_RARITY_COLORS, ABILITY_RARITY_LABELS,
+  ABILITY_EFFECT_META, ABILITY_EFFECT_UNIT_HINT,
 } from "@/lib/abilities";
 import {
   getAllAbilityDefinitions, adminUpsertAbilityDefinition,
@@ -16,16 +17,14 @@ interface AbilityAdminTabProps {
   profiles: { id: string; username: string }[];
 }
 
-const EFFECT_TYPES: AbilityEffectType[] = [
-  "mine_cr_bonus", "mine_double_chance", "mine_speed", "mine_storage_hours", "mine_upgrade_discount",
-  "snake_cr_per_apple", "snake_gold_apple_rate",
-  "plinko_loss_recovery", "plinko_multiplier_boost",
-  "don_bonus_flips", "don_daily_shield",
-  "world_damage_boost", "world_hp_regen", "world_xp_boost",
-  "xp_boost", "credit_bonus", "streak_grace_hours",
-];
-
+// Derived from the single source of truth — new effect types appear automatically.
+const EFFECT_TYPES = Object.keys(ABILITY_EFFECT_META) as AbilityEffectType[];
 const CATEGORIES: AbilityCategory[] = ["mine", "snake", "plinko", "don", "world", "global"];
+// Effect types grouped by their category for the <optgroup> selector.
+const EFFECTS_BY_CATEGORY = CATEGORIES.map((cat) => ({
+  cat,
+  types: EFFECT_TYPES.filter((t) => ABILITY_EFFECT_META[t].category === cat),
+})).filter((g) => g.types.length > 0);
 const RARITIES: AbilityRarity[] = ["selten", "mythisch", "ultra"];
 
 const BLANK: Partial<AbilityDefinition> & { key: string } = {
@@ -219,14 +218,29 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
                 </select>
               </label>
               <label className="flex flex-col gap-1">
-                <span className="text-xs text-zinc-400">Effect Type</span>
+                <span className="text-xs text-zinc-400">Effekt-Typ</span>
                 <select
                   value={editing.effectType ?? "xp_boost"}
-                  onChange={(e) => setEditing((prev) => prev ? { ...prev, effectType: e.target.value as AbilityEffectType } : null)}
+                  onChange={(e) => {
+                    const t = e.target.value as AbilityEffectType;
+                    // Auto-sync category to the effect's home category for consistency.
+                    setEditing((prev) => prev ? { ...prev, effectType: t, category: ABILITY_EFFECT_META[t].category } : null);
+                  }}
                   className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-200 outline-none"
                 >
-                  {EFFECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  {EFFECTS_BY_CATEGORY.map((g) => (
+                    <optgroup key={g.cat} label={ABILITY_CATEGORY_LABELS[g.cat]}>
+                      {g.types.map((t) => <option key={t} value={t}>{ABILITY_EFFECT_META[t].label}</option>)}
+                    </optgroup>
+                  ))}
                 </select>
+                {editing.effectType && (
+                  <span className="mt-0.5 text-[10px] leading-snug text-zinc-500">
+                    {ABILITY_EFFECT_META[editing.effectType].description}
+                    {" — "}
+                    <span className="text-purple-300/80">{ABILITY_EFFECT_UNIT_HINT[ABILITY_EFFECT_META[editing.effectType].unit]}</span>
+                  </span>
+                )}
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-zinc-400">Seltenheit</span>
@@ -256,6 +270,65 @@ export function AbilityAdminTab({ profiles }: AbilityAdminTabProps) {
                 </label>
               ))}
             </div>
+            {/* Effect-Config (Kombo-Effekte) — beliebige Zusatz-Werte als Key→Zahl */}
+            <div className="mt-4 rounded-xl border border-white/8 bg-black/20 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-300">Zusatz-Effekte (effectConfig)</span>
+                <button
+                  onClick={() => setEditing((prev) => {
+                    if (!prev) return prev;
+                    const cfg = { ...(prev.effectConfig ?? {}) };
+                    let i = 1; let k = "bonus";
+                    while (cfg[k] !== undefined) k = `bonus_${i++}`;
+                    return { ...prev, effectConfig: { ...cfg, [k]: 0 } };
+                  })}
+                  className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-zinc-300 hover:bg-white/10"
+                >
+                  <Plus className="h-3 w-3" /> Wert
+                </button>
+              </div>
+              <p className="mb-2 text-[10px] text-zinc-600">Optional: kombiniert mehrere Effekte in EINER Fähigkeit (z.B. <code>double_chance</code>, <code>upgrade_discount</code>, <code>storage_bonus</code>). Greift zusätzlich zum Haupt-Effekt.</p>
+              {Object.entries(editing.effectConfig ?? {}).length === 0 ? (
+                <p className="text-[10px] text-zinc-600">Keine Zusatz-Effekte.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {Object.entries(editing.effectConfig ?? {}).map(([k, v]) => (
+                    <div key={k} className="flex items-center gap-2">
+                      <input
+                        value={k}
+                        onChange={(e) => setEditing((prev) => {
+                          if (!prev) return prev;
+                          const cfg = { ...(prev.effectConfig ?? {}) };
+                          const val = cfg[k]; delete cfg[k];
+                          const nk = e.target.value.trim();
+                          if (nk) cfg[nk] = val ?? 0;
+                          return { ...prev, effectConfig: cfg };
+                        })}
+                        placeholder="schlüssel"
+                        className="flex-1 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+                      />
+                      <input
+                        type="number" step="any"
+                        value={String(v ?? 0)}
+                        onChange={(e) => setEditing((prev) => prev ? { ...prev, effectConfig: { ...(prev.effectConfig ?? {}), [k]: Number(e.target.value) } } : null)}
+                        className="w-24 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
+                      />
+                      <button
+                        onClick={() => setEditing((prev) => {
+                          if (!prev) return prev;
+                          const cfg = { ...(prev.effectConfig ?? {}) }; delete cfg[k];
+                          return { ...prev, effectConfig: cfg };
+                        })}
+                        className="rounded-md p-1 text-zinc-500 hover:text-red-400"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="mt-5 flex items-center gap-3">
               <button
                 onClick={handleSave}
