@@ -166,6 +166,8 @@ export async function clearGlobalChat(): Promise<{ success: boolean; error?: str
             maxRewardPerTicket: (globalRow as Record<string, unknown>).max_reward_per_ticket as number ?? DEFAULT_MOD_PERMISSIONS.maxRewardPerTicket,
             canPauseTickets: (globalRow as Record<string, unknown>).can_pause_tickets as boolean ?? DEFAULT_MOD_PERMISSIONS.canPauseTickets,
             canUseAdminAi: (globalRow as Record<string, unknown>).can_use_admin_ai as boolean ?? DEFAULT_MOD_PERMISSIONS.canUseAdminAi,
+            canMuteChat: (globalRow as Record<string, unknown>).can_mute_chat as boolean ?? DEFAULT_MOD_PERMISSIONS.canMuteChat,
+            maxChatMuteHours: (globalRow as Record<string, unknown>).max_chat_mute_hours as number ?? DEFAULT_MOD_PERMISSIONS.maxChatMuteHours,
           }
         : DEFAULT_MOD_PERMISSIONS;
       const override = ((profile as Record<string, unknown>).mod_permissions_override as Partial<ModPermissions>) ?? null;
@@ -220,11 +222,15 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "Nicht eingeloggt." };
 
-  const { data: profile } = await supabase.from("profiles").select("username, role, temp_banned_until, avatar_url, active_name_style_key, prio_badges").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("username, role, temp_banned_until, chat_muted_until, avatar_url, active_name_style_key, prio_badges").eq("id", user.id).single();
   if (!profile) return { success: false, error: "Profil nicht gefunden." };
 
   if (profile.temp_banned_until && new Date(profile.temp_banned_until) > new Date()) {
     return { success: false, error: "Du bist temporär gesperrt." };
+  }
+
+  if (profile.chat_muted_until && new Date(profile.chat_muted_until) > new Date()) {
+    return { success: false, error: "Du bist im Chat stummgeschaltet." };
   }
 
   // Load chat config (graceful fallback to defaults if table doesn't exist yet)

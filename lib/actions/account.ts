@@ -55,6 +55,7 @@ export async function updateUsername(newUsername: string): Promise<AccountAction
 export interface PlayerSettings {
   acceptsTrades: boolean;
   profileVisible: boolean;
+  acceptFriendRequests: boolean;
 }
 
 export async function getPlayerSettings(): Promise<PlayerSettings> {
@@ -62,17 +63,18 @@ export async function getPlayerSettings(): Promise<PlayerSettings> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { acceptsTrades: true, profileVisible: true };
+  if (!user) return { acceptsTrades: true, profileVisible: true, acceptFriendRequests: true };
 
   const { data } = await supabase
     .from("profiles")
-    .select("accepts_trades, profile_visible")
+    .select("accepts_trades, profile_visible, accept_friend_requests")
     .eq("id", user.id)
     .single();
 
   return {
     acceptsTrades: data?.accepts_trades ?? true,
     profileVisible: data?.profile_visible ?? true,
+    acceptFriendRequests: data?.accept_friend_requests ?? true,
   };
 }
 
@@ -118,6 +120,7 @@ export async function updatePlayerSettings(input: Partial<PlayerSettings>): Prom
   const payload: Record<string, boolean> = {};
   if (typeof input.acceptsTrades === "boolean") payload.accepts_trades = input.acceptsTrades;
   if (typeof input.profileVisible === "boolean") payload.profile_visible = input.profileVisible;
+  if (typeof input.acceptFriendRequests === "boolean") payload.accept_friend_requests = input.acceptFriendRequests;
   if (Object.keys(payload).length === 0) return { success: true };
 
   const { error } = await supabase.from("profiles").update(payload).eq("id", user.id);

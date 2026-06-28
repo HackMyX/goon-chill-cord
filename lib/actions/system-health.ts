@@ -154,6 +154,10 @@ const COLUMN_CHECKS: Array<{
   { id: "col_mod_maxreward",      category: "Mod-Berechtigungen", table: "mod_permissions",    col: "max_reward_per_ticket",   detail: "ALTER TABLE mod_permissions ADD COLUMN max_reward_per_ticket integer DEFAULT 0;" },
   { id: "col_mod_pausetickets",   category: "Mod-Berechtigungen", table: "mod_permissions",    col: "can_pause_tickets",       detail: "ALTER TABLE mod_permissions ADD COLUMN IF NOT EXISTS can_pause_tickets boolean NOT NULL DEFAULT false;" },
   { id: "col_mod_canuseadminai",  category: "Mod-Berechtigungen", table: "mod_permissions",    col: "can_use_admin_ai",        detail: "node scripts/add-can-use-admin-ai.cjs" },
+  // Chat-Stummschaltung — Global-Chat-Mute (2026-06-28)
+  { id: "col_mod_canmutechat",    category: "Mod-Berechtigungen", table: "mod_permissions",    col: "can_mute_chat",           detail: "node scripts/add-settings-chatmod.cjs" },
+  { id: "col_mod_maxchatmute",    category: "Mod-Berechtigungen", table: "mod_permissions",    col: "max_chat_mute_hours",     detail: "node scripts/add-settings-chatmod.cjs" },
+  { id: "col_profiles_chatmuted", category: "Mod-Berechtigungen", table: "profiles",            col: "chat_muted_until",        detail: "node scripts/add-settings-chatmod.cjs" },
   // Profiles — DON upgrade & verified (2026-06-25)
   { id: "col_profiles_donupgrade",category: "DON-System",         table: "profiles",            col: "don_upgrade_tier",        detail: "ALTER TABLE profiles ADD COLUMN don_upgrade_tier integer NOT NULL DEFAULT 0;" },
   { id: "col_profiles_donshield", category: "DON-System",         table: "profiles",            col: "don_shield_used_at",      detail: "node scripts/add-don-shield.cjs" },
@@ -350,6 +354,8 @@ const COLUMN_CHECKS: Array<{
   { id: "col_surveya_answer_number",    category: "Umfragen", table: "survey_answers",   col: "answer_number",              detail: "node scripts/add-survey-upgrade-world-streak.cjs" },
   // user_sessions — last_ping for heartbeat (2026-06-26)
   { id: "col_sess_last_ping",           category: "Sessions", table: "user_sessions",    col: "last_ping",                  detail: "node scripts/add-session-in-world.cjs" },
+  // Profiles — Freundschaftsanfragen annehmen (2026-06-28)
+  { id: "col_profiles_accept_friend_requests", category: "Social / Freunde", table: "profiles", col: "accept_friend_requests", detail: "node scripts/add-settings-chatmod.cjs" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

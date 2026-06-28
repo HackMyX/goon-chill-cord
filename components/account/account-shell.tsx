@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Coins, Package, Sparkles, ShieldCheck, Pencil, Check, X, Repeat, Eye, EyeOff, Loader2, Zap } from "lucide-react";
+import { ArrowLeft, Coins, Package, Sparkles, ShieldCheck, Pencil, Check, X, Repeat, Eye, EyeOff, Loader2, Zap, UserPlus } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { updateUsername, updatePlayerSettings, type NotificationPrefs } from "@/lib/actions/account";
@@ -27,6 +27,7 @@ interface AccountShellProps {
   inventoryCount: number;
   acceptsTrades: boolean;
   profileVisible: boolean;
+  acceptFriendRequests: boolean;
   notificationPrefs: NotificationPrefs;
   level?: number;
   xp?: number;
@@ -48,6 +49,7 @@ export function AccountShell({
   inventoryCount,
   acceptsTrades: initialAcceptsTrades,
   profileVisible: initialProfileVisible,
+  acceptFriendRequests: initialAcceptFriendRequests,
   notificationPrefs,
   level = 1,
   xp = 0,
@@ -66,8 +68,10 @@ export function AccountShell({
   const [liveRole, setLiveRole] = useState(role);
   const [acceptsTrades, setAcceptsTrades] = useState(initialAcceptsTrades);
   const [profileVisible, setProfileVisible] = useState(initialProfileVisible);
+  const [acceptFriendRequests, setAcceptFriendRequests] = useState(initialAcceptFriendRequests);
   const [acceptsTradesSaving, setAcceptsTradesSaving] = useState(false);
   const [profileVisibleSaving, setProfileVisibleSaving] = useState(false);
+  const [acceptFriendRequestsSaving, setAcceptFriendRequestsSaving] = useState(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
   const sound = useSoundManager();
 
@@ -80,6 +84,22 @@ export function AccountShell({
     setAcceptsTradesSaving(false);
     if (res.success) {
       setAcceptsTrades(next);
+      sound.save();
+    } else {
+      sound.error();
+      setToggleError(res.error ?? "Speichern fehlgeschlagen.");
+    }
+  }
+
+  async function handleToggleAcceptFriendRequests() {
+    sound.click();
+    setToggleError(null);
+    setAcceptFriendRequestsSaving(true);
+    const next = !acceptFriendRequests;
+    const res = await updatePlayerSettings({ acceptFriendRequests: next });
+    setAcceptFriendRequestsSaving(false);
+    if (res.success) {
+      setAcceptFriendRequests(next);
       sound.save();
     } else {
       sound.error();
@@ -322,6 +342,40 @@ export function AccountShell({
                     <span
                       className={`absolute left-0 top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
                         acceptsTrades ? "translate-x-[22px]" : "translate-x-[2px]"
+                      }`}
+                    />
+                  )}
+                </span>
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+              <div className="flex items-center gap-3">
+                <UserPlus className="h-5 w-5 shrink-0 text-pink-300" />
+                <div>
+                  <p className="text-sm font-semibold text-zinc-200">Freundschaftsanfragen annehmen</p>
+                  <p className="text-xs text-zinc-500">Wenn aus, kann dir niemand eine Freundschaftsanfrage senden.</p>
+                </div>
+              </div>
+              <button
+                onMouseEnter={sound.hover}
+                onClick={handleToggleAcceptFriendRequests}
+                disabled={acceptFriendRequestsSaving}
+                role="switch"
+                aria-checked={acceptFriendRequests}
+                className="shrink-0 rounded-full outline-none disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900"
+              >
+                <span
+                  className={`relative block h-6 w-11 overflow-hidden rounded-full transition-colors duration-200 ${
+                    acceptFriendRequests ? "bg-purple-600" : "bg-white/10"
+                  }`}
+                >
+                  {acceptFriendRequestsSaving ? (
+                    <Loader2 className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin text-zinc-300" />
+                  ) : (
+                    <span
+                      className={`absolute left-0 top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                        acceptFriendRequests ? "translate-x-[22px]" : "translate-x-[2px]"
                       }`}
                     />
                   )}

@@ -7,7 +7,7 @@ import {
   Sparkles, LayoutDashboard, RefreshCw, History, NotepadText, FileText,
   Trophy, Paperclip, MessageSquare, Bug, Lightbulb, ArrowUpRight,
   PauseCircle, PlayCircle, SortAsc, SortDesc, BarChart3, Filter,
-  Maximize2, CalendarDays,
+  Maximize2, CalendarDays, MicOff, Mic,
 } from "lucide-react";
 import { AdminAiChat } from "@/components/admin/admin-ai-chat";
 import { GlobalChatPanel } from "@/components/global/global-chat-panel";
@@ -71,6 +71,8 @@ const ACTION_MAP: Record<ModActionRow["actionType"], { label: string; cls: strin
   temp_ban: { label: "Temp-Ban", cls: "bg-red-500/20 text-red-300 border-red-500/30", Icon: Ban },
   ticket_close: { label: "Ticket", cls: "bg-purple-500/20 text-purple-300 border-purple-500/30", Icon: Ticket },
   credits_add: { label: "Credits", cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30", Icon: Coins },
+  chat_mute: { label: "Chat-Mute", cls: "bg-orange-500/20 text-orange-300 border-orange-500/30", Icon: MicOff },
+  chat_unmute: { label: "Chat-Entmutet", cls: "bg-teal-500/20 text-teal-300 border-teal-500/30", Icon: Mic },
 };
 
 function ActionTypeBadge({ type }: { type: ModActionRow["actionType"] }) {

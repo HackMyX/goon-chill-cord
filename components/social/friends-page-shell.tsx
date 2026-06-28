@@ -223,6 +223,9 @@ export function FriendsPageShell({
         )}
 
         {/* ── Anfragen ───────────────────────────────────────────────────── */}
+        {/* Anker: Klick auf eine Freundschaftsanfrage-Benachrichtigung (/friends#requests)
+            scrollt direkt hierher, wo man annehmen/ablehnen kann. */}
+        <div id="requests" className="scroll-mt-24" />
         <SectionTitle
           icon={Inbox}
           text={`Anfragen (${data.incoming.length + data.outgoing.length})`}

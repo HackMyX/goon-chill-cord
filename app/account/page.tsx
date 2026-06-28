@@ -15,7 +15,7 @@ export default async function AccountPage() {
   // Core profile — must succeed for the page to render.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("username, avatar_url, credits, streak_days, cases_opened, role, created_at, accepts_trades, profile_visible")
+    .select("username, avatar_url, credits, streak_days, cases_opened, role, created_at, accepts_trades, profile_visible, accept_friend_requests")
     .eq("id", user.id)
     .single();
 
@@ -59,6 +59,7 @@ export default async function AccountPage() {
       inventoryCount={inventoryCount ?? 0}
       acceptsTrades={profile.accepts_trades ?? true}
       profileVisible={profile.profile_visible ?? true}
+      acceptFriendRequests={profile.accept_friend_requests ?? true}
       notificationPrefs={notificationPrefs}
       level={levelInfo?.level ?? 1}
       xp={levelInfo?.xp ?? 0}

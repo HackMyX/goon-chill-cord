@@ -535,8 +535,8 @@ export async function openCase(tierId: string, tokenId?: string): Promise<OpenCa
 
     const rarityLabel = RARITY_LABELS[won.rarity as keyof typeof RARITY_LABELS] ?? won.rarity;
     const dropLink =
-      won.kind === "name_style" ? "/profil"
-      : won.kind === "badge" ? "/profil"
+      won.kind === "name_style" ? "/garderobe"
+      : won.kind === "badge" ? "/garderobe"
       : won.kind === "credits" ? "/"
       : "/garderobe"; // item, ability
     try {
@@ -553,7 +553,7 @@ export async function openCase(tierId: string, tokenId?: string): Promise<OpenCa
           type: "case_opened",
           title: "🎨 Name-Style gewonnen!",
           message: `Bonus-Drop: Name-Style „${wonStyleKey}" wurde deiner Sammlung hinzugefügt!`,
-          link: "/profil",
+          link: "/garderobe",
         });
       }
     } catch { /* non-fatal */ }

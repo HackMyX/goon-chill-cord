@@ -25,6 +25,9 @@ export interface ModPermissions {
   canPauseTickets: boolean;
   // v3 — Admin-KI access
   canUseAdminAi: boolean; // Zugriff auf Admin-KI-Tools (standard: false für Mods)
+  // v4 — Global-Chat-Stummschaltung (zeitlich begrenzt)
+  canMuteChat: boolean;
+  maxChatMuteHours: number;
 }
 
 export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
@@ -45,6 +48,8 @@ export const DEFAULT_MOD_PERMISSIONS: ModPermissions = {
   maxRewardPerTicket: 0,
   canPauseTickets: false,
   canUseAdminAi: false,
+  canMuteChat: false,
+  maxChatMuteHours: 24,
 };
 
 export const ADMIN_MOD_PERMISSIONS: ModPermissions = {
@@ -65,6 +70,8 @@ export const ADMIN_MOD_PERMISSIONS: ModPermissions = {
   maxRewardPerTicket: 0,
   canPauseTickets: true,
   canUseAdminAi: true,
+  canMuteChat: true,
+  maxChatMuteHours: 8760,
 };
 
 export interface ChatConfig {
@@ -99,7 +106,7 @@ export interface ModActionRow {
   modUsername: string | null;
   targetUserId: string | null;
   targetUsername: string | null;
-  actionType: "warning" | "note" | "temp_ban" | "ticket_close" | "credits_add";
+  actionType: "warning" | "note" | "temp_ban" | "ticket_close" | "credits_add" | "chat_mute" | "chat_unmute";
   reason: string | null;
   details: Record<string, unknown> | null;
   expiresAt: string | null;

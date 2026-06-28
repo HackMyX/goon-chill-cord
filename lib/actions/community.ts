@@ -24,6 +24,7 @@ export interface PublicProfile {
   xp: number;
   viewerIsElevated: boolean;
   tempBannedUntil: string | null;
+  chatMutedUntil: string | null;
   equippedByCategory: Record<string, { id: string; name: string; rarity: Rarity }>;
   rarityCounts: Record<Rarity, number>;
   badges: UserBadge[];
@@ -61,7 +62,7 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
     admin.from("profiles").select("role").eq("id", user.id).single(),
     admin
       .from("profiles")
-      .select("id, username, role, credits, streak_days, cases_opened, created_at, gender, verified, active_name_style_key, warning_strikes, level, xp, prio_badges, temp_banned_until")
+      .select("id, username, role, credits, streak_days, cases_opened, created_at, gender, verified, active_name_style_key, warning_strikes, level, xp, prio_badges, temp_banned_until, chat_muted_until")
       .eq("id", targetUserId)
       .single(),
     admin
@@ -157,6 +158,11 @@ export async function getPublicProfile(targetUserId: string): Promise<GetPublicP
       tempBannedUntil: viewerIsElevated
         ? (((profile as unknown as Record<string, unknown>).temp_banned_until as string | null) ?? null)
         : null,
+      // Chat-Mute-Status ist Moderations-only — wie der Ban-Status nur für
+      // erhöhte Betrachter ausliefern.
+      chatMutedUntil: viewerIsElevated
+        ? (((profile as unknown as Record<string, unknown>).chat_muted_until as string | null) ?? null)
+        : null,
       equippedByCategory,
       rarityCounts,
       badges,
@@ -180,6 +186,7 @@ export interface MinimalProfile {
   verified: boolean;
   warningStrikes: number;
   tempBannedUntil: string | null;
+  chatMutedUntil: string | null;
   prioBadges: string[];
 }
 
@@ -207,7 +214,7 @@ export async function getMinimalProfile(targetUserId: string): Promise<GetMinima
   const [{ data: viewerProfile }, { data: targetProfile }, { data: authUser }] = await Promise.all([
     admin.from("profiles").select("role").eq("id", user.id).single(),
     admin.from("profiles")
-      .select("id, username, role, credits, streak_days, cases_opened, created_at, verified, active_name_style_key, warning_strikes, temp_banned_until, prio_badges")
+      .select("id, username, role, credits, streak_days, cases_opened, created_at, verified, active_name_style_key, warning_strikes, temp_banned_until, chat_muted_until, prio_badges")
       .eq("id", targetUserId)
       .single(),
     admin.auth.admin.getUserById(targetUserId),
@@ -237,6 +244,7 @@ export async function getMinimalProfile(targetUserId: string): Promise<GetMinima
       verified: Boolean(targetProfile.verified),
       warningStrikes: Number(targetProfile.warning_strikes ?? 0),
       tempBannedUntil: ((targetProfile as unknown as Record<string, unknown>).temp_banned_until as string | null) ?? null,
+      chatMutedUntil: ((targetProfile as unknown as Record<string, unknown>).chat_muted_until as string | null) ?? null,
       prioBadges: (targetProfile.prio_badges as string[] | null) ?? [],
     },
   };

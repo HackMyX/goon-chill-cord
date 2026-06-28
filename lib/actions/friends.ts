@@ -279,8 +279,11 @@ export async function sendFriendRequest(targetUserId: string): Promise<ActionRes
   if (me === targetUserId) return { ok: false, error: "Du kannst dir nicht selbst eine Anfrage schicken." };
   const admin = createAdminClient();
 
-  const { data: target } = await admin.from("profiles").select("id, username").eq("id", targetUserId).maybeSingle();
+  const { data: target } = await admin.from("profiles").select("id, username, accept_friend_requests").eq("id", targetUserId).maybeSingle();
   if (!target) return { ok: false, error: "Nutzer nicht gefunden." };
+  if ((target as { accept_friend_requests?: boolean | null }).accept_friend_requests === false) {
+    return { ok: false, error: "Dieser Spieler nimmt keine Freundschaftsanfragen an." };
+  }
 
   // Block in beide Richtungen?
   const { data: block } = await admin
@@ -317,7 +320,7 @@ export async function sendFriendRequest(targetUserId: string): Promise<ActionRes
     type: "friend_request",
     title: "Neue Freundschaftsanfrage",
     message: `${myName} möchte dich als Freund hinzufügen.`,
-    link: "/?friends=requests",
+    link: "/friends#requests",
   });
   await Promise.all([broadcastLive(`friends:${me}`), broadcastLive(`friends:${targetUserId}`)]);
   return { ok: true };
@@ -352,7 +355,7 @@ async function acceptRequestInternal(admin: AdminClient, requestId: string, me: 
     type: "friend_accepted",
     title: "Freundschaft bestätigt",
     message: `${myName} hat deine Freundschaftsanfrage angenommen.`,
-    link: "/?friends=list",
+    link: "/friends",
   });
   await Promise.all([broadcastLive(`friends:${r.from_user_id}`), broadcastLive(`friends:${r.to_user_id}`)]);
   return { ok: true };

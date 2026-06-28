@@ -202,7 +202,36 @@ export function ModConfigEditor({ permissions: initialPermissions }: Props) {
             value={perms.canClearChat}
             onChange={(v) => set("canClearChat", v)}
           />
+          <Toggle
+            label="Darf im Chat stummschalten"
+            description="Moderatoren können Nutzer zeitlich begrenzt im Global-Chat stummschalten (gemutete Nutzer können überall sonst schreiben)"
+            value={perms.canMuteChat}
+            onChange={(v) => set("canMuteChat", v)}
+          />
         </div>
+
+        {perms.canMuteChat && (
+          <div className="mt-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-zinc-400">
+                Max. Chat-Mute-Dauer (Std.)
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={8760}
+                  value={perms.maxChatMuteHours}
+                  onChange={(e) => set("maxChatMuteHours", Number(e.target.value))}
+                  className="w-28 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+                />
+                <span className="text-xs text-zinc-500">
+                  = {perms.maxChatMuteHours < 24 ? `${perms.maxChatMuteHours}h` : `${Math.round(perms.maxChatMuteHours / 24 * 10) / 10} Tage`}
+                </span>
+              </div>
+            </label>
+          </div>
+        )}
 
         <h3 className="mt-5 mb-1 flex items-center gap-2 text-sm font-bold text-zinc-300">
           <Bot className="h-4 w-4 text-rose-400" />

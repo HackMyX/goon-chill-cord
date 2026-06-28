@@ -34,6 +34,8 @@ const PERM_LABELS: {
   // System
   { key: "canViewAuditLog",       label: "Audit-Log",                 description: "Kann das vollständige Aktionsprotokoll einsehen",             section: "System" },
   { key: "canClearChat",          label: "Chat leeren",               description: "Kann den Global-Chat mit einem Klick löschen",               section: "System" },
+  { key: "canMuteChat",           label: "Chat stummschalten",        description: "Kann Nutzer zeitlich begrenzt im Global-Chat stummschalten",  section: "System" },
+  { key: "maxChatMuteHours",      label: "Max. Chat-Mute (Stunden)",  description: "Maximale Dauer einer Chat-Stummschaltung in Stunden",         section: "System", isNumber: true, min: 1, max: 8760 },
   { key: "canUseAdminAi",         label: "Admin-KI nutzen",           description: "Zugriff auf die Admin-KI mit erweiterten Admin-Werkzeugen — STANDARDMÄBIG DEAKTIVIERT", section: "System" },
 ];
 
@@ -208,7 +210,7 @@ function ModRow({ mod, globalPerms }: { mod: ModeratorWithPermissions; globalPer
                                   min={min ?? 0}
                                   max={max ?? 9999999}
                                   value={val as number}
-                                  onChange={(e) => setVal(key as "maxTempBanHours" | "maxRewardPerTicket", Number(e.target.value))}
+                                  onChange={(e) => setVal(key as "maxTempBanHours" | "maxRewardPerTicket" | "maxChatMuteHours", Number(e.target.value))}
                                   className="w-24 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-purple-400/60"
                                 />
                                 {isIndividual && (

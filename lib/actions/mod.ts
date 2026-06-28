@@ -81,6 +81,8 @@ export async function getModPermissions(): Promise<ModPermissions> {
     maxRewardPerTicket: data.max_reward_per_ticket ?? 0,
     canPauseTickets: data.can_pause_tickets ?? false,
     canUseAdminAi: data.can_use_admin_ai ?? false,
+    canMuteChat: data.can_mute_chat ?? false,
+    maxChatMuteHours: data.max_chat_mute_hours ?? 24,
   };
 }
 
@@ -127,6 +129,8 @@ export async function updateModPermissions(
       max_reward_per_ticket: perms.maxRewardPerTicket,
       can_pause_tickets: perms.canPauseTickets,
       can_use_admin_ai: perms.canUseAdminAi,
+      can_mute_chat: perms.canMuteChat,
+      max_chat_mute_hours: perms.maxChatMuteHours,
       updated_at: new Date().toISOString(),
     });
     if (error) return { success: false, error: error.message };
@@ -536,6 +540,76 @@ export async function modLiftBan(
     return { success: true };
   } catch (e) {
     void logDebugEvent({ level: "error", scope: "mod", message: "modLiftBan fehlgeschlagen", detail: String(e), context: { targetUserId } });
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Stummschaltung im Global-Chat (zeitlich begrenzt) — EIGENSTÄNDIG, NICHT der
+ * Voll-Tempban. Gemutete User können alles außer im Global-Chat schreiben.
+ */
+export async function modMuteChat(
+  targetUserId: string,
+  hours: number,
+  reason: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser, user.id);
+    if (!perms.canMuteChat) return { success: false, error: "Keine Berechtigung für Chat-Stummschaltungen." };
+    const cappedHours = Math.min(hours, perms.maxChatMuteHours);
+    const expiresAt = new Date(Date.now() + cappedHours * 3_600_000).toISOString();
+    const admin = createAdminClient();
+    const guardErr = await blockIfProtectedTarget(admin, isAdminUser, targetUserId);
+    if (guardErr) return { success: false, error: guardErr };
+    const [actionRes, muteRes] = await Promise.all([
+      admin.from("mod_actions").insert({
+        mod_id: user.id, target_user_id: targetUserId,
+        action_type: "chat_mute", reason: reason.trim() || null,
+        expires_at: expiresAt, details: { hours: cappedHours },
+      }),
+      admin.from("profiles").update({ chat_muted_until: expiresAt }).eq("id", targetUserId),
+    ]);
+    if (actionRes.error) return { success: false, error: actionRes.error.message };
+    if (muteRes.error) return { success: false, error: muteRes.error.message };
+    await notifyUser({
+      userId: targetUserId,
+      type: "admin_action",
+      title: "Im Chat stummgeschaltet",
+      message: reason.trim()
+        ? `Du wurdest für ${cappedHours}h im Global-Chat stummgeschaltet. Grund: ${reason.trim()}`
+        : `Du wurdest für ${cappedHours}h im Global-Chat stummgeschaltet.`,
+      link: "/account",
+    });
+    void logActivity("mod:chatmute", `Chat-Mute gesetzt: ${targetUserId} für ${cappedHours}h`, { modId: user.id, targetUserId, hours: cappedHours, reason: reason.trim() || null });
+    return { success: true };
+  } catch (e) {
+    void logDebugEvent({ level: "error", scope: "mod", message: "modMuteChat fehlgeschlagen", detail: String(e), context: { targetUserId, hours } });
+    return { success: false, error: String(e) };
+  }
+}
+
+export async function modUnmuteChat(
+  targetUserId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { user, isAdminUser } = await requireMod();
+    const perms = await effectivePerms(isAdminUser, user.id);
+    if (!perms.canMuteChat) return { success: false, error: "Keine Berechtigung." };
+    const admin = createAdminClient();
+    const [actionRes, unmuteRes] = await Promise.all([
+      admin.from("mod_actions").insert({
+        mod_id: user.id, target_user_id: targetUserId,
+        action_type: "chat_unmute", reason: "Chat-Stummschaltung manuell aufgehoben",
+      }),
+      admin.from("profiles").update({ chat_muted_until: null }).eq("id", targetUserId),
+    ]);
+    if (unmuteRes.error) return { success: false, error: unmuteRes.error.message };
+    if (actionRes.error) return { success: false, error: actionRes.error.message };
+    void logActivity("mod:chatunmute", `Chat-Mute aufgehoben: ${targetUserId}`, { modId: user.id, targetUserId });
+    return { success: true };
+  } catch (e) {
+    void logDebugEvent({ level: "error", scope: "mod", message: "modUnmuteChat fehlgeschlagen", detail: String(e), context: { targetUserId } });
     return { success: false, error: String(e) };
   }
 }

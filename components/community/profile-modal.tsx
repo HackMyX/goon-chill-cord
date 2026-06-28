@@ -10,11 +10,12 @@ import {
   X, Loader2, ShieldCheck, BadgeCheck, Package,
   Calendar, Coins, Flame, Star, Copy, Check,
   AlertTriangle, Crown, Shield, User, Ban,
-  NotepadText, Ticket, History, Trash2, ChevronDown, ChevronUp, ArrowUpRight,
+  NotepadText, Ticket, History, Trash2, ChevronDown, ChevronUp, ArrowUpRight, MicOff,
 } from "lucide-react";
 import {
   modWarnUser, modTempBan, modLiftBan, modAddCredits, getMyEffectivePermissions,
   modAddNote, modRemoveWarning, getModUserHistory, getPopupModSummary,
+  modMuteChat, modUnmuteChat,
 } from "@/lib/actions/mod";
 import type { ModPermissions, ModActionRow } from "@/lib/mod";
 import { CharacterModel } from "@/components/world/character-model";
@@ -139,6 +140,7 @@ function RarityBars({ counts }: { counts: Record<Rarity, number> }) {
 // ── Moderation panel (elevated viewers only) ───────────────────────────────────
 
 const BAN_HOUR_OPTIONS = [1, 6, 12, 24, 48, 72] as const;
+const MUTE_HOUR_OPTIONS = [1, 6, 12, 24, 48, 72, 168] as const;
 
 function ModPanel({ profile }: { profile: PublicProfile }) {
   const [perms, setPerms] = useState<ModPermissions | null>(null);
@@ -147,6 +149,9 @@ function ModPanel({ profile }: { profile: PublicProfile }) {
   const [warnReason, setWarnReason] = useState("");
   const [banHours, setBanHours] = useState<number>(24);
   const [banReason, setBanReason] = useState("");
+  const [muteHours, setMuteHours] = useState<number>(24);
+  const [muteReason, setMuteReason] = useState("");
+  const [localMutedUntil, setLocalMutedUntil] = useState<string | null | undefined>(undefined);
   const [creditAmount, setCreditAmount] = useState<number>(0);
   const [creditReason, setCreditReason] = useState("");
   const [localBanUntil, setLocalBanUntil] = useState<string | null | undefined>(undefined);
@@ -161,9 +166,19 @@ function ModPanel({ profile }: { profile: PublicProfile }) {
   const effectiveBanUntil = localBanUntil !== undefined ? localBanUntil : profile.tempBannedUntil;
   const isBanned = !!effectiveBanUntil && new Date(effectiveBanUntil) > new Date();
 
+  const effectiveMuteUntil = localMutedUntil !== undefined ? localMutedUntil : profile.chatMutedUntil;
+  const isMuted = !!effectiveMuteUntil && new Date(effectiveMuteUntil) > new Date();
+
   useEffect(() => {
     getMyEffectivePermissions().then(setPerms);
   }, []);
+
+  // Standard-Auswahl an die erlaubte Höchstdauer anpassen, sobald Perms da sind.
+  useEffect(() => {
+    if (!perms) return;
+    const max = perms.maxChatMuteHours || 1;
+    setMuteHours((h) => (h <= max ? h : max));
+  }, [perms]);
 
   function feedback(text: string, ok: boolean) {
     setMsg({ text, ok });
@@ -208,9 +223,10 @@ function ModPanel({ profile }: { profile: PublicProfile }) {
   }
 
   const availableHours = BAN_HOUR_OPTIONS.filter((h) => !perms || h <= (perms.maxTempBanHours || 24));
+  const availableMuteHours = MUTE_HOUR_OPTIONS.filter((h) => h <= (perms?.maxChatMuteHours || 1));
   const hasAnyPerm = perms && (
     perms.canWarnUsers || perms.canTempBanUsers || perms.canAddCredits ||
-    perms.canViewUserDetails || perms.canViewTickets
+    perms.canMuteChat || perms.canViewUserDetails || perms.canViewTickets
   );
   const warnings = history.filter((a) => a.actionType === "warning" && !removedWarnings.has(a.id));
   const canSeeDetails = !!perms && (perms.canViewUserDetails || perms.canViewTickets || perms.canWarnUsers);
@@ -352,6 +368,71 @@ function ModPanel({ profile }: { profile: PublicProfile }) {
                   >
                     {busy === "ban" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
                     {banHours}h Bann verhängen
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Chat-Stummschaltung / aufheben ── */}
+          {perms.canMuteChat && (
+            <div className="rounded-xl border border-amber-900/30 bg-amber-950/20 p-3 space-y-2">
+              <p className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                <MicOff className="h-3.5 w-3.5" />
+                Chat-Stummschaltung
+              </p>
+              {isMuted ? (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-amber-300">
+                    Stummgeschaltet bis {new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(effectiveMuteUntil!))}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={!!busy}
+                    onClick={async () => {
+                      const ok = await doAction("unmute", () => modUnmuteChat(profile.id));
+                      if (ok) setLocalMutedUntil(null);
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-40"
+                  >
+                    {busy === "unmute" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    Stummschaltung aufheben
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-1 flex-wrap">
+                    {availableMuteHours.map((h) => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setMuteHours(h)}
+                        className={`rounded px-2 py-0.5 text-xs font-bold transition-colors ${muteHours === h ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" : "text-zinc-600 hover:text-zinc-400 border border-transparent"}`}
+                      >
+                        {h}h
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Grund (optional)"
+                    value={muteReason}
+                    maxLength={200}
+                    onChange={(e) => setMuteReason(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none focus:border-amber-400/50"
+                  />
+                  <button
+                    type="button"
+                    disabled={!!busy}
+                    onClick={async () => {
+                      const expiresAt = new Date(Date.now() + muteHours * 3_600_000);
+                      const ok = await doAction("mute", () => modMuteChat(profile.id, muteHours, muteReason.trim()));
+                      if (ok) { setMuteReason(""); setLocalMutedUntil(expiresAt.toISOString()); }
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-40"
+                  >
+                    {busy === "mute" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MicOff className="h-3.5 w-3.5" />}
+                    {muteHours}h Chat stummschalten
                   </button>
                 </div>
               )}

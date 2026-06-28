@@ -18,10 +18,15 @@ import {
   X, Loader2, ShieldCheck, BadgeCheck, Flame, Crown, Shield,
   Copy, Check, ExternalLink, Calendar, AlertTriangle, ChevronDown,
   Ban, Ticket, Swords, ShieldAlert, UserPlus, UserCheck, Clock, UserX,
+  MicOff, Volume2,
 } from "lucide-react";
 import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 import { getMinimalProfile, type MinimalProfile } from "@/lib/actions/community";
-import { getPopupModSummary, type PopupModSummary } from "@/lib/actions/mod";
+import {
+  getPopupModSummary, getMyEffectivePermissions, modMuteChat, modUnmuteChat,
+  type PopupModSummary,
+} from "@/lib/actions/mod";
+import type { ModPermissions } from "@/lib/mod";
 import { subscribeToPresence } from "@/lib/presence-client";
 import { useSoundManager } from "@/lib/sound-manager";
 import {
@@ -196,6 +201,85 @@ function FriendButton({ userId }: { userId: string }) {
         >
           <UserX className="h-3.5 w-3.5" />
         </button>
+      )}
+    </div>
+  );
+}
+
+// ── Mod: kompakte Chat-Stummschaltung ────────────────────────────────────────────
+
+const MUTE_HOUR_OPTIONS = [1, 6, 12, 24, 48, 72, 168] as const;
+
+function ModMuteButton({ userId, mutedUntil }: { userId: string; mutedUntil: string | null }) {
+  const [perms, setPerms] = useState<ModPermissions | null>(null);
+  const [isSelf, setIsSelf] = useState(false);
+  const [localMutedUntil, setLocalMutedUntil] = useState<string | null | undefined>(undefined);
+  const [hours, setHours] = useState<number>(24);
+  const [busy, setBusy] = useState(false);
+  const sound = useSoundManager();
+
+  useEffect(() => {
+    getMyEffectivePermissions().then(setPerms).catch(() => undefined);
+    getRelationshipTo(userId)
+      .then((r) => { if (r.ok && r.kind === "self") setIsSelf(true); })
+      .catch(() => undefined);
+  }, [userId]);
+
+  // Standard-Dauer an die erlaubte Höchstgrenze anpassen.
+  useEffect(() => {
+    if (!perms) return;
+    const max = perms.maxChatMuteHours || 1;
+    setHours((h) => (h <= max ? h : max));
+  }, [perms]);
+
+  if (!perms?.canMuteChat || isSelf) return null;
+
+  const effectiveMutedUntil = localMutedUntil !== undefined ? localMutedUntil : mutedUntil;
+  const isMuted = !!effectiveMutedUntil && new Date(effectiveMutedUntil) > new Date();
+  const availableHours = MUTE_HOUR_OPTIONS.filter((h) => h <= (perms.maxChatMuteHours || 1));
+
+  const act = async (fn: () => Promise<{ success: boolean; error?: string }>, nextMuted: string | null) => {
+    setBusy(true);
+    sound.click();
+    try {
+      const res = await fn();
+      if (res.success) setLocalMutedUntil(nextMuted);
+      else sound.error();
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="mx-4 mb-2 flex items-center gap-2">
+      {isMuted ? (
+        <button
+          onClick={() => act(() => modUnmuteChat(userId), null)}
+          disabled={busy}
+          title={`Stummgeschaltet bis ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(effectiveMutedUntil!))}`}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-60"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Volume2 className="h-3.5 w-3.5" /> Stumm aufheben</>}
+        </button>
+      ) : (
+        <>
+          <button
+            onClick={() => act(() => modMuteChat(userId, hours, ""), new Date(Date.now() + hours * 3_600_000).toISOString())}
+            disabled={busy}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/20 disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><MicOff className="h-3.5 w-3.5" /> Chat stumm ({hours}h)</>}
+          </button>
+          <select
+            value={hours}
+            onChange={(e) => setHours(Number(e.target.value))}
+            disabled={busy}
+            title="Dauer"
+            className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-xs font-bold text-amber-300 outline-none focus:border-amber-400/50 disabled:opacity-60"
+          >
+            {availableHours.map((h) => (
+              <option key={h} value={h} className="bg-[#09090f] text-zinc-200">{h}h</option>
+            ))}
+          </select>
+        </>
       )}
     </div>
   );
@@ -492,6 +576,11 @@ function PopupCard({
                 )}
               </AnimatePresence>
             </div>
+          )}
+
+          {/* ── Mod: kompakte Chat-Stummschaltung (nur erhöhte Betrachter) ── */}
+          {isElevated && (
+            <ModMuteButton userId={userId} mutedUntil={profile.chatMutedUntil} />
           )}
 
           {/* ── Social: Freund-Aktion ─────────────────────────────────────── */}

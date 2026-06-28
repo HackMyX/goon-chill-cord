@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bell, Sparkles, Repeat, Gavel, ShieldCheck, Loader2, Check, Lock } from "lucide-react";
+import { Bell, Sparkles, Repeat, Gavel, ShieldCheck, Loader2, Check, Lock, Users } from "lucide-react";
 import { updateNotificationPrefs, type NotificationPrefs } from "@/lib/actions/account";
 import { useSoundManager } from "@/lib/sound-manager";
 import { isModerator } from "@/lib/admin";
@@ -10,7 +10,7 @@ type NotifEntry = { type: string; label: string; desc: string };
 type NotifGroup = {
   key: string;
   label: string;
-  color: "amber" | "cyan" | "emerald";
+  color: "amber" | "cyan" | "emerald" | "violet";
   icon: React.ReactNode;
   types: NotifEntry[];
 };
@@ -56,6 +56,16 @@ const USER_GROUPS: NotifGroup[] = [
       { type: "auction_sold",    label: "Auktion verkauft",              desc: "Wenn dein Angebot verkauft wurde" },
     ],
   },
+  {
+    key: "social",
+    label: "Soziales & Freunde",
+    color: "violet",
+    icon: <Users className="h-3.5 w-3.5" />,
+    types: [
+      { type: "friend_request",  label: "Neue Freundschaftsanfrage", desc: "Wenn dir jemand eine Freundschaftsanfrage sendet" },
+      { type: "friend_accepted", label: "Freundschaft bestätigt",    desc: "Wenn jemand deine Anfrage annimmt" },
+    ],
+  },
 ];
 
 const STAFF_ENTRIES: NotifEntry[] = [
@@ -74,6 +84,7 @@ const COLORS = {
   amber:   { dot: "bg-amber-400",   border: "border-amber-400/25",   bg: "bg-amber-400/[0.04]",   text: "text-amber-300"   },
   cyan:    { dot: "bg-cyan-400",    border: "border-cyan-400/25",    bg: "bg-cyan-400/[0.04]",    text: "text-cyan-300"    },
   emerald: { dot: "bg-emerald-400", border: "border-emerald-400/25", bg: "bg-emerald-400/[0.04]", text: "text-emerald-300" },
+  violet:  { dot: "bg-violet-400",  border: "border-violet-400/25",  bg: "bg-violet-400/[0.04]",  text: "text-violet-300"  },
 } as const;
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {

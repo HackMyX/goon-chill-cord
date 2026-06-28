@@ -206,7 +206,7 @@ export async function awardXp(
         type: "level_up",
         title: `🎉 Level ${newLevel} erreicht!`,
         message: `Glückwunsch! Du hast Level ${newLevel} erreicht${collectedRewards.length > 0 ? " und Belohnungen erhalten" : ""}.`,
-        link: "/profil",
+        link: "/garderobe",
       });
     } catch { /* non-fatal */ }
 
