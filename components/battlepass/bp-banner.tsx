@@ -227,13 +227,11 @@ export function BpBanner({ pass, userStatus, onPurchase }: BpBannerProps) {
   const glow = theme.glow;
 
   const hasPremium = userStatus?.hasPremium ?? false;
-  const hasElite = userStatus?.hasElite ?? false;
   const progressDays = userStatus?.progressDays ?? 0;
   const progressPct = Math.min(100, Math.round((progressDays / pass.tierCount) * 100));
 
-  const freeTierCount = pass.tiers.filter((t) => !t.isPremium && !t.isElite).length;
-  const premiumTierCount = pass.tiers.filter((t) => t.isPremium && !t.isElite).length;
-  const eliteTierCount = pass.tiers.filter((t) => t.isElite).length;
+  const freeTierCount = pass.tiers.filter((t) => !t.isPremium).length;
+  const premiumTierCount = pass.tiers.filter((t) => t.isPremium).length;
 
   // Prefer milestone tiers for the preview; fill from evenly-spaced tiers otherwise
   const previewTiers: BattlePassTier[] = (() => {
@@ -366,11 +364,6 @@ export function BpBanner({ pass, userStatus, onPurchase }: BpBannerProps) {
                     <Crown className="h-2.5 w-2.5" />Premium
                   </span>
                 )}
-                {hasElite && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/50 bg-violet-500/18 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-violet-300">
-                    💎 Elite
-                  </span>
-                )}
               </div>
 
               {/* Season label */}
@@ -410,11 +403,6 @@ export function BpBanner({ pass, userStatus, onPurchase }: BpBannerProps) {
                 {premiumTierCount > 0 && (
                   <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-400/80 font-bold">
                     +{premiumTierCount} PREMIUM
-                  </span>
-                )}
-                {pass.eliteEnabled && eliteTierCount > 0 && (
-                  <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-400/80 font-bold">
-                    +{eliteTierCount} ELITE
                   </span>
                 )}
               </div>
@@ -488,19 +476,6 @@ export function BpBanner({ pass, userStatus, onPurchase }: BpBannerProps) {
                   </div>
                 </div>
               )}
-              {pass.eliteEnabled && !hasElite && (
-                <div className="flex flex-col gap-0.5 lg:text-right">
-                  <span className="text-[10px] text-violet-400/60 font-semibold uppercase tracking-widest">
-                    Elite Pass
-                  </span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-xl font-black text-violet-300 tabular-nums">
-                      {pass.elitePriceCr.toLocaleString("de-DE")}
-                    </span>
-                    <span className="text-sm font-semibold text-violet-400/40">CR</span>
-                  </div>
-                </div>
-              )}
 
               {/* CTA buttons */}
               <div className="flex flex-col gap-2 w-full lg:items-end">
@@ -528,23 +503,8 @@ export function BpBanner({ pass, userStatus, onPurchase }: BpBannerProps) {
                   </motion.button>
                 )}
 
-                {pass.eliteEnabled && !hasElite && (
-                  <motion.button
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.96 }}
-                    onClick={handleBuy}
-                    className="relative overflow-hidden rounded-xl border border-violet-500/50 bg-violet-500/18 px-5 py-2.5 text-sm font-black text-violet-200 w-full lg:w-auto transition-all hover:bg-violet-500/28"
-                    style={{ boxShadow: "0 4px 24px rgba(139,92,246,0.25), 0 0 0 1px rgba(139,92,246,0.2)" }}
-                  >
-                    <span className="flex items-center justify-center gap-2">
-                      <Zap className="h-3.5 w-3.5" />
-                      Elite kaufen
-                    </span>
-                  </motion.button>
-                )}
-
                 {/* Already owned → go to pass */}
-                {hasPremium && (!pass.eliteEnabled || hasElite) && (
+                {hasPremium && (
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}

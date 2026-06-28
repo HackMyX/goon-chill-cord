@@ -20,7 +20,6 @@ function rowToTier(r: Record<string, unknown>): BattlePassTier {
     tierNumber: r.tier_number as number,
     name: r.name as string,
     isPremium: r.is_premium as boolean,
-    isElite: (r.is_elite as boolean | null) ?? false,
     rewardType: r.reward_type as BpRewardType,
     rewardCredits: r.reward_credits as number | null,
     rewardItemId: r.reward_item_id as string | null,
@@ -51,8 +50,6 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
     seasonLabel: r.season_label as string,
     description: r.description as string | null,
     priceCr: r.price_cr as number,
-    elitePriceCr: (r.elite_price_cr as number | null) ?? 0,
-    eliteEnabled: (r.elite_enabled as boolean | null) ?? false,
     enabled: r.enabled as boolean,
     isActive: r.is_active as boolean,
     startDate: r.start_date as string | null,
@@ -69,7 +66,6 @@ function rowToPass(r: Record<string, unknown>, tiers: BattlePassTier[]): BattleP
     shopPosition: ((r.shop_position as BpShopPosition | null) ?? "below_featured"),
     shopBannerSize: ((r.shop_banner_size as BpShopBannerSize | null) ?? "card"),
     customBuyText: (r.custom_buy_text as string | null) ?? null,
-    customEliteBuyText: (r.custom_elite_buy_text as string | null) ?? null,
     highlightColor: (r.highlight_color as string | null) ?? null,
     showTierCountInShop: (r.show_tier_count_in_shop as boolean | null) ?? true,
     showCountdown: (r.show_countdown as boolean | null) ?? true,
@@ -170,7 +166,7 @@ export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
   const [{ data: ubpRow }, { data: claimRows }] = await Promise.all([
     admin
       .from("user_battle_passes")
-      .select("has_premium, has_elite, progress_days, bp_xp")
+      .select("has_premium, progress_days, bp_xp")
       .eq("user_id", user.id)
       .eq("pass_id", pass.id)
       .maybeSingle(),
@@ -184,7 +180,6 @@ export async function getActiveBattlePass(): Promise<ActiveBpView | null> {
   const userStatus: UserBpStatus = {
     passId: pass.id,
     hasPremium: ubpRow?.has_premium ?? false,
-    hasElite: ubpRow?.has_elite ?? false,
     progressDays: ubpRow?.progress_days ?? 0,
     claimedTierIds: (claimRows ?? []).map((r) => r.tier_id as string),
     bpXp: (ubpRow?.bp_xp as number | null) ?? 0,
@@ -253,7 +248,7 @@ export async function getActiveBattlePasses(): Promise<ActiveBpView[]> {
   const [{ data: ubpRows }, { data: claimRows }] = await Promise.all([
     admin
       .from("user_battle_passes")
-      .select("pass_id, has_premium, has_elite, progress_days, bp_xp")
+      .select("pass_id, has_premium, progress_days, bp_xp")
       .eq("user_id", user.id)
       .in("pass_id", passIds),
     admin
@@ -272,7 +267,6 @@ export async function getActiveBattlePasses(): Promise<ActiveBpView[]> {
     const userStatus: UserBpStatus = {
       passId: pass.id,
       hasPremium: ubp?.has_premium ?? false,
-      hasElite: ubp?.has_elite ?? false,
       progressDays: ubp?.progress_days ?? 0,
       claimedTierIds: claims,
       bpXp: (ubp?.bp_xp as number | null) ?? 0,
@@ -370,103 +364,6 @@ export async function purchaseBattlePass(passId: string): Promise<{ success: boo
   return { success: true };
 }
 
-export async function purchaseEliteBattlePass(passId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Du musst eingeloggt sein." };
-
-  const admin = createAdminClient();
-  const [{ data: passRow }, { data: profile }, { currencyName }] = await Promise.all([
-    admin.from("battle_passes").select("id, elite_price_cr, elite_enabled, enabled, is_active, incompatible_with").eq("id", passId).single(),
-    admin.from("profiles").select("credits").eq("id", user.id).single(),
-    getSiteConfig(),
-  ]);
-
-  if (!passRow || !passRow.enabled || !passRow.is_active) {
-    return { success: false, error: "Dieser Pass ist nicht verfügbar." };
-  }
-  if (!(passRow.elite_enabled as boolean)) {
-    return { success: false, error: "Der Elite-Pass ist nicht verfügbar." };
-  }
-  if (!profile) return { success: false, error: "Profil nicht gefunden." };
-
-  const elitePriceCr = (passRow.elite_price_cr as number | null) ?? 0;
-  if (profile.credits < elitePriceCr) {
-    return { success: false, error: `Nicht genug ${currencyName}. Benötigt: ${elitePriceCr.toLocaleString("de-DE")} ${currencyName}.` };
-  }
-
-  // Incompatibility check
-  const incompatibleWith = (passRow.incompatible_with as string[] | null) ?? [];
-  if (incompatibleWith.length > 0) {
-    const { data: conflictRows } = await admin
-      .from("user_battle_passes")
-      .select("pass_id")
-      .eq("user_id", user.id)
-      .eq("has_elite", true)
-      .in("pass_id", incompatibleWith);
-    if (conflictRows && conflictRows.length > 0) {
-      const { data: conflictPasses } = await admin
-        .from("battle_passes")
-        .select("name")
-        .in("id", conflictRows.map((r) => r.pass_id as string));
-      const names = (conflictPasses ?? []).map((p) => p.name as string).join(", ");
-      return { success: false, error: `Dieser Elite-Pass ist nicht kombinierbar mit: ${names}.` };
-    }
-  }
-
-  const { data: existing } = await admin
-    .from("user_battle_passes")
-    .select("id, has_elite")
-    .eq("user_id", user.id)
-    .eq("pass_id", passId)
-    .maybeSingle();
-
-  if (existing?.has_elite) {
-    return { success: false, error: "Du hast den Elite-Pass bereits." };
-  }
-
-  const newCredits = profile.credits - elitePriceCr;
-
-  const { error: creditError } = await admin
-    .from("profiles")
-    .update({ credits: newCredits })
-    .eq("id", user.id)
-    .gte("credits", elitePriceCr);
-
-  if (creditError) return { success: false, error: `Nicht genug ${currencyName}.` };
-
-  const now = new Date().toISOString();
-  // Elite is a SUPERSET of Premium — buying Elite also unlocks the Premium track,
-  // so Elite holders get free + premium + elite rewards.
-  if (existing) {
-    await admin
-      .from("user_battle_passes")
-      .update({ has_premium: true, has_elite: true, elite_purchased_at: now })
-      .eq("id", existing.id);
-  } else {
-    await admin.from("user_battle_passes").insert({
-      user_id: user.id,
-      pass_id: passId,
-      has_premium: true,
-      has_elite: true,
-      progress_days: 0,
-      elite_purchased_at: now,
-    });
-  }
-
-  try {
-    await admin.from("audit_logs").insert({
-      user_id: user.id,
-      action: "battle_pass_elite_purchase",
-      payload: { passId, cost: elitePriceCr, newCredits },
-    });
-  } catch { /* ignore */ }
-
-  revalidatePath("/battlepass");
-  revalidatePath("/");
-  return { success: true };
-}
-
 export async function claimBpTier(tierId: string): Promise<{ success: boolean; error?: string; reward?: string; rewardType?: BpRewardType }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -499,29 +396,22 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
 
   const { data: ubp } = await admin
     .from("user_battle_passes")
-    .select("has_premium, has_elite, progress_days")
+    .select("has_premium, progress_days")
     .eq("user_id", user.id)
     .eq("pass_id", passId)
     .maybeSingle();
 
   const progressDays = ubp?.progress_days ?? 0;
   const hasPremium = ubp?.has_premium ?? false;
-  const hasElite = ubp?.has_elite ?? false;
   const t = tier as Record<string, unknown>;
   const tierNum = t.tier_number as number;
   const isPremium = t.is_premium as boolean;
-  const isElite = t.is_elite as boolean;
 
   if (progressDays < tierNum) {
     return { success: false, error: `Noch nicht freigeschaltet — du brauchst ${tierNum} Login-Tage.` };
   }
-  // Track hierarchy: FREE ⊂ PREMIUM ⊂ ELITE. Elite tiers need the Elite upgrade;
-  // premium tiers need Premium OR Elite (Elite is a superset, so an Elite holder
-  // can claim every premium-track tier too).
-  if (isElite && !hasElite) {
-    return { success: false, error: "Nur für Elite-Pass-Inhaber." };
-  }
-  if (isPremium && !hasPremium && !hasElite) {
+  // Two tracks: FREE (anyone with the login days) and PREMIUM (pass buyers).
+  if (isPremium && !hasPremium) {
     return { success: false, error: "Nur für Premium-Pass-Inhaber." };
   }
 
@@ -856,8 +746,6 @@ export interface AdminPassInput {
   seasonLabel: string;
   description: string;
   priceCr: number;
-  elitePriceCr: number;
-  eliteEnabled: boolean;
   enabled: boolean;
   startDate: string | null;
   endDate: string | null;
@@ -873,7 +761,6 @@ export interface AdminPassInput {
   shopPosition: BpShopPosition;
   shopBannerSize: BpShopBannerSize;
   customBuyText: string;
-  customEliteBuyText: string;
   highlightColor: string;
   showTierCountInShop: boolean;
   showCountdown: boolean;
@@ -899,8 +786,6 @@ export async function adminCreateBattlePass(
       season_label: input.seasonLabel.trim(),
       description: input.description.trim() || null,
       price_cr: Math.max(0, Math.round(input.priceCr)),
-      elite_price_cr: Math.max(0, Math.round(input.elitePriceCr)),
-      elite_enabled: input.eliteEnabled,
       enabled: input.enabled,
       is_active: false,
       start_date: input.startDate || null,
@@ -917,7 +802,6 @@ export async function adminCreateBattlePass(
       shop_position: input.shopPosition ?? "below_featured",
       shop_banner_size: input.shopBannerSize ?? "card",
       custom_buy_text: input.customBuyText?.trim() || null,
-      custom_elite_buy_text: input.customEliteBuyText?.trim() || null,
       highlight_color: input.highlightColor?.trim() || null,
       show_tier_count_in_shop: input.showTierCountInShop ?? true,
       show_countdown: input.showCountdown ?? true,
@@ -953,8 +837,6 @@ export async function adminUpdateBattlePass(
       season_label: input.seasonLabel.trim(),
       description: input.description.trim() || null,
       price_cr: Math.max(0, Math.round(input.priceCr)),
-      elite_price_cr: Math.max(0, Math.round(input.elitePriceCr)),
-      elite_enabled: input.eliteEnabled,
       enabled: input.enabled,
       start_date: input.startDate || null,
       end_date: input.endDate || null,
@@ -970,7 +852,6 @@ export async function adminUpdateBattlePass(
       shop_position: input.shopPosition ?? "below_featured",
       shop_banner_size: input.shopBannerSize ?? "card",
       custom_buy_text: input.customBuyText?.trim() || null,
-      custom_elite_buy_text: input.customEliteBuyText?.trim() || null,
       highlight_color: input.highlightColor?.trim() || null,
       show_tier_count_in_shop: input.showTierCountInShop ?? true,
       show_countdown: input.showCountdown ?? true,
@@ -1028,7 +909,6 @@ export interface AdminTierInput {
   tierNumber: number;
   name: string;
   isPremium: boolean;
-  isElite: boolean;
   rewardType: BpRewardType;
   rewardCredits: number | null;
   rewardItemId: string | null;
@@ -1064,7 +944,6 @@ export async function adminUpsertBpTier(
       tier_number: input.tierNumber,
       name: input.name.trim(),
       is_premium: input.isPremium,
-      is_elite: input.isElite ?? false,
       reward_type: input.rewardType,
       reward_credits: input.rewardType === "credits" ? (input.rewardCredits ?? 100) : null,
       reward_item_id: (input.rewardType === "item") ? input.rewardItemId : null,
@@ -1095,13 +974,14 @@ export async function adminUpsertBpTier(
 // Belohnungs-Inhalt einer Stufe (alles AUSSER Identität pass_id/tier_number/id/created_at).
 // reward_item_name & reward_ability_name absichtlich AUSGELASSEN (existieren nicht in der DB).
 const BP_TIER_CONTENT_COLS =
-  "name, is_premium, is_elite, reward_type, reward_credits, reward_item_id, reward_item_type, " +
+  "name, is_premium, reward_type, reward_credits, reward_item_id, reward_item_type, " +
   "reward_item_rarity, reward_badge_key, reward_badge_text, reward_xp_boost, reward_name_style_key, " +
   "reward_ability_key, reward_quantity, highlight_tier, description, icon, bp_xp_required, " +
   "display_mode, show_tier_name, show_tier_description";
 
-function bpTrackFlags(track: "free" | "premium" | "elite") {
-  return { is_premium: track === "premium", is_elite: track === "elite" };
+function bpTrackFlags(track: "free" | "premium") {
+  // Two tracks remain: FREE and PREMIUM (the Elite track has been removed).
+  return { is_premium: track === "premium" };
 }
 
 function bpTierContent(row: Record<string, unknown>): Record<string, unknown> {
@@ -1114,7 +994,7 @@ function bpTierContent(row: Record<string, unknown>): Record<string, unknown> {
 
 /**
  * Verschiebt / tauscht eine Belohnung im visuellen Timeline-Editor.
- * - fromTier === toTier  → reiner Track-Wechsel (Free/Premium/Elite) der Quelle.
+ * - fromTier === toTier  → reiner Track-Wechsel (Free/Premium) der Quelle.
  * - Ziel belegt          → Tausch beider Stufen-Inhalte (Quelle erhält toTrack, das verdrängte
  *                           Reward landet an der Quell-Stufe und behält deren bisherigen Track).
  * - Ziel leer            → Verschieben (Quelle wird geleert, Ziel erhält Inhalt + toTrack).
@@ -1124,7 +1004,7 @@ export async function adminPlaceBpReward(
   passId: string,
   fromTier: number,
   toTier: number,
-  toTrack: "free" | "premium" | "elite",
+  toTrack: "free" | "premium",
 ): Promise<{ success: boolean; error?: string }> {
   const user = await requireAdminUser();
   if (!user) return { success: false, error: "Kein Zugriff." };
@@ -1163,11 +1043,7 @@ export async function adminPlaceBpReward(
 
   if (tgt) {
     // TAUSCH: verdrängtes Reward → Quell-Stufe (behält Quell-Track); Quelle → Ziel (toTrack)
-    const srcTrack: "free" | "premium" | "elite" = srcRow.is_elite
-      ? "elite"
-      : srcRow.is_premium
-        ? "premium"
-        : "free";
+    const srcTrack: "free" | "premium" = srcRow.is_premium ? "premium" : "free";
     const e1 = await admin
       .from("battle_pass_tiers")
       .update({ ...bpTierContent(tgt as unknown as Record<string, unknown>), ...bpTrackFlags(srcTrack) })
@@ -1234,7 +1110,7 @@ export async function adminAutoFillBpTiers(
   // Fetch pass to get tierCount
   const { data: passRow, error: passError } = await admin
     .from("battle_passes")
-    .select("id, tier_count, elite_enabled")
+    .select("id, tier_count")
     .eq("id", passId)
     .single();
 
@@ -1243,7 +1119,6 @@ export async function adminAutoFillBpTiers(
   }
 
   const tierCount = passRow.tier_count as number;
-  const passEliteEnabled = passRow.elite_enabled === true;
 
   // ── Echte Items laden → der Generator vergibt KONKRETE Items (reward_item_id), damit die
   //    3D-Modelle in den Kacheln erscheinen (statt generischer Würfel). Gruppiert nach Seltenheit.
@@ -1275,30 +1150,23 @@ export async function adminAutoFillBpTiers(
     return null;
   };
 
-  // ── Track-Grenzen robust (Summe == tierCount, nie negativ) — VOR rarityForTier,
-  //    weil die track-relative Rarity die Track-Grenzen kennen muss. ──
+  // ── Track-Grenzen (Summe == tierCount): nur noch FREE + PREMIUM ──
   let freeCount = Math.round(tierCount * config.freeRatio / 100);
-  let eliteCount = passEliteEnabled ? Math.round(tierCount * config.eliteRatio / 100) : 0;
-  if (freeCount + eliteCount > tierCount) {
-    eliteCount = Math.max(0, tierCount - freeCount);
-    if (freeCount > tierCount) freeCount = tierCount;
-  }
-  const premiumCount = Math.max(0, tierCount - freeCount - eliteCount);
+  if (freeCount > tierCount) freeCount = tierCount;
+  const premiumCount = Math.max(0, tierCount - freeCount);
 
-  // ── ECONOMY-GEHIRN: Rarity wird pro TRACK gedeckelt, nicht global.
-  //    FREE = normal..selten · PREMIUM = normal..mythisch · ELITE = normal..ultra.
-  //    Innerhalb des Tracks steigt die Wertigkeit mit der Position; Meilensteine
-  //    bekommen den Track-Bestwert. So landet NIE ein Ultra im kostenlosen Track. ──
-  const TRACK_CAPS: Record<"free" | "premium" | "elite", Rarity[]> = {
+  // ── ECONOMY-GEHIRN: Rarity pro TRACK gedeckelt. FREE = normal..selten,
+  //    PREMIUM = normal..ultra (der bezahlte Top-Track). Wertigkeit steigt mit der
+  //    Position im Track; Meilensteine = Track-Bestwert. Nie Ultra im Free-Track. ──
+  const TRACK_CAPS: Record<"free" | "premium", Rarity[]> = {
     free: ["normal", "selten"],
-    premium: ["normal", "selten", "mythisch"],
-    elite: ["normal", "selten", "mythisch", "ultra"],
+    premium: ["normal", "selten", "mythisch", "ultra"],
   };
-  const rarityForTier = (tierNumber: number, isPremium: boolean, isElite: boolean): Rarity => {
-    const track = isElite ? "elite" : isPremium ? "premium" : "free";
+  const rarityForTier = (tierNumber: number, isPremium: boolean): Rarity => {
+    const track = isPremium ? "premium" : "free";
     const caps = TRACK_CAPS[track];
-    const start = track === "elite" ? freeCount + premiumCount : track === "premium" ? freeCount : 0;
-    const len = track === "elite" ? eliteCount : track === "premium" ? premiumCount : freeCount;
+    const start = isPremium ? freeCount : 0;
+    const len = isPremium ? premiumCount : freeCount;
     if (!config.rarityProgression) return caps[Math.max(0, caps.length - 2)] ?? caps[0];
     if (len <= 0) return caps[caps.length - 1];
     const posPct = ((tierNumber - 1 - start) / len) * 100; // 0..100 innerhalb des Tracks
@@ -1322,12 +1190,8 @@ export async function adminAutoFillBpTiers(
   for (let tierNumber = 1; tierNumber <= tierCount; tierNumber++) {
     const isMilestone = config.milestoneTierInterval > 0 && tierNumber % config.milestoneTierInterval === 0;
 
-    // Track
-    let isPremium = false;
-    let isElite = false;
-    if (tierNumber <= freeCount) { /* free */ }
-    else if (tierNumber <= freeCount + premiumCount) isPremium = true;
-    else isElite = true;
+    // Track — first freeCount tiers are FREE, the rest PREMIUM.
+    const isPremium = tierNumber > freeCount;
 
     // Reward-Typ: Meilensteine = fettes 3D-Item; sonst greedy nach größtem Restkontingent
     let rewardType: BpRewardType;
@@ -1348,11 +1212,11 @@ export async function adminAutoFillBpTiers(
     let reward_item_rarity: Rarity | null = null;
     let pickedName: string | null = null;
     if (rewardType === "item") {
-      // Meilenstein = bester Wert des EIGENEN Tracks (Free→selten, Premium→mythisch,
-      // Elite→ultra), NICHT global ultra. Sonst track-relative Rarity.
+      // Meilenstein = bester Wert des EIGENEN Tracks (Free→selten, Premium→ultra),
+      // NICHT pauschal ultra. Sonst track-relative Rarity.
       const rar: Rarity = isMilestone
-        ? (isElite ? "ultra" : isPremium ? "mythisch" : "selten")
-        : rarityForTier(tierNumber, isPremium, isElite);
+        ? (isPremium ? "ultra" : "selten")
+        : rarityForTier(tierNumber, isPremium);
       if (config.resolveRandomItems !== false) {
         // Konkretes Item schon jetzt auswürfeln → echtes 3D-Modell + echter Name in der Kachel
         const it = pickItem(rar);
@@ -1401,7 +1265,6 @@ export async function adminAutoFillBpTiers(
       tier_number: tierNumber,
       name,
       is_premium: isPremium,
-      is_elite: isElite,
       reward_type: rewardType,
       reward_credits,
       reward_item_id,

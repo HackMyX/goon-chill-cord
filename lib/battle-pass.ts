@@ -108,7 +108,6 @@ export interface BattlePassTier {
   tierNumber: number;
   name: string;
   isPremium: boolean;
-  isElite: boolean;
   rewardType: BpRewardType;
   rewardCredits: number | null;
   rewardItemId: string | null;
@@ -146,8 +145,6 @@ export interface BattlePass {
   seasonLabel: string;
   description: string | null;
   priceCr: number;
-  elitePriceCr: number;
-  eliteEnabled: boolean;
   enabled: boolean;
   isActive: boolean;
   startDate: string | null;
@@ -164,7 +161,6 @@ export interface BattlePass {
   shopPosition: BpShopPosition;
   shopBannerSize: BpShopBannerSize;
   customBuyText: string | null;
-  customEliteBuyText: string | null;
   highlightColor: string | null;
   showTierCountInShop: boolean;
   showCountdown: boolean;
@@ -181,7 +177,6 @@ export interface BattlePass {
 export interface UserBpStatus {
   passId: string;
   hasPremium: boolean;
-  hasElite: boolean;
   progressDays: number;
   claimedTierIds: string[];
   bpXp: number;
@@ -236,7 +231,6 @@ export interface BpAutoFillConfig {
   rewardMixXpBoost: number;
   rewardMixBadge: number;
   freeRatio: number;
-  eliteRatio: number;
   rarityProgression: boolean;
   creditProgression: boolean;
   /** Default visual display mode applied to every generated tier. */
@@ -257,7 +251,6 @@ export const DEFAULT_AUTOFILL_CONFIG: BpAutoFillConfig = {
   rewardMixXpBoost: 15,
   rewardMixBadge: 10,
   freeRatio: 45,
-  eliteRatio: 20,
   rarityProgression: true,
   creditProgression: true,
   defaultDisplayMode: "3d",

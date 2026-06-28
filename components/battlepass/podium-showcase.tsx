@@ -15,13 +15,12 @@ const RARITY_HEX: Record<string, string> = {
   normal: "#9ca3af", selten: "#3b82f6", mythisch: "#a855f7", ultra: "#f59e0b",
 };
 const TRACK = {
-  elite: { label: "Elite", color: "#a78bfa", icon: Sparkles },
   premium: { label: "Premium", color: "#f59e0b", icon: Crown },
   free: { label: "Kostenlos", color: "#94a3b8", icon: Gift },
 } as const;
 
-function trackOf(t: BattlePassTier): "elite" | "premium" | "free" {
-  return t.isElite ? "elite" : t.isPremium ? "premium" : "free";
+function trackOf(t: BattlePassTier): "premium" | "free" {
+  return t.isPremium ? "premium" : "free";
 }
 
 function subjectOf(t: BattlePassTier): PreviewSubject | null {
@@ -90,8 +89,7 @@ export function PodiumShowcase({
     const subj = subjectOf(tier);
     const claimed = userStatus?.claimedTierIds.includes(tier.id) ?? false;
     const unlocked = (userStatus?.progressDays ?? 0) >= tier.tierNumber
-      && (!tier.isPremium || (userStatus?.hasPremium ?? false))
-      && (!tier.isElite || (userStatus?.hasElite ?? false));
+      && (!tier.isPremium || (userStatus?.hasPremium ?? false));
     return { tk, color, isItem, subj, claimed, unlocked, isUltra };
   }, [tier, userStatus]);
 

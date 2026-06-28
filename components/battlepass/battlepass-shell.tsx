@@ -10,7 +10,7 @@ import {
   Target, Wand2, Gem, Flame,
 } from "lucide-react";
 import { BP_THEMES, DEFAULT_BP_VISUAL_CONFIG, type BattlePass, type BattlePassTier, type UserBpStatus, type BpQuestWithProgress, type BpVisualConfig, type BpLayoutMode } from "@/lib/battle-pass";
-import { purchaseBattlePass, purchaseEliteBattlePass, claimBpTier, getActiveBattlePass } from "@/lib/actions/battle-pass";
+import { purchaseBattlePass, claimBpTier, getActiveBattlePass } from "@/lib/actions/battle-pass";
 import { createClient } from "@/lib/supabase/client";
 import { getBpQuestsWithProgress } from "@/lib/actions/bp-quests";
 import { StyledUsername } from "@/components/ui/styled-username";
@@ -75,7 +75,6 @@ function getTierState(tier: BattlePassTier, userStatus: UserBpStatus | null, pro
   if (userStatus.claimedTierIds.includes(tier.id)) return "claimed";
   if (progressDays >= tier.tierNumber) {
     if (tier.isPremium && !userStatus.hasPremium) return "locked";
-    if (tier.isElite && !userStatus.hasElite) return "locked";
     return "available";
   }
   return "locked";
@@ -1039,10 +1038,9 @@ function TrackTileCard({
   }, [scrollRootRef]);
 
   // Track type detection for richer visual treatment
-  const isPremiumTier = tier.isPremium && !tier.isElite;
-  const isEliteTier = tier.isElite;
+  const isPremiumTier = tier.isPremium;
 
-  // Border style — stronger glow for milestone + premium/elite available tiles
+  // Border style — stronger glow for milestone + premium available tiles
   const borderStyle = isSelected
     ? {
         borderColor: effectiveTrackColor,
@@ -1054,7 +1052,7 @@ function TrackTileCard({
             borderColor: `${effectiveTrackColor}90`,
             boxShadow: `0 0 ${Math.round(milestoneGlow * 80)}px ${glow}, 0 8px 40px ${glow}60, inset 0 0 30px ${effectiveTrackColor}12, inset 0 0 0 1px ${effectiveTrackColor}30`,
           }
-        : (isPremiumTier || isEliteTier)
+        : isPremiumTier
           ? {
               borderColor: `${effectiveTrackColor}80`,
               boxShadow: `0 6px 40px ${glow}60, 0 0 24px ${glow}30, inset 0 0 16px ${effectiveTrackColor}10, inset 0 0 0 1px ${effectiveTrackColor}25`,
@@ -1064,11 +1062,11 @@ function TrackTileCard({
         ? { borderColor: "rgba(52,211,153,0.28)", boxShadow: "0 3px 16px rgba(52,211,153,0.10), inset 0 0 0 1px rgba(52,211,153,0.10)" }
         : { borderColor: "rgba(255,255,255,0.05)", boxShadow: "none" };
 
-  // Richer glass gradient for premium/elite
+  // Richer glass gradient for premium
   const bgStyle = isAvailable
     ? isMilestone
       ? `linear-gradient(170deg, ${effectiveTrackColor}30 0%, ${effectiveTrackColor}10 45%, rgba(0,0,0,0.50) 100%)`
-      : (isPremiumTier || isEliteTier)
+      : isPremiumTier
         ? `linear-gradient(170deg, ${effectiveTrackColor}26 0%, ${effectiveTrackColor}0c 50%, rgba(0,0,0,0.55) 100%)`
         : `linear-gradient(170deg, ${effectiveTrackColor}1c 0%, ${effectiveTrackColor}08 55%, rgba(0,0,0,0.55) 100%)`
     : isClaimed
@@ -1085,7 +1083,7 @@ function TrackTileCard({
 
   const tooltipName = tier.rewardItemName ?? (tier.rewardType === "credits" ? null : tier.name);
   const tooltipRarity = tier.rewardItemRarity;
-  const tooltipTrack = tier.isElite ? "Elite" : tier.isPremium ? "Premium" : "Free";
+  const tooltipTrack = tier.isPremium ? "Premium" : "Free";
 
   return (
     <motion.div
@@ -1164,26 +1162,26 @@ function TrackTileCard({
           <>
             <motion.div
               className="absolute inset-0"
-              animate={{ opacity: [0, (isPremiumTier || isEliteTier) ? 0.8 : 0.6, 0] }}
+              animate={{ opacity: [0, isPremiumTier ? 0.8 : 0.6, 0] }}
               transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-              style={{ background: `linear-gradient(135deg, ${effectiveTrackColor}${(isPremiumTier || isEliteTier) ? "38" : "28"}, transparent 55%)` }}
+              style={{ background: `linear-gradient(135deg, ${effectiveTrackColor}${isPremiumTier ? "38" : "28"}, transparent 55%)` }}
             />
             {/* Diagonal scan line */}
             <motion.div
               className="absolute left-0 right-0 h-10"
               animate={{ top: ["-10%", "110%"] }}
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", repeatDelay: 2 }}
-              style={{ background: `linear-gradient(180deg, transparent, ${effectiveTrackColor}${(isPremiumTier || isEliteTier) ? "38" : "28"}, transparent)` }}
+              style={{ background: `linear-gradient(180deg, transparent, ${effectiveTrackColor}${isPremiumTier ? "38" : "28"}, transparent)` }}
             />
             {/* Corner light flare */}
             <motion.div
               className="absolute -top-2 -right-2 h-12 w-12"
-              animate={{ opacity: [0, (isPremiumTier || isEliteTier) ? 0.85 : 0.6, 0] }}
+              animate={{ opacity: [0, isPremiumTier ? 0.85 : 0.6, 0] }}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: 0.8 }}
               style={{ background: `radial-gradient(circle at top right, ${effectiveTrackColor}80, transparent 65%)` }}
             />
-            {/* Premium/Elite: radial pulse from center */}
-            {(isPremiumTier || isEliteTier) && (
+            {/* Premium: radial pulse from center */}
+            {isPremiumTier && (
               <motion.div
                 className="absolute inset-0 rounded-3xl"
                 animate={{ opacity: [0, 0.35, 0] }}
@@ -1387,13 +1385,13 @@ interface TrackProps {
   visualConfig: BpVisualConfig;
   /** View index offset so each track's tiles get unique indices in the shared Canvas. */
   viewIndexOffset?: number;
-  /** Unified "Season Road": every tile colours itself by its own track (free/premium/elite). */
+  /** Unified "Season Road": every tile colours itself by its own track (free/premium). */
   roadMode?: boolean;
 }
 
-const ROAD_COLOR = { elite: "#a78bfa", premium: "#f59e0b", free: "#94a3b8" } as const;
-const ROAD_GLOW = { elite: "rgba(167,139,250,0.55)", premium: "rgba(245,158,11,0.55)", free: "rgba(148,163,184,0.4)" } as const;
-const roadTrackOf = (t: BattlePassTier): "elite" | "premium" | "free" => (t.isElite ? "elite" : t.isPremium ? "premium" : "free");
+const ROAD_COLOR = { premium: "#f59e0b", free: "#94a3b8" } as const;
+const ROAD_GLOW = { premium: "rgba(245,158,11,0.55)", free: "rgba(148,163,184,0.4)" } as const;
+const roadTrackOf = (t: BattlePassTier): "premium" | "free" => (t.isPremium ? "premium" : "free");
 
 function HorizontalTrack({
   tiers, label, labelColor, trackIcon, userStatus, progressDays, accent, glow, trackColor,
@@ -1617,11 +1615,6 @@ function HorizontalTrack({
                         <Crown className="h-3 w-3" />Premium
                       </span>
                     )}
-                    {selectedTierData.isElite && (
-                      <span className="flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10px] font-black text-violet-300">
-                        <Sparkles className="h-3 w-3" />Elite
-                      </span>
-                    )}
                     {selectedTierData.highlightTier && (
                       <span className="flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-black text-amber-200">
                         <Star className="h-3 w-3" />Meilenstein
@@ -1787,10 +1780,7 @@ function ListTierRow({
 
       {/* Track badges */}
       <div className="flex shrink-0 items-center gap-2">
-        {tier.isElite && (
-          <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[9px] font-black text-violet-300">Elite</span>
-        )}
-        {tier.isPremium && !tier.isElite && (
+        {tier.isPremium && (
           <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black text-amber-300">Premium</span>
         )}
         {tier.highlightTier && (
@@ -1958,12 +1948,10 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
 
   const progressDays = userStatus?.progressDays ?? 0;
   const hasPremium = userStatus?.hasPremium ?? false;
-  const hasElite = userStatus?.hasElite ?? false;
   const visualConfig: BpVisualConfig = { ...DEFAULT_BP_VISUAL_CONFIG, ...(pass.visualConfig ?? {}) };
 
-  const freeTiers = pass.tiers.filter((t) => !t.isPremium && !t.isElite);
-  const premiumTiers = pass.tiers.filter((t) => t.isPremium && !t.isElite);
-  const eliteTiers = pass.tiers.filter((t) => t.isElite);
+  const freeTiers = pass.tiers.filter((t) => !t.isPremium);
+  const premiumTiers = pass.tiers.filter((t) => t.isPremium);
   const claimedCount = userStatus?.claimedTierIds.length ?? 0;
 
   function showToast(msg: string, ok: boolean) {
@@ -2016,26 +2004,7 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
         showToast("Premium Pass aktiviert! 👑", true);
         setUserStatus((prev) =>
           prev ? { ...prev, hasPremium: true }
-               : { passId: pass.id, hasPremium: true, hasElite: false, progressDays: 0, claimedTierIds: [], bpXp: 0 }
-        );
-        router.refresh();
-      } else {
-        setBuyError(res.error ?? "Kauf fehlgeschlagen.");
-      }
-    });
-  }, [pass.id, router]);
-
-  const handleBuyElite = useCallback(() => {
-    setBuyError(null);
-    startTransition(async () => {
-      const res = await purchaseEliteBattlePass(pass.id);
-      if (res.success) {
-        setPurchaseAnim(true);
-        setTimeout(() => setPurchaseAnim(false), 2000);
-        showToast("Elite Pass aktiviert! 💎", true);
-        setUserStatus((prev) =>
-          prev ? { ...prev, hasElite: true }
-               : { passId: pass.id, hasPremium: false, hasElite: true, progressDays: 0, claimedTierIds: [], bpXp: 0 }
+               : { passId: pass.id, hasPremium: true, progressDays: 0, claimedTierIds: [], bpXp: 0 }
         );
         router.refresh();
       } else {
@@ -2310,11 +2279,6 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
                   <Crown className="h-3 w-3" /> PREMIUM · {premiumTiers.length} Levels · {pass.priceCr.toLocaleString("de-DE")} CR
                 </span>
               )}
-              {pass.eliteEnabled && eliteTiers.length > 0 && (
-                <span className="flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-300">
-                  <Sparkles className="h-3 w-3" /> ELITE · {eliteTiers.length} Levels · {pass.elitePriceCr.toLocaleString("de-DE")} CR
-                </span>
-              )}
             </motion.div>
           </div>
         </div>
@@ -2373,7 +2337,7 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
               if (allTiers.length === 0) return null;
               const layoutMode: BpLayoutMode = visualConfig.layoutMode ?? "carousel";
               const TrackComponent = layoutMode === "grid" ? GridTrack : layoutMode === "list" ? ListTrack : HorizontalTrack;
-              const showLockHint = (!hasPremium && premiumTiers.length > 0) || (pass.eliteEnabled && !hasElite && eliteTiers.length > 0);
+              const showLockHint = !hasPremium && premiumTiers.length > 0;
               return (
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -2396,16 +2360,11 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
                         {hasPremium ? <Crown className="h-3 w-3" /> : <Lock className="h-3 w-3" />}PREMIUM · {premiumTiers.length}
                       </span>
                     )}
-                    {pass.eliteEnabled && eliteTiers.length > 0 && (
-                      <span className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold" style={{ borderColor: hasElite ? "#a78bfa55" : "#a78bfa33", background: "#a78bfa12", color: "#c4b5fd" }}>
-                        {hasElite ? <Sparkles className="h-3 w-3" /> : <Lock className="h-3 w-3" />}ELITE · {eliteTiers.length}
-                      </span>
-                    )}
                   </div>
                   {showLockHint && (
                     <p className="mb-3 text-[11px] text-white/35">
                       <Lock className="mr-1 inline h-3 w-3" />
-                      Gesperrte Stufen (Premium/Elite) schaltest du rechts in der Seitenleiste frei.
+                      Gesperrte Premium-Stufen schaltest du rechts in der Seitenleiste frei.
                     </p>
                   )}
                   <TrackComponent
@@ -2455,12 +2414,7 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
                       <Crown className="h-3 w-3" />Premium
                     </span>
                   )}
-                  {hasElite && (
-                    <span className="flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs font-bold text-violet-300">
-                      <Sparkles className="h-3 w-3" />Elite
-                    </span>
-                  )}
-                  {!hasPremium && !hasElite && (
+                  {!hasPremium && (
                     <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold text-white/35">
                       Free Pass
                     </span>
@@ -2503,7 +2457,7 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
             )}
 
             {/* Purchase / upgrade card */}
-            {(!hasPremium || (pass.eliteEnabled && !hasElite)) && (
+            {!hasPremium && (
               <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 space-y-3 backdrop-blur-sm">
                 <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-white/35">
                   <Coins className="h-3.5 w-3.5" />
@@ -2553,37 +2507,11 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
                   </div>
                 )}
 
-                {pass.eliteEnabled && !hasElite && (
-                  <div className="rounded-xl border border-violet-500/25 bg-violet-500/5 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 text-sm font-black text-violet-300">
-                        <Sparkles className="h-4 w-4" />Elite
-                      </span>
-                      <span className="text-lg font-black text-white tabular-nums">
-                        {pass.elitePriceCr.toLocaleString("de-DE")}
-                        <span className="text-xs text-white/30 ml-1">CR</span>
-                      </span>
-                    </div>
-                    <p className="text-xs text-white/35 leading-relaxed">
-                      Legendary Elite-Rewards — für die wahren Goons.
-                    </p>
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.97 }}
-                      disabled={isPending}
-                      onClick={handleBuyElite}
-                      className="w-full rounded-xl border border-violet-500/40 bg-violet-500/15 py-3 text-sm font-black text-violet-200 transition-all hover:bg-violet-500/25 disabled:opacity-50"
-                      style={{ boxShadow: "0 4px 20px rgba(167,139,250,0.2)" }}
-                    >
-                      {isPending ? "Kaufe…" : (pass.customEliteBuyText || "💎 Elite kaufen")}
-                    </motion.button>
-                  </div>
-                )}
               </div>
             )}
 
             {/* Fully owned */}
-            {hasPremium && (!pass.eliteEnabled || hasElite) && (
+            {hasPremium && (
               <div
                 className="rounded-2xl border p-5"
                 style={{ borderColor: `${accent}30`, background: `${accent}08` }}
@@ -2636,9 +2564,9 @@ export function BattlePassShell({ pass: initialPass, userStatus: initialStatus }
                 ))}
                 <div className="mt-2 h-px bg-white/5" />
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-white/35">Free / Premium / Elite</span>
+                  <span className="text-white/35">Free / Premium</span>
                   <span className="font-bold text-white/40 tabular-nums">
-                    {freeTiers.length} / {premiumTiers.length} / {eliteTiers.length}
+                    {freeTiers.length} / {premiumTiers.length}
                   </span>
                 </div>
               </div>

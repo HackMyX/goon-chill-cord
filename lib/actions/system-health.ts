@@ -229,12 +229,6 @@ const COLUMN_CHECKS: Array<{
   { id: "col_plinko_glow",        category: "Plinko",             table: "plinko_config",       col: "glow_intensity",          detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS glow_intensity numeric DEFAULT 1.5;" },
   { id: "col_plinko_animspeed",   category: "Plinko",             table: "plinko_config",       col: "animation_speed",         detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS animation_speed numeric DEFAULT 1.0;" },
   { id: "col_plinko_autobet",     category: "Plinko",             table: "plinko_config",       col: "auto_bet_enabled",        detail: "ALTER TABLE plinko_config ADD COLUMN IF NOT EXISTS auto_bet_enabled boolean DEFAULT true;" },
-  // Battle Pass elite tier (2026-06-25)
-  { id: "col_bp_elitepricecr",    category: "Battle Pass",        table: "battle_passes",       col: "elite_price_cr",          detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS elite_price_cr integer NOT NULL DEFAULT 0;" },
-  { id: "col_bp_eliteenabled",    category: "Battle Pass",        table: "battle_passes",       col: "elite_enabled",           detail: "ALTER TABLE battle_passes ADD COLUMN IF NOT EXISTS elite_enabled boolean NOT NULL DEFAULT false;" },
-  { id: "col_bpt_iselite",        category: "Battle Pass",        table: "battle_pass_tiers",   col: "is_elite",                detail: "ALTER TABLE battle_pass_tiers ADD COLUMN IF NOT EXISTS is_elite boolean NOT NULL DEFAULT false;" },
-  { id: "col_ubp_haselite",       category: "Battle Pass",        table: "user_battle_passes",  col: "has_elite",               detail: "ALTER TABLE user_battle_passes ADD COLUMN IF NOT EXISTS has_elite boolean NOT NULL DEFAULT false;" },
-  { id: "col_ubp_elitepurchased", category: "Battle Pass",        table: "user_battle_passes",  col: "elite_purchased_at",      detail: "ALTER TABLE user_battle_passes ADD COLUMN IF NOT EXISTS elite_purchased_at timestamptz;" },
   // Name Styles — new feature columns on profiles
   { id: "col_profiles_active_name_style", category: "Name Styles", table: "profiles", col: "active_name_style_key", detail: "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS active_name_style_key text;" },
   { id: "col_profiles_warning_strikes",   category: "Name Styles", table: "profiles", col: "warning_strikes",       detail: "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS warning_strikes integer NOT NULL DEFAULT 0;" },

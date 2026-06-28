@@ -17,10 +17,9 @@ import { RARITY_ORDER, RARITY_LABELS } from "@/lib/cases";
 import type { BattlePassTier, BpRewardType } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
 
-type Track = "free" | "premium" | "elite";
+type Track = "free" | "premium";
 
 const TRACK_META: Record<Track, { label: string; short: string; color: string; glow: string; emoji: string }> = {
-  elite:   { label: "Elite",     short: "ELITE", color: "#f472b6", glow: "rgba(244,114,182,0.45)", emoji: "💎" },
   premium: { label: "Premium",   short: "PRO",   color: "#fbbf24", glow: "rgba(251,191,36,0.45)",  emoji: "👑" },
   free:    { label: "Kostenlos", short: "FREE",  color: "#a78bfa", glow: "rgba(167,139,250,0.45)", emoji: "✦" },
 };
@@ -34,7 +33,7 @@ const RARITY_HEX: Record<string, string> = {
 };
 
 function trackOf(t: BattlePassTier): Track {
-  return t.isElite ? "elite" : t.isPremium ? "premium" : "free";
+  return t.isPremium ? "premium" : "free";
 }
 
 function rewardSummary(t: BattlePassTier): string {
@@ -90,7 +89,6 @@ function buildInput(p: PoolItem, tierNumber: number, track: Track): AdminTierIte
     tierNumber,
     name: p.label,
     isPremium: track === "premium",
-    isElite: track === "elite",
     rewardType: p.rewardType,
     rewardCredits: p.rewardCredits ?? null,
     rewardItemId: p.rewardItemId ?? null,
@@ -123,7 +121,6 @@ export function BpRewardStudio({
   passId,
   tiers,
   tierCount,
-  eliteEnabled,
   onEditTier,
   onOpenSmartGen,
   onChanged,
@@ -131,7 +128,6 @@ export function BpRewardStudio({
   passId: string;
   tiers: BattlePassTier[];
   tierCount: number;
-  eliteEnabled: boolean;
   onEditTier: (tierNumber: number, existing: BattlePassTier | null, track?: Track) => void;
   onOpenSmartGen: () => void;
   onChanged: () => void | Promise<void>;
@@ -154,13 +150,13 @@ export function BpRewardStudio({
   const [badges, setBadges] = useState<{ key: string; label: string; icon: string; color: string }[]>([]);
 
   const tierMap = useMemo(() => new Map(tiers.map((t) => [t.tierNumber, t])), [tiers]);
-  const lanes: Track[] = eliteEnabled ? ["elite", "premium", "free"] : ["premium", "free"];
+  const lanes: Track[] = ["premium", "free"];
   const tierNumbers = useMemo(
     () => Array.from({ length: Math.max(1, Math.min(50, tierCount)) }, (_, i) => i + 1),
     [tierCount],
   );
   const counts = useMemo(() => {
-    const c = { free: 0, premium: 0, elite: 0, total: tiers.length };
+    const c = { free: 0, premium: 0, total: tiers.length };
     for (const t of tiers) c[trackOf(t)]++;
     return c;
   }, [tiers]);
@@ -247,7 +243,7 @@ export function BpRewardStudio({
     if (!raw) return null;
     const [track, tierStr] = raw.split(":");
     const tier = Number(tierStr);
-    if (!tier || (track !== "free" && track !== "premium" && track !== "elite")) return null;
+    if (!tier || (track !== "free" && track !== "premium")) return null;
     return { tier, track };
   }
 
@@ -371,7 +367,7 @@ export function BpRewardStudio({
         </div>
         <div className="ml-auto flex items-center gap-2">
           <span className="hidden text-[11px] text-zinc-500 sm:inline">
-            {counts.total}/{tierNumbers.length} belegt · {counts.free}·F {counts.premium}·P{eliteEnabled ? ` ${counts.elite}·E` : ""}
+            {counts.total}/{tierNumbers.length} belegt · {counts.free}·F {counts.premium}·P
           </span>
           <button
             onClick={onOpenSmartGen}

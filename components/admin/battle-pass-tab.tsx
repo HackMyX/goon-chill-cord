@@ -8,7 +8,7 @@ import {
   Gift, Coins, Trophy, Package, Sparkles, TrendingUp, Users,
   ShoppingBag, Crown, Palette, Search, BarChart2, Calendar, Wand2, Pencil,
   Target, RotateCcw, RefreshCw, CheckCircle2, Lock,
-  BookOpen, Gem, ChevronRight,
+  BookOpen, ChevronRight,
 } from "lucide-react";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { BpTimelineEditor } from "@/components/admin/bp-timeline-editor";
@@ -254,24 +254,12 @@ function AutoFillModal({
     });
   }
 
-  // Normalize track ratio: freeRatio + eliteRatio + premiumRatio = 100
-  // premiumRatio is derived: 100 - freeRatio - eliteRatio
-  function setTrackRatio(key: "freeRatio" | "eliteRatio", value: number) {
-    setConfig((prev) => {
-      const clamped = Math.max(0, Math.min(100, value));
-      if (key === "freeRatio") {
-        const eliteMax = 100 - clamped;
-        const newElite = Math.min(prev.eliteRatio, eliteMax);
-        return { ...prev, freeRatio: clamped, eliteRatio: newElite };
-      } else {
-        const eliteMax = 100 - prev.freeRatio;
-        const newElite = Math.min(clamped, eliteMax);
-        return { ...prev, eliteRatio: newElite };
-      }
-    });
+  // Two tracks: freeRatio + premiumRatio = 100. premiumRatio is derived.
+  function setTrackRatio(key: "freeRatio", value: number) {
+    setConfig((prev) => ({ ...prev, [key]: Math.max(0, Math.min(100, value)) }));
   }
 
-  const premiumRatio = Math.max(0, 100 - config.freeRatio - config.eliteRatio);
+  const premiumRatio = Math.max(0, 100 - config.freeRatio);
   const rewardSum = config.rewardMixCredits + config.rewardMixRandomItem + config.rewardMixXpBoost + config.rewardMixBadge;
 
   async function handleAutoFill() {
@@ -393,7 +381,7 @@ function AutoFillModal({
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-semibold text-zinc-400">Track-Verteilung</p>
               <span className="text-[10px] text-zinc-600">
-                Kostenlos {config.freeRatio}% · Premium {premiumRatio}% · Elite {config.eliteRatio}%
+                Kostenlos {config.freeRatio}% · Premium {premiumRatio}%
               </span>
             </div>
             <div className="space-y-2">
@@ -415,18 +403,6 @@ function AutoFillModal({
                   {premiumRatio}% (auto)
                 </div>
                 <span className="w-8 shrink-0 text-right text-[11px] text-zinc-300">{premiumRatio}%</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-16 shrink-0 text-[11px] text-violet-300">💎 Elite</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100 - config.freeRatio}
-                  value={config.eliteRatio}
-                  onChange={(e) => setTrackRatio("eliteRatio", Number(e.target.value))}
-                  className="flex-1 accent-violet-400"
-                />
-                <span className="w-8 shrink-0 text-right text-[11px] text-zinc-300">{config.eliteRatio}%</span>
               </div>
             </div>
           </div>
@@ -560,11 +536,6 @@ function TierPreview({ pass }: { pass: BattlePass }) {
           <span className="rounded-full border px-2 py-0.5 text-[10px] font-bold" style={{ borderColor: `${theme.accent}50`, color: theme.accent }}>
             {pass.priceCr.toLocaleString("de-DE")} CR
           </span>
-          {pass.eliteEnabled && (
-            <span className="rounded-full border border-violet-400/50 bg-violet-500/20 px-2 py-0.5 text-[10px] font-bold text-violet-300">
-              💎 {pass.elitePriceCr.toLocaleString("de-DE")} CR
-            </span>
-          )}
           {pass.spinChanceBoost > 0 && (
             <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
               +{(pass.spinChanceBoost * 100).toFixed(1)}% Spin
@@ -580,31 +551,26 @@ function TierPreview({ pass }: { pass: BattlePass }) {
         {Array.from({ length: pass.tierCount }, (_, i) => i + 1).map((n) => {
           const tier = tierMap.get(n);
           const isHighlight = tier?.highlightTier;
-          const isElite = tier?.isElite;
-          const isPremium = !isElite && tier?.isPremium;
+          const isPremium = tier?.isPremium;
           return (
             <div
               key={n}
               className={`shrink-0 flex flex-col items-center gap-0.5 rounded-lg border px-2 transition-all ${
                 isHighlight ? "py-3 scale-110" : "py-1.5"
               } ${
-                isElite
-                  ? "border-violet-400/40 bg-violet-500/10"
-                  : isPremium === false && tier
-                    ? "border-purple-400/40 bg-purple-500/10"
-                    : tier
-                      ? "border-amber-400/30 bg-amber-500/10"
-                      : "border-white/10 bg-white/[0.02]"
+                !tier
+                  ? "border-white/10 bg-white/[0.02]"
+                  : isPremium
+                    ? "border-amber-400/30 bg-amber-500/10"
+                    : "border-purple-400/40 bg-purple-500/10"
               }`}
               style={{ minWidth: isHighlight ? "56px" : "44px" }}
             >
               <span className="text-[9px] text-zinc-500">{n}</span>
               <span className={isHighlight ? "text-xl leading-none" : "text-base leading-none"}>{tier?.icon ?? "·"}</span>
               {tier && (
-                <span className={`text-[8px] font-bold ${
-                  isElite ? "text-violet-400" : isPremium ? "text-amber-400" : "text-purple-300"
-                }`}>
-                  {isElite ? "ELITE" : isPremium ? "PRO" : "FREE"}
+                <span className={`text-[8px] font-bold ${isPremium ? "text-amber-400" : "text-purple-300"}`}>
+                  {isPremium ? "PRO" : "FREE"}
                 </span>
               )}
             </div>
@@ -619,9 +585,6 @@ function TierPreview({ pass }: { pass: BattlePass }) {
           <span className="inline-block h-2 w-2 rounded border border-amber-400/30 bg-amber-500/10" />Premium
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded border border-violet-400/40 bg-violet-500/10" />Elite
-        </span>
-        <span className="flex items-center gap-1">
           <span className="inline-block h-2 w-2 rounded border border-white/10 bg-white/[0.02]" />Leer
         </span>
       </div>
@@ -631,7 +594,7 @@ function TierPreview({ pass }: { pass: BattlePass }) {
 
 // ── Tier editor modal ─────────────────────────────────────────────────────────
 
-type TierTrack = "free" | "premium" | "elite";
+type TierTrack = "free" | "premium";
 
 function TierEditorModal({
   passId,
@@ -649,11 +612,9 @@ function TierEditorModal({
   onSaved: () => void;
 }) {
   // Derive track from existing tier; for a NEW tier fall back to the lane that was clicked.
-  const initialTrack: TierTrack = existing?.isElite
-    ? "elite"
-    : existing?.isPremium
-      ? "premium"
-      : (existing ? "free" : (initialTrackProp ?? "free"));
+  const initialTrack: TierTrack = existing?.isPremium
+    ? "premium"
+    : (existing ? "free" : (initialTrackProp ?? "free"));
 
   const [name, setName] = useState(existing?.name ?? `Level ${tierNumber}`);
   const [icon, setIcon] = useState(existing?.icon ?? "🎁");
@@ -683,9 +644,8 @@ function TierEditorModal({
   const [error, setError] = useState<string | null>(null);
   const sound = useSoundManager();
 
-  // Derive isPremium and isElite from track
+  // Derive isPremium from track
   const isPremium = track === "premium";
-  const isElite = track === "elite";
 
   // Fähigkeiten LIVE aus ability_definitions (synct automatisch mit dem Fähigkeiten-Admin)
   useEffect(() => {
@@ -709,7 +669,6 @@ function TierEditorModal({
       tierNumber,
       name: name.trim() || `Level ${tierNumber}`,
       isPremium,
-      isElite,
       rewardType,
       rewardCredits: rewardType === "credits" ? rewardCredits : null,
       rewardItemId: rewardType === "item" ? rewardItemId : null,
@@ -799,7 +758,7 @@ function TierEditorModal({
               />
             </label>
 
-            {/* Free / Premium / Elite 3-button toggle */}
+            {/* Free / Premium 2-button toggle */}
             <div className="flex gap-1.5 sm:gap-2">
               <button
                 onClick={() => setTrack("free")}
@@ -820,16 +779,6 @@ function TierEditorModal({
                 }`}
               >
                 👑 Premium
-              </button>
-              <button
-                onClick={() => setTrack("elite")}
-                className={`flex-1 rounded-lg border px-2 py-2.5 text-[10px] sm:text-xs font-semibold transition-colors min-h-[44px] ${
-                  track === "elite"
-                    ? "border-violet-400/60 bg-violet-500/20 text-violet-200"
-                    : "border-white/10 text-zinc-400 hover:border-white/30"
-                }`}
-              >
-                💎 Elite
               </button>
             </div>
 
@@ -1540,8 +1489,6 @@ function PassEditor({
   const [seasonLabel, setSeasonLabel] = useState(pass.seasonLabel);
   const [description, setDescription] = useState(pass.description ?? "");
   const [priceCr, setPriceCr] = useState(pass.priceCr);
-  const [elitePriceCr, setElitePriceCr] = useState(pass.elitePriceCr);
-  const [eliteEnabled, setEliteEnabled] = useState(pass.eliteEnabled);
   const [enabled, setEnabled] = useState(pass.enabled);
   const [startDate, setStartDate] = useState(pass.startDate ?? "");
   const [endDate, setEndDate] = useState(pass.endDate ?? "");
@@ -1558,7 +1505,6 @@ function PassEditor({
   const [shopBannerSize, setShopBannerSize] = useState<BpShopBannerSize>(pass.shopBannerSize ?? "card");
   const [passIcon, setPassIcon] = useState(pass.passIcon ?? "🏆");
   const [customBuyText, setCustomBuyText] = useState(pass.customBuyText ?? "");
-  const [customEliteBuyText, setCustomEliteBuyText] = useState(pass.customEliteBuyText ?? "");
   const [showCountdown, setShowCountdown] = useState(pass.showCountdown ?? true);
   const [showTierCountInShop, setShowTierCountInShop] = useState(pass.showTierCountInShop ?? true);
   const [highlightColor, setHighlightColor] = useState(pass.highlightColor ?? "");
@@ -1598,8 +1544,6 @@ function PassEditor({
       seasonLabel: seasonLabel.trim(),
       description,
       priceCr,
-      elitePriceCr,
-      eliteEnabled,
       enabled,
       startDate: startDate || null,
       endDate: endDate || null,
@@ -1616,7 +1560,6 @@ function PassEditor({
       shopBannerSize,
       passIcon: passIcon.trim() || "🏆",
       customBuyText: customBuyText.trim(),
-      customEliteBuyText: customEliteBuyText.trim(),
       showCountdown,
       showTierCountInShop,
       highlightColor: highlightColor.trim(),
@@ -2085,51 +2028,6 @@ function PassEditor({
         </div>
       </label>
 
-      {/* Elite section */}
-      <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-violet-300 flex items-center gap-1.5">
-            💎 Elite-Track
-          </p>
-          <button
-            onClick={() => setEliteEnabled((v) => !v)}
-            className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-              eliteEnabled
-                ? "border-violet-400/60 bg-violet-500/20 text-violet-200"
-                : "border-white/10 text-zinc-500 hover:border-white/30 hover:text-zinc-300"
-            }`}
-          >
-            {eliteEnabled ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
-            Elite-Track {eliteEnabled ? "aktiviert" : "deaktiviert"}
-          </button>
-        </div>
-        <p className="rounded-lg border border-violet-500/15 bg-violet-500/[0.05] px-3 py-2 text-[11px] leading-relaxed text-violet-200/80">
-          <b className="text-violet-200">Was ist der Elite-Track?</b> Ein <b>dritter, separat kaufbarer Premium-Track</b> über
-          Free und Premium. Spieler zahlen den Elite-Preis <i>zusätzlich</i> und schalten damit alle als 💎 Elite markierten
-          Level mit den wertvollsten/exklusivsten Belohnungen frei. Lässt du ihn aus, gibt es nur <b>Free + Premium</b>
-          (Level lassen sich dann nicht als Elite markieren).
-        </p>
-        <div className={eliteEnabled ? "" : "pointer-events-none opacity-40"}>
-          <label className="flex flex-col gap-1 text-xs text-zinc-400">
-            Elite-Preis (CR)
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                value={elitePriceCr}
-                onChange={(e) => setElitePriceCr(Math.max(0, Number(e.target.value) || 0))}
-                min={0}
-                disabled={!eliteEnabled}
-                className="w-40 rounded-lg border border-violet-400/20 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-400/60 disabled:opacity-50"
-              />
-              <span className="text-xs text-violet-300">{elitePriceCr.toLocaleString("de-DE")} CR</span>
-            </div>
-          </label>
-        </div>
-        {!eliteEnabled && (
-          <p className="text-[10px] text-zinc-600">Aktiviere den Elite-Track, um einen dritten Level-Track mit separatem Preis anzubieten.</p>
-        )}
-      </div>
-
       {/* Combinability (incompatible passes) */}
       {(() => {
         const otherPasses = passes.filter((p) => p.id !== pass.id);
@@ -2289,15 +2187,6 @@ function PassEditor({
               className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-400/60"
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs text-zinc-400">
-            Benutzerdefinierter Kauf-Text (Elite)
-            <input
-              value={customEliteBuyText}
-              onChange={(e) => setCustomEliteBuyText(e.target.value)}
-              placeholder="💎 Elite kaufen"
-              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-400/60"
-            />
-          </label>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -2386,7 +2275,6 @@ function PassEditor({
             pass={{
               ...pass,
               name, seasonLabel, bannerColor, priceCr,
-              elitePriceCr, eliteEnabled,
               tierCount, spinChanceBoost: spinBoost,
               theme, accentColor, showInShop,
             }}
@@ -2413,7 +2301,6 @@ function PassEditor({
             passId={pass.id}
             tiers={pass.tiers}
             tierCount={tierCount}
-            eliteEnabled={eliteEnabled}
             onEditTier={(num, existing, track) => setEditingTier({ num, existing, track })}
             onOpenSmartGen={() => setShowAutoFill(true)}
             onChanged={async () => { await onSaved(); router.refresh(); }}
@@ -2425,8 +2312,7 @@ function PassEditor({
           {Array.from({ length: tierCount }, (_, i) => i + 1).map((n) => {
             const tier = tierMap.get(n);
             const isHighlight = tier?.highlightTier;
-            const isEliteTier = tier?.isElite;
-            const isPremiumTier = !isEliteTier && tier?.isPremium;
+            const isPremiumTier = tier?.isPremium;
             return (
               <button
                 key={n}
@@ -2435,23 +2321,19 @@ function PassEditor({
                 className={`group relative flex flex-col items-center gap-0.5 rounded-lg border transition-all hover:scale-105 ${
                   isHighlight ? "px-3 py-3 ring-1 ring-yellow-400/40" : "px-2 py-2"
                 } ${
-                  isEliteTier
-                    ? "border-violet-400/40 bg-violet-500/10 hover:border-violet-400/70"
-                    : isPremiumTier === false && tier
-                      ? "border-purple-400/40 bg-purple-500/10 hover:border-purple-400/70"
-                      : tier
-                        ? "border-amber-400/30 bg-amber-500/10 hover:border-amber-400/60"
-                        : "border-white/10 bg-white/[0.02] hover:border-white/30"
+                  !tier
+                    ? "border-white/10 bg-white/[0.02] hover:border-white/30"
+                    : isPremiumTier
+                      ? "border-amber-400/30 bg-amber-500/10 hover:border-amber-400/60"
+                      : "border-purple-400/40 bg-purple-500/10 hover:border-purple-400/70"
                 }`}
                 style={{ minWidth: "44px" }}
               >
                 <span className="text-[9px] text-zinc-500">{n}</span>
                 <span className={isHighlight ? "text-xl leading-none" : "text-base leading-none"}>{tier?.icon ?? "+"}</span>
                 {tier && (
-                  <span className={`text-[8px] font-bold ${
-                    isEliteTier ? "text-violet-400" : isPremiumTier ? "text-amber-400" : "text-purple-300"
-                  }`}>
-                    {isEliteTier ? "ELITE" : isPremiumTier ? "PRO" : "FREE"}
+                  <span className={`text-[8px] font-bold ${isPremiumTier ? "text-amber-400" : "text-purple-300"}`}>
+                    {isPremiumTier ? "PRO" : "FREE"}
                   </span>
                 )}
                 {tier && (
@@ -2527,8 +2409,6 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
       seasonLabel,
       description: "",
       priceCr,
-      elitePriceCr: 0,
-      eliteEnabled: false,
       enabled: true,
       startDate: null,
       endDate: null,
@@ -2545,7 +2425,6 @@ function CreatePassForm({ onCreated }: { onCreated: () => void }) {
       shopBannerSize: "card",
       passIcon: "🏆",
       customBuyText: "",
-      customEliteBuyText: "",
       showCountdown: true,
       showTierCountInShop: true,
       highlightColor: "",
@@ -2626,8 +2505,6 @@ CREATE TABLE IF NOT EXISTS battle_passes (
   season_label text NOT NULL DEFAULT 'Pass',
   description text,
   price_cr integer NOT NULL DEFAULT 2000,
-  elite_price_cr integer NOT NULL DEFAULT 0,
-  elite_enabled boolean NOT NULL DEFAULT false,
   enabled boolean NOT NULL DEFAULT true,
   is_active boolean NOT NULL DEFAULT false,
   start_date date, end_date date,
@@ -2649,7 +2526,6 @@ CREATE TABLE IF NOT EXISTS battle_pass_tiers (
   tier_number integer NOT NULL,
   name text NOT NULL DEFAULT 'Belohnung',
   is_premium boolean NOT NULL DEFAULT true,
-  is_elite boolean NOT NULL DEFAULT false,
   reward_type text NOT NULL DEFAULT 'credits',
   reward_credits integer DEFAULT 100,
   reward_item_id text, reward_badge_key text,
@@ -2667,7 +2543,6 @@ CREATE TABLE IF NOT EXISTS user_battle_passes (
   user_id uuid NOT NULL,
   pass_id text NOT NULL REFERENCES battle_passes(id) ON DELETE CASCADE,
   has_premium boolean NOT NULL DEFAULT false,
-  has_elite boolean NOT NULL DEFAULT false,
   progress_days integer NOT NULL DEFAULT 0,
   purchased_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -2762,8 +2637,7 @@ function BpGuide() {
 
   const TRACKS = [
     { icon: Gift, label: "FREE", hex: "#a855f7", desc: "Jeder Spieler. Schaltet sich allein durch Fortschritt frei (Login-Tage oder BP-XP). Kostenlos." },
-    { icon: Crown, label: "PREMIUM", hex: "#f59e0b", desc: "Pass-Kauf (Preis CR). Schaltet ZUSÄTZLICH alle Premium-Levels frei + Spin-Bonus." },
-    { icon: Gem, label: "ELITE", hex: "#a78bfa", desc: "Elite-Upgrade (Elite-Preis CR). Beinhaltet Premium + exklusive Elite-Levels. Top-Track." },
+    { icon: Crown, label: "PREMIUM", hex: "#f59e0b", desc: "Pass-Kauf (Preis CR). Schaltet ZUSÄTZLICH alle Premium-Levels frei + Spin-Bonus. Der bezahlte Top-Track." },
   ];
 
   return (
@@ -2775,7 +2649,7 @@ function BpGuide() {
         </div>
         <div className="flex-1">
           <p className="text-sm font-black tracking-tight text-zinc-50">So funktioniert der Battle Pass</p>
-          <p className="text-[11px] text-zinc-400">Tracks, Levels, Belohnungen, Economy-Generator &amp; Elite — alles erklärt.</p>
+          <p className="text-[11px] text-zinc-400">Tracks, Levels, Belohnungen &amp; Economy-Generator — alles erklärt.</p>
         </div>
         <ChevronDown className={`h-5 w-5 flex-shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -2784,7 +2658,7 @@ function BpGuide() {
         <div className="space-y-5 border-t border-white/8 px-4 py-4">
           {/* Track hierarchy */}
           <div>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-purple-300">Die 3 Tracks — FREE ⊂ PREMIUM ⊂ ELITE</p>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-purple-300">Die 2 Tracks — FREE &amp; PREMIUM</p>
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
               {TRACKS.map((t, i, arr) => (
                 <div key={t.label} className="flex flex-1 items-center gap-2">
@@ -2800,7 +2674,7 @@ function BpGuide() {
             </div>
             <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-400/20 bg-amber-500/[0.04] px-3 py-2 text-[11px] text-amber-200/80">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-              <span><strong>Elite = Superset:</strong> Wer Elite kauft, bekommt automatisch auch den Premium-Track. Ein reiner Free-Spieler holt nur Free-Levels, ein Premium-Käufer Free+Premium, ein Elite-Käufer ALLES. Jedes Level gehört genau EINEM Track.</span>
+              <span><strong>Premium = Superset:</strong> Ein reiner Free-Spieler holt nur die Free-Levels, ein Premium-Käufer bekommt Free + Premium. Jedes Level gehört genau EINEM Track.</span>
             </p>
           </div>
 
@@ -2809,13 +2683,13 @@ function BpGuide() {
             <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-purple-300">In 4 Schritten zur fertigen Season</p>
             <div className="grid gap-2 sm:grid-cols-2">
               <BpGuideStep n={1} icon={Calendar} title="Pass erstellen" accent="#a855f7">
-                „Neuer Pass" → Name, Season-Label, <strong className="text-zinc-300">Preis</strong> (Premium) und <strong className="text-zinc-300">Elite-Preis</strong>, Anzahl Levels, Fortschrittsart (Login-Tage oder BP-XP).
+                „Neuer Pass" → Name, Season-Label, <strong className="text-zinc-300">Preis</strong> (Premium), Anzahl Levels, Fortschrittsart (Login-Tage oder BP-XP).
               </BpGuideStep>
               <BpGuideStep n={2} icon={Users} title="Track-Verteilung" accent="#f59e0b">
-                Free-/Elite-Anteil setzen (Premium = Rest). Reward-Mix bestimmt, wie viele Tiers Credits/Items/XP/Badge werden (Summe 100 %).
+                Free-Anteil setzen (Premium = Rest). Reward-Mix bestimmt, wie viele Tiers Credits/Items/XP/Badge werden (Summe 100 %).
               </BpGuideStep>
               <BpGuideStep n={3} icon={Wand2} title="Auto-Fill (Economy-Gehirn)" accent="#34d399">
-                Generiert alle Levels mit <strong className="text-zinc-300">track-gerechter</strong> Seltenheit: Free → normal/selten, Premium → bis mythisch, Elite → bis ultra. Meilensteine = Track-Bestwert. Nie Ultra im Free-Track.
+                Generiert alle Levels mit <strong className="text-zinc-300">track-gerechter</strong> Seltenheit: Free → normal/selten, Premium → bis ultra. Meilensteine = Track-Bestwert. Nie Ultra im Free-Track.
               </BpGuideStep>
               <BpGuideStep n={4} icon={Pencil} title="Feinschliff & Aktiv" accent="#e879f9">
                 Einzelne Tiers überschreiben (3D/Icon, Item pinnen, Credits, Badge…). Dann Pass <strong className="text-zinc-300">aktiv</strong> + im Shop sichtbar schalten.
@@ -2829,7 +2703,7 @@ function BpGuide() {
               <BarChart2 className="h-4 w-4" /> Economy-Regeln (automatisch erzwungen)
             </p>
             <ul className="space-y-1 text-[11.5px] leading-relaxed text-zinc-300">
-              <li><strong>Rarity ist pro Track gedeckelt:</strong> Free max <span className="text-purple-300">selten</span>, Premium max <span className="text-amber-300">mythisch</span>, Elite bis <span className="text-fuchsia-300">ultra</span>. Innerhalb des Tracks steigt der Wert mit dem Level.</li>
+              <li><strong>Rarity ist pro Track gedeckelt:</strong> Free max <span className="text-purple-300">selten</span>, Premium bis <span className="text-fuchsia-300">ultra</span>. Innerhalb des Tracks steigt der Wert mit dem Level.</li>
               <li><strong>Meilenstein-Tiers</strong> (alle N) bekommen den besten Wert IHRES Tracks (nicht global ultra) + verdoppelte Credits.</li>
               <li><strong>Items werden konkret ausgewürfelt</strong> (echtes 3D-Modell + Name in der Kachel); gibt es keine passende Rarität, fällt der Slot auf Credits zurück — nie auf ein zu wertvolles Item.</li>
             </ul>
@@ -2879,11 +2753,6 @@ export function BattlePassTab({ initialPasses, migrationNeeded = false }: { init
             <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
               {activePass.seasonLabel}
             </span>
-            {activePass.eliteEnabled && (
-              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-bold text-violet-300">
-                💎 Elite
-              </span>
-            )}
             {activePass.showInShop && (
               <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-300 flex items-center gap-1">
                 <ShoppingBag className="h-2.5 w-2.5" /> Shop
@@ -2921,11 +2790,6 @@ export function BattlePassTab({ initialPasses, migrationNeeded = false }: { init
                   <span className="rounded-full bg-purple-500/15 px-2 py-0.5 text-[10px] font-bold text-purple-300">
                     {pass.priceCr.toLocaleString("de-DE")} CR
                   </span>
-                  {pass.eliteEnabled && (
-                    <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-bold text-violet-300">
-                      💎 {pass.elitePriceCr.toLocaleString("de-DE")} CR
-                    </span>
-                  )}
                   <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">
                     {pass.tiers.length}/{pass.tierCount} Levels
                   </span>

@@ -582,11 +582,6 @@ function BpBannerCard({ bp, size }: { bp: BattlePass; size: "card" | "banner" | 
                   {bp.tierCount} Tiers
                 </span>
               )}
-              {bp.eliteEnabled && (
-                <span className="rounded-full border border-violet-400/40 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-300">
-                  💎 Elite {bp.elitePriceCr.toLocaleString("de-DE")} CR
-                </span>
-              )}
             </div>
           </div>
           <div

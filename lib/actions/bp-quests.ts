@@ -191,7 +191,7 @@ export async function incrementBpQuestProgress(
 
         const currentXp = (ubpRow?.bp_xp as number | null) ?? 0;
 
-        // CRITICAL: never voll-upserten — das würde has_premium/has_elite/progress_days
+        // CRITICAL: never voll-upserten — das würde has_premium/progress_days
         // eines bestehenden (ggf. bezahlten) Pass-Rows auf die Defaults zurücksetzen.
         // Nur bp_xp anfassen; existierenden Row updaten, sonst frisch anlegen.
         if (ubpRow) {
@@ -209,7 +209,6 @@ export async function incrementBpQuestProgress(
               bp_xp: bpXpReward,
               progress_days: 0,
               has_premium: false,
-              has_elite: false,
             });
         }
       }
