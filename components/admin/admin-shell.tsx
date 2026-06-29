@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Volume2, Eye, Settings2, Music, ListChecks, SwatchBook, Gift, Link2 } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Volume2, Eye, Settings2, Music, ListChecks, SwatchBook, Gift, Link2, LayoutGrid } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CasesAdminTab } from "@/components/admin/case-group-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -36,6 +36,7 @@ import { EconomySynergyEditor } from "@/components/admin/economy-synergy-editor"
 import { SoundConfigEditor } from "@/components/admin/sound-config-editor";
 import { MusicConfigEditor } from "@/components/admin/music-config-editor";
 import { FeedbackConfigEditor } from "@/components/admin/feedback-config-editor";
+import { ShowcaseTab } from "@/components/admin/showcase-tab";
 import { ThemeConfigEditor } from "@/components/admin/theme-config-editor";
 import { PreviewConfigTab } from "@/components/admin/preview-config-tab";
 import { DailyQuestsTab } from "@/components/admin/daily-quests-tab";
@@ -173,7 +174,7 @@ interface AdminShellProps {
   fineConfig: FineConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "givables" | "sounds" | "music" | "feedback" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy" | "friends";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "givables" | "sounds" | "music" | "feedback" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy" | "friends" | "showcase";
 
 const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string; anchor?: string }[] = [
   { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
@@ -203,6 +204,7 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Spiel-Limit-Anzeige", tab: "feedback", keywords: ["limit", "limitanzeige", "limit meter", "meter", "restanzahl", "verbleibend", "übrig", "balken", "segmente", "ring", "plinko bälle", "flips", "spiele heute", "fortschrittsbalken", "anzeige", "schwelle", "pulsieren"], description: "Die animierte Restanzahl-Anzeige der Spiele (Plinko/Snake/DON): Stil, Farben, Schwellen, Animation, Pulsieren" },
   { label: "Version & Deployment", tab: "debug", keywords: ["version", "deploy", "deployment", "vercel", "build", "commit", "release", "live", "geladen", "deployt", "neue version", "update", "stand", "git"], description: "Welcher Vercel-Deploy läuft, wann gebaut/deployt wurde und wann die Version geladen wurde — im Debug-Tab" },
   { label: "Debug Log & Systemstatus", tab: "debug", keywords: ["debug", "log", "fehler", "error", "systemstatus", "health", "diagnose", "logs", "aktivität"], description: "Server-Debug-Logs, System-Health-Check und Versions-/Deploy-Status" },
+  { label: "Vorschau-Galerie", tab: "showcase", keywords: ["vorschau", "galerie", "showcase", "test", "varianten", "variationen", "alles ansehen", "übersicht", "3d", "modelle", "karten", "name-styles", "seltenheit", "preview", "gallery"], description: "Alles in allen Varianten auf einen Blick (3D-Belohnungen, Bonus-/Fähigkeits-Karten, Name-Styles), max. 20 pro Seite" },
   { label: "Theming / Designs", tab: "theme", keywords: ["theme", "design", "farbe", "color", "palette", "skin", "darkmode", "neon", "cyber", "matrix", "vaporwave", "look", "stil", "akzentfarbe"], description: "Seitenweites Gesamt-Design wählen (Farben, Glow), Live-Vorschau" },
   { label: "Preview-Engine", tab: "preview_config", keywords: ["preview", "vorschau", "3d", "rotation", "zoom", "partikel", "glow", "badge", "item", "namestyle"], description: "Vorschau-Engine Konfiguration für Items, Badges, Name-Styles" },
   { label: "Name-Styles", tab: "namestyles", keywords: ["namestyle", "name", "animation", "shimmer", "rainbow", "glitch"], description: "Name-Stil Katalog und Shop" },
@@ -263,6 +265,7 @@ const TABS = ([
   { id: "sounds",         label: "Sound Manager",        icon: Volume2 },
   { id: "music",          label: "Hintergrundmusik",     icon: Music },
   { id: "feedback",       label: "Belohnungs-Feedback",  icon: Sparkles },
+  { id: "showcase",       label: "Vorschau-Galerie",     icon: LayoutGrid },
   { id: "theme",          label: "Theming / Designs",    icon: SwatchBook },
   { id: "homepage_chat",  label: "Startseite Chat",      icon: MessageSquare },
   { id: "surveys",        label: "Umfragen",             icon: BarChart3 },
@@ -305,6 +308,7 @@ const TAB_DESC: Record<Tab, string> = {
   sounds: "Sound-Events und Lautstärken.",
   music: "Hintergrundmusik pro Seite, Track-Bibliothek, Fades.",
   feedback: "Belohnungs-Feedback (XP, Level-Up, Quests, Battle-Pass): Farbe, Animation, Sound, Konfetti — pro Event.",
+  showcase: "Vorschau-Galerie: ALLES in allen Varianten auf einen Blick (3D-Belohnungen, Karten, Name-Styles) — max. 20 pro Seite.",
   theme: "Gesamt-Design der Seite (Farben, Glow, Presets) mit Live-Vorschau.",
   preview_config: "3D-Vorschau-Engine: Rotation, Zoom, Partikel, Glow pro Subjekt.",
   fine_config: "Feingranulare Werte: Nametags, Multiplayer-Sync, Hit-Effekte, Chat-Polling.",
@@ -318,7 +322,7 @@ const TAB_DESC: Record<Tab, string> = {
 const TAB_GROUPS: { title: string; icon: typeof Coins; tabs: Tab[] }[] = [
   { title: "Spiele & Welt", icon: Gamepad2, tabs: ["games", "monsters", "pets", "balance"] },
   { title: "Wirtschaft", icon: Coins, tabs: ["economy", "shop", "items"] },
-  { title: "Belohnungen & Fortschritt", icon: Sparkles, tabs: ["battlepass", "daily_quests", "streak", "level_xp", "synergy", "givables", "feedback"] },
+  { title: "Belohnungen & Fortschritt", icon: Sparkles, tabs: ["battlepass", "daily_quests", "streak", "level_xp", "synergy", "givables", "feedback", "showcase"] },
   { title: "Kosmetik", icon: SwatchBook, tabs: ["badges", "namestyles", "preview_config"] },
   { title: "Community & Inhalte", icon: MessageCircle, tabs: ["chat", "homepage_chat", "surveys", "patchnotes", "users", "friends"] },
   { title: "Design & Medien", icon: Palette, tabs: ["branding", "theme", "sounds", "music"] },
@@ -766,6 +770,7 @@ export function AdminShell({
 
         {tab === "music" && <MusicConfigEditor />}
         {tab === "feedback" && <FeedbackConfigEditor />}
+        {tab === "showcase" && <ShowcaseTab />}
 
         {tab === "theme" && <ThemeConfigEditor />}
 

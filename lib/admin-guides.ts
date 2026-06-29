@@ -40,6 +40,26 @@ export function guideSearchText(c: AdminGuideContent): string {
 }
 
 export const TAB_GUIDES: Record<string, AdminGuideContent> = {
+  showcase: {
+    title: "So funktioniert die Vorschau-Galerie",
+    subtitle: "Alles in allen Varianten auf einen Blick — schnell prüfen, ob alles korrekt aussieht.",
+    steps: [
+      { title: "Kategorie wählen", text: "Belohnungen (3D), Bonus-Karten, Fähigkeits-Karten oder Name-Styles — oben umschalten." },
+      { title: "Durchblättern", text: "Es werden max. 20 Varianten gleichzeitig gezeigt (schont die Grafikkarte). Mit den Pfeilen blätterst du durch alle Kombinationen aus Typ × Seltenheit × Effekt." },
+      { title: "Prüfen", text: "Jede Variante wird exakt so gerendert wie im echten Spiel (gleiche 3D-Modelle/Karten) — so siehst du sofort, ob alles geil & korrekt ist." },
+    ],
+    howItWorks: { heading: "Echte Komponenten, eine geteilte 3D-Canvas", lines: [
+      "Die Galerie nutzt dieselben Komponenten wie Battle Pass, Garderobe & Dock — kein Sonder-Render, also 100% repräsentativ.",
+      "Alle sichtbaren 3D-Modelle teilen sich EINEN WebGL-Context; durch die 20er-Begrenzung bleibt es flüssig.",
+      "Nur zur Ansicht — hier wird nichts vergeben oder verändert.",
+    ] },
+    glossary: [
+      { term: "Variante", def: "Eine konkrete Kombination, z. B. 'Fähigkeit mine · episch' oder 'Bonus-Karte inferno · ultra'." },
+      { term: "Seltenheit", def: "normal · selten · episch · mythisch · ultra — beeinflusst Farbe, Aura & Glanz." },
+    ],
+    tip: "Wenn dir eine Variante nicht gefällt, sag mir Typ + Seltenheit — dann passe ich genau die an.",
+  },
+
   feedback: {
     title: "So funktioniert das Belohnungs-Feedback",
     subtitle: "Jedes Celebration-Popup der Seite an einem Ort — Farbe, Animation, Sound, Konfetti.",
