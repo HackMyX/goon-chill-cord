@@ -89,6 +89,7 @@ const USER_GROUPS: NotifGroup[] = [
       { type: "fb_bp_tier",         label: "Battle-Pass-Belohnung",      desc: "Feier, wenn du eine Battle-Pass-Stufe einlöst" },
       { type: "fb_reward",          label: "Sonstige Belohnungen",       desc: "Allgemeines Feedback bei weiteren Gewinnen" },
       { type: "fb_limit_meter",     label: "Spiel-Limit-Anzeige",        desc: "Die animierte „Restanzahl\"-Anzeige in Plinko, Snake & DON. Aus = nur schlichter Text." },
+      { type: "notif_toast",        label: "Benachrichtigungs-Toasts",   desc: "Animierter Live-Toast oben rechts bei neuen Benachrichtigungen (Trade, Shop, Freunde …)." },
     ],
   },
 ];

@@ -176,6 +176,13 @@ export function FeedbackConfigEditor() {
           </div>
           <Select<FeedbackPosition> value={form.position} options={FEEDBACK_POSITIONS} labels={POSITION_LABEL} onChange={(v) => setForm((f) => ({ ...f, position: v }))} />
         </div>
+        <div className="mt-3 flex items-center justify-between gap-4 border-t border-white/8 pt-3" title="Lässt bei jeder neuen Benachrichtigung (Trade, Auktion, Shop, Freund, Streak …) kurz einen animierten Toast oben rechts aufploppen. Nutzer können das in /account abschalten.">
+          <div>
+            <p className="text-sm font-bold text-zinc-100">Benachrichtigungs-Toasts</p>
+            <p className="text-xs text-zinc-500">Animierter Live-Toast bei neuen Benachrichtigungen (Trade, Shop, Freunde …).</p>
+          </div>
+          <Toggle checked={form.notificationToasts} onChange={(v) => setForm((f) => ({ ...f, notificationToasts: v }))} />
+        </div>
       </div>
 
       {/* ── Spiel-Limit-Anzeige (LimitMeter) ──────────────────────────────── */}

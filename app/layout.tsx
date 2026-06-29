@@ -23,6 +23,7 @@ import { SoundConfigLoader } from "@/components/layout/sound-config-loader";
 import { LevelUpPopup } from "@/components/layout/level-up-popup";
 import { XpGainToast } from "@/components/layout/xp-gain-toast";
 import { FeedbackHost } from "@/components/layout/feedback-host";
+import { NotificationToast } from "@/components/layout/notification-toast";
 import { PatchnotePopupLoader } from "@/components/layout/patchnote-popup-loader";
 import { GlobalBroadcast } from "@/components/global/global-broadcast";
 import { GenderGate } from "@/components/auth/gender-gate";
@@ -100,6 +101,7 @@ export default async function RootLayout({
         <LevelUpPopup />
         <XpGainToast />
         <FeedbackHost />
+        <NotificationToast />
         <GlobalBroadcast />
         <GenderGate />
         <SupportButton />

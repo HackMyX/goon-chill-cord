@@ -112,7 +112,12 @@ export interface FeedbackConfig {
   events: Record<FeedbackEventKey, FeedbackEventConfig>;
   /** Shared "remaining limit" meter used across the games. */
   limitMeter: LimitMeterConfig;
+  /** Pop an animated toast when a new notification arrives (trade, shop, friend …). */
+  notificationToasts: boolean;
 }
+
+/** The /account user pref key for live notification toasts. */
+export const NOTIF_TOAST_PREF_KEY = "notif_toast";
 
 /** Animation key → globals.css @keyframes name. */
 export const FEEDBACK_ANIM_KEYFRAME: Record<FeedbackAnimation, string> = {
@@ -170,6 +175,7 @@ export const DEFAULT_FEEDBACK_CONFIG: FeedbackConfig = {
     reward:          { enabled: true, style: "popup",    accent: "#facc15", animation: "rubber",     durationMs: 3400, sound: true, icon: "🎉", confetti: true,  intensity: "normal", particleType: "streamers", screenFlash: false },
   },
   limitMeter: DEFAULT_LIMIT_METER_CONFIG,
+  notificationToasts: true,
 };
 
 /** Merge a (possibly partial) stored config with defaults — safe per event. */
@@ -185,6 +191,7 @@ export function resolveFeedbackConfig(raw: Partial<FeedbackConfig> | null | unde
     position: raw.position ?? base.position,
     events,
     limitMeter: { ...base.limitMeter, ...(raw.limitMeter ?? {}) },
+    notificationToasts: raw.notificationToasts ?? base.notificationToasts,
   };
 }
 

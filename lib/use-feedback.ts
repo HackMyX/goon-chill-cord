@@ -5,7 +5,7 @@ import { getFeedbackConfig } from "@/lib/actions/feedback-config";
 import { getNotificationPrefs, type NotificationPrefs } from "@/lib/actions/account";
 import { useLiveConfig } from "@/lib/use-live-config";
 import {
-  DEFAULT_FEEDBACK_CONFIG, feedbackPrefKey, LIMIT_METER_PREF_KEY,
+  DEFAULT_FEEDBACK_CONFIG, feedbackPrefKey, LIMIT_METER_PREF_KEY, NOTIF_TOAST_PREF_KEY,
   FB_INTENSITY_PREF_KEY, FB_REDUCE_MOTION_PREF_KEY, applyPersonalFeedback,
   type FeedbackConfig, type FeedbackEventConfig, type FeedbackEventKey, type UserFeedbackIntensity,
 } from "@/lib/feedback-config";
@@ -51,5 +51,8 @@ export function useFeedbackSettings() {
     ? { ...config.limitMeter, animate: false, pulseWhenLow: false }
     : config.limitMeter;
 
-  return { config, allows, eventConfig, userIntensity, reduceMotion, limitMeter, limitMeterAllowed };
+  // Live notification toasts: admin master + user hasn't opted out.
+  const notificationToastsEnabled = config.notificationToasts && prefs[NOTIF_TOAST_PREF_KEY] !== false;
+
+  return { config, allows, eventConfig, userIntensity, reduceMotion, limitMeter, limitMeterAllowed, notificationToastsEnabled };
 }
