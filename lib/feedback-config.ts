@@ -21,8 +21,9 @@ export type FeedbackEventKey =
   | "bp_tier"
   | "reward";
 
-/** Visual intensity of a feedback event. */
-export type FeedbackStyle = "toast" | "popup" | "confetti";
+/** Visual intensity of a feedback event.
+ *  fullscreen = große Level-Up-artige Vollbild-Feier (Aura, Konfetti, Chips, Weiter-Button). */
+export type FeedbackStyle = "toast" | "popup" | "confetti" | "fullscreen";
 
 /** Entrance animation — maps to a keyframe in globals.css via FEEDBACK_ANIM_KEYFRAME. */
 export type FeedbackAnimation =
@@ -131,7 +132,7 @@ export const FEEDBACK_ANIM_KEYFRAME: Record<FeedbackAnimation, string> = {
 export const FEEDBACK_ANIMATIONS: FeedbackAnimation[] = [
   "pop", "slide-up", "slide-down", "zoom", "bounce", "flip", "fade", "glow", "drop", "rubber", "swing",
 ];
-export const FEEDBACK_STYLES: FeedbackStyle[] = ["toast", "popup", "confetti"];
+export const FEEDBACK_STYLES: FeedbackStyle[] = ["toast", "popup", "confetti", "fullscreen"];
 export const FEEDBACK_POSITIONS: FeedbackPosition[] = ["top", "top-right", "bottom", "bottom-right"];
 export const FEEDBACK_INTENSITIES: FeedbackIntensity[] = ["subtle", "normal", "epic"];
 export const FEEDBACK_PARTICLES: FeedbackParticle[] = ["confetti", "fireworks", "stars", "streamers"];
@@ -163,8 +164,8 @@ export const DEFAULT_FEEDBACK_CONFIG: FeedbackConfig = {
     xp_gain:         { enabled: true, style: "toast",    accent: "#34d399", animation: "slide-up",   durationMs: 2200, sound: true, icon: "✨", confetti: false, intensity: "subtle", particleType: "confetti",  screenFlash: false },
     level_up:        { enabled: true, style: "popup",    accent: "#a78bfa", animation: "pop",        durationMs: 3400, sound: true, icon: "⬆️", confetti: false, intensity: "normal", particleType: "stars",     screenFlash: true  },
     level_milestone: { enabled: true, style: "confetti", accent: "#fbbf24", animation: "zoom",       durationMs: 6000, sound: true, icon: "🏆", confetti: true,  intensity: "epic",   particleType: "fireworks", screenFlash: true  },
-    daily_quest:     { enabled: true, style: "popup",    accent: "#22d3ee", animation: "drop",       durationMs: 3200, sound: true, icon: "✅", confetti: true,  intensity: "normal", particleType: "confetti",  screenFlash: false },
-    bp_quest:        { enabled: true, style: "popup",    accent: "#e879f9", animation: "drop",       durationMs: 3200, sound: true, icon: "🎯", confetti: true,  intensity: "normal", particleType: "stars",     screenFlash: false },
+    daily_quest:     { enabled: true, style: "fullscreen", accent: "#22d3ee", animation: "drop",     durationMs: 5200, sound: true, icon: "✅", confetti: true,  intensity: "normal", particleType: "confetti",  screenFlash: true  },
+    bp_quest:        { enabled: true, style: "fullscreen", accent: "#e879f9", animation: "drop",     durationMs: 5200, sound: true, icon: "🎯", confetti: true,  intensity: "epic",   particleType: "stars",     screenFlash: true  },
     bp_tier:         { enabled: true, style: "confetti", accent: "#fb923c", animation: "bounce",     durationMs: 4600, sound: true, icon: "🎁", confetti: true,  intensity: "epic",   particleType: "fireworks", screenFlash: true  },
     reward:          { enabled: true, style: "popup",    accent: "#facc15", animation: "rubber",     durationMs: 3400, sound: true, icon: "🎉", confetti: true,  intensity: "normal", particleType: "streamers", screenFlash: false },
   },

@@ -14,11 +14,11 @@ import {
   type LimitMeterConfig, type LimitMeterStyle,
 } from "@/lib/feedback-config";
 import { LimitMeterPreview } from "@/components/rewards/limit-meter";
-import { ParticleField } from "@/components/layout/feedback-host";
+import { ParticleField, FullscreenCelebration } from "@/components/layout/feedback-host";
 import { INTENSITY_FACTOR } from "@/lib/feedback-config";
 import { Gauge } from "lucide-react";
 
-const STYLE_LABEL: Record<FeedbackStyle, string> = { toast: "Toast (Pille)", popup: "Popup (Karte)", confetti: "Popup + Konfetti" };
+const STYLE_LABEL: Record<FeedbackStyle, string> = { toast: "Toast (Pille)", popup: "Popup (Karte)", confetti: "Popup + Konfetti", fullscreen: "Vollbild-Feier 🎉" };
 const POSITION_LABEL: Record<FeedbackPosition, string> = { "top": "Oben Mitte", "top-right": "Oben rechts", "bottom": "Unten Mitte", "bottom-right": "Unten rechts" };
 const ANIM_LABEL: Record<FeedbackAnimation, string> = {
   "pop": "Pop", "slide-up": "Hoch schieben", "slide-down": "Runter schieben",
@@ -79,6 +79,7 @@ export function FeedbackConfigEditor() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [previewKey, setPreviewKey] = useState<Record<string, number>>({});
+  const [fsPreview, setFsPreview] = useState<FeedbackEventKey | null>(null);
   const sound = useSoundManager();
 
   // Load current config once.
@@ -103,13 +104,41 @@ export function FeedbackConfigEditor() {
   }
 
   function preview(key: FeedbackEventKey) {
-    setPreviewKey((p) => ({ ...p, [key]: (p[key] ?? 0) + 1 }));
     const ev = form.events[key];
+    if (ev.style === "fullscreen") {
+      // Fire a faithful fullscreen preview (sound handled inside the component).
+      setFsPreview(null);
+      setTimeout(() => setFsPreview(key), 0);
+      return;
+    }
+    setPreviewKey((p) => ({ ...p, [key]: (p[key] ?? 0) + 1 }));
     if (ev.sound) sound.win();
+  }
+
+  function samplePayload(key: FeedbackEventKey) {
+    const meta = FEEDBACK_EVENT_META.find((m) => m.key === key);
+    return {
+      type: key,
+      title: `${meta?.label ?? "Belohnung"}!`,
+      message: "Beispiel-Vorschau — so sieht es für den Spieler aus",
+      amount: 120,
+      rewards: [
+        { label: "+250 CR", icon: "🪙" },
+        { label: "+80 XP", icon: "✨" },
+        { label: "Episches Item", icon: "🎁" },
+      ],
+    };
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {fsPreview && (
+        <FullscreenCelebration
+          payload={samplePayload(fsPreview)}
+          ev={form.events[fsPreview]}
+          onDone={() => setFsPreview(null)}
+        />
+      )}
       <div className="flex items-center gap-2">
         <Sparkles className="h-5 w-5 text-amber-400" />
         <span className="text-base font-extrabold text-zinc-100">Belohnungs-Feedback</span>
