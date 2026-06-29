@@ -47,15 +47,15 @@ const DEFAULT_FX_SRC: Record<FxSound, string> = {
   toggleOn:         "/sounds/save.wav",
   toggleOff:        "/sounds/hover.wav",
   // Level & XP
-  levelUp:          "/sounds/win.wav",
+  levelUp:          "/sounds/levelup-epic.wav",
   xpGain:           "/sounds/tick.wav",
   abilityEquip:     "/sounds/save.wav",
-  achievementUnlock:"/sounds/win.wav",
+  achievementUnlock:"/sounds/achievement.wav",
   // Battle Pass
-  questComplete:    "/sounds/win.wav",
-  bpTierClaim:      "/sounds/save.wav",
-  bpUnlock:         "/sounds/ultra-win.wav",
-  bpEliteUnlock:    "/sounds/ultra-win.wav",
+  questComplete:    "/sounds/cheer.wav",
+  bpTierClaim:      "/sounds/fanfare.wav",
+  bpUnlock:         "/sounds/fanfare.wav",
+  bpEliteUnlock:    "/sounds/levelup-epic.wav",
   // World
   monsterKill:      "/sounds/hit.wav",
   pvpHit:           "/sounds/hit.wav",
