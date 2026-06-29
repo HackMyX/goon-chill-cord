@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { createClient } from "@/lib/supabase/client";
 import {
   ListChecks, X, RotateCcw, CheckCircle2, Coins, Sparkles, Package,
   Star, Trophy, ChevronRight, Lock, Zap, Calendar, Gift, Joystick, CircleDot,
@@ -360,6 +361,10 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
   const sound = useSoundManager();
   const { currencyName } = useSiteConfig();
   const panelRef = useRef<HTMLDivElement>(null);
+  const channelId = useId();
+  // True solange ein eigener Claim läuft → unterdrückt das lautlose Realtime-Reload,
+  // damit die optimistische Anzeige nicht mit Zwischenständen flackert.
+  const mutatingRef = useRef(false);
 
   const completed = quests.filter(q => q.completed).length;
   const total = quests.length;
@@ -387,7 +392,50 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // Lautloses Neuladen (ohne Lade-Spinner) für Realtime-Events.
+  const silentReload = useCallback(async () => {
+    if (mutatingRef.current) return;
+    try {
+      const data = await getMyDailyQuests();
+      setQuests(data);
+    } catch { /* still silent */ }
+  }, []);
+
   useEffect(() => { void load(); }, []);
+
+  // ── Badge-Sync: broadcastet die EXAKTE Anzahl abholbarer Quests, sobald sie
+  // sich ändert (initiales Laden, Abholen, „Alles abholen"). Der Topbar-Badge
+  // (DailyQuestsTrigger) hört darauf und korrigiert sich SOFORT — kein 5-Min-Lag,
+  // keine geisterhafte „(1)" mehr. Erst broadcasten, wenn geladen ist, damit nicht
+  // kurzzeitig 0 gemeldet wird, während die Daten noch kommen.
+  useEffect(() => {
+    if (loading) return;
+    window.dispatchEvent(
+      new CustomEvent("gn:daily-quests-badge", { detail: { count: claimableCount } })
+    );
+  }, [loading, claimableCount]);
+
+  // ── Live-Aktualisierung des offenen Panels: bei jeder DB-Änderung der eigenen
+  // Quests (Fortschritt via Gameplay, Admin-Reset, Tageswechsel) lautlos neu laden.
+  // Während eines eigenen Claims (mutatingRef) wird übersprungen, damit die
+  // optimistische Anzeige nicht flackert; nach dem Claim feuert ein DB-Event eh.
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user || cancelled) return;
+      channel = supabase
+        .channel(`daily-quests-panel-${user.id}-${channelId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "user_daily_quests", filter: `user_id=eq.${user.id}` },
+          () => { void silentReload(); }
+        )
+        .subscribe();
+    });
+    return () => { cancelled = true; if (channel) void supabase.removeChannel(channel); };
+  }, [channelId, silentReload]);
 
   // Close on Escape (backdrop click is handled by the overlay below).
   useEffect(() => {
@@ -397,36 +445,51 @@ export function DailyQuestsPanel({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   async function handleClaim(questId: string) {
-    const result = await claimDailyQuestReward(questId);
-    if (result.success && result.reward) {
-      sound.win?.();
-      setClaimToast(result.reward);
-      setConfettiKey(k => k + 1);
-      setQuests(prev => prev.map(q => q.id === questId ? { ...q, rewardClaimed: true } : q));
-    } else {
-      sound.error?.();
+    mutatingRef.current = true;
+    try {
+      const result = await claimDailyQuestReward(questId);
+      if (result.success && result.reward) {
+        sound.win?.();
+        setClaimToast(result.reward);
+        setConfettiKey(k => k + 1);
+        setQuests(prev => prev.map(q => q.id === questId ? { ...q, rewardClaimed: true } : q));
+      } else {
+        // Claim fehlgeschlagen (z.B. schon eingelöst in anderem Tab) → mit der
+        // Wahrheit vom Server synchronisieren, damit Anzeige + Badge stimmen.
+        sound.error?.();
+        await silentReload();
+      }
+    } finally {
+      mutatingRef.current = false;
     }
   }
 
   async function claimAll() {
     if (claimingAll) return;
     setClaimingAll(true);
+    mutatingRef.current = true;
     const agg: ClaimResult = { credits: 0, xp: 0, bpXp: 0, itemRarity: null };
     let any = false;
-    for (const q of quests.filter(x => x.completed && !x.rewardClaimed)) {
-      const result = await claimDailyQuestReward(q.id);
-      if (result.success && result.reward) {
-        any = true;
-        agg.credits += result.reward.credits;
-        agg.xp += result.reward.xp;
-        agg.bpXp += result.reward.bpXp;
-        if (result.reward.itemRarity) agg.itemRarity = result.reward.itemRarity;
-        setQuests(prev => prev.map(x => x.id === q.id ? { ...x, rewardClaimed: true } : x));
+    try {
+      for (const q of quests.filter(x => x.completed && !x.rewardClaimed)) {
+        const result = await claimDailyQuestReward(q.id);
+        if (result.success && result.reward) {
+          any = true;
+          agg.credits += result.reward.credits;
+          agg.xp += result.reward.xp;
+          agg.bpXp += result.reward.bpXp;
+          if (result.reward.itemRarity) agg.itemRarity = result.reward.itemRarity;
+          setQuests(prev => prev.map(x => x.id === q.id ? { ...x, rewardClaimed: true } : x));
+        }
       }
+    } finally {
+      mutatingRef.current = false;
     }
     if (any) { sound.win?.(); setClaimToast(agg); setConfettiKey(k => k + 1); }
     else sound.error?.();
     setClaimingAll(false);
+    // Endgültig mit dem Server abgleichen (auch falls einzelne Claims fehlschlugen).
+    await silentReload();
   }
 
   const allDone = total > 0 && claimed === total;
@@ -642,20 +705,53 @@ export function DailyQuestsTrigger({ userId }: { userId?: string }) {
   // viewport (same fix the Level menu modal uses).
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+  const channelId = useId();
 
+  // Holt die WAHRE Anzahl abholbarer Quests vom Server und setzt den Badge.
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const quests = await getMyDailyQuests();
+      setBadge(quests.filter(q => q.completed && !q.rewardClaimed).length);
+    } catch { /* silent */ }
+  }, [userId]);
+
+  // Initial + 5-Min-Intervall NUR als Sicherheitsnetz (falls Realtime/Events mal
+  // ausfallen, z.B. backgrounded Tab).
   useEffect(() => {
     if (!userId) return;
-    async function check() {
-      try {
-        const quests = await getMyDailyQuests();
-        const unclaimed = quests.filter(q => q.completed && !q.rewardClaimed).length;
-        setBadge(unclaimed);
-      } catch { /* silent */ }
-    }
-    void check();
-    const interval = setInterval(check, 5 * 60 * 1000); // refresh every 5 min
+    void refresh();
+    const interval = setInterval(() => { void refresh(); }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [userId]);
+  }, [userId, refresh]);
+
+  // LIVE: jede DB-Änderung an den eigenen Quests (Fortschritt, Abschluss, Claim,
+  // Generierung, Reset) korrigiert den Badge sofort — egal ob das Panel offen ist.
+  useEffect(() => {
+    if (!userId) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`daily-quests-badge-${userId}-${channelId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_daily_quests", filter: `user_id=eq.${userId}` },
+        () => { void refresh(); }
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [userId, channelId, refresh]);
+
+  // SOFORT-Sync im selben Tab: das offene Panel meldet beim Abholen die exakte
+  // verbleibende Anzahl — ohne Server-Roundtrip. So springt der Badge ohne jede
+  // Verzögerung auf den korrekten Wert (Kern-Fix gegen die geisterhafte „(1)").
+  useEffect(() => {
+    const onBadge = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { count?: number } | undefined;
+      if (typeof detail?.count === "number") setBadge(detail.count);
+    };
+    window.addEventListener("gn:daily-quests-badge", onBadge);
+    return () => window.removeEventListener("gn:daily-quests-badge", onBadge);
+  }, []);
 
   // Cross-link: the Level menu can open this panel by dispatching the event.
   useEffect(() => {
