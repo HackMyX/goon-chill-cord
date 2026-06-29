@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Gift, X } from "lucide-react";
 import { getActiveBonusCards, type ActiveBonusCard } from "@/lib/actions/bonus-cards";
 import { useSoundManager } from "@/lib/sound-manager";
 import { BonusCard } from "@/components/rewards/bonus-card";
+import { RewardCardCanvas } from "@/components/rewards/reward-card-canvas";
 
 /**
  * Drop-in-Ersatz für <GameBonusBadge> — zeigt dieselbe amber Bonus-Pill, ist aber
@@ -24,6 +25,7 @@ export function ActiveBonusDock({
   const [cards, setCards] = useState<ActiveBonusCard[]>([]);
   const [open, setOpen] = useState(false);
   const sound = useSoundManager();
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
     let active = true;
@@ -76,6 +78,7 @@ export function ActiveBonusDock({
 
               {/* Panel */}
               <motion.div
+                ref={panelRef}
                 className="relative z-[121] flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#0a0710] shadow-[0_32px_96px_rgba(0,0,0,0.95)] sm:max-w-3xl sm:rounded-3xl"
                 onClick={(e) => e.stopPropagation()}
                 initial={{ opacity: 0, y: 60, scale: 0.98 }}
@@ -115,13 +118,17 @@ export function ActiveBonusDock({
                     </div>
                   ) : (
                     <div className="flex flex-wrap justify-center gap-4">
-                      {cards.map((c) => (
-                        <BonusCard key={c.id} card={c} />
+                      {cards.map((c, i) => (
+                        <BonusCard key={c.id} card={c} view3d={{ index: i }} />
                       ))}
                     </div>
                   )}
                 </div>
               </motion.div>
+
+              {/* Geteilte 3D-Canvas — als Geschwister (NICHT im transform-animierten
+                  Panel, sonst bräche `fixed`). Trackt das Panel, liegt darüber. */}
+              {open && <RewardCardCanvas eventSourceRef={panelRef} zIndex={122} />}
             </motion.div>
           )}
         </AnimatePresence>,

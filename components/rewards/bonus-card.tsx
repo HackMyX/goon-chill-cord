@@ -9,6 +9,7 @@ import {
 } from "@/lib/bonus-card-themes";
 import { BONUS_GAME_LABELS, type BonusGame } from "@/lib/bonus-games";
 import type { ActiveBonusCard } from "@/lib/actions/bonus-cards";
+import { BpRewardView3D } from "@/components/battlepass/bp-reward-3d";
 
 /**
  * Eine richtig schick gethemte Container-Karte für EINEN aktiven Spiel-Bonus.
@@ -38,6 +39,7 @@ interface NormalizedCard {
   title: string | null;
   subtitle: string | null;
   gameLabel: string;
+  game: BonusGame;
   source: string | null;
   remaining: number;
   total: number;
@@ -48,7 +50,7 @@ interface NormalizedCard {
 function fromActive(c: ActiveBonusCard): NormalizedCard {
   return {
     theme: c.theme, rarity: c.rarity, title: c.title, subtitle: c.subtitle,
-    gameLabel: c.gameLabel, source: c.source,
+    gameLabel: c.gameLabel, game: c.game, source: c.source,
     remaining: c.remaining, total: c.total, used: c.used, expiresAt: c.expiresAt,
   };
 }
@@ -62,6 +64,7 @@ function fromPreview(p: BonusCardPreview): NormalizedCard {
     title: p.title?.trim() ? p.title.trim() : null,
     subtitle: p.subtitle?.trim() ? p.subtitle.trim() : null,
     gameLabel: p.gameLabel ?? BONUS_GAME_LABELS[p.game] ?? p.game,
+    game: p.game,
     source: "voucher",
     remaining: total, total, used: 0,
     expiresAt: hours > 0 ? new Date(Date.now() + hours * 3_600_000).toISOString() : null,
@@ -93,6 +96,9 @@ export function BonusCard(
     animateEntry?: boolean;
     /** Konfigurierte Stärke→Seltenheit-Stufen (sonst Default). */
     tiers?: RarityTier[];
+    /** Wenn gesetzt: rendert das echte 3D-Spiel-Bonus-Modell im Glyph-Feld
+     *  (über eine geteilte Canvas, die der Container mountet). index = viewIndex. */
+    view3d?: { index: number };
   },
 ) {
   const card = "card" in props ? fromActive(props.card) : fromPreview(props.preview);
@@ -163,14 +169,25 @@ export function BonusCard(
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
               <span
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-2xl"
+                className="relative grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl text-2xl"
                 style={{
                   background: "rgba(0,0,0,0.28)",
                   border: `1px solid ${theme.border}`,
                   boxShadow: `inset 0 1px 0 rgba(255,255,255,0.12)`,
                 }}
               >
-                {theme.glyph}
+                {/* Emoji-Fallback (liegt hinten; das 3D-Modell überlagert es, wenn aktiv) */}
+                <span aria-hidden>{theme.glyph}</span>
+                {props.view3d && (
+                  <span className="absolute inset-0">
+                    <BpRewardView3D
+                      rewardType="game_bonus"
+                      game={card.game}
+                      rarity={effectiveRarity}
+                      viewIndex={props.view3d.index}
+                    />
+                  </span>
+                )}
               </span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-black leading-tight" style={{ color: theme.text }}>

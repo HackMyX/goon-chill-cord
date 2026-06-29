@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Zap, Check, ShieldOff, Info, RefreshCw, Clock } from "lucide-react";
 import type { UserAbility } from "@/lib/abilities";
 import {
@@ -10,6 +10,7 @@ import {
 import { equipAbility } from "@/lib/actions/abilities";
 import { useSoundManager } from "@/lib/sound-manager";
 import { AbilityVoucherCard } from "@/components/rewards/ability-voucher-card";
+import { RewardCardCanvas } from "@/components/rewards/reward-card-canvas";
 
 interface AbilitiesSectionProps {
   abilities: UserAbility[];
@@ -78,9 +79,10 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
   }
 
   const equippedAbility = abilities.find((a) => a.abilityKey === equipped);
+  const sectionRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" ref={sectionRef}>
       {/* Equipped slot */}
       <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
         <div className="mb-3 flex items-center gap-2">
@@ -123,7 +125,7 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
 
       {/* Owned abilities grid — schick gethemte Gutschein-Karten + Ausrüst-Button */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {abilities.map((ua) => {
+        {abilities.map((ua, i) => {
           const def = ua.definition;
           if (!def) return null;
           const isEquipped = equipped === ua.abilityKey;
@@ -145,6 +147,8 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
                 abilityRarity={def.rarity}
                 equipped={isEquipped}
                 expiresAt={ua.expiresAt}
+                effectCategory={def.category}
+                view3d={{ index: i }}
               />
               <div className="flex items-center justify-between gap-2 px-1">
                 <span className="text-[10px] text-zinc-600">
@@ -179,6 +183,9 @@ export function AbilitiesSection({ abilities, equippedKey: initialEquipped }: Ab
           solange er ausgerüstet ist. Tausche ihn jederzeit aus.
         </span>
       </div>
+
+      {/* EINE geteilte 3D-Canvas für alle Gutschein-Karten (ein WebGL-Context). */}
+      {abilities.length > 0 && <RewardCardCanvas eventSourceRef={sectionRef} zIndex={5} />}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   getBonusCardRarity, resolveCardTheme,
   BONUS_CARD_RARITIES, type BonusCardRarity,
 } from "@/lib/bonus-card-themes";
+import { BpRewardView3D } from "@/components/battlepass/bp-reward-3d";
 
 /**
  * Schick gethemte Gutschein-Karte für EINE Fähigkeit / einen Fähigkeits-Gutschein.
@@ -37,6 +38,10 @@ export interface AbilityVoucherCardProps {
   className?: string;
   /** Eintritts-Animation (scale/opacity). Default an; für Vorschau false. */
   animateEntry?: boolean;
+  /** Roher Wirkungsbereich (mine/snake/plinko/don/world/global) → effekt-abhängiges 3D-Modell. */
+  effectCategory?: string | null;
+  /** Wenn gesetzt: echtes 3D-Modell im Glyph-Feld (geteilte Canvas vom Container). */
+  view3d?: { index: number };
 }
 
 /** Fähigkeits-Seltenheit → Bonus-Card-Seltenheit (Fallback bei cardRarity=auto). */
@@ -64,7 +69,7 @@ export function AbilityVoucherCard({
   name, description, icon, category,
   cardTheme, cardRarity, abilityRarity,
   equipped = false, expiresAt = null,
-  className, animateEntry,
+  className, animateEntry, effectCategory, view3d,
 }: AbilityVoucherCardProps) {
   // Effektive Seltenheit: konkreter cardRarity gewinnt, sonst aus abilityRarity.
   const effectiveRarity: BonusCardRarity =
@@ -130,14 +135,24 @@ export function AbilityVoucherCard({
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
               <span
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-2xl"
+                className="relative grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl text-2xl"
                 style={{
                   background: "rgba(0,0,0,0.28)",
                   border: `1px solid ${theme.border}`,
                   boxShadow: `inset 0 1px 0 rgba(255,255,255,0.12)`,
                 }}
               >
-                {glyph}
+                <span aria-hidden>{glyph}</span>
+                {view3d && (
+                  <span className="absolute inset-0">
+                    <BpRewardView3D
+                      rewardType="ability"
+                      effect={effectCategory ?? undefined}
+                      rarity={effectiveRarity}
+                      viewIndex={view3d.index}
+                    />
+                  </span>
+                )}
               </span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-black leading-tight" style={{ color: theme.text }}>
