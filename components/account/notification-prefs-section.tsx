@@ -1,10 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bell, Sparkles, Repeat, Gavel, ShieldCheck, Loader2, Check, Lock, Users } from "lucide-react";
+import { Bell, Sparkles, Repeat, Gavel, ShieldCheck, Loader2, Check, Lock, Users, Gauge, Wind } from "lucide-react";
 import { updateNotificationPrefs, type NotificationPrefs } from "@/lib/actions/account";
 import { useSoundManager } from "@/lib/sound-manager";
 import { isModerator } from "@/lib/admin";
+import {
+  FB_INTENSITY_PREF_KEY, FB_REDUCE_MOTION_PREF_KEY, type UserFeedbackIntensity,
+} from "@/lib/feedback-config";
+
+const INTENSITY_OPTIONS: { value: UserFeedbackIntensity; label: string; desc: string }[] = [
+  { value: "full",    label: "Voll 🎉",  desc: "Alle Feiern in voller Pracht — Vollbild, Konfetti, alle Effekte." },
+  { value: "reduced", label: "Dezent",   desc: "Ruhiger: keine Vollbild-Feiern, weniger Effekte, kein Bildschirm-Blitz." },
+  { value: "minimal", label: "Minimal",  desc: "Nur kleine Hinweis-Pillen — keine Partikel, kein Blitz, keine großen Popups." },
+];
 
 type NotifEntry = { type: string; label: string; desc: string };
 type NotifGroup = {
@@ -190,6 +199,21 @@ export function NotificationPrefsSection({
     });
   }
 
+  const intensity: UserFeedbackIntensity =
+    prefs[FB_INTENSITY_PREF_KEY] === "reduced" || prefs[FB_INTENSITY_PREF_KEY] === "minimal"
+      ? (prefs[FB_INTENSITY_PREF_KEY] as UserFeedbackIntensity)
+      : "full";
+  const reduceMotion = prefs[FB_REDUCE_MOTION_PREF_KEY] === true;
+
+  function setIntensity(v: UserFeedbackIntensity) {
+    sound.click();
+    setPrefs((p) => ({ ...p, [FB_INTENSITY_PREF_KEY]: v }));
+  }
+  function toggleReduceMotion() {
+    sound.click();
+    setPrefs((p) => ({ ...p, [FB_REDUCE_MOTION_PREF_KEY]: !reduceMotion }));
+  }
+
   return (
     <div className="mt-8">
       <div className="mb-3 flex items-center gap-2">
@@ -198,6 +222,53 @@ export function NotificationPrefsSection({
       </div>
 
       <div className="flex flex-col gap-2.5">
+        {/* Feedback-Stärke (persönlich) */}
+        <div className="overflow-hidden rounded-xl border border-fuchsia-400/25 bg-fuchsia-400/[0.04]">
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <Gauge className="h-3.5 w-3.5 text-fuchsia-300" />
+            <span className="text-xs font-bold text-fuchsia-300">Feedback-Stärke</span>
+            <span className="text-[10px] text-zinc-600">— gilt für alle Feiern &amp; Belohnungs-Popups</span>
+          </div>
+          <div className="space-y-3 border-t border-white/[0.05] px-4 py-3">
+            <div>
+              <p className="mb-2 text-sm font-medium text-zinc-200">Wie krass sollen Feiern sein?</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {INTENSITY_OPTIONS.map((opt) => {
+                  const active = intensity === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setIntensity(opt.value)}
+                      className={`rounded-lg border px-2 py-2 text-xs font-bold transition-colors ${
+                        active
+                          ? "border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-200 shadow-[0_0_14px_-2px_rgba(232,121,249,0.6)]"
+                          : "border-white/10 bg-white/[0.03] text-zinc-400 hover:border-white/25 hover:text-zinc-200"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[11px] leading-snug text-zinc-500">
+                {INTENSITY_OPTIONS.find((o) => o.value === intensity)?.desc}
+              </p>
+            </div>
+            <div className="flex items-center justify-between gap-4 border-t border-white/[0.05] pt-3">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-sm font-medium text-zinc-200">
+                  <Wind className="h-3.5 w-3.5 text-zinc-400" /> Bewegungsarm
+                </p>
+                <p className="text-[11px] leading-snug text-zinc-500">
+                  Schaltet Animationen, Konfetti und Bildschirm-Blitze ab — gut bei empfindlichen Augen oder schwachen Geräten.
+                </p>
+              </div>
+              <Toggle checked={reduceMotion} onChange={toggleReduceMotion} />
+            </div>
+          </div>
+        </div>
+
         {/* Toggleable groups */}
         {USER_GROUPS.map((group) => {
           const c = COLORS[group.color];

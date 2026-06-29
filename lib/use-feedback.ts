@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { getFeedbackConfig } from "@/lib/actions/feedback-config";
-import { getNotificationPrefs } from "@/lib/actions/account";
+import { getNotificationPrefs, type NotificationPrefs } from "@/lib/actions/account";
 import { useLiveConfig } from "@/lib/use-live-config";
 import {
   DEFAULT_FEEDBACK_CONFIG, feedbackPrefKey, LIMIT_METER_PREF_KEY,
-  type FeedbackConfig, type FeedbackEventKey,
+  FB_INTENSITY_PREF_KEY, FB_REDUCE_MOTION_PREF_KEY, applyPersonalFeedback,
+  type FeedbackConfig, type FeedbackEventConfig, type FeedbackEventKey, type UserFeedbackIntensity,
 } from "@/lib/feedback-config";
 
 /**
@@ -16,7 +17,7 @@ import {
  */
 export function useFeedbackSettings() {
   const [config, setConfig] = useState<FeedbackConfig>(DEFAULT_FEEDBACK_CONFIG);
-  const [prefs, setPrefs] = useState<Record<string, boolean>>({});
+  const [prefs, setPrefs] = useState<NotificationPrefs>({});
 
   useEffect(() => { getFeedbackConfig().then(setConfig).catch(() => {}); }, []);
   useEffect(() => { getNotificationPrefs().then(setPrefs).catch(() => {}); }, []);
@@ -30,10 +31,25 @@ export function useFeedbackSettings() {
     return true;
   }, [config, prefs]);
 
+  // Personal feedback strength chosen by the user in /account.
+  const rawIntensity = prefs[FB_INTENSITY_PREF_KEY];
+  const userIntensity: UserFeedbackIntensity =
+    rawIntensity === "reduced" || rawIntensity === "minimal" ? rawIntensity : "full";
+  const reduceMotion = prefs[FB_REDUCE_MOTION_PREF_KEY] === true;
+
+  // The admin event config with the user's personal prefs applied on top.
+  const eventConfig = useCallback((key: FeedbackEventKey): FeedbackEventConfig => {
+    return applyPersonalFeedback(config.events[key], userIntensity, reduceMotion);
+  }, [config, userIntensity, reduceMotion]);
+
   // The rich game-limit meter: admin master + meter-enabled + user hasn't opted out.
   // (Master `config.enabled` does NOT gate the meter — it's an informational HUD,
   //  not a celebration — so muting all popups still leaves the limit readable.)
   const limitMeterAllowed = config.limitMeter.enabled && prefs[LIMIT_METER_PREF_KEY] !== false;
+  // Honour reduce-motion for the meter too (no sheen/pulse).
+  const limitMeter = reduceMotion
+    ? { ...config.limitMeter, animate: false, pulseWhenLow: false }
+    : config.limitMeter;
 
-  return { config, allows, limitMeter: config.limitMeter, limitMeterAllowed };
+  return { config, allows, eventConfig, userIntensity, reduceMotion, limitMeter, limitMeterAllowed };
 }

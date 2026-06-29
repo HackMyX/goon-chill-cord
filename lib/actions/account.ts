@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
-export type NotificationPrefs = Record<string, boolean>;
+// Mostly boolean on/off toggles, but a few keys store a small string choice
+// (e.g. personal feedback intensity). JSONB holds either fine.
+export type NotificationPrefs = Record<string, boolean | string>;
 
 export interface AccountActionResult {
   success: boolean;

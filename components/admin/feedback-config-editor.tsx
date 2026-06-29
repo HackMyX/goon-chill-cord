@@ -146,8 +146,10 @@ export function FeedbackConfigEditor() {
       <p className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3 text-[12px] leading-relaxed text-amber-100/90">
         Steuere <strong>jedes</strong> Belohnungs-Feedback der Seite: XP, Level-Up, Meilensteine, Tages- &amp;
         Battle-Pass-Quests, Battle-Pass-Stufen und allgemeine Belohnungen. Pro Event: Farbe, Animation, Stil,
-        Dauer, Sound, Konfetti und An/Aus. Nutzer können einzelne Typen zusätzlich in ihrem Profil
-        (<code className="text-amber-300">/account</code>) abschalten. Änderungen sind sofort live.
+        Intensität, Partikel-Effekt, Screen-Blitz, Dauer, Sound, Konfetti und An/Aus. Nutzer können einzelne
+        Typen in ihrem Profil (<code className="text-amber-300">/account</code>) abschalten und dort zusätzlich
+        ihre persönliche <strong>Feedback-Stärke</strong> (Voll/Dezent/Minimal) sowie einen Bewegungsarm-Modus
+        wählen. Änderungen sind sofort live.
       </p>
 
       {msg && (

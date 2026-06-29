@@ -24,7 +24,7 @@ export function LevelUpPopup({ userId }: { userId?: string | null }) {
   const [roadConfig, setRoadConfig] = useState<LevelRoadConfig>(DEFAULT_LEVEL_ROAD_CONFIG);
   const [levels, setLevels] = useState<LevelDefinition[]>([]);
   const sound = useSoundManager();
-  const { config: fbConfig, allows } = useFeedbackSettings();
+  const { config: fbConfig, allows, eventConfig, userIntensity, reduceMotion } = useFeedbackSettings();
   // Refs so the realtime callback (mount-only) always sees the latest config.
   const roadConfigRef = useRef(roadConfig);
   roadConfigRef.current = roadConfig;
@@ -91,7 +91,10 @@ export function LevelUpPopup({ userId }: { userId?: string | null }) {
   }
 
   const current = queue[0] ?? null;
-  const showMilestone = !!current && isMilestoneLevel(current.newLevel, roadConfig) && roadConfig.celebrateMilestones !== false;
+  // Personal prefs: minimal / reduce-motion users get the calm card, not the
+  // grand fullscreen milestone takeover.
+  const allowBig = userIntensity !== "minimal" && !reduceMotion;
+  const showMilestone = !!current && isMilestoneLevel(current.newLevel, roadConfig) && roadConfig.celebrateMilestones !== false && allowBig;
   const tier = current ? resolveLevelRoadTier(current.newLevel, roadConfig) : null;
   const levelDef = current ? levels.find((l) => l.level === current.newLevel) : undefined;
 
@@ -111,7 +114,7 @@ export function LevelUpPopup({ userId }: { userId?: string | null }) {
       {current && !showMilestone && tier && (
         <LevelUpCelebration
           key={current.id}
-          ev={fbConfig.events.level_up}
+          ev={eventConfig("level_up")}
           oldLevel={current.oldLevel}
           newLevel={current.newLevel}
           accent={tier.accent}

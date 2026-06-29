@@ -24,10 +24,10 @@ export function XpGainToast({ userId }: { userId?: string | null }) {
   const [queue, setQueue] = useState<XpToast[]>([]);
   const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
   const sound = useSoundManager();
-  const { config, allows } = useFeedbackSettings();
+  const { allows, eventConfig, reduceMotion } = useFeedbackSettings();
   const allowsRef = useRef(allows);
   allowsRef.current = allows;
-  const ev = config.events.xp_gain;
+  const ev = eventConfig("xp_gain");
   const soundOnRef = useRef(ev.sound);
   soundOnRef.current = ev.sound;
   // Pending accumulator for rapid-fire merge (e.g. Plinko auto-bet)
@@ -122,6 +122,7 @@ export function XpGainToast({ userId }: { userId?: string | null }) {
             durationMs={ev.durationMs}
             icon={ev.icon}
             intensity={ev.intensity}
+            motion={!reduceMotion}
             onDone={() => dismiss(toast.id)}
           />
         ))}
@@ -130,9 +131,9 @@ export function XpGainToast({ userId }: { userId?: string | null }) {
   );
 }
 
-function XpToastChip({ toast, accent, durationMs, icon, intensity, onDone }: {
+function XpToastChip({ toast, accent, durationMs, icon, intensity, motion: showMotion, onDone }: {
   toast: XpToast; accent: string; durationMs: number; icon: string;
-  intensity: "subtle" | "normal" | "epic"; onDone: () => void;
+  intensity: "subtle" | "normal" | "epic"; motion: boolean; onDone: () => void;
 }) {
   useEffect(() => {
     const t = setTimeout(onDone, Math.max(1200, durationMs));
@@ -160,7 +161,7 @@ function XpToastChip({ toast, accent, durationMs, icon, intensity, onDone }: {
     >
       {/* rising sparkles */}
       <div className="pointer-events-none absolute inset-x-0 top-1/2 z-0">
-        {sparks.map((s) => (
+        {showMotion && sparks.map((s) => (
           <span
             key={s.i}
             className="absolute left-1/2 block h-1 w-1 rounded-full"

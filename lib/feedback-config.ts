@@ -213,6 +213,46 @@ export function feedbackPrefKey(key: FeedbackEventKey): string {
 /** The /account user pref key for the rich game-limit meter (stored in notification_prefs). */
 export const LIMIT_METER_PREF_KEY = "fb_limit_meter";
 
+// ── Persönliche Feedback-Stärke (pro User, in notification_prefs) ────────────
+/** How strong the user personally wants celebrations. */
+export type UserFeedbackIntensity = "full" | "reduced" | "minimal";
+/** Pref key storing the user's personal feedback strength (UserFeedbackIntensity). */
+export const FB_INTENSITY_PREF_KEY = "fb_intensity";
+/** Pref key: user wants minimal motion (no big animations/particles). */
+export const FB_REDUCE_MOTION_PREF_KEY = "fb_reduce_motion";
+
+export const USER_FEEDBACK_INTENSITIES: UserFeedbackIntensity[] = ["full", "reduced", "minimal"];
+
+/** Apply a user's personal feedback prefs on top of the admin event config.
+ *  Lets each player tone celebrations down without the admin's settings changing.
+ *  - minimal  → small toast, no particles/flash, subtle.
+ *  - reduced  → no fullscreen, one step calmer, no screen flash.
+ *  - reduceMotion → fade entrance, no particles/flash, subtle. */
+export function applyPersonalFeedback(
+  ev: FeedbackEventConfig,
+  pref: UserFeedbackIntensity,
+  reduceMotion: boolean,
+): FeedbackEventConfig {
+  let out: FeedbackEventConfig = { ...ev };
+  if (pref === "minimal") {
+    out.style = "toast";
+    out.confetti = false;
+    out.screenFlash = false;
+    out.intensity = "subtle";
+  } else if (pref === "reduced") {
+    if (out.style === "fullscreen") out.style = "popup";
+    out.intensity = out.intensity === "epic" ? "normal" : "subtle";
+    out.screenFlash = false;
+  }
+  if (reduceMotion) {
+    out.animation = "fade";
+    out.confetti = false;
+    out.screenFlash = false;
+    out.intensity = "subtle";
+  }
+  return out;
+}
+
 /** Pick the active tone colour for a given remaining/total ratio. */
 export function limitMeterTone(
   ratio: number, remaining: number, cfg: LimitMeterConfig,

@@ -9,7 +9,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { useFeedbackSettings } from "@/lib/use-feedback";
 import {
   feedbackAnimationStyle, hexToRgba, INTENSITY_FACTOR,
-  type CelebrationPayload, type FeedbackConfig, type FeedbackEventConfig, type FeedbackEventKey,
+  type CelebrationPayload, type FeedbackEventConfig, type FeedbackEventKey,
   type FeedbackPosition, type FeedbackParticle,
 } from "@/lib/feedback-config";
 
@@ -36,7 +36,7 @@ const POSITION_CLASS: Record<FeedbackPosition, string> = {
 export function FeedbackHost({ userId }: { userId?: string | null }) {
   const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
-  const { config, allows } = useFeedbackSettings();
+  const { config, allows, eventConfig } = useFeedbackSettings();
   const configRef = useRef(config);
   configRef.current = config;
   const allowsRef = useRef(allows);
@@ -71,9 +71,11 @@ export function FeedbackHost({ userId }: { userId?: string | null }) {
 
   if (queue.length === 0) return null;
 
-  // Split: corner toasts/popups vs. fullscreen "level-up" celebrations.
-  const cornerItems = queue.filter((it) => config.events[it.payload.type]?.style !== "fullscreen");
-  const fsItems = queue.filter((it) => config.events[it.payload.type]?.style === "fullscreen");
+  // Split using the EFFECTIVE per-user config (personal prefs may force a
+  // fullscreen celebration down to a corner toast).
+  const isFs = (it: QueueItem) => eventConfig(it.payload.type).style === "fullscreen";
+  const cornerItems = queue.filter((it) => !isFs(it));
+  const fsItems = queue.filter(isFs);
 
   return (
     <>
@@ -86,7 +88,7 @@ export function FeedbackHost({ userId }: { userId?: string | null }) {
             <FeedbackItem
               key={item.id}
               payload={item.payload}
-              cfg={config}
+              ev={eventConfig(item.payload.type)}
               onDone={() => dismiss(item.id)}
             />
           ))}
@@ -97,10 +99,10 @@ export function FeedbackHost({ userId }: { userId?: string | null }) {
         <FullscreenCelebration
           key={fsItems[fsItems.length - 1].id}
           payload={fsItems[fsItems.length - 1].payload}
-          ev={config.events[fsItems[fsItems.length - 1].payload.type]}
+          ev={eventConfig(fsItems[fsItems.length - 1].payload.type)}
           onDone={() => {
             // dismiss ALL queued fullscreen items so we don't replay a backlog.
-            setQueue((q) => q.filter((it) => config.events[it.payload.type]?.style !== "fullscreen"));
+            setQueue((q) => q.filter((it) => !isFs(it)));
           }}
         />
       )}
@@ -108,9 +110,8 @@ export function FeedbackHost({ userId }: { userId?: string | null }) {
   );
 }
 
-function FeedbackItem({ payload, cfg, onDone }: { payload: CelebrationPayload; cfg: FeedbackConfig; onDone: () => void }) {
+function FeedbackItem({ payload, ev, onDone }: { payload: CelebrationPayload; ev: FeedbackEventConfig; onDone: () => void }) {
   const sound = useSoundManager();
-  const ev: FeedbackEventConfig = cfg.events[payload.type];
   const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
