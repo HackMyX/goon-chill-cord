@@ -178,6 +178,8 @@ const COLUMN_CHECKS: Array<{
   { id: "col_don_upgradetiers",   category: "DON-System",         table: "don_config",          col: "upgrade_tiers",           detail: "ALTER TABLE don_config ADD COLUMN upgrade_tiers jsonb NOT NULL DEFAULT '[]'::jsonb;" },
   // Global chat — avatar snapshot (2026-06-24)
   { id: "col_chat_avatar",        category: "Chat",               table: "global_chat_messages",col: "avatar_url",              detail: "ALTER TABLE global_chat_messages ADD COLUMN avatar_url text;" },
+  { id: "col_chat_broadcastwins", category: "Chat",               table: "global_chat_config",  col: "broadcast_wins",          detail: "node scripts/add-chat-broadcast-config.cjs" },
+  { id: "col_chat_broadcastrar",  category: "Chat",               table: "global_chat_config",  col: "broadcast_min_rarity",    detail: "node scripts/add-chat-broadcast-config.cjs" },
   // Login events — fingerprint (security)
   { id: "col_login_fingerprint",  category: "Security",           table: "login_events",        col: "fingerprint",             detail: "ALTER TABLE login_events ADD COLUMN fingerprint text;" },
   // Site config — homepage & topbar

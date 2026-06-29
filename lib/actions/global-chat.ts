@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isModerator } from "@/lib/admin";
-import { type ChatConfig, DEFAULT_CHAT_CONFIG, ADMIN_MOD_PERMISSIONS, DEFAULT_MOD_PERMISSIONS, type ModPermissions } from "@/lib/mod";
+import { type ChatConfig, DEFAULT_CHAT_CONFIG, ADMIN_MOD_PERMISSIONS, DEFAULT_MOD_PERMISSIONS, type ModPermissions, RARITY_RANK } from "@/lib/mod";
 import { logDebugEvent } from "@/lib/debug-log-server";
 
 export interface GlobalChatMessage {
@@ -92,6 +92,8 @@ export async function getChatConfig(): Promise<ChatConfig> {
       bannedWords: (data.banned_words as string[]) ?? [],
       autoFilter: data.auto_filter ?? true,
       modsCanClear: data.mods_can_clear ?? true,
+      broadcastWins: data.broadcast_wins ?? true,
+      broadcastMinRarity: (data.broadcast_min_rarity as ChatConfig["broadcastMinRarity"]) ?? "mythisch",
     };
   } catch {
     return DEFAULT_CHAT_CONFIG;
@@ -116,6 +118,8 @@ export async function updateChatConfig(
       banned_words: config.bannedWords.filter(Boolean),
       auto_filter: config.autoFilter,
       mods_can_clear: config.modsCanClear,
+      broadcast_wins: config.broadcastWins,
+      broadcast_min_rarity: config.broadcastMinRarity,
       updated_at: new Date().toISOString(),
     });
     if (error) return { success: false, error: error.message };
@@ -301,7 +305,9 @@ export async function sendGlobalChatMessage(content: string): Promise<{ success:
   return { success: true };
 }
 
-// Called by server actions when big wins happen — bypasses RLS
+// Called by server actions when wins happen — bypasses RLS. Gating ist ZENTRAL
+// hier: Admin steuert via ChatConfig, ob & ab welcher Seltenheit broadcastet wird.
+// Aufrufer können einfach immer aufrufen — diese Funktion entscheidet.
 export async function broadcastSystemWin(opts: {
   username: string;
   itemName: string;
@@ -309,9 +315,14 @@ export async function broadcastSystemWin(opts: {
   caseName?: string;
 }) {
   try {
+    const cfg = await getChatConfig();
+    if (!cfg.broadcastWins) return;
+    if ((RARITY_RANK[opts.rarity] ?? 0) < (RARITY_RANK[cfg.broadcastMinRarity] ?? 3)) return;
     const admin = createAdminClient();
-    const emoji = opts.rarity === "ultra" ? "🌟" : opts.rarity === "mythisch" ? "✨" : "⭐";
-    const rarityLabel = opts.rarity === "ultra" ? "Ultra" : opts.rarity === "mythisch" ? "Mythisch" : opts.rarity;
+    const rarityEmoji: Record<string, string> = { selten: "⭐", episch: "💜", mythisch: "✨", ultra: "🌟" };
+    const rarityLabels: Record<string, string> = { selten: "Selten", episch: "Episch", mythisch: "Mythisch", ultra: "Ultra" };
+    const emoji = rarityEmoji[opts.rarity] ?? "⭐";
+    const rarityLabel = rarityLabels[opts.rarity] ?? opts.rarity;
     const content = `${emoji} ${opts.username} hat „${opts.itemName}" (${rarityLabel}) gezogen!`;
     await admin.from("global_chat_messages").insert({
       user_id: null,

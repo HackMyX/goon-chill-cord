@@ -374,23 +374,45 @@ export function GlobalChatPanel({ panelHeight, isStaff = false }: GlobalChatPane
             const msgType = (meta?.type as string) ?? "";
             const isClear = msgType === "chat_clear";
             const isReward = msgType === "ticket_reward";
+            const isWin = msgType === "win" || (!isClear && !isReward && !!rarity);
+            const time = formatTime(msg.createdAt);
+
+            if (isClear) {
+              return (
+                <div key={msg.id} className="my-1 flex items-center justify-center gap-2 text-[10px] text-zinc-600 chat-msg-enter">
+                  <span className="h-px flex-1 max-w-[60px] bg-zinc-700/40" />
+                  <span className="flex items-center gap-1">🧹 {msg.content}<span className="text-zinc-700">· {time}</span></span>
+                  <span className="h-px flex-1 max-w-[60px] bg-zinc-700/40" />
+                </div>
+              );
+            }
+
+            if (isWin) {
+              const c =
+                rarity === "ultra" ? { from: "rgba(251,191,36,0.22)", brd: "rgba(251,191,36,0.55)", txt: "#fde68a", glow: "rgba(251,191,36,0.4)" }
+                : rarity === "mythisch" ? { from: "rgba(236,72,153,0.20)", brd: "rgba(236,72,153,0.5)", txt: "#fbcfe8", glow: "rgba(236,72,153,0.4)" }
+                : rarity === "episch" ? { from: "rgba(168,85,247,0.20)", brd: "rgba(168,85,247,0.5)", txt: "#e9d5ff", glow: "rgba(168,85,247,0.38)" }
+                : { from: "rgba(56,189,248,0.18)", brd: "rgba(56,189,248,0.45)", txt: "#bae6fd", glow: "rgba(56,189,248,0.35)" };
+              return (
+                <div key={msg.id} className="my-1 flex justify-center px-1 chat-msg-enter">
+                  <div
+                    className="relative flex max-w-full items-center gap-2 overflow-hidden rounded-xl border px-3.5 py-2"
+                    style={{ borderColor: c.brd, background: `linear-gradient(100deg, ${c.from}, rgba(10,8,18,0.6))`, boxShadow: `0 0 20px -4px ${c.glow}` }}
+                  >
+                    <span className="absolute inset-0 -translate-x-full animate-[bonus-sheen_3s_linear_infinite] bg-gradient-to-r from-transparent via-white/15 to-transparent" style={{ backgroundSize: "250% 100%" }} />
+                    <span className="relative text-xs font-bold leading-snug" style={{ color: c.txt }}>{msg.content}</span>
+                    <span className="relative shrink-0 text-[10px] font-semibold tabular-nums text-white/45">{time}</span>
+                  </div>
+                </div>
+              );
+            }
+
             return (
-              <div key={msg.id} className="flex justify-center chat-msg-enter">
-                <span
-                  className={`chat-sys-msg ${
-                    isClear
-                      ? "bg-zinc-800/30 text-zinc-600 border-zinc-700/25"
-                      : isReward
-                      ? "bg-amber-500/10 text-amber-300/90 border-amber-400/25"
-                      : rarity === "ultra"
-                      ? "bg-fuchsia-500/10 text-fuchsia-300/90 border-fuchsia-500/20"
-                      : rarity === "mythisch"
-                      ? "bg-purple-500/10 text-purple-300/90 border-purple-500/20"
-                      : "bg-blue-500/8 text-blue-300/80 border-blue-500/15"
-                  }`}
-                >
+              <div key={msg.id} className="flex items-center justify-center gap-1.5 chat-msg-enter">
+                <span className={`chat-sys-msg ${isReward ? "bg-amber-500/10 text-amber-300/90 border-amber-400/25" : "bg-blue-500/8 text-blue-300/80 border-blue-500/15"}`}>
                   {msg.content}
                 </span>
+                <span className="text-[10px] tabular-nums text-zinc-600">{time}</span>
               </div>
             );
           }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   MessageSquare, Save, Loader2, Info, Plus, X, Trash2,
-  Shield, Zap, Clock, Hash, AlertTriangle,
+  Shield, Zap, Clock, Hash, AlertTriangle, Megaphone,
 } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 import { updateChatConfig } from "@/lib/actions/global-chat";
@@ -108,6 +108,39 @@ export function ChatConfigEditor({ initialConfig }: Props) {
             value={config.modsCanClear}
             onChange={(v) => set("modsCanClear", v)}
           />
+        </div>
+      </div>
+
+      {/* Broadcasts */}
+      <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">
+          <Megaphone className="h-5 w-5 text-fuchsia-400" />
+          Broadcasts (Gewinne im Chat)
+          <AdminTooltip text="Steuert, ob und ab welcher Seltenheit Case-/Item-Gewinne automatisch als schicker System-Banner im globalen Chat angekündigt werden. So entscheidest du, was 'broadcastet' wird." />
+        </h3>
+        <div className="flex flex-col gap-3">
+          <Toggle
+            label="Gewinne broadcasten"
+            description="Postet bei seltenen Ziehungen einen seltenheits-gefärbten Banner in den Chat (z. B. … hat 'Legendärer Ring' (Mythisch) gezogen)."
+            value={config.broadcastWins}
+            onChange={(v) => set("broadcastWins", v)}
+          />
+          <label className={`flex flex-col gap-1.5 ${config.broadcastWins ? "" : "pointer-events-none opacity-40"}`}>
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+              Ab Seltenheit broadcasten
+              <AdminTooltip text="Nur Gewinne ab dieser Seltenheit werden angekündigt — alles darunter bleibt still. Beispiel: 'Mythisch' = nur Mythisch & Ultra werden gepostet." />
+            </span>
+            <select
+              value={config.broadcastMinRarity}
+              onChange={(e) => set("broadcastMinRarity", e.target.value as ChatConfig["broadcastMinRarity"])}
+              className="w-48 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-zinc-200 outline-none focus:border-fuchsia-400/50"
+            >
+              <option value="selten" className="bg-zinc-900">Selten &amp; höher</option>
+              <option value="episch" className="bg-zinc-900">Episch &amp; höher</option>
+              <option value="mythisch" className="bg-zinc-900">Mythisch &amp; höher</option>
+              <option value="ultra" className="bg-zinc-900">Nur Ultra</option>
+            </select>
+          </label>
         </div>
       </div>
 

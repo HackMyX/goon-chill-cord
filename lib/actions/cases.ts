@@ -509,13 +509,12 @@ export async function openCase(tierId: string, tokenId?: string): Promise<OpenCa
     try { wonStyleKey = await tryDropNameStyle(user.id, won.rarity, supabase); } catch { /* non-fatal */ }
   }
 
-  // Ultra/mythisch global broadcast (rare, request-scoped) — also in-request.
-  if (won.rarity === "ultra" || won.rarity === "mythisch") {
-    try {
-      const { data: p } = await supabase.from("profiles").select("username").eq("id", user.id).single();
-      await broadcastSystemWin({ username: (p?.username as string) ?? "Jemand", itemName: won.name, rarity: won.rarity, caseName: tier.label });
-    } catch { /* non-fatal */ }
-  }
+  // Gewinn-Broadcast (request-scoped). Ob & ab welcher Seltenheit entscheidet
+  // ZENTRAL broadcastSystemWin anhand der Admin-Chat-Config — daher immer aufrufen.
+  try {
+    const { data: p } = await supabase.from("profiles").select("username").eq("id", user.id).single();
+    await broadcastSystemWin({ username: (p?.username as string) ?? "Jemand", itemName: won.name, rarity: won.rarity, caseName: tier.label });
+  } catch { /* non-fatal */ }
 
   // Fire-and-forget the admin-client side-effects (XP / quests / notifications).
   void (async () => {
@@ -758,8 +757,8 @@ export async function openCaseBatch(tierId: string, count: number): Promise<Open
     link: "/garderobe",
   });
 
-  // Broadcast ultra/mythisch wins from batch
-  if (bestRarity === "ultra" || bestRarity === "mythisch") {
+  // Bester Drop des Batches als Broadcast (Schwelle entscheidet broadcastSystemWin zentral).
+  {
     const best = drops.find((d) => d.rarity === bestRarity);
     const { data: p } = await (await import("@/lib/supabase/server")).createClient()
       .then((c) => c.from("profiles").select("username").eq("id", user.id).single());

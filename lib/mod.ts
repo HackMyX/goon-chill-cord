@@ -74,6 +74,9 @@ export const ADMIN_MOD_PERMISSIONS: ModPermissions = {
   maxChatMuteHours: 8760,
 };
 
+/** Welche Seltenheiten als Gewinn in den Chat broadcastet werden. */
+export type BroadcastMinRarity = "selten" | "episch" | "mythisch" | "ultra";
+
 export interface ChatConfig {
   enabled: boolean;
   messageCooldownSec: number;
@@ -81,6 +84,10 @@ export interface ChatConfig {
   bannedWords: string[];
   autoFilter: boolean;
   modsCanClear: boolean;
+  /** Case-/Item-Gewinne als System-Broadcast in den Chat posten. */
+  broadcastWins: boolean;
+  /** Ab welcher Seltenheit ein Gewinn broadcastet wird (alles darunter bleibt still). */
+  broadcastMinRarity: BroadcastMinRarity;
 }
 
 export const DEFAULT_CHAT_CONFIG: ChatConfig = {
@@ -90,6 +97,13 @@ export const DEFAULT_CHAT_CONFIG: ChatConfig = {
   bannedWords: [],
   autoFilter: true,
   modsCanClear: true,
+  broadcastWins: true,
+  broadcastMinRarity: "mythisch",
+};
+
+/** Rang einer Seltenheit (für die Broadcast-Schwelle). Höher = seltener. */
+export const RARITY_RANK: Record<string, number> = {
+  normal: 0, selten: 1, episch: 2, mythisch: 3, ultra: 4,
 };
 
 export interface ModeratorWithPermissions {

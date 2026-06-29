@@ -26,6 +26,7 @@ import { StyledUsername } from "@/components/ui/styled-username";
 import { badgeRank } from "@/lib/badges";
 import { useSoundManager } from "@/lib/sound-manager";
 import type { HomepageChatConfig } from "@/lib/homepage-chat-config-types";
+import Link from "next/link";
 
 /** Single highest-prestige owned badge — fallback when a user set no prio badges
  *  (mirrors the global chat / resolveDisplayBadges everywhere else). */
@@ -187,39 +188,59 @@ function MessageRow({
     const rarity = (meta?.rarity as string) ?? "";
     const isClear = msgType === "chat_clear";
     const isReward = msgType === "ticket_reward";
+    const isWin = msgType === "win" || (!isClear && !isReward && !!rarity);
+    const time = formatAbsolute(msg.createdAt);
 
+    // Geleert-Hinweis: dezente, zentrierte Zeile mit Uhrzeit ("wann zuletzt geleert").
+    if (isClear) {
+      const content = (
+        <div className="my-1 flex items-center justify-center gap-2 text-[10px] text-zinc-600">
+          <span className="h-px flex-1 max-w-[40px] bg-zinc-700/40" />
+          <span className="flex items-center gap-1">🧹 {msg.content}<span className="text-zinc-700">· {time}</span></span>
+          <span className="h-px flex-1 max-w-[40px] bg-zinc-700/40" />
+        </div>
+      );
+      return doAnimate
+        ? <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>{content}</motion.div>
+        : content;
+    }
+
+    // Gewinn-Broadcast: schicker, seltenheits-gefärbter Banner mit Glow + Uhrzeit.
+    if (isWin) {
+      const c =
+        rarity === "ultra" ? { from: "rgba(251,191,36,0.22)", brd: "rgba(251,191,36,0.55)", txt: "#fde68a", glow: "rgba(251,191,36,0.4)" }
+        : rarity === "mythisch" ? { from: "rgba(236,72,153,0.20)", brd: "rgba(236,72,153,0.5)", txt: "#fbcfe8", glow: "rgba(236,72,153,0.4)" }
+        : rarity === "episch" ? { from: "rgba(168,85,247,0.20)", brd: "rgba(168,85,247,0.5)", txt: "#e9d5ff", glow: "rgba(168,85,247,0.38)" }
+        : { from: "rgba(56,189,248,0.18)", brd: "rgba(56,189,248,0.45)", txt: "#bae6fd", glow: "rgba(56,189,248,0.35)" };
+      const content = (
+        <div className="my-1 flex justify-center px-1">
+          <div
+            className="relative flex max-w-full items-center gap-2 overflow-hidden rounded-xl border px-3 py-1.5 text-center"
+            style={{ borderColor: c.brd, background: `linear-gradient(100deg, ${c.from}, rgba(10,8,18,0.6))`, boxShadow: `0 0 18px -4px ${c.glow}` }}
+          >
+            <span className="absolute inset-0 -translate-x-full animate-[bonus-sheen_3s_linear_infinite] bg-gradient-to-r from-transparent via-white/15 to-transparent" style={{ backgroundSize: "250% 100%" }} />
+            <span className="relative text-[11px] font-bold leading-snug" style={{ color: c.txt }}>{msg.content}</span>
+            <span className="relative shrink-0 text-[9px] font-semibold tabular-nums text-white/45">{time}</span>
+          </div>
+        </div>
+      );
+      return doAnimate
+        ? <motion.div initial={{ opacity: 0, scale: 0.92, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: "spring", stiffness: 320, damping: 22 }}>{content}</motion.div>
+        : content;
+    }
+
+    // Sonstige System-Nachrichten (z.B. Ticket-Belohnung) — dezente Pille + Uhrzeit.
     const content = (
-      <div className="flex justify-center">
-        <span
-          className={`chat-sys-msg ${
-            isClear
-              ? "bg-zinc-800/30 text-zinc-600 border-zinc-700/25"
-              : isReward
-              ? "bg-amber-500/10 text-amber-300/90 border-amber-400/25"
-              : rarity === "ultra"
-              ? "bg-fuchsia-500/10 text-fuchsia-300/90 border-fuchsia-500/20"
-              : rarity === "mythisch"
-              ? "bg-purple-500/10 text-purple-300/90 border-purple-500/20"
-              : "bg-blue-500/8 text-blue-300/80 border-blue-500/15"
-          }`}
-        >
+      <div className="flex items-center justify-center gap-1.5">
+        <span className={`chat-sys-msg ${isReward ? "bg-amber-500/10 text-amber-300/90 border-amber-400/25" : "bg-blue-500/8 text-blue-300/80 border-blue-500/15"}`}>
           {msg.content}
         </span>
+        <span className="text-[9px] tabular-nums text-zinc-600">{time}</span>
       </div>
     );
-
-    if (doAnimate) {
-      return (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
-        >
-          {content}
-        </motion.div>
-      );
-    }
-    return content;
+    return doAnimate
+      ? <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>{content}</motion.div>
+      : content;
   }
 
   const nameStyleKey = msg.nameStyleKey ?? (msg.metadata?.name_style_key as string | undefined);
@@ -878,13 +899,19 @@ function ChatPanel({
           <span className="text-xs font-bold text-zinc-300 truncate flex-1">
             {config.tabTitle}
           </span>
-          {config.showOnlineCount && (
-            <span className="flex items-center gap-1 text-[10px] text-zinc-500 shrink-0">
-              <Users className="h-3 w-3" />
-              {onlineCount > 0 && <span>{onlineCount}</span>}
+          {/* Online-Anzeige + grüner Punkt = klickbarer Button → Community-Seite */}
+          <Link
+            href="/community"
+            title="Zur Community-Seite — alle Spieler ansehen"
+            className="group flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300 transition-colors hover:border-emerald-400/50 hover:bg-emerald-500/20 hover:text-emerald-200"
+          >
+            <Users className="h-3 w-3" />
+            {config.showOnlineCount && onlineCount > 0 && <span className="tabular-nums">{onlineCount}</span>}
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
             </span>
-          )}
-          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" />
+          </Link>
           {showClose && onClose && (
             <button
               onClick={onClose}
