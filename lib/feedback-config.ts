@@ -50,6 +50,45 @@ export interface FeedbackEventConfig {
   confetti: boolean;
 }
 
+// ── Spiel-Limit-Anzeige (LimitMeter) ────────────────────────────────────────
+/** Visual style of the shared "remaining limit" meter (Plinko/Snake/DON …). */
+export type LimitMeterStyle = "bar" | "segments" | "ring";
+
+export interface LimitMeterConfig {
+  /** Master on/off for the rich meter. Off → minimal text-only readout. */
+  enabled: boolean;
+  /** bar = gradient-Balken, segments = Pips, ring = Radial-Ring. */
+  style: LimitMeterStyle;
+  /** Colour when plenty is left (ratio above midThreshold). */
+  highColor: string;
+  /** Colour when getting low (between low- and midThreshold). */
+  midColor: string;
+  /** Colour when almost out (ratio at/below lowThreshold). */
+  lowColor: string;
+  /** Ratio (0..1) below which the meter switches to midColor. */
+  midThreshold: number;
+  /** Ratio (0..1) at/below which the meter switches to lowColor. */
+  lowThreshold: number;
+  /** Animated sheen sweeping across the fill. */
+  animate: boolean;
+  /** Pulse the whole meter (glow + scale) while in the low zone. */
+  pulseWhenLow: boolean;
+}
+
+export const LIMIT_METER_STYLES: LimitMeterStyle[] = ["bar", "segments", "ring"];
+
+export const DEFAULT_LIMIT_METER_CONFIG: LimitMeterConfig = {
+  enabled: true,
+  style: "bar",
+  highColor: "#34d399",
+  midColor: "#fbbf24",
+  lowColor: "#f87171",
+  midThreshold: 0.5,
+  lowThreshold: 0.25,
+  animate: true,
+  pulseWhenLow: true,
+};
+
 export interface FeedbackConfig {
   /** Master switch for ALL reward feedback. */
   enabled: boolean;
@@ -57,6 +96,8 @@ export interface FeedbackConfig {
   position: FeedbackPosition;
   /** Per-event settings. */
   events: Record<FeedbackEventKey, FeedbackEventConfig>;
+  /** Shared "remaining limit" meter used across the games. */
+  limitMeter: LimitMeterConfig;
 }
 
 /** Animation key → globals.css @keyframes name. */
@@ -100,6 +141,7 @@ export const DEFAULT_FEEDBACK_CONFIG: FeedbackConfig = {
     bp_tier:         { enabled: true, style: "confetti", accent: "#fb923c", animation: "bounce",     durationMs: 4600, sound: true, icon: "🎁", confetti: true  },
     reward:          { enabled: true, style: "popup",    accent: "#facc15", animation: "pop",        durationMs: 3400, sound: true, icon: "🎉", confetti: false },
   },
+  limitMeter: DEFAULT_LIMIT_METER_CONFIG,
 };
 
 /** Merge a (possibly partial) stored config with defaults — safe per event. */
@@ -114,6 +156,7 @@ export function resolveFeedbackConfig(raw: Partial<FeedbackConfig> | null | unde
     enabled: raw.enabled ?? base.enabled,
     position: raw.position ?? base.position,
     events,
+    limitMeter: { ...base.limitMeter, ...(raw.limitMeter ?? {}) },
   };
 }
 
@@ -137,6 +180,18 @@ export function hexToRgba(hex: string, alpha: number): string {
 /** The /account user pref key for muting an event type (stored in notification_prefs). */
 export function feedbackPrefKey(key: FeedbackEventKey): string {
   return `fb_${key}`;
+}
+
+/** The /account user pref key for the rich game-limit meter (stored in notification_prefs). */
+export const LIMIT_METER_PREF_KEY = "fb_limit_meter";
+
+/** Pick the active tone colour for a given remaining/total ratio. */
+export function limitMeterTone(
+  ratio: number, remaining: number, cfg: LimitMeterConfig,
+): { color: string; zone: "high" | "mid" | "low" } {
+  if (remaining <= 0 || ratio <= cfg.lowThreshold) return { color: cfg.lowColor, zone: "low" };
+  if (ratio <= cfg.midThreshold) return { color: cfg.midColor, zone: "mid" };
+  return { color: cfg.highColor, zone: "high" };
 }
 
 /** Rich payload broadcast on `celebrations:<userId>` for server-driven events

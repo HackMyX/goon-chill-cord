@@ -23,6 +23,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { ActiveBonusDock } from "@/components/rewards/active-bonus-dock";
 import { ActiveAbilityBadge } from "@/components/rewards/active-ability-badge";
+import { LimitMeter } from "@/components/rewards/limit-meter";
 
 interface Props {
   config: PlinkoConfig;
@@ -404,11 +405,14 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
             <Coins className="h-3.5 w-3.5" />
             <AnimatedCredits value={credits} /> CR
           </div>
-          <div className="hidden sm:flex items-center gap-1 text-[11px] text-zinc-500">
-            <Clock className="h-3 w-3" />
-            {remaining}/{config.hourlyBallLimit}/h
-            {config.dailyBallLimit > 0 && <span className="ml-1">· {config.dailyBallLimit}/Tag</span>}
-          </div>
+          <LimitMeter
+            remaining={remaining}
+            total={config.hourlyBallLimit}
+            label="Bälle/h"
+            icon={<Clock className="h-3.5 w-3.5" />}
+            size="sm"
+            className="hidden w-[148px] sm:flex"
+          />
           <ActiveAbilityBadge refreshKey={resultsVersion} />
           <ActiveBonusDock game="plinko" suffix="Bälle" refreshKey={resultsVersion} />
         </div>

@@ -304,6 +304,30 @@
   100% { transform: translate(var(--fb-cx, 0), var(--fb-cy, 140px)) rotate(var(--fb-cr, 360deg)); opacity: 0; }
 }
 
+/* ── Spiel-Limit-Meter (LimitMeter) ───────────────────────────────────────── */
+/* Sheen sweeping across the fill bar — endless, subtle. */
+@keyframes limit-sheen {
+  0%   { transform: translateX(-130%); }
+  60%  { transform: translateX(230%); }
+  100% { transform: translateX(230%); }
+}
+/* Low-zone attention pulse — glow + faint breathing. */
+@keyframes limit-low-pulse {
+  0%, 100% { filter: brightness(1);    transform: scale(1); }
+  50%      { filter: brightness(1.22); transform: scale(1.018); }
+}
+/* Segment pip lighting up. */
+@keyframes limit-pip-pop {
+  0%   { transform: scale(0.55); opacity: 0; }
+  70%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+/* Number tick when the remaining value changes. */
+@keyframes limit-num-pop {
+  0%   { transform: translateY(-3px) scale(1.18); }
+  100% { transform: translateY(0)    scale(1); }
+}
+
 @keyframes rgbBorder {
   from { background-position: 0% 50%; }
   to { background-position: 200% 50%; }

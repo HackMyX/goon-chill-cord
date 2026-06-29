@@ -5,7 +5,7 @@ import { getFeedbackConfig } from "@/lib/actions/feedback-config";
 import { getNotificationPrefs } from "@/lib/actions/account";
 import { useLiveConfig } from "@/lib/use-live-config";
 import {
-  DEFAULT_FEEDBACK_CONFIG, feedbackPrefKey,
+  DEFAULT_FEEDBACK_CONFIG, feedbackPrefKey, LIMIT_METER_PREF_KEY,
   type FeedbackConfig, type FeedbackEventKey,
 } from "@/lib/feedback-config";
 
@@ -30,5 +30,10 @@ export function useFeedbackSettings() {
     return true;
   }, [config, prefs]);
 
-  return { config, allows };
+  // The rich game-limit meter: admin master + meter-enabled + user hasn't opted out.
+  // (Master `config.enabled` does NOT gate the meter — it's an informational HUD,
+  //  not a celebration — so muting all popups still leaves the limit readable.)
+  const limitMeterAllowed = config.limitMeter.enabled && prefs[LIMIT_METER_PREF_KEY] !== false;
+
+  return { config, allows, limitMeter: config.limitMeter, limitMeterAllowed };
 }

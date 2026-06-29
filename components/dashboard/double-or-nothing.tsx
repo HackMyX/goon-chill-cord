@@ -9,6 +9,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { ActiveBonusDock } from "@/components/rewards/active-bonus-dock";
 import { ActiveAbilityBadge } from "@/components/rewards/active-ability-badge";
+import { LimitMeter } from "@/components/rewards/limit-meter";
 import type { DonConfig } from "@/lib/don-config";
 
 function fireDoNConfetti() {
@@ -40,9 +41,6 @@ export function DoubleOrNothing({ credits, onCreditsChange, donConfig, initialFl
   const { currencyName } = useSiteConfig();
 
   const remaining = donConfig.dailyFlipLimit !== null ? Math.max(0, donConfig.dailyFlipLimit - flipsUsed) : null;
-  const remainingPct = donConfig.dailyFlipLimit !== null && donConfig.dailyFlipLimit > 0
-    ? (remaining ?? 0) / donConfig.dailyFlipLimit
-    : 1;
 
   const maxAllowed = donConfig.maxBet !== null ? Math.min(credits, donConfig.maxBet) : credits;
   const clampedAmount = Math.max(donConfig.minBet, Math.min(amount, maxAllowed || donConfig.minBet));
@@ -126,30 +124,14 @@ export function DoubleOrNothing({ credits, onCreditsChange, donConfig, initialFl
       {/* Remaining spins display */}
       {donConfig.showRemainingSpins && donConfig.dailyFlipLimit !== null && (
         <div className="mx-auto mt-4 w-full max-w-xs">
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="flex items-center gap-1 text-zinc-500">
-              <Zap className="h-3 w-3 text-amber-400" />
-              Verbleibende Flips heute
-            </span>
-            <span className={`font-bold tabular-nums ${remaining === 0 ? "text-red-400" : (remaining ?? 1) <= 5 ? "text-amber-400" : "text-emerald-400"}`}>
-              {remaining} / {donConfig.dailyFlipLimit}
-            </span>
-          </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${remainingPct * 100}%`,
-                background: remaining === 0
-                  ? "rgb(239,68,68)"
-                  : (remaining ?? 1) <= 5
-                    ? "rgb(251,191,36)"
-                    : "linear-gradient(90deg, rgb(52,211,153), rgb(16,185,129))",
-              }}
-            />
-          </div>
+          <LimitMeter
+            remaining={remaining ?? 0}
+            total={donConfig.dailyFlipLimit}
+            label="Flips heute"
+            icon={<Zap className="h-3.5 w-3.5" />}
+          />
           {isExhausted && (
-            <p className="mt-1.5 text-xs font-semibold text-red-400">
+            <p className="mt-1.5 text-center text-xs font-semibold text-red-400">
               Tageslimit erreicht! Komm morgen wieder.
             </p>
           )}

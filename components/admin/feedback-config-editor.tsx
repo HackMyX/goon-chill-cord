@@ -6,10 +6,13 @@ import { getFeedbackConfig, saveFeedbackConfig } from "@/lib/actions/feedback-co
 import { useSoundManager } from "@/lib/sound-manager";
 import {
   DEFAULT_FEEDBACK_CONFIG, FEEDBACK_EVENT_META, FEEDBACK_ANIMATIONS, FEEDBACK_STYLES, FEEDBACK_POSITIONS,
-  feedbackAnimationStyle, hexToRgba, resolveFeedbackConfig,
+  LIMIT_METER_STYLES, feedbackAnimationStyle, hexToRgba, resolveFeedbackConfig,
   type FeedbackConfig, type FeedbackEventConfig, type FeedbackEventKey,
   type FeedbackAnimation, type FeedbackStyle, type FeedbackPosition,
+  type LimitMeterConfig, type LimitMeterStyle,
 } from "@/lib/feedback-config";
+import { LimitMeterPreview } from "@/components/rewards/limit-meter";
+import { Gauge } from "lucide-react";
 
 const STYLE_LABEL: Record<FeedbackStyle, string> = { toast: "Toast (Pille)", popup: "Popup (Karte)", confetti: "Popup + Konfetti" };
 const POSITION_LABEL: Record<FeedbackPosition, string> = { "top": "Oben Mitte", "top-right": "Oben rechts", "bottom": "Unten Mitte", "bottom-right": "Unten rechts" };
@@ -17,6 +20,7 @@ const ANIM_LABEL: Record<FeedbackAnimation, string> = {
   "pop": "Pop", "slide-up": "Hoch schieben", "slide-down": "Runter schieben",
   "zoom": "Zoom + Dreh", "bounce": "Bounce", "flip": "Flip", "fade": "Einblenden", "glow": "Glow-Flash",
 };
+const LIMIT_STYLE_LABEL: Record<LimitMeterStyle, string> = { bar: "Balken", segments: "Segmente", ring: "Ring" };
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -46,6 +50,22 @@ function Select<T extends string>({ value, options, labels, onChange }: {
   );
 }
 
+function ColorPick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-7 w-9 cursor-pointer rounded border border-white/10 bg-transparent p-0" />
+      <input type="text" value={value} onChange={(e) => onChange(e.target.value)} className="w-[72px] rounded border border-white/10 bg-black/40 px-1.5 py-1 text-[11px] font-mono text-zinc-300 outline-none" />
+    </span>
+  );
+}
+
+/** Parse a percent text input → clamped 0..1 ratio (keeps low/mid thresholds ordered). */
+function clampPct(raw: string, minPct: number, maxPct: number): number {
+  const n = parseInt(raw, 10);
+  if (Number.isNaN(n)) return minPct / 100;
+  return Math.max(minPct, Math.min(maxPct, n)) / 100;
+}
+
 export function FeedbackConfigEditor() {
   const [form, setForm] = useState<FeedbackConfig>(DEFAULT_FEEDBACK_CONFIG);
   const [loaded, setLoaded] = useState(false);
@@ -61,6 +81,9 @@ export function FeedbackConfigEditor() {
 
   const setEvent = (key: FeedbackEventKey, patch: Partial<FeedbackEventConfig>) =>
     setForm((f) => ({ ...f, events: { ...f.events, [key]: { ...f.events[key], ...patch } } }));
+
+  const setLimit = (patch: Partial<LimitMeterConfig>) =>
+    setForm((f) => ({ ...f, limitMeter: { ...f.limitMeter, ...patch } }));
 
   async function save() {
     setSaving(true);
@@ -116,6 +139,79 @@ export function FeedbackConfigEditor() {
           <Select<FeedbackPosition> value={form.position} options={FEEDBACK_POSITIONS} labels={POSITION_LABEL} onChange={(v) => setForm((f) => ({ ...f, position: v }))} />
         </div>
       </div>
+
+      {/* ── Spiel-Limit-Anzeige (LimitMeter) ──────────────────────────────── */}
+      {(() => {
+        const lm = form.limitMeter;
+        return (
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.03] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-sm font-extrabold text-zinc-100">
+                  <Gauge className="h-4 w-4 text-cyan-300" /> Spiel-Limit-Anzeige
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">
+                  Die animierte „Restanzahl"-Anzeige in Plinko, Snake &amp; Double-or-Nothing (z. B. „Bälle/h").
+                  Farbe wechselt automatisch grün → gelb → rot, je weniger übrig ist. Nutzer können sie in
+                  <code className="mx-1 text-cyan-300">/account</code> ausblenden.
+                </p>
+              </div>
+              <span title="Schaltet die schicke Limit-Anzeige an. Aus = nur ein schlichter Text (3/10).">
+                <Toggle checked={lm.enabled} onChange={(v) => setLimit({ enabled: v })} />
+              </span>
+            </div>
+
+            <div className={`mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 ${lm.enabled ? "" : "pointer-events-none opacity-40"}`}>
+              <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Balken = klassischer Fortschrittsbalken. Segmente = einzelne Pips (ideal bei kleinen Limits). Ring = runder Radial-Ring.">
+                Stil
+                <Select<LimitMeterStyle> value={lm.style} options={LIMIT_METER_STYLES} labels={LIMIT_STYLE_LABEL} onChange={(v) => setLimit({ style: v })} />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Bewegte Glanz-Animation auf dem Balken bzw. weiches Aufleuchten der Segmente.">
+                Animation
+                <Toggle checked={lm.animate} onChange={(v) => setLimit({ animate: v })} />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Farbe, solange noch viel übrig ist (über der mittleren Schwelle).">
+                Farbe „viel übrig"
+                <ColorPick value={lm.highColor} onChange={(v) => setLimit({ highColor: v })} />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Farbe im mittleren Bereich (zwischen unterer und mittlerer Schwelle) — Warnung, dass es knapper wird.">
+                Farbe „wird knapp"
+                <ColorPick value={lm.midColor} onChange={(v) => setLimit({ midColor: v })} />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Farbe, wenn fast nichts mehr übrig ist (unter der unteren Schwelle) oder das Limit erreicht wurde.">
+                Farbe „fast leer"
+                <ColorPick value={lm.lowColor} onChange={(v) => setLimit({ lowColor: v })} />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Pulsiert die Anzeige (Leuchten + leichtes Pochen), sobald sie im roten Fast-leer-Bereich ist — fällt sofort ins Auge.">
+                Pulsieren bei „fast leer"
+                <Toggle checked={lm.pulseWhenLow} onChange={(v) => setLimit({ pulseWhenLow: v })} />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Ab welchem Anteil (Prozent) auf die mittlere Warnfarbe gewechselt wird. Beispiel: 50 = unter der Hälfte wird es gelb.">
+                Schwelle „wird knapp" (%)
+                <input type="number" min={5} max={95} step={5} value={Math.round(lm.midThreshold * 100)}
+                  onChange={(e) => setLimit({ midThreshold: clampPct(e.target.value, lm.lowThreshold * 100 + 5, 95) })}
+                  className="w-20 rounded border border-white/10 bg-black/40 px-2 py-1 text-right text-xs text-zinc-200 outline-none focus:border-cyan-400/50" />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Ab welchem Anteil (Prozent) auf die rote Fast-leer-Farbe gewechselt wird. Beispiel: 25 = unter einem Viertel wird es rot.">
+                Schwelle „fast leer" (%)
+                <input type="number" min={5} max={90} step={5} value={Math.round(lm.lowThreshold * 100)}
+                  onChange={(e) => setLimit({ lowThreshold: clampPct(e.target.value, 5, lm.midThreshold * 100 - 5) })}
+                  className="w-20 rounded border border-white/10 bg-black/40 px-2 py-1 text-right text-xs text-zinc-200 outline-none focus:border-cyan-400/50" />
+              </label>
+            </div>
+
+            {/* Live-Vorschau: drei Füllstände */}
+            <div className="mt-3 border-t border-white/8 pt-3">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Live-Vorschau</p>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <LimitMeterPreview cfg={lm} remaining={11} total={12} label="Viel übrig" />
+                <LimitMeterPreview cfg={lm} remaining={5} total={12} label="Wird knapp" />
+                <LimitMeterPreview cfg={lm} remaining={1} total={12} label="Fast leer" />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Per-event */}
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
