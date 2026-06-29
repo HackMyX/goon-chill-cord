@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin, isModerator } from "@/lib/admin";
 import { logDebugEvent } from "@/lib/debug-log-server";
+import { emitCelebration } from "@/lib/celebrations";
 import type {
   BpQuest, BpQuestDefinition, BpQuestWithProgress, UserBpQuestProgress,
   QuestDifficulty, QuestFrequency, QuestType,
@@ -124,7 +125,7 @@ export async function incrementBpQuestProgress(
     // Find matching quests across all active passes
     const { data: quests } = await admin
       .from("bp_quests")
-      .select("id, pass_id, quest_type, target_value, bp_xp_reward")
+      .select("id, pass_id, quest_type, target_value, bp_xp_reward, label")
       .in("pass_id", passIds)
       .eq("target_action", targetAction)
       .eq("enabled", true);
@@ -136,6 +137,7 @@ export async function incrementBpQuestProgress(
       const passId = quest.pass_id as string;
       const targetValue = quest.target_value as number;
       const bpXpReward = quest.bp_xp_reward as number;
+      const questLabel = (quest.label as string | null) ?? "Battle-Pass-Quest";
 
       // Upsert progress
       const { data: existing } = await admin
@@ -211,6 +213,15 @@ export async function incrementBpQuestProgress(
               has_premium: false,
             });
         }
+
+        // Live celebration popup for the completed BP quest.
+        void emitCelebration(userId, {
+          type: "bp_quest",
+          title: "Battle-Pass-Quest abgeschlossen!",
+          message: questLabel,
+          amount: bpXpReward,
+          rewards: [{ label: `+${bpXpReward.toLocaleString("de-DE")} BP-XP`, icon: "🎟️" }],
+        });
       }
     }
   } catch (e) {

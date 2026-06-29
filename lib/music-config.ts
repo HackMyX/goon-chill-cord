@@ -46,6 +46,10 @@ export interface MusicConfig {
   userCanMute: boolean;
   /** If false, the volume slider is hidden from users */
   userCanAdjustVolume: boolean;
+  /** If false, the "Hintergrundmusik" volume row is completely REMOVED from the
+   *  /account audio settings (and anywhere it's offered to the user). Music still
+   *  plays per the admin config — the user just has no UI control for it at all. */
+  showAccountMusicControl: boolean;
   /** Maximum volume users are allowed to set (0–1) */
   maxUserVolume: number;
   tracks: MusicTrack[];
@@ -205,6 +209,7 @@ export const DEFAULT_MUSIC_CONFIG: MusicConfig = {
   userCanControl:      false,  // Dictator-Modus: User haben standardmäßig keine Kontrolle
   userCanMute:         false,
   userCanAdjustVolume: false,
+  showAccountMusicControl: true,
   maxUserVolume:       1.0,
   tracks:              BUILT_IN_TRACKS,
   pageVolumes:         {},

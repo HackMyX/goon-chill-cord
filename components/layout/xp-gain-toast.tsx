@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useSoundManager } from "@/lib/sound-manager";
+import { useFeedbackSettings } from "@/lib/use-feedback";
+import { hexToRgba } from "@/lib/feedback-config";
 
 interface XpToast {
   id: string;
@@ -19,6 +21,12 @@ export function XpGainToast({ userId }: { userId?: string | null }) {
   const [queue, setQueue] = useState<XpToast[]>([]);
   const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
   const sound = useSoundManager();
+  const { config, allows } = useFeedbackSettings();
+  const allowsRef = useRef(allows);
+  allowsRef.current = allows;
+  const ev = config.events.xp_gain;
+  const soundOnRef = useRef(ev.sound);
+  soundOnRef.current = ev.sound;
   // Pending accumulator for rapid-fire merge (e.g. Plinko auto-bet)
   const pendingRef = useRef<{ amount: number; timer: ReturnType<typeof setTimeout> } | null>(null);
 
@@ -85,7 +93,8 @@ export function XpGainToast({ userId }: { userId?: string | null }) {
   }, [resolvedUserId]);
 
   function flush(amount: number) {
-    sound.xpGain();
+    if (!allowsRef.current("xp_gain")) return; // admin/user can disable XP feedback
+    if (soundOnRef.current) sound.xpGain();
     setQueue((q) => [
       ...q.slice(-2), // keep max 3 at a time
       { id: `${Date.now()}-${Math.random()}`, amount },
@@ -106,6 +115,9 @@ export function XpGainToast({ userId }: { userId?: string | null }) {
           <XpToastChip
             key={toast.id}
             toast={toast}
+            accent={ev.accent}
+            durationMs={ev.durationMs}
+            icon={ev.icon}
             onDone={() => dismiss(toast.id)}
           />
         ))}
@@ -114,9 +126,11 @@ export function XpGainToast({ userId }: { userId?: string | null }) {
   );
 }
 
-function XpToastChip({ toast, onDone }: { toast: XpToast; onDone: () => void }) {
+function XpToastChip({ toast, accent, durationMs, icon, onDone }: {
+  toast: XpToast; accent: string; durationMs: number; icon: string; onDone: () => void;
+}) {
   useEffect(() => {
-    const t = setTimeout(onDone, 2200);
+    const t = setTimeout(onDone, Math.max(1200, durationMs));
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -129,9 +143,13 @@ function XpToastChip({ toast, onDone }: { toast: XpToast; onDone: () => void }) 
       transition={{ type: "spring", stiffness: 420, damping: 28 }}
       className="pointer-events-auto"
     >
-      <div className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-black/70 px-3 py-1 shadow-[0_0_16px_rgba(251,191,36,0.2)] backdrop-blur-md">
-        <Zap className="h-3 w-3 text-amber-400" />
-        <span className="text-xs font-bold tabular-nums text-amber-300">
+      <div
+        className="flex items-center gap-1.5 rounded-full border bg-black/70 px-3 py-1 backdrop-blur-md"
+        style={{ borderColor: hexToRgba(accent, 0.5), boxShadow: `0 0 16px ${hexToRgba(accent, 0.25)}` }}
+      >
+        <span className="text-xs leading-none">{icon || "✨"}</span>
+        <Zap className="h-3 w-3" style={{ color: accent }} />
+        <span className="text-xs font-bold tabular-nums" style={{ color: accent }}>
           +{toast.amount.toLocaleString("de-DE")} XP
         </span>
       </div>

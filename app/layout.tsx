@@ -22,6 +22,7 @@ import { FineConfigProvider } from "@/lib/fine-config-context";
 import { SoundConfigLoader } from "@/components/layout/sound-config-loader";
 import { LevelUpPopup } from "@/components/layout/level-up-popup";
 import { XpGainToast } from "@/components/layout/xp-gain-toast";
+import { FeedbackHost } from "@/components/layout/feedback-host";
 import { PatchnotePopupLoader } from "@/components/layout/patchnote-popup-loader";
 import { GlobalBroadcast } from "@/components/global/global-broadcast";
 import { GenderGate } from "@/components/auth/gender-gate";
@@ -98,6 +99,7 @@ export default async function RootLayout({
         <SoundConfigLoader config={soundConfig} />
         <LevelUpPopup />
         <XpGainToast />
+        <FeedbackHost />
         <GlobalBroadcast />
         <GenderGate />
         <SupportButton />

@@ -7,6 +7,7 @@ import { isAdmin } from "@/lib/admin";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { recomputeAutoPrioBadges } from "@/lib/actions/prio-badges";
 import { logDebugEvent, logActivity } from "@/lib/debug-log-server";
+import { emitCelebration } from "@/lib/celebrations";
 import type { BattlePass, BattlePassTier, UserBpStatus, ActiveBpView, BpRewardType, BpTheme, BpShopPosition, BpShopBannerSize, BpAutoFillConfig, BpVisualConfig } from "@/lib/battle-pass";
 import { DEFAULT_BP_VISUAL_CONFIG } from "@/lib/battle-pass";
 import type { Rarity } from "@/lib/cases";
@@ -601,6 +602,14 @@ export async function claimBpTier(tierId: string): Promise<{ success: boolean; e
   // All reward grants succeeded and no early-return fired — the reservation is now
   // permanent (the finally below will NOT roll it back).
   claimGranted = true;
+
+  // Live celebration popup (admin/user configurable).
+  void emitCelebration(user.id, {
+    type: "bp_tier",
+    title: `Battle-Pass Tier ${tierNum} freigeschaltet!`,
+    message: rewardMsg || undefined,
+    rewards: rewardMsg ? [{ label: rewardMsg, icon: "🎁" }] : undefined,
+  });
 
   try {
     await admin.from("audit_logs").insert({

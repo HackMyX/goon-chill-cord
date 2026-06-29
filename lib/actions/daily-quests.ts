@@ -10,6 +10,7 @@ import { incrementBpQuestProgress } from "@/lib/actions/bp-quests";
 import { getSynergyConfig } from "@/lib/actions/economy-synergy";
 import { dailyQuestLevelScale } from "@/lib/economy-synergy";
 import { grantReward, type RewardSpec } from "@/lib/rewards-grant";
+import { emitCelebration } from "@/lib/celebrations";
 import {
   DEFAULT_DAILY_QUEST_CONFIG,
   levelScaleFactor,
@@ -467,6 +468,19 @@ export async function claimDailyQuestReward(
       scope: "daily-quests:claim",
       message: `Quest "${q.label}" beansprucht von ${user.id}`,
       context: { questId, rewardCredits, rewardXp, rewardBpXp, rewardItemRarity },
+    });
+
+    // Live celebration popup (admin/user configurable).
+    void emitCelebration(user.id, {
+      type: "daily_quest",
+      title: "Tagesquest abgeschlossen!",
+      message: String(q.label),
+      rewards: [
+        ...(rewardCredits > 0 ? [{ label: `+${rewardCredits.toLocaleString("de-DE")} CR`, icon: "🪙" }] : []),
+        ...(rewardXp > 0 ? [{ label: `+${rewardXp.toLocaleString("de-DE")} XP`, icon: "✨" }] : []),
+        ...(rewardBpXp > 0 ? [{ label: `+${rewardBpXp.toLocaleString("de-DE")} BP-XP`, icon: "🎟️" }] : []),
+        ...(rewardItemRarity ? [{ label: `${rewardItemRarity}-Item`, icon: "🎁" }] : []),
+      ],
     });
 
     revalidatePath("/");

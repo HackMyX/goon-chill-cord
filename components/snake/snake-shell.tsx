@@ -18,6 +18,7 @@ import type { SnakeLeaderboardEntry } from "@/lib/actions/snake";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { ActiveBonusDock } from "@/components/rewards/active-bonus-dock";
 import { ActiveAbilityBadge } from "@/components/rewards/active-ability-badge";
+import { LimitMeter } from "@/components/rewards/limit-meter";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -1590,7 +1591,7 @@ export function SnakeShell({
 
             {/* Idle overlay */}
             {phase === "idle" && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 sm:gap-5 bg-black/65 backdrop-blur-[2px]">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 overflow-y-auto px-3 py-4 sm:gap-5 bg-black/65 backdrop-blur-[2px]">
                 <div className="text-5xl sm:text-7xl drop-shadow-[0_0_30px_rgba(52,211,153,0.8)]">🐍</div>
                 <div className="text-center">
                   <h2 className="text-2xl sm:text-3xl font-extrabold text-zinc-50">{config.sectionTitle}</h2>
@@ -1608,6 +1609,19 @@ export function SnakeShell({
                       );
                     })}
                   </div>
+                )}
+                {/* Remaining games meter (pre-start) — only when a per-mode game
+                     limit exists and the player still has runs left today. */}
+                {modeCfg.dailyGameLimit !== null && !dailyGameLimitReached && !dailyLimitReached && (
+                  <LimitMeter
+                    className="w-full max-w-[260px]"
+                    size="sm"
+                    remaining={dailyGamesRemaining ?? 0}
+                    total={modeCfg.dailyGameLimit}
+                    label="Spiele heute übrig"
+                    unit="Spiele"
+                    icon={<Flame className="h-3.5 w-3.5" />}
+                  />
                 )}
                 <p className="text-xs text-zinc-500">{isMobileDevice ? T.controlsHintMobile : T.controlsHintDesktop}</p>
                 {dailyLimitReached ? (
@@ -1636,7 +1650,7 @@ export function SnakeShell({
 
             {/* Dead overlay */}
             {phase === "dead" && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 sm:gap-4 bg-black/80 backdrop-blur-sm">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 overflow-y-auto px-3 py-4 sm:gap-4 bg-black/80 backdrop-blur-sm">
                 <Skull className="h-10 w-10 sm:h-14 sm:w-14 text-red-400 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)]" />
                 <div className="text-center">
                   <h2 className="text-2xl sm:text-3xl font-extrabold text-zinc-50">{T.gameOverTitle}</h2>

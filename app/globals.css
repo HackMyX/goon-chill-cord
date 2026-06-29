@@ -257,6 +257,53 @@
   100% { transform: translateY(0) scale(1); opacity: 1; }
 }
 
+/* ── Reward / progression feedback entrances (admin-selectable) ───────────── */
+@keyframes fb-pop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes fb-slide-up {
+  0%   { transform: translateY(28px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@keyframes fb-slide-down {
+  0%   { transform: translateY(-28px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@keyframes fb-zoom {
+  0%   { transform: scale(0.2) rotate(-8deg); opacity: 0; }
+  70%  { transform: scale(1.12) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes fb-bounce {
+  0%   { transform: translateY(-40px) scale(0.8); opacity: 0; }
+  55%  { transform: translateY(6px) scale(1.05); opacity: 1; }
+  75%  { transform: translateY(-3px) scale(0.99); }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes fb-flip {
+  0%   { transform: perspective(600px) rotateX(-90deg); opacity: 0; }
+  100% { transform: perspective(600px) rotateX(0deg); opacity: 1; }
+}
+@keyframes fb-fade {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes fb-glow {
+  0%   { transform: scale(0.9); opacity: 0; filter: brightness(2); }
+  100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+}
+@keyframes fb-out {
+  0%   { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.92) translateY(-8px); opacity: 0; }
+}
+/* Confetti particle fall for feedback popups */
+@keyframes fb-confetti {
+  0%   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(var(--fb-cx, 0), var(--fb-cy, 140px)) rotate(var(--fb-cr, 360deg)); opacity: 0; }
+}
+
 @keyframes rgbBorder {
   from { background-position: 0% 50%; }
   to { background-position: 200% 50%; }

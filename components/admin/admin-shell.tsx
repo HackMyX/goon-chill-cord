@@ -35,6 +35,7 @@ import { BalanceCockpit } from "@/components/admin/balance-cockpit";
 import { EconomySynergyEditor } from "@/components/admin/economy-synergy-editor";
 import { SoundConfigEditor } from "@/components/admin/sound-config-editor";
 import { MusicConfigEditor } from "@/components/admin/music-config-editor";
+import { FeedbackConfigEditor } from "@/components/admin/feedback-config-editor";
 import { ThemeConfigEditor } from "@/components/admin/theme-config-editor";
 import { PreviewConfigTab } from "@/components/admin/preview-config-tab";
 import { DailyQuestsTab } from "@/components/admin/daily-quests-tab";
@@ -172,7 +173,7 @@ interface AdminShellProps {
   fineConfig: FineConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "givables" | "sounds" | "music" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy" | "friends";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "givables" | "sounds" | "music" | "feedback" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy" | "friends";
 
 const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string; anchor?: string }[] = [
   { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
@@ -198,6 +199,7 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Bonus-Karten-Themes", tab: "givables", keywords: ["theme", "karte", "card", "design", "bonus", "rgb", "präsentation", "vorschau", "aurora", "legendär", "holographisch", "seltenheit"], description: "Theme/Seltenheit/Titel pro Gutschein-Karte + Live-Vorschau" },
   { label: "Sound-Einstellungen", tab: "sounds", keywords: ["sound", "ton", "lautstärke", "audio", "sfx", "soundeffekt", "klick", "hover", "haptik", "event"], description: "Sound-Events (SFX) und Lautstärken" },
   { label: "Hintergrundmusik", tab: "music", keywords: ["musik", "music", "bgm", "hintergrund", "track", "loop", "arcade", "chill", "adventure", "fade", "lautstärke", "tempo", "dynamik", "zero-overlap", "überlappung", "doppeln", "sfx", "audio"], description: "BGM pro Seite zuweisen, Track-Bibliothek, Fades, Zero-Overlap" },
+  { label: "Belohnungs-Feedback", tab: "feedback", keywords: ["feedback", "belohnung", "celebration", "popup", "toast", "xp", "level up", "levelup", "meilenstein", "quest", "abgeschlossen", "battle pass", "battlepass", "konfetti", "confetti", "animation", "farbe", "sound", "feier"], description: "XP/Level/Quest/Battle-Pass-Feedback: Farbe, Animation, Stil, Sound, Konfetti pro Event" },
   { label: "Theming / Designs", tab: "theme", keywords: ["theme", "design", "farbe", "color", "palette", "skin", "darkmode", "neon", "cyber", "matrix", "vaporwave", "look", "stil", "akzentfarbe"], description: "Seitenweites Gesamt-Design wählen (Farben, Glow), Live-Vorschau" },
   { label: "Preview-Engine", tab: "preview_config", keywords: ["preview", "vorschau", "3d", "rotation", "zoom", "partikel", "glow", "badge", "item", "namestyle"], description: "Vorschau-Engine Konfiguration für Items, Badges, Name-Styles" },
   { label: "Name-Styles", tab: "namestyles", keywords: ["namestyle", "name", "animation", "shimmer", "rainbow", "glitch"], description: "Name-Stil Katalog und Shop" },
@@ -257,6 +259,7 @@ const TABS = ([
   { id: "security",       label: "Sicherheit",           icon: ShieldAlert },
   { id: "sounds",         label: "Sound Manager",        icon: Volume2 },
   { id: "music",          label: "Hintergrundmusik",     icon: Music },
+  { id: "feedback",       label: "Belohnungs-Feedback",  icon: Sparkles },
   { id: "theme",          label: "Theming / Designs",    icon: SwatchBook },
   { id: "homepage_chat",  label: "Startseite Chat",      icon: MessageSquare },
   { id: "surveys",        label: "Umfragen",             icon: BarChart3 },
@@ -298,6 +301,7 @@ const TAB_DESC: Record<Tab, string> = {
   givables: "Vergebbare Inhalte in EINEM Menü: Fähigkeits-Gutscheine (Effekt-Typen, Kombo, Vergabe) + Gutscheine (Belohnungs-Bündel direkt an Spieler vergeben).",
   sounds: "Sound-Events und Lautstärken.",
   music: "Hintergrundmusik pro Seite, Track-Bibliothek, Fades.",
+  feedback: "Belohnungs-Feedback (XP, Level-Up, Quests, Battle-Pass): Farbe, Animation, Sound, Konfetti — pro Event.",
   theme: "Gesamt-Design der Seite (Farben, Glow, Presets) mit Live-Vorschau.",
   preview_config: "3D-Vorschau-Engine: Rotation, Zoom, Partikel, Glow pro Subjekt.",
   fine_config: "Feingranulare Werte: Nametags, Multiplayer-Sync, Hit-Effekte, Chat-Polling.",
@@ -311,7 +315,7 @@ const TAB_DESC: Record<Tab, string> = {
 const TAB_GROUPS: { title: string; icon: typeof Coins; tabs: Tab[] }[] = [
   { title: "Spiele & Welt", icon: Gamepad2, tabs: ["games", "monsters", "pets", "balance"] },
   { title: "Wirtschaft", icon: Coins, tabs: ["economy", "shop", "items"] },
-  { title: "Belohnungen & Fortschritt", icon: Sparkles, tabs: ["battlepass", "daily_quests", "streak", "level_xp", "synergy", "givables"] },
+  { title: "Belohnungen & Fortschritt", icon: Sparkles, tabs: ["battlepass", "daily_quests", "streak", "level_xp", "synergy", "givables", "feedback"] },
   { title: "Kosmetik", icon: SwatchBook, tabs: ["badges", "namestyles", "preview_config"] },
   { title: "Community & Inhalte", icon: MessageCircle, tabs: ["chat", "homepage_chat", "surveys", "patchnotes", "users", "friends"] },
   { title: "Design & Medien", icon: Palette, tabs: ["branding", "theme", "sounds", "music"] },
@@ -758,6 +762,7 @@ export function AdminShell({
         )}
 
         {tab === "music" && <MusicConfigEditor />}
+        {tab === "feedback" && <FeedbackConfigEditor />}
 
         {tab === "theme" && <ThemeConfigEditor />}
 

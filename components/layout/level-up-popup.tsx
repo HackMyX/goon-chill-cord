@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap, Star, ChevronUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -8,6 +8,8 @@ import { getLevelColor, isMilestoneLevel, resolveLevelRoadTier, DEFAULT_LEVEL_RO
 import { getXpConfig } from "@/lib/actions/level-system";
 import { useSoundManager } from "@/lib/sound-manager";
 import { MilestoneCelebration } from "@/components/layout/milestone-celebration";
+import { useFeedbackSettings } from "@/lib/use-feedback";
+import { hexToRgba } from "@/lib/feedback-config";
 
 interface LevelUpEvent {
   id: string;
@@ -21,6 +23,14 @@ export function LevelUpPopup({ userId }: { userId?: string | null }) {
   const [roadConfig, setRoadConfig] = useState<LevelRoadConfig>(DEFAULT_LEVEL_ROAD_CONFIG);
   const [levels, setLevels] = useState<LevelDefinition[]>([]);
   const sound = useSoundManager();
+  const { config: fbConfig, allows } = useFeedbackSettings();
+  // Refs so the realtime callback (mount-only) always sees the latest config.
+  const roadConfigRef = useRef(roadConfig);
+  roadConfigRef.current = roadConfig;
+  const allowsRef = useRef(allows);
+  allowsRef.current = allows;
+  const fbRef = useRef(fbConfig);
+  fbRef.current = fbConfig;
 
   // Load level config once so milestone level-ups can trigger the fullscreen
   // celebration (with the level's title + rewards), and tier colours match.
@@ -56,12 +66,16 @@ export function LevelUpPopup({ userId }: { userId?: string | null }) {
           const row = payload.new as Record<string, unknown>;
           const newLevel = typeof row.level === "number" ? row.level : null;
           if (newLevel && prevLevel !== null && newLevel > prevLevel) {
-            setQueue((q) => [...q, {
-              id: `${Date.now()}`,
-              oldLevel: prevLevel!,
-              newLevel,
-            }]);
-            sound.levelUp();
+            const milestone = isMilestoneLevel(newLevel, roadConfigRef.current) && roadConfigRef.current.celebrateMilestones !== false;
+            const key = milestone ? "level_milestone" : "level_up";
+            if (allowsRef.current(key)) {
+              setQueue((q) => [...q, {
+                id: `${Date.now()}`,
+                oldLevel: prevLevel!,
+                newLevel,
+              }]);
+              if (fbRef.current.events[key].sound) sound.levelUp();
+            }
           }
           if (newLevel) prevLevel = newLevel;
         }
@@ -108,7 +122,10 @@ export function LevelUpPopup({ userId }: { userId?: string | null }) {
           role="status"
           aria-live="polite"
         >
-          <div className="relative overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-900/80 via-[#1a0a00]/90 to-purple-900/60 px-6 py-4 shadow-[0_0_40px_rgba(251,191,36,0.25)] backdrop-blur-md">
+          <div
+            className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-amber-900/80 via-[#1a0a00]/90 to-purple-900/60 px-6 py-4 backdrop-blur-md"
+            style={{ borderColor: hexToRgba(fbConfig.events.level_up.accent, 0.45), boxShadow: `0 0 40px ${hexToRgba(fbConfig.events.level_up.accent, 0.28)}` }}
+          >
             {/* Shimmer */}
             <motion.div
               className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent"
@@ -117,14 +134,17 @@ export function LevelUpPopup({ userId }: { userId?: string | null }) {
             />
 
             <div className="relative flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-500/50 bg-amber-500/15 shadow-[0_0_20px_rgba(251,191,36,0.3)]">
-                <ChevronUp className="h-6 w-6 text-amber-300" />
+              <div
+                className="flex h-12 w-12 items-center justify-center rounded-2xl border text-2xl"
+                style={{ borderColor: hexToRgba(fbConfig.events.level_up.accent, 0.5), background: hexToRgba(fbConfig.events.level_up.accent, 0.15), boxShadow: `0 0 20px ${hexToRgba(fbConfig.events.level_up.accent, 0.3)}` }}
+              >
+                {fbConfig.events.level_up.icon || <ChevronUp className="h-6 w-6" style={{ color: fbConfig.events.level_up.accent }} />}
               </div>
 
               <div>
                 <div className="flex items-center gap-1.5 mb-0.5">
-                  <Zap className="h-3.5 w-3.5 text-amber-400" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-amber-400">Level Up!</span>
+                  <Zap className="h-3.5 w-3.5" style={{ color: fbConfig.events.level_up.accent }} />
+                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: fbConfig.events.level_up.accent }}>Level Up!</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`text-2xl font-black ${getLevelColor(current.newLevel)}`}>

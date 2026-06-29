@@ -94,6 +94,8 @@ const REQUIRED_TABLES = [
   "game_leaderboard_config",
   // Music config singleton (run scripts/add-music-config.cjs)
   "music_config",
+  // Reward-feedback config singleton (run scripts/add-feedback-config.cjs)
+  "feedback_config",
   // Theme config singleton (run scripts/add-theme-config.cjs)
   "theme_config",
   // Single-session enforcement (run scripts/add-user-sessions.cjs)
@@ -137,6 +139,7 @@ const SINGLETON_CONFIGS: Array<{ id: string; table: string; name: string; catego
   { id: "cfg_fine",        table: "fine_config",          name: "fine_config (default)",          category: "Feintuning" },
   { id: "cfg_game_lb",    table: "game_leaderboard_config", name: "game_leaderboard_config (default)", category: "Spielebestenlisten" },
   { id: "cfg_music",      table: "music_config",            name: "music_config (default)",           category: "Musik-System" },
+  { id: "cfg_feedback",   table: "feedback_config",         name: "feedback_config (default)",        category: "Belohnungs-Feedback" },
   { id: "cfg_theme",      table: "theme_config",            name: "theme_config (default)",           category: "Theming-Engine" },
   { id: "cfg_case_display", table: "case_display_config",   name: "case_display_config (default)",     category: "Cases" },
   { id: "cfg_daily_quest", table: "daily_quest_config",     name: "daily_quest_config (default)",     category: "Daily Quests" },

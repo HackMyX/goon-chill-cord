@@ -565,6 +565,12 @@ export function MusicConfigEditor() {
             label="Lautstärke anpassen erlauben"
             description="User können den Lautstärke-Slider verschieben."
           />
+          <Toggle
+            checked={config.showAccountMusicControl ?? true}
+            onChange={(v) => setConfig((c) => ({ ...c, showAccountMusicControl: v }))}
+            label="Musik-Regler im Profil (/account) zeigen"
+            description="Wenn aus: Der „Hintergrundmusik“-Regler verschwindet komplett aus den Account-Audio-Einstellungen."
+          />
         </div>
 
         {/* Max user volume */}

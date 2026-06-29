@@ -40,6 +40,27 @@ export function guideSearchText(c: AdminGuideContent): string {
 }
 
 export const TAB_GUIDES: Record<string, AdminGuideContent> = {
+  feedback: {
+    title: "So funktioniert das Belohnungs-Feedback",
+    subtitle: "Jedes Celebration-Popup der Seite an einem Ort — Farbe, Animation, Sound, Konfetti.",
+    steps: [
+      { title: "Event wählen", text: "Jede Belohnungsquelle (XP, Level-Up, Meilenstein, Tagesquest, Battle-Pass-Quest, Battle-Pass-Stufe, allgemeine Belohnung) hat eine eigene Karte." },
+      { title: "Stil & Optik einstellen", text: "Pro Event: Stil (Toast/Popup/Konfetti), Farbe, Animation, Symbol, Dauer, Sound und Konfetti — mit Live-Vorschau." },
+      { title: "An/Aus", text: "Master-Schalter steuert alles; pro Event lässt sich Feedback einzeln deaktivieren." },
+    ],
+    howItWorks: { heading: "Sofort live & nutzer-respektierend", lines: [
+      "Änderungen werden per Realtime an alle offenen Clients gesendet — kein Reload.",
+      "Nutzer können einzelne Feedback-Typen zusätzlich in ihrem Profil (/account) abschalten; der Admin gibt nur den Rahmen vor.",
+      "XP & Level-Up reagieren auf echte Profil-Änderungen; Quests/Battle-Pass werden serverseitig ausgelöst.",
+    ] },
+    glossary: [
+      { term: "Toast", def: "Kleine Pille, die kurz erscheint (z. B. +XP)." },
+      { term: "Popup", def: "Größere Karte mit Symbol, Titel und Belohnungs-Chips." },
+      { term: "Konfetti", def: "Popup mit zusätzlichem Partikel-Effekt für besondere Momente." },
+    ],
+    tip: "Nutze die Vorschau pro Event, um Farbe + Animation schnell abzustimmen, bevor du speicherst.",
+  },
+
   balance: {
     title: "So funktioniert das Balance Studio",
     subtitle: "Schnelles Balancing aller Spiele an einem Ort.",

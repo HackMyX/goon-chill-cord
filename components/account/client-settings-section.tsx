@@ -191,20 +191,23 @@ export function ClientSettingsSection() {
           <span className="text-sm font-bold text-zinc-200">Audio</span>
         </div>
         <div className="flex flex-col gap-2">
-          <VolumeRow
-            icon={<Music className="h-5 w-5 text-purple-300" />}
-            title="Hintergrundmusik"
-            hint={
-              musicCfg && !canMusicVolume
-                ? "Lautstärke wird vom Admin vorgegeben."
-                : "Lautstärke der Spielmusik."
-            }
-            volume={settings.musicVolume}
-            muted={settings.musicMuted}
-            disabled={!!musicCfg && !canMusicVolume && !canMusicMute}
-            onVolume={onMusicVol}
-            onToggleMute={() => { if (canMusicMute || !musicCfg) setMusicMuted(!settings.musicMuted); }}
-          />
+          {/* Admin can hide the music control entirely (showAccountMusicControl). */}
+          {(musicCfg?.showAccountMusicControl ?? true) && (
+            <VolumeRow
+              icon={<Music className="h-5 w-5 text-purple-300" />}
+              title="Hintergrundmusik"
+              hint={
+                musicCfg && !canMusicVolume
+                  ? "Lautstärke wird vom Admin vorgegeben."
+                  : "Lautstärke der Spielmusik."
+              }
+              volume={settings.musicVolume}
+              muted={settings.musicMuted}
+              disabled={!!musicCfg && !canMusicVolume && !canMusicMute}
+              onVolume={onMusicVol}
+              onToggleMute={() => { if (canMusicMute || !musicCfg) setMusicMuted(!settings.musicMuted); }}
+            />
+          )}
           <VolumeRow
             icon={<Volume2 className="h-5 w-5 text-purple-300" />}
             title="Soundeffekte (SFX)"

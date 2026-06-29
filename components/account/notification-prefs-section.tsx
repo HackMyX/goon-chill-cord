@@ -10,7 +10,7 @@ type NotifEntry = { type: string; label: string; desc: string };
 type NotifGroup = {
   key: string;
   label: string;
-  color: "amber" | "cyan" | "emerald" | "violet";
+  color: "amber" | "cyan" | "emerald" | "violet" | "fuchsia";
   icon: React.ReactNode;
   types: NotifEntry[];
 };
@@ -66,6 +66,21 @@ const USER_GROUPS: NotifGroup[] = [
       { type: "friend_accepted", label: "Freundschaft bestätigt",    desc: "Wenn jemand deine Anfrage annimmt" },
     ],
   },
+  {
+    key: "feedback",
+    label: "Belohnungs-Feedback (Popups)",
+    color: "fuchsia",
+    icon: <Sparkles className="h-3.5 w-3.5" />,
+    types: [
+      { type: "fb_xp_gain",         label: "XP-Anzeige",                 desc: "Kleiner Toast, wenn du XP erhältst" },
+      { type: "fb_level_up",        label: "Level-Up-Feier",             desc: "Popup, wenn du ein Level aufsteigst" },
+      { type: "fb_level_milestone", label: "Meilenstein-Feier",          desc: "Große Konfetti-Feier bei besonderen Levels" },
+      { type: "fb_daily_quest",     label: "Tagesquest abgeschlossen",   desc: "Popup, wenn du eine Tagesquest fertigstellst" },
+      { type: "fb_bp_quest",        label: "Battle-Pass-Quest",          desc: "Popup, wenn du eine Battle-Pass-Aufgabe abschließt" },
+      { type: "fb_bp_tier",         label: "Battle-Pass-Belohnung",      desc: "Feier, wenn du eine Battle-Pass-Stufe einlöst" },
+      { type: "fb_reward",          label: "Sonstige Belohnungen",       desc: "Allgemeines Feedback bei weiteren Gewinnen" },
+    ],
+  },
 ];
 
 const STAFF_ENTRIES: NotifEntry[] = [
@@ -85,6 +100,7 @@ const COLORS = {
   cyan:    { dot: "bg-cyan-400",    border: "border-cyan-400/25",    bg: "bg-cyan-400/[0.04]",    text: "text-cyan-300"    },
   emerald: { dot: "bg-emerald-400", border: "border-emerald-400/25", bg: "bg-emerald-400/[0.04]", text: "text-emerald-300" },
   violet:  { dot: "bg-violet-400",  border: "border-violet-400/25",  bg: "bg-violet-400/[0.04]",  text: "text-violet-300"  },
+  fuchsia: { dot: "bg-fuchsia-400", border: "border-fuchsia-400/25", bg: "bg-fuchsia-400/[0.04]", text: "text-fuchsia-300" },
 } as const;
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
