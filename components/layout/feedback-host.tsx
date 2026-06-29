@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useFeedbackSettings } from "@/lib/use-feedback";
 import {
-  feedbackAnimationStyle, hexToRgba,
-  type CelebrationPayload, type FeedbackConfig, type FeedbackEventConfig, type FeedbackEventKey, type FeedbackPosition,
+  feedbackAnimationStyle, hexToRgba, INTENSITY_FACTOR,
+  type CelebrationPayload, type FeedbackConfig, type FeedbackEventConfig, type FeedbackEventKey,
+  type FeedbackPosition, type FeedbackParticle,
 } from "@/lib/feedback-config";
 
 interface QueueItem { id: string; payload: CelebrationPayload }
@@ -102,6 +103,7 @@ function FeedbackItem({ payload, cfg, onDone }: { payload: CelebrationPayload; c
   const icon = payload.icon || ev.icon;
   const isPopup = ev.style !== "toast";
   const showConfetti = ev.style === "confetti" || ev.confetti;
+  const f = INTENSITY_FACTOR[ev.intensity] ?? INTENSITY_FACTOR.normal;
 
   const animStyle = leaving
     ? "fb-out 0.34s ease forwards"
@@ -140,84 +142,153 @@ function FeedbackItem({ payload, cfg, onDone }: { payload: CelebrationPayload; c
   return (
     <div
       className="pointer-events-auto relative w-[calc(100vw-2rem)] max-w-sm cursor-pointer overflow-visible"
-      style={{ animation: animStyle }}
       onClick={onDone}
       role="status"
     >
-      {showConfetti && <ConfettiBurst accent={accent} />}
-      <div
-        className="relative overflow-hidden rounded-2xl border px-5 py-4 backdrop-blur-md"
-        style={{
-          borderColor: hexToRgba(accent, 0.5),
-          background: `linear-gradient(135deg, ${hexToRgba(accent, 0.18)}, rgba(8,7,18,0.92) 70%)`,
-          boxShadow: `0 0 44px ${hexToRgba(accent, 0.3)}`,
-        }}
-      >
-        <div className="absolute inset-0 -translate-x-full animate-[mine-shimmer_2s_ease_forwards] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-        <div className="relative flex items-center gap-3.5">
-          <div
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-2xl"
-            style={{ borderColor: hexToRgba(accent, 0.5), background: hexToRgba(accent, 0.15), boxShadow: `0 0 20px ${hexToRgba(accent, 0.3)}` }}
-          >
-            {icon}
+      {/* ScreenFlash must NOT be inside a transformed ancestor (else `fixed` breaks). */}
+      {ev.screenFlash && !leaving && <ScreenFlash accent={accent} strength={f.flash} />}
+      <div className="relative overflow-visible" style={{ transform: `scale(${f.scale})` }}>
+      {showConfetti && !leaving && <ParticleField accent={accent} type={ev.particleType} count={f.particles} />}
+      {f.shockwave && !leaving && <Shockwave accent={accent} />}
+      <div className="relative overflow-visible" style={{ animation: animStyle }}>
+        <div
+          className="relative overflow-hidden rounded-2xl border px-5 py-4 backdrop-blur-md"
+          style={{
+            borderColor: hexToRgba(accent, 0.5),
+            background: `linear-gradient(135deg, ${hexToRgba(accent, 0.18)}, rgba(8,7,18,0.92) 70%)`,
+            boxShadow: `0 0 ${Math.round(30 + f.glow * 70)}px ${hexToRgba(accent, Math.min(0.6, f.glow + 0.12))}`,
+          }}
+        >
+          <div className="absolute inset-0 -translate-x-full animate-[mine-shimmer_2s_ease_forwards] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+          <div className="relative flex items-center gap-3.5">
+            <div
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-2xl"
+              style={{ borderColor: hexToRgba(accent, 0.5), background: hexToRgba(accent, 0.15), boxShadow: `0 0 20px ${hexToRgba(accent, 0.3)}` }}
+            >
+              {icon}
+            </div>
+            <div className="min-w-0">
+              <p className="text-base font-black leading-tight" style={{ color: accent }}>{payload.title}</p>
+              {payload.message && <p className="mt-0.5 text-xs text-zinc-300">{payload.message}</p>}
+              {typeof payload.amount === "number" && (
+                <p className="mt-0.5 text-sm font-black tabular-nums" style={{ color: accent }}>
+                  +{payload.amount.toLocaleString("de-DE")}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-base font-black leading-tight" style={{ color: accent }}>{payload.title}</p>
-            {payload.message && <p className="mt-0.5 text-xs text-zinc-300">{payload.message}</p>}
-            {typeof payload.amount === "number" && (
-              <p className="mt-0.5 text-sm font-black tabular-nums" style={{ color: accent }}>
-                +{payload.amount.toLocaleString("de-DE")}
-              </p>
-            )}
-          </div>
+          {payload.rewards && payload.rewards.length > 0 && (
+            <div className="relative mt-3 flex flex-wrap gap-1.5">
+              {payload.rewards.map((r, i) => (
+                <span
+                  key={i}
+                  className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold"
+                  style={{ borderColor: hexToRgba(accent, 0.35), background: hexToRgba(accent, 0.10), color: accent }}
+                >
+                  {r.icon && <span className="leading-none">{r.icon}</span>}{r.label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-        {payload.rewards && payload.rewards.length > 0 && (
-          <div className="relative mt-3 flex flex-wrap gap-1.5">
-            {payload.rewards.map((r, i) => (
-              <span
-                key={i}
-                className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold"
-                style={{ borderColor: hexToRgba(accent, 0.35), background: hexToRgba(accent, 0.10), color: accent }}
-              >
-                {r.icon && <span className="leading-none">{r.icon}</span>}{r.label}
-              </span>
-            ))}
-          </div>
-        )}
+      </div>
       </div>
     </div>
   );
 }
 
-/** Lightweight CSS confetti burst — 16 particles fanning out from the card top. */
-function ConfettiBurst({ accent }: { accent: string }) {
-  const colors = [accent, "#ffffff", hexToRgba(accent, 0.6), "#fbbf24"];
-  const parts = Array.from({ length: 18 }, (_, i) => {
-    const angle = (i / 18) * Math.PI * 2;
-    const dist = 70 + (i % 5) * 22;
-    const cx = Math.cos(angle) * dist;
-    const cy = Math.sin(angle) * dist + 40;
-    const rot = 180 + (i % 7) * 90;
-    const delay = (i % 6) * 0.04;
-    return { cx, cy, rot, color: colors[i % colors.length], delay, left: 50 + (i % 3 - 1) * 6 };
+/** One-shot full-screen accent glow that pulses once — the "big moment" punch.
+ *  Rendered via portal-free fixed overlay; pointer-events none. */
+function ScreenFlash({ accent, strength }: { accent: string; strength: number }) {
+  return (
+    <div
+      className="pointer-events-none fixed inset-0 z-0"
+      style={{
+        background: `radial-gradient(circle at 50% 42%, ${hexToRgba(accent, strength)}, transparent 62%)`,
+        animation: "fb-flash 0.9s ease-out forwards",
+      }}
+    />
+  );
+}
+
+/** Expanding shockwave ring behind the card (epic intensity only). */
+function Shockwave({ accent }: { accent: string }) {
+  return (
+    <span
+      className="pointer-events-none absolute left-1/2 top-1/2 z-0 block h-24 w-24 rounded-full border-2"
+      style={{ borderColor: hexToRgba(accent, 0.7), animation: "fb-shockwave 0.9s ease-out forwards" }}
+    />
+  );
+}
+
+/** Configurable particle burst — confetti / fireworks / stars / streamers.
+ *  Particle count scales with the event intensity. Exported so the admin editor
+ *  can fire a faithful inline preview. */
+export function ParticleField({ accent, type, count }: { accent: string; type: FeedbackParticle; count: number }) {
+  const colors = [accent, "#ffffff", hexToRgba(accent, 0.65), "#fbbf24", "#f472b6"];
+  const n = Math.max(6, Math.round(count));
+  const parts = Array.from({ length: n }, (_, i) => {
+    const angle = (i / n) * Math.PI * 2 + (i % 3) * 0.4;
+    const color = colors[i % colors.length];
+    const delay = (i % 7) * 0.035;
+    return { i, angle, color, delay };
   });
+
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-0">
-      {parts.map((p, i) => (
-        <span
-          key={i}
-          className="absolute block h-2 w-2 rounded-[1px]"
-          style={{
-            left: `${p.left}%`,
-            top: 0,
-            background: p.color,
-            ["--fb-cx" as string]: `${p.cx}px`,
-            ["--fb-cy" as string]: `${p.cy}px`,
-            ["--fb-cr" as string]: `${p.rot}deg`,
-            animation: `fb-confetti 1.1s ${p.delay}s ease-out forwards`,
-          }}
-        />
-      ))}
+      {parts.map((p) => {
+        if (type === "fireworks") {
+          const dist = 80 + (p.i % 6) * 26;
+          const cx = Math.cos(p.angle) * dist;
+          const cy = Math.sin(p.angle) * dist;
+          const size = 4 + (p.i % 3) * 2;
+          return (
+            <span key={p.i} className="absolute block rounded-full"
+              style={{
+                left: "50%", top: 0, height: size, width: size, background: p.color,
+                boxShadow: `0 0 8px ${p.color}`,
+                ["--fb-cx" as string]: `${cx}px`, ["--fb-cy" as string]: `${cy}px`, ["--fb-s" as string]: "1",
+                animation: `fb-spark 1.05s ${p.delay}s cubic-bezier(0.15,0.7,0.3,1) forwards`,
+              }} />
+          );
+        }
+        if (type === "stars") {
+          const cx = (p.i % 2 ? 1 : -1) * (20 + (p.i % 6) * 16);
+          const cy = -(90 + (p.i % 5) * 34);
+          return (
+            <span key={p.i} className="absolute text-sm leading-none"
+              style={{
+                left: `${48 + (p.i % 5 - 2) * 8}%`, top: 0, color: p.color, filter: `drop-shadow(0 0 4px ${p.color})`,
+                ["--fb-cx" as string]: `${cx}px`, ["--fb-cy" as string]: `${cy}px`, ["--fb-cr" as string]: `${180 + (p.i % 4) * 90}deg`,
+                animation: `fb-star 1.3s ${p.delay}s ease-out forwards`,
+              }}>★</span>
+          );
+        }
+        if (type === "streamers") {
+          const cx = (p.i % 2 ? 1 : -1) * (10 + (p.i % 7) * 14);
+          const cy = 150 + (p.i % 5) * 30;
+          return (
+            <span key={p.i} className="absolute block rounded-[1px]"
+              style={{
+                left: `${50 + (p.i % 6 - 3) * 7}%`, top: 0, height: 14, width: 4, background: p.color,
+                ["--fb-cx" as string]: `${cx}px`, ["--fb-cy" as string]: `${cy}px`, ["--fb-r" as string]: `${(p.i % 4) * 30}deg`,
+                animation: `fb-streamer 1.3s ${p.delay}s ease-in forwards`,
+              }} />
+          );
+        }
+        // confetti (default)
+        const dist = 70 + (p.i % 5) * 22;
+        const cx = Math.cos(p.angle) * dist;
+        const cy = Math.sin(p.angle) * dist + 40;
+        return (
+          <span key={p.i} className="absolute block h-2 w-2 rounded-[1px]"
+            style={{
+              left: `${50 + (p.i % 3 - 1) * 6}%`, top: 0, background: p.color,
+              ["--fb-cx" as string]: `${cx}px`, ["--fb-cy" as string]: `${cy}px`, ["--fb-cr" as string]: `${180 + (p.i % 7) * 90}deg`,
+              animation: `fb-confetti 1.1s ${p.delay}s ease-out forwards`,
+            }} />
+        );
+      })}
     </div>
   );
 }

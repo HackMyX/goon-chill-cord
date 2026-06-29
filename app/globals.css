@@ -304,6 +304,56 @@
   100% { transform: translate(var(--fb-cx, 0), var(--fb-cy, 140px)) rotate(var(--fb-cr, 360deg)); opacity: 0; }
 }
 
+/* ── Erweiterte Feedback-Entrances ────────────────────────────────────────── */
+@keyframes fb-drop {
+  0%   { transform: translateY(-130%) scale(0.9); opacity: 0; }
+  60%  { transform: translateY(8%) scale(1.04);   opacity: 1; }
+  80%  { transform: translateY(-2%) scale(0.99); }
+  100% { transform: translateY(0) scale(1);        opacity: 1; }
+}
+@keyframes fb-rubber {
+  0%   { transform: scale(0.5);          opacity: 0; }
+  50%  { transform: scale(1.16, 0.88);   opacity: 1; }
+  70%  { transform: scale(0.94, 1.06); }
+  85%  { transform: scale(1.03, 0.98); }
+  100% { transform: scale(1);            opacity: 1; }
+}
+@keyframes fb-swing {
+  0%   { transform: rotate(-12deg) translateY(-22px) scale(0.9); opacity: 0; }
+  60%  { transform: rotate(6deg) translateY(0) scale(1);         opacity: 1; }
+  80%  { transform: rotate(-3deg); }
+  100% { transform: rotate(0deg) scale(1);                       opacity: 1; }
+}
+
+/* ── Partikel-Effekte ─────────────────────────────────────────────────────── */
+/* Fireworks / radial burst (round sparks shooting outward, fading). */
+@keyframes fb-spark {
+  0%   { transform: translate(0, 0) scale(var(--fb-s, 1)); opacity: 1; }
+  100% { transform: translate(var(--fb-cx, 0), var(--fb-cy, 0)) scale(0.2); opacity: 0; }
+}
+/* Stars drifting upward + twinkling. */
+@keyframes fb-star {
+  0%   { transform: translate(0, 0) scale(0.3) rotate(0deg);   opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translate(var(--fb-cx, 0), var(--fb-cy, -120px)) scale(1) rotate(var(--fb-cr, 180deg)); opacity: 0; }
+}
+/* Ribbon streamers falling with a sway. */
+@keyframes fb-streamer {
+  0%   { transform: translate(0, -8px) rotate(var(--fb-r, 0deg)); opacity: 1; }
+  100% { transform: translate(var(--fb-cx, 0), var(--fb-cy, 150px)) rotate(calc(var(--fb-r, 0deg) + 240deg)); opacity: 0; }
+}
+
+/* ── Screen flash + shockwave for big moments ─────────────────────────────── */
+@keyframes fb-flash {
+  0%   { opacity: 0; }
+  22%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes fb-shockwave {
+  0%   { transform: translate(-50%, -50%) scale(0.25); opacity: 0.75; }
+  100% { transform: translate(-50%, -50%) scale(2.8);  opacity: 0; }
+}
+
 /* ── Spiel-Limit-Meter (LimitMeter) ───────────────────────────────────────── */
 /* Sheen sweeping across the fill bar — endless, subtle. */
 @keyframes limit-sheen {

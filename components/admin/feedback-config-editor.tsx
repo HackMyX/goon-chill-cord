@@ -6,12 +6,16 @@ import { getFeedbackConfig, saveFeedbackConfig } from "@/lib/actions/feedback-co
 import { useSoundManager } from "@/lib/sound-manager";
 import {
   DEFAULT_FEEDBACK_CONFIG, FEEDBACK_EVENT_META, FEEDBACK_ANIMATIONS, FEEDBACK_STYLES, FEEDBACK_POSITIONS,
+  FEEDBACK_INTENSITIES, FEEDBACK_PARTICLES,
   LIMIT_METER_STYLES, feedbackAnimationStyle, hexToRgba, resolveFeedbackConfig,
   type FeedbackConfig, type FeedbackEventConfig, type FeedbackEventKey,
   type FeedbackAnimation, type FeedbackStyle, type FeedbackPosition,
+  type FeedbackIntensity, type FeedbackParticle,
   type LimitMeterConfig, type LimitMeterStyle,
 } from "@/lib/feedback-config";
 import { LimitMeterPreview } from "@/components/rewards/limit-meter";
+import { ParticleField } from "@/components/layout/feedback-host";
+import { INTENSITY_FACTOR } from "@/lib/feedback-config";
 import { Gauge } from "lucide-react";
 
 const STYLE_LABEL: Record<FeedbackStyle, string> = { toast: "Toast (Pille)", popup: "Popup (Karte)", confetti: "Popup + Konfetti" };
@@ -19,8 +23,11 @@ const POSITION_LABEL: Record<FeedbackPosition, string> = { "top": "Oben Mitte", 
 const ANIM_LABEL: Record<FeedbackAnimation, string> = {
   "pop": "Pop", "slide-up": "Hoch schieben", "slide-down": "Runter schieben",
   "zoom": "Zoom + Dreh", "bounce": "Bounce", "flip": "Flip", "fade": "Einblenden", "glow": "Glow-Flash",
+  "drop": "Fallen lassen", "rubber": "Gummi", "swing": "Schwingen",
 };
 const LIMIT_STYLE_LABEL: Record<LimitMeterStyle, string> = { bar: "Balken", segments: "Segmente", ring: "Ring" };
+const INTENSITY_LABEL: Record<FeedbackIntensity, string> = { subtle: "Dezent", normal: "Normal", epic: "Episch 🔥" };
+const PARTICLE_LABEL: Record<FeedbackParticle, string> = { confetti: "Konfetti", fireworks: "Feuerwerk", stars: "Sterne", streamers: "Luftschlangen" };
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -258,9 +265,21 @@ export function FeedbackConfigEditor() {
                   Sound
                   <Toggle checked={ev.sound} onChange={(v) => setEvent(meta.key, { sound: v })} />
                 </label>
-                <label className="flex items-center justify-between gap-2 text-xs text-zinc-300">
-                  Konfetti
+                <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Schaltet den Partikel-Effekt an/aus. Der Typ wird unten gewählt.">
+                  Partikel
                   <Toggle checked={ev.confetti} onChange={(v) => setEvent(meta.key, { confetti: v })} />
+                </label>
+                <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Wie wuchtig die Feier ist: Dezent (klein, kaum Partikel), Normal, oder Episch (groß, viele Partikel, Shockwave-Ring).">
+                  Intensität
+                  <Select<FeedbackIntensity> value={ev.intensity} options={FEEDBACK_INTENSITIES} labels={INTENSITY_LABEL} onChange={(v) => setEvent(meta.key, { intensity: v })} />
+                </label>
+                <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Welcher Partikel-Effekt fliegt: Konfetti (Regen), Feuerwerk (radiale Funken), Sterne (steigen auf) oder Luftschlangen.">
+                  Effekt
+                  <Select<FeedbackParticle> value={ev.particleType} options={FEEDBACK_PARTICLES} labels={PARTICLE_LABEL} onChange={(v) => setEvent(meta.key, { particleType: v })} />
+                </label>
+                <label className="flex items-center justify-between gap-2 text-xs text-zinc-300" title="Lässt bei diesem Event kurz den ganzen Bildschirm in der Akzentfarbe aufleuchten — für die wirklich großen Momente (Level-Up, Battle-Pass-Stufe).">
+                  Screen-Blitz
+                  <Toggle checked={ev.screenFlash} onChange={(v) => setEvent(meta.key, { screenFlash: v })} />
                 </label>
               </div>
 
@@ -270,15 +289,21 @@ export function FeedbackConfigEditor() {
                   className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 hover:border-white/25 hover:text-zinc-100">
                   <Play className="h-3 w-3" /> Vorschau
                 </button>
-                <div className="flex min-h-[40px] flex-1 items-center justify-center overflow-hidden">
+                <div className="relative flex min-h-[48px] flex-1 items-center justify-center overflow-visible">
+                  {pk > 0 && ev.confetti && (
+                    <div key={`p${pk}`} className="pointer-events-none absolute left-1/2 top-1/2 h-0 w-0">
+                      <ParticleField accent={ev.accent} type={ev.particleType} count={INTENSITY_FACTOR[ev.intensity].particles} />
+                    </div>
+                  )}
                   <div
                     key={pk}
-                    className="flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-extrabold backdrop-blur-md"
+                    className="relative flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-extrabold backdrop-blur-md"
                     style={{
                       animation: pk > 0 ? feedbackAnimationStyle(ev.animation) : undefined,
+                      transform: `scale(${INTENSITY_FACTOR[ev.intensity].scale})`,
                       borderColor: hexToRgba(ev.accent, 0.5),
                       background: `linear-gradient(90deg, ${hexToRgba(ev.accent, 0.22)}, ${hexToRgba(ev.accent, 0.1)})`,
-                      boxShadow: `0 8px 30px ${hexToRgba(ev.accent, 0.28)}`,
+                      boxShadow: `0 8px ${Math.round(20 + INTENSITY_FACTOR[ev.intensity].glow * 50)}px ${hexToRgba(ev.accent, 0.28)}`,
                       color: ev.accent,
                     }}
                   >
