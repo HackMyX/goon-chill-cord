@@ -434,6 +434,66 @@ function GameBonusModel({ game }: { game?: string }) {
   );
 }
 
+// ── Seltenheit: EINE Quelle der Wahrheit (Farbe + Stufe) ──────────────────────
+// Farben an die kanonischen Karten-Seltenheiten angelehnt (lib/bonus-card-themes).
+// `tier` steuert Aura-Stärke, Lichtintensität & Glanz — je seltener, desto krasser.
+export const RARITY_3D: Record<string, { color: string; tier: number }> = {
+  normal:   { color: "#a1a1aa", tier: 0 },
+  selten:   { color: "#38bdf8", tier: 1 },
+  episch:   { color: "#a855f7", tier: 2 },
+  mythisch: { color: "#ec4899", tier: 3 },
+  ultra:    { color: "#fbbf24", tier: 4 },
+};
+export function rarity3d(rarity?: string): { color: string; tier: number } {
+  return RARITY_3D[rarity ?? "normal"] ?? RARITY_3D.normal;
+}
+
+// ── Seltenheits-Aura: weicher Glow hinter JEDEM Modell, Stärke nach Seltenheit ─
+function RarityAura({ color, tier }: { color: string; tier: number }) {
+  const ref = useRef<THREE.Group>(null);
+  const haloRef = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    ref.current.rotation.z = clock.elapsedTime * 0.4;
+    // Höhere Seltenheiten "atmen" sichtbar.
+    if (haloRef.current && tier >= 2) {
+      const p = 0.85 + Math.abs(Math.sin(clock.elapsedTime * 1.6)) * 0.15;
+      haloRef.current.scale.setScalar(p);
+    }
+  });
+  if (tier <= 0) return null;
+  const opacity = 0.05 + tier * 0.035;       // 0.085 … 0.19
+  const radius = 0.82 + tier * 0.1;          // größer bei mehr Seltenheit
+  const sparkleCount = tier >= 3 ? 10 : tier === 2 ? 6 : 0;
+  return (
+    <group ref={ref} position={[0, 0, -0.55]}>
+      {/* weicher Glow-Ball */}
+      <mesh>
+        <sphereGeometry args={[radius, 24, 24]} />
+        <meshBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} />
+      </mesh>
+      {/* Glow-Ring für episch+ */}
+      {tier >= 2 && (
+        <mesh ref={haloRef} rotation={[Math.PI / 2.2, 0, 0]}>
+          <torusGeometry args={[radius * 0.95, 0.02 + tier * 0.006, 8, 48]} />
+          <meshBasicMaterial color={color} transparent opacity={0.35} depthWrite={false} />
+        </mesh>
+      )}
+      {/* umkreisende Funken für mythisch/ultra */}
+      {Array.from({ length: sparkleCount }).map((_, i) => {
+        const a = (i / sparkleCount) * Math.PI * 2;
+        const r = radius * 1.05;
+        return (
+          <mesh key={i} position={[Math.cos(a) * r, Math.sin(a) * r, 0.2]}>
+            <sphereGeometry args={[0.03 + tier * 0.004, 8, 8]} />
+            <meshBasicMaterial color={color} transparent opacity={0.9} depthWrite={false} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
 // ── Reward type → 3D scene ────────────────────────────────────────────────────
 
 function BpRewardScene({
@@ -447,26 +507,28 @@ function BpRewardScene({
   creditsAmount?: number;
   game?: string;
 }) {
-  const rarityColors: Record<string, string> = {
-    normal: "#94a3b8",
-    selten: "#a78bfa",
-    mythisch: "#f59e0b",
-    ultra: "#e879f9",
-  };
-  const rc = rarityColors[rarity] ?? "#7c3aed";
+  const { color: rc, tier } = rarity3d(rarity);
 
+  let model: ReactNode;
   switch (rewardType) {
-    case "credits": return <SpinningCoin amount={creditsAmount} />;
-    case "random_item": return <SpinningDice rarityColor={rc} />;
-    case "badge": return <SpinningTrophy />;
-    case "xp_boost": return <SpinningBolt />;
-    case "name_style": return <SpinningStyleOrb />;
-    case "ability": return <SpinningAbilityOrb />;
+    case "credits": model = <SpinningCoin amount={creditsAmount} />; break;
+    case "random_item": model = <SpinningDice rarityColor={rc} />; break;
+    case "badge": model = <SpinningTrophy />; break;
+    case "xp_boost": model = <SpinningBolt />; break;
+    case "name_style": model = <SpinningStyleOrb />; break;
+    case "ability": model = <SpinningAbilityOrb />; break;
     // Eigene Modelle: Ticket für Case-Gutscheine, pro-Spiel-Modell für Spiel-Bonus.
-    case "case_voucher": return <SpinningTicket color={rc} />;
-    case "game_bonus": return <GameBonusModel game={game} />;
-    default: return <SpinningGem color={rc} />;
+    case "case_voucher": model = <SpinningTicket color={rc} />; break;
+    case "game_bonus": model = <GameBonusModel game={game} />; break;
+    default: model = <SpinningGem color={rc} />; break;
   }
+
+  return (
+    <>
+      <RarityAura color={rc} tier={tier} />
+      {model}
+    </>
+  );
 }
 
 // ── Carousel clip — per-FRAME visibility (no React lag) ───────────────────────
@@ -552,9 +614,10 @@ export function BpRewardView3D({
   );
 }
 
-const RARITY_HERO_COLORS: Record<string, string> = {
-  normal: "#94a3b8", selten: "#a78bfa", mythisch: "#f59e0b", ultra: "#e879f9",
-};
+// Licht-/Hero-Farbe pro Seltenheit — aus der EINEN Quelle (RARITY_3D), inkl. episch.
+function rarityHeroColor(rarity: string): string {
+  return rarity3d(rarity).color;
+}
 
 /**
  * Eigenständiger 3D-Hero (eigene Canvas, kein <View> nötig) — rendert eine
@@ -575,7 +638,7 @@ export function RewardHero3D({
   game?: string;
   autoRotate?: boolean;
 }) {
-  const light = RARITY_HERO_COLORS[rarity] ?? "#7c3aed";
+  const light = rarityHeroColor(rarity);
   return (
     <Canvas
       camera={{ position: [0, 0.18, 2.9], fov: 42 }}
