@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { LayoutGrid, ChevronLeft, ChevronRight, Box, Gift, Sparkles, Type } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { LayoutGrid, ChevronLeft, ChevronRight, Box, Gift, Sparkles, Type, Loader2 } from "lucide-react";
 import { BpRewardView3D } from "@/components/battlepass/bp-reward-3d";
 import { RewardCardCanvas } from "@/components/rewards/reward-card-canvas";
 import { BonusCard } from "@/components/rewards/bonus-card";
@@ -9,7 +9,44 @@ import { AbilityVoucherCard } from "@/components/rewards/ability-voucher-card";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { BONUS_CARD_THEMES, type BonusCardRarity } from "@/lib/bonus-card-themes";
 import { NAME_STYLES } from "@/lib/name-styles";
+import { ABILITY_EFFECT_META, ABILITY_CATEGORY_LABELS, type AbilityDefinition, type AbilityEffectUnit } from "@/lib/abilities";
+import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
 import type { BonusGame } from "@/lib/bonus-games";
+
+// Effektwert nach Einheit lesbar machen (nur wenn ein Wert existiert).
+function formatEffectValue(value: number, unit: AbilityEffectUnit): string | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  switch (unit) {
+    case "percent": return `+${Math.round(value * 100)}%`;
+    case "chance":  return `${Math.round(value * 100)}%`;
+    case "hours":   return `${value} h`;
+    case "flat":    return `+${value}`;
+    case "flag":    return value ? "an" : null;
+    case "value":   return `${value}`;
+    default:        return `${value}`;
+  }
+}
+
+// Kleines Info-Badge — wird NUR gerendert, wenn ein Wert vorhanden ist.
+function InfoBadge({ label, value, tone = "zinc" }: { label?: string; value: string | number | null | undefined; tone?: "zinc" | "amber" | "fuchsia" | "emerald" | "sky" }) {
+  if (value === null || value === undefined || value === "" || (typeof value === "number" && Number.isNaN(value))) return null;
+  const tones: Record<string, string> = {
+    zinc: "border-white/10 bg-white/[0.04] text-zinc-300",
+    amber: "border-amber-400/30 bg-amber-500/10 text-amber-300",
+    fuchsia: "border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-300",
+    emerald: "border-emerald-400/30 bg-emerald-500/10 text-emerald-300",
+    sky: "border-sky-400/30 bg-sky-500/10 text-sky-300",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-bold ${tones[tone]}`}>
+      {label && <span className="opacity-60">{label}</span>}{value}
+    </span>
+  );
+}
+
+const RARITY_TONE: Record<string, "zinc" | "sky" | "fuchsia" | "amber" | "emerald"> = {
+  normal: "zinc", selten: "sky", episch: "fuchsia", mythisch: "fuchsia", ultra: "amber",
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vorschau-Galerie — Admin sieht ALLES in allen Varianten auf einen Blick, um
@@ -71,17 +108,21 @@ export function ShowcaseTab() {
     themes.forEach((t) => RARITIES.forEach((r) => out.push({ key: `${t.id}-${r}`, theme: t.id, rarity: r, game: "plinko" })));
     return out;
   }, []);
-  const abilityVariants = useMemo(() => {
-    const out: { key: string; cat: string; rarity: BonusCardRarity }[] = [];
-    ABILITY_CATS.forEach((c) => RARITIES.forEach((r) => out.push({ key: `${c}-${r}`, cat: c, rarity: r })));
-    return out;
-  }, []);
   const nameStyleVariants = useMemo(() => Object.values(NAME_STYLES), []);
+
+  // ECHTE Fähigkeiten (lazy laden) → echte Effekt-Werte als Info-Badges.
+  const [abilityDefs, setAbilityDefs] = useState<AbilityDefinition[] | null>(null);
+  const [loadingAbilities, setLoadingAbilities] = useState(false);
+  useEffect(() => {
+    if (cat !== "abilities" || abilityDefs || loadingAbilities) return;
+    setLoadingAbilities(true);
+    getAllAbilityDefinitions().then((d) => setAbilityDefs(d)).catch(() => setAbilityDefs([])).finally(() => setLoadingAbilities(false));
+  }, [cat, abilityDefs, loadingAbilities]);
 
   const total =
     cat === "rewards3d" ? rewardVariants.length :
     cat === "bonus" ? bonusVariants.length :
-    cat === "abilities" ? abilityVariants.length :
+    cat === "abilities" ? (abilityDefs?.length ?? 0) :
     nameStyleVariants.length;
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -168,7 +209,14 @@ export function ShowcaseTab() {
                     viewIndex={i}
                   />
                 </div>
-                <span className="text-center text-[10px] font-semibold leading-tight text-zinc-400">{v.label}</span>
+                <span className="text-center text-[10px] font-semibold leading-tight text-zinc-400">{REWARD_TYPE_LABEL[v.rewardType] ?? (v.rewardType === "game_bonus" ? "Spiel-Bonus" : v.rewardType === "ability" ? "Fähigkeit" : v.rewardType)}</span>
+                {/* Info-Badges — nur was existiert */}
+                <div className="flex flex-wrap justify-center gap-1">
+                  <InfoBadge value={v.rarity} tone={RARITY_TONE[v.rarity]} />
+                  {v.creditsAmount ? <InfoBadge label="" value={`${v.creditsAmount.toLocaleString("de-DE")} CR`} tone="amber" /> : null}
+                  {v.game ? <InfoBadge value={v.game} tone="sky" /> : null}
+                  {v.effect ? <InfoBadge value={v.effect} tone="emerald" /> : null}
+                </div>
               </div>
             ))}
           </div>
@@ -183,27 +231,51 @@ export function ShowcaseTab() {
                   animateEntry={false}
                   view3d={{ index: i }}
                 />
-                <span className="text-[10px] text-zinc-500">{v.theme} · {v.rarity}</span>
+                <div className="flex flex-wrap justify-center gap-1">
+                  <InfoBadge label="Theme:" value={v.theme} />
+                  <InfoBadge value={v.rarity} tone={RARITY_TONE[v.rarity]} />
+                  <InfoBadge value={v.game} tone="sky" />
+                </div>
               </div>
             ))}
           </div>
         )}
 
         {cat === "abilities" && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {abilityVariants.slice(start, start + PAGE_SIZE).map((v, i) => (
-              <AbilityVoucherCard
-                key={v.key}
-                name={`${v.cat} · ${v.rarity}`}
-                description={`Vorschau einer Fähigkeit im Bereich „${v.cat}" mit Seltenheit „${v.rarity}".`}
-                category={v.cat}
-                cardRarity={v.rarity}
-                effectCategory={v.cat}
-                view3d={{ index: i }}
-                animateEntry={false}
-              />
-            ))}
-          </div>
+          loadingAbilities ? (
+            <div className="flex items-center gap-2 py-10 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> Lade Fähigkeiten…</div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {(abilityDefs ?? []).slice(start, start + PAGE_SIZE).map((def, i) => {
+                const meta = ABILITY_EFFECT_META[def.effectType];
+                const effVal = meta ? formatEffectValue(def.effectValue, meta.unit) : null;
+                return (
+                  <div key={def.key} className="flex flex-col gap-1.5">
+                    <AbilityVoucherCard
+                      name={def.name}
+                      description={def.description}
+                      icon={def.icon}
+                      category={ABILITY_CATEGORY_LABELS[def.category]}
+                      cardTheme={def.cardTheme}
+                      cardRarity={def.cardRarity}
+                      abilityRarity={def.rarity}
+                      effectCategory={def.category}
+                      view3d={{ index: i }}
+                      animateEntry={false}
+                    />
+                    {/* Echte Info-Badges — nur was wirklich gesetzt ist */}
+                    <div className="flex flex-wrap gap-1 px-1">
+                      {meta ? <InfoBadge label="Effekt:" value={meta.label} tone="fuchsia" /> : null}
+                      {effVal ? <InfoBadge label="Wert:" value={effVal} tone="emerald" /> : null}
+                      <InfoBadge value={def.rarity} tone={RARITY_TONE[def.rarity] ?? "zinc"} />
+                      <InfoBadge value={ABILITY_CATEGORY_LABELS[def.category]} tone="sky" />
+                      {def.availableInShop && def.shopPriceCr > 0 ? <InfoBadge label="Shop:" value={`${def.shopPriceCr.toLocaleString("de-DE")} CR`} tone="amber" /> : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
         )}
 
         {cat === "namestyles" && (
@@ -211,7 +283,10 @@ export function ShowcaseTab() {
             {nameStyleVariants.slice(start, start + PAGE_SIZE).map((s) => (
               <div key={s.key} className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2.5">
                 <StyledUsername name="SpielerName" styleDef={s} size="md" />
-                <span className="shrink-0 text-[10px] text-zinc-600">{s.rarity}</span>
+                <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                  <InfoBadge value={s.rarity} tone={RARITY_TONE[s.rarity] ?? "zinc"} />
+                  <InfoBadge value={s.category} tone={s.category === "animated" ? "fuchsia" : "zinc"} />
+                </div>
               </div>
             ))}
           </div>
