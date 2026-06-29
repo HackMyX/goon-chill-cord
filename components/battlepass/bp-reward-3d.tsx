@@ -237,52 +237,62 @@ function SpinningBolt() {
 
 // ── Name-style spinning rings ─────────────────────────────────────────────────
 
+// Holografisches Namensschild — schicke „Name-Tag"-Platte mit rainbow Glanz-Rand
+// (steht für Namens-STYLING), Stern-Emblem & „Text"-Zeilen, sanftes Wobble.
 function SpinningStyleOrb() {
   const ref = useRef<THREE.Group>(null);
-  const r1 = useRef<THREE.Mesh>(null);
-  const r2 = useRef<THREE.Mesh>(null);
-  const r3 = useRef<THREE.Mesh>(null);
+  const star = useStarShape(0.16, 0.075, 5);
+  const sheen = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
     if (!ref.current) return;
-    ref.current.position.y = Math.sin(clock.elapsedTime * 1.1) * 0.07;
-    if (r1.current) r1.current.rotation.y = clock.elapsedTime * 2.0;
-    if (r2.current) r2.current.rotation.z = clock.elapsedTime * 1.5;
-    if (r3.current) r3.current.rotation.x = clock.elapsedTime * 1.0;
+    const t = clock.elapsedTime;
+    // Sanftes Kippeln, Vorderseite bleibt zur Kamera (premium, kein Kanten-Flip).
+    ref.current.rotation.y = Math.sin(t * 0.8) * 0.5;
+    ref.current.rotation.z = Math.cos(t * 0.6) * 0.05;
+    ref.current.position.y = Math.sin(t * 1.15) * 0.06;
+    if (sheen.current) {
+      const m = sheen.current.material as THREE.MeshStandardMaterial;
+      m.emissiveIntensity = 0.4 + Math.abs(Math.sin(t * 1.6)) * 0.5; // pulsierender Glanz
+    }
   });
 
-  const colors = ["#a78bfa", "#f472b6", "#34d399", "#f59e0b"];
+  const W = 1.34, H = 0.72, D = 0.1;
+  const rainbow = ["#f472b6", "#a78bfa", "#38bdf8", "#34d399", "#fbbf24"];
   return (
-    <group ref={ref}>
-      {/* Central sphere */}
+    <group ref={ref} rotation={[0.1, 0, 0]}>
+      {/* Schild-Körper (dunkel, glänzend) */}
       <mesh>
-        <sphereGeometry args={[0.28, 20, 20]} />
-        <meshStandardMaterial color="#7c3aed" emissive="#6d28d9" emissiveIntensity={0.6} metalness={0.6} roughness={0.2} />
+        <boxGeometry args={[W, H, D]} />
+        <meshStandardMaterial color="#171430" emissive="#312e81" emissiveIntensity={0.35} metalness={0.7} roughness={0.25} />
       </mesh>
-      {/* Orbit ring 1 */}
-      <mesh ref={r1}>
-        <torusGeometry args={[0.52, 0.035, 8, 40]} />
-        <meshStandardMaterial color={colors[0]} emissive={colors[0]} emissiveIntensity={0.7} />
+      {/* Glanz-Overlay-Platte (pulsiert) */}
+      <mesh ref={sheen} position={[0, 0, D * 0.5 + 0.001]}>
+        <planeGeometry args={[W * 0.94, H * 0.86]} />
+        <meshStandardMaterial color="#c4b5fd" emissive="#a78bfa" emissiveIntensity={0.5} metalness={0.9} roughness={0.15} transparent opacity={0.14} />
       </mesh>
-      {/* Orbit ring 2 */}
-      <mesh ref={r2} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.52, 0.035, 8, 40]} />
-        <meshStandardMaterial color={colors[1]} emissive={colors[1]} emissiveIntensity={0.7} />
+      {/* Rainbow-Glanz-Rand: oben/unten farbige Leisten = „Name-Styling" */}
+      {[H / 2 - 0.03, -H / 2 + 0.03].map((y, row) => (
+        <group key={row} position={[0, y, D * 0.5 + 0.002]}>
+          {rainbow.map((c, i) => (
+            <mesh key={i} position={[-W / 2 + 0.13 + i * ((W - 0.26) / (rainbow.length - 1)), 0, 0]}>
+              <boxGeometry args={[(W - 0.18) / rainbow.length, 0.05, 0.02]} />
+              <meshStandardMaterial color={c} emissive={c} emissiveIntensity={0.9} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      {/* Stern-Emblem links */}
+      <mesh position={[-W / 2 + 0.27, 0, D * 0.5 + 0.01]}>
+        <extrudeGeometry args={[star, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2 }]} />
+        <meshStandardMaterial color="#fde68a" emissive="#fbbf24" emissiveIntensity={0.9} metalness={1} roughness={0.1} />
       </mesh>
-      {/* Orbit ring 3 */}
-      <mesh ref={r3} rotation={[Math.PI / 4, Math.PI / 4, 0]}>
-        <torusGeometry args={[0.52, 0.035, 8, 40]} />
-        <meshStandardMaterial color={colors[2]} emissive={colors[2]} emissiveIntensity={0.7} />
-      </mesh>
-      {/* Orbiting dots */}
-      {colors.map((col, i) => {
-        const angle = (i / colors.length) * Math.PI * 2;
-        return (
-          <mesh key={i} position={[Math.cos(angle) * 0.52, Math.sin(angle) * 0.52, 0]}>
-            <sphereGeometry args={[0.07, 8, 8]} />
-            <meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.9} />
-          </mesh>
-        );
-      })}
+      {/* „Name"-Zeilen rechts (angedeutete Schrift) */}
+      {[0.12, -0.02, -0.16].map((y, i) => (
+        <mesh key={i} position={[0.16, y, D * 0.5 + 0.01]}>
+          <boxGeometry args={[i === 0 ? 0.64 : 0.5, 0.07, 0.02]} />
+          <meshStandardMaterial color="#e2e8f0" emissive="#cbd5e1" emissiveIntensity={0.5} metalness={0.8} roughness={0.3} />
+        </mesh>
+      ))}
     </group>
   );
 }
