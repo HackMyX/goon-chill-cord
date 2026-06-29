@@ -10,8 +10,9 @@ import { broadcastLive } from "@/lib/realtime-broadcast";
 import { consumeGameBonus } from "@/lib/rewards-grant";
 import {
   DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG, DEFAULT_FARM_CONFIG,
-  DEFAULT_THEME_X1, DEFAULT_THEME_X2, DEFAULT_THEME_GRIND, DEFAULT_THEME_FARM,
+  DEFAULT_THEME_X1, DEFAULT_THEME_X2, DEFAULT_THEME_GRIND, DEFAULT_THEME_FARM, DEFAULT_SNAKE_TEXTS, BADGE_COLORS,
   type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig, type SnakeMode, type SnakeModeTheme,
+  type SnakeTexts, type SnakeBadge, type SnakeBadgeColor,
 } from "@/lib/snake-config";
 import { notifyUser } from "@/lib/notifications-internal";
 import { getSiteConfig } from "@/lib/actions/site-config";
@@ -59,6 +60,7 @@ export async function getSnakeConfig(): Promise<SnakeConfig> {
     x2?: Partial<SnakeModeConfig>;
     grind?: Partial<SnakeGrindConfig>;
     farm?: Partial<SnakeModeConfig>;
+    texts?: Partial<SnakeTexts>;
   } | null;
 
   if (mc && typeof mc === "object") {
@@ -66,6 +68,7 @@ export async function getSnakeConfig(): Promise<SnakeConfig> {
       enabled: data.enabled ?? DEFAULT_SNAKE_CONFIG.enabled,
       sectionTitle: data.section_title?.trim() || DEFAULT_SNAKE_CONFIG.sectionTitle,
       sectionSubtitle: data.section_subtitle?.trim() || DEFAULT_SNAKE_CONFIG.sectionSubtitle,
+      texts: { ...DEFAULT_SNAKE_TEXTS, ...(mc.texts ?? {}) },
       x1: sanitizeMode(mc.x1 ?? {}, DEFAULT_X1_CONFIG),
       x2: sanitizeMode(mc.x2 ?? {}, DEFAULT_X2_CONFIG),
       grind: sanitizeGrind(mc.grind ?? {}),
@@ -118,6 +121,7 @@ export async function getSnakeConfig(): Promise<SnakeConfig> {
     enabled: data.enabled ?? d.enabled,
     sectionTitle: data.section_title?.trim() || d.sectionTitle,
     sectionSubtitle: data.section_subtitle?.trim() || d.sectionSubtitle,
+    texts: DEFAULT_SNAKE_TEXTS,
     x1,
     x2,
     grind: DEFAULT_GRIND_CONFIG,
@@ -159,9 +163,41 @@ export async function updateSnakeConfig(
   const cleanText = (v: unknown, fallback: string, max: number): string =>
     typeof v === "string" && v.trim() ? v.trim().slice(0, max) : fallback;
 
+  const validColor = (c: unknown): SnakeBadgeColor =>
+    (typeof c === "string" && c in BADGE_COLORS) ? (c as SnakeBadgeColor) : "emerald";
+
+  // Badges: each entry trimmed, capped, colour validated. Empty entries (no icon
+  // AND no label) are dropped. Falls back to the mode default only when `raw` is
+  // not an array — an explicit empty array (admin removed all badges) is honoured.
+  const sanitizeBadges = (raw: unknown, def: SnakeBadge[]): SnakeBadge[] => {
+    if (!Array.isArray(raw)) return def;
+    return raw.slice(0, 8).map((b) => {
+      const o = (b ?? {}) as Partial<SnakeBadge>;
+      return {
+        icon: typeof o.icon === "string" ? o.icon.trim().slice(0, 8) : "",
+        label: typeof o.label === "string" ? o.label.trim().slice(0, 60) : "",
+        color: validColor(o.color),
+      };
+    }).filter((b) => b.icon || b.label);
+  };
+
+  const sanitizeTexts = (raw: Partial<SnakeTexts> | undefined): SnakeTexts => {
+    const r = raw ?? {};
+    const out = { ...DEFAULT_SNAKE_TEXTS };
+    (Object.keys(DEFAULT_SNAKE_TEXTS) as (keyof SnakeTexts)[]).forEach((k) => {
+      const v = r[k];
+      if (typeof v === "string" && v.trim()) out[k] = v.slice(0, 160);
+    });
+    return out;
+  };
+
   const sanitizedX1: SnakeModeConfig = {
     label: cleanText(input.x1.label, DEFAULT_X1_CONFIG.label, 24),
     sublabel: cleanText(input.x1.sublabel, DEFAULT_X1_CONFIG.sublabel, 80),
+    startButtonLabel: cleanText(input.x1.startButtonLabel, DEFAULT_X1_CONFIG.startButtonLabel, 28),
+    badges: sanitizeBadges(input.x1.badges, DEFAULT_X1_CONFIG.badges),
+    bonusMessage: cleanText(input.x1.bonusMessage, DEFAULT_X1_CONFIG.bonusMessage, 120),
+    goldenMessage: cleanText(input.x1.goldenMessage, DEFAULT_X1_CONFIG.goldenMessage, 120),
     theme: sanitizeTheme(input.x1.theme, DEFAULT_THEME_X1),
     enabled: input.x1.enabled,
     boardSize: clamp(input.x1.boardSize, 10, 50),
@@ -192,6 +228,10 @@ export async function updateSnakeConfig(
   const sanitizedX2: SnakeModeConfig = {
     label: cleanText(input.x2.label, DEFAULT_X2_CONFIG.label, 24),
     sublabel: cleanText(input.x2.sublabel, DEFAULT_X2_CONFIG.sublabel, 80),
+    startButtonLabel: cleanText(input.x2.startButtonLabel, DEFAULT_X2_CONFIG.startButtonLabel, 28),
+    badges: sanitizeBadges(input.x2.badges, DEFAULT_X2_CONFIG.badges),
+    bonusMessage: cleanText(input.x2.bonusMessage, DEFAULT_X2_CONFIG.bonusMessage, 120),
+    goldenMessage: cleanText(input.x2.goldenMessage, DEFAULT_X2_CONFIG.goldenMessage, 120),
     theme: sanitizeTheme(input.x2.theme, DEFAULT_THEME_X2),
     enabled: input.x2.enabled,
     boardSize: clamp(input.x2.boardSize, 10, 50),
@@ -222,6 +262,10 @@ export async function updateSnakeConfig(
   const sanitizedGrind: SnakeGrindConfig = {
     label: cleanText(input.grind.label, DEFAULT_GRIND_CONFIG.label, 24),
     sublabel: cleanText(input.grind.sublabel, DEFAULT_GRIND_CONFIG.sublabel, 80),
+    startButtonLabel: cleanText(input.grind.startButtonLabel, DEFAULT_GRIND_CONFIG.startButtonLabel, 28),
+    badges: sanitizeBadges(input.grind.badges, DEFAULT_GRIND_CONFIG.badges),
+    bonusMessage: cleanText(input.grind.bonusMessage, DEFAULT_GRIND_CONFIG.bonusMessage, 120),
+    goldenMessage: cleanText(input.grind.goldenMessage, DEFAULT_GRIND_CONFIG.goldenMessage, 120),
     theme: sanitizeTheme(input.grind.theme, DEFAULT_THEME_GRIND),
     enabled: input.grind.enabled,
     boardSize: clamp(input.grind.boardSize, 16, 128),
@@ -257,6 +301,10 @@ export async function updateSnakeConfig(
   const sanitizedFarm: SnakeModeConfig = {
     label: cleanText(input.farm.label, DEFAULT_FARM_CONFIG.label, 24),
     sublabel: cleanText(input.farm.sublabel, DEFAULT_FARM_CONFIG.sublabel, 80),
+    startButtonLabel: cleanText(input.farm.startButtonLabel, DEFAULT_FARM_CONFIG.startButtonLabel, 28),
+    badges: sanitizeBadges(input.farm.badges, DEFAULT_FARM_CONFIG.badges),
+    bonusMessage: cleanText(input.farm.bonusMessage, DEFAULT_FARM_CONFIG.bonusMessage, 120),
+    goldenMessage: cleanText(input.farm.goldenMessage, DEFAULT_FARM_CONFIG.goldenMessage, 120),
     theme: sanitizeTheme(input.farm.theme, DEFAULT_THEME_FARM),
     enabled: input.farm.enabled,
     boardSize: clamp(input.farm.boardSize, 10, 50),
@@ -290,7 +338,7 @@ export async function updateSnakeConfig(
     enabled: input.enabled,
     section_title: input.sectionTitle?.trim() || DEFAULT_SNAKE_CONFIG.sectionTitle,
     section_subtitle: input.sectionSubtitle?.trim() || DEFAULT_SNAKE_CONFIG.sectionSubtitle,
-    modes_config: { x1: sanitizedX1, x2: sanitizedX2, grind: sanitizedGrind, farm: sanitizedFarm },
+    modes_config: { x1: sanitizedX1, x2: sanitizedX2, grind: sanitizedGrind, farm: sanitizedFarm, texts: sanitizeTexts(input.texts) },
     // Keep legacy columns updated for any existing external reads
     board_size: sanitizedX1.boardSize,
     credits_per_apple_x1: sanitizedX1.creditsPerApple,

@@ -32,11 +32,62 @@ export const DEFAULT_THEME_FARM: SnakeModeTheme = {
   snakeGlow: "#8b5cf6", appleColor: "#34d399", appleGlow: "#10b981", goldenColor: "#fbbf24", borderColor: "#8b5cf6",
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Badges (pre-start info pills) — fully admin-editable per mode
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Colour preset for a badge. Mapped to fixed Tailwind classes in BADGE_COLORS
+ *  (never build dynamic class strings → Tailwind purge would drop them). */
+export type SnakeBadgeColor =
+  | "emerald" | "amber" | "yellow" | "red" | "cyan" | "violet"
+  | "rose" | "sky" | "lime" | "orange" | "fuchsia" | "zinc";
+
+/** A single pre-start info pill. `icon` is a free emoji/short text, `label`
+ *  supports template tokens like `{creditsPerApple}` (see formatSnakeText). */
+export interface SnakeBadge {
+  icon: string;
+  label: string;
+  color: SnakeBadgeColor;
+}
+
+/** Fixed Tailwind class sets per badge colour (client-safe, purge-proof). */
+export const BADGE_COLORS: Record<SnakeBadgeColor, { border: string; bg: string; text: string }> = {
+  emerald: { border: "border-emerald-500/30", bg: "bg-emerald-500/10", text: "text-emerald-300" },
+  amber:   { border: "border-amber-400/30",   bg: "bg-amber-500/10",   text: "text-amber-300" },
+  yellow:  { border: "border-yellow-400/30",  bg: "bg-yellow-500/10",  text: "text-yellow-300" },
+  red:     { border: "border-red-400/30",     bg: "bg-red-500/10",     text: "text-red-300" },
+  cyan:    { border: "border-cyan-400/30",    bg: "bg-cyan-500/10",    text: "text-cyan-300" },
+  violet:  { border: "border-violet-400/30",  bg: "bg-violet-500/10",  text: "text-violet-300" },
+  rose:    { border: "border-rose-400/30",    bg: "bg-rose-500/10",    text: "text-rose-300" },
+  sky:     { border: "border-sky-400/30",     bg: "bg-sky-500/10",     text: "text-sky-300" },
+  lime:    { border: "border-lime-400/30",    bg: "bg-lime-500/10",    text: "text-lime-300" },
+  orange:  { border: "border-orange-400/30",  bg: "bg-orange-500/10",  text: "text-orange-300" },
+  fuchsia: { border: "border-fuchsia-400/30", bg: "bg-fuchsia-500/10", text: "text-fuchsia-300" },
+  zinc:    { border: "border-zinc-400/20",    bg: "bg-zinc-500/10",    text: "text-zinc-300" },
+};
+
+export const BADGE_COLOR_KEYS = Object.keys(BADGE_COLORS) as SnakeBadgeColor[];
+
+/** Replace `{token}` placeholders in admin-editable strings. Unknown tokens are
+ *  left verbatim so a typo is visible instead of silently vanishing. */
+export function formatSnakeText(tpl: string, vars: Record<string, string | number>): string {
+  if (!tpl) return "";
+  return tpl.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
+}
+
 export interface SnakeModeConfig {
   /** Mode display name on the selection card (admin-editable). */
   label: string;
   /** Short tagline under the name on the card (admin-editable). */
   sublabel: string;
+  /** Start button label on the idle screen (admin-editable, e.g. "Grind starten"). */
+  startButtonLabel: string;
+  /** Pre-start info pills (admin-editable: add/remove/reorder). */
+  badges: SnakeBadge[];
+  /** Toast template shown when a bonus triggers. Tokens: {bonusCrFlat} {comboInfo} {bonusEveryN}. */
+  bonusMessage: string;
+  /** Toast template shown when a golden apple is eaten. Tokens: {goldenMult} {creditsPerApple}. */
+  goldenMessage: string;
   /** Per-mode colours (admin-editable). */
   theme: SnakeModeTheme;
   enabled: boolean;
@@ -90,10 +141,91 @@ export interface SnakeGrindConfig extends SnakeModeConfig {
   shrinkBlinkApples: number;
 }
 
+/** All shared (non per-mode) UI strings, fully admin-editable. Many support
+ *  template tokens — see the comment on each field. */
+export interface SnakeTexts {
+  // Header
+  backLabel: string;            // "Zurück"
+  crChip: string;               // "{creditsPerApple} CR / Apfel"
+  // HUD labels
+  hudScore: string;             // "Score"
+  hudEarned: string;            // "Verdient"
+  hudNextBonus: string;         // "Nächster Bonus"
+  hudNextBonusNow: string;      // "JETZT!"
+  hudNextBonusAt: string;       // "Apfel {apple}"
+  hudShrinkIn: string;          // "Shrink in"
+  hudShrinkValue: string;       // "{apples} Äpfel"
+  hudComboLabel: string;        // "2× COMBO"
+  hudDailyRemaining: string;    // "Heute noch"
+  hudDailyCrValue: string;      // "{cr} CR"
+  hudGamesRemaining: string;    // "{remaining} / {limit} Spiele übrig"
+  hudGamesToday: string;        // "Spiele heute"
+  hudGamesTodayValue: string;   // "{remaining} / {limit} übrig"
+  abortLabel: string;           // "Abbrechen"
+  // Idle overlay
+  controlsHintDesktop: string;  // "← → ↑ ↓ oder WASD · Swipe auf Handy"
+  controlsHintMobile: string;   // "Swipe oder D-Pad zum Steuern"
+  dailyCrLimitReached: string;  // "CR-Tageslimit erreicht"
+  dailyGameLimitReached: string;// "Tageslimit: {limit} Spiele gespielt — komm morgen wieder!"
+  // Dead overlay
+  gameOverTitle: string;        // "Game Over"
+  gameOverStats: string;        // "{score} Äpfel · {credits} CR"
+  shrinkSurvived: string;       // "{count}× Shrink überlebt!"
+  saving: string;               // "Wird gespeichert…"
+  newRecord: string;            // "Neuer Rekord! (vorher: {previousBest})"
+  earnedLine: string;           // "+{credits} CR"
+  playAgain: string;            // "Nochmal"
+  // Leaderboard
+  leaderboardTitle: string;     // "Highscores"
+  leaderboardEmpty: string;     // "Noch keine Scores"
+  leaderboardYou: string;       // "Du"
+  myBestLabel: string;          // "Dein Best"
+  // Floating toasts (grind shrink warnings)
+  shrinkWarning: string;        // "⚠ ACHTUNG — Wände schließen sich in {apples} Apfel{plural}!"
+  shrinkLastWarning: string;    // "🔴 LETZTE WARNUNG — NÄCHSTER APFEL SHRINK!"
+}
+
+export const DEFAULT_SNAKE_TEXTS: SnakeTexts = {
+  backLabel: "Zurück",
+  crChip: "{creditsPerApple} CR / Apfel",
+  hudScore: "Score",
+  hudEarned: "Verdient",
+  hudNextBonus: "Nächster Bonus",
+  hudNextBonusNow: "JETZT!",
+  hudNextBonusAt: "Apfel {apple}",
+  hudShrinkIn: "Shrink in",
+  hudShrinkValue: "{apples} Äpfel",
+  hudComboLabel: "2× COMBO",
+  hudDailyRemaining: "Heute noch",
+  hudDailyCrValue: "{cr} CR",
+  hudGamesRemaining: "{remaining} / {limit} Spiele übrig",
+  hudGamesToday: "Spiele heute",
+  hudGamesTodayValue: "{remaining} / {limit} übrig",
+  abortLabel: "Abbrechen",
+  controlsHintDesktop: "← → ↑ ↓ oder WASD · Swipe auf Handy",
+  controlsHintMobile: "Swipe oder D-Pad zum Steuern",
+  dailyCrLimitReached: "CR-Tageslimit erreicht",
+  dailyGameLimitReached: "Tageslimit: {limit} Spiele gespielt — komm morgen wieder!",
+  gameOverTitle: "Game Over",
+  gameOverStats: "{score} Äpfel · {credits} CR",
+  shrinkSurvived: "{count}× Shrink überlebt!",
+  saving: "Wird gespeichert…",
+  newRecord: "Neuer Rekord! (vorher: {previousBest})",
+  earnedLine: "+{credits} CR",
+  playAgain: "Nochmal",
+  leaderboardTitle: "Highscores",
+  leaderboardEmpty: "Noch keine Scores",
+  leaderboardYou: "Du",
+  myBestLabel: "Dein Best",
+  shrinkWarning: "⚠ ACHTUNG — Wände schließen sich in {apples} Apfel{plural}!",
+  shrinkLastWarning: "🔴 LETZTE WARNUNG — NÄCHSTER APFEL SHRINK!",
+};
+
 export interface SnakeConfig {
   enabled: boolean;
   sectionTitle: string;
   sectionSubtitle: string;
+  texts: SnakeTexts;
   x1: SnakeModeConfig;
   x2: SnakeModeConfig;
   grind: SnakeGrindConfig;
@@ -103,6 +235,14 @@ export interface SnakeConfig {
 export const DEFAULT_X1_CONFIG: SnakeModeConfig = {
   label: "Classic",
   sublabel: "Der Klassiker — ruhiges Tempo, fairer Einstieg.",
+  startButtonLabel: "Spielen",
+  badges: [
+    { icon: "🪙", label: "{creditsPerApple} CR/Apfel", color: "emerald" },
+    { icon: "🎁", label: "Bonus alle {bonusEveryN} Äpfel", color: "amber" },
+    { icon: "⭐", label: "Goldener Apfel ×{goldenMult}", color: "yellow" },
+  ],
+  bonusMessage: "🎉 BONUS! +{bonusCrFlat} CR{comboInfo}",
+  goldenMessage: "⭐ Goldener Apfel! ×{goldenMult} CR",
   theme: DEFAULT_THEME_X1,
   enabled: true,
   boardSize: 20,
@@ -133,6 +273,14 @@ export const DEFAULT_X1_CONFIG: SnakeModeConfig = {
 export const DEFAULT_X2_CONFIG: SnakeModeConfig = {
   label: "Turbo",
   sublabel: "Doppeltes Tempo, doppelte Credits — für Profis.",
+  startButtonLabel: "Turbo starten",
+  badges: [
+    { icon: "🪙", label: "{creditsPerApple} CR/Apfel", color: "cyan" },
+    { icon: "🎁", label: "Bonus alle {bonusEveryN} Äpfel", color: "amber" },
+    { icon: "⭐", label: "Goldener Apfel ×{goldenMult}", color: "yellow" },
+  ],
+  bonusMessage: "🎉 BONUS! +{bonusCrFlat} CR{comboInfo}",
+  goldenMessage: "⭐ Goldener Apfel! ×{goldenMult} CR",
   theme: DEFAULT_THEME_X2,
   enabled: true,
   boardSize: 20,
@@ -163,6 +311,15 @@ export const DEFAULT_X2_CONFIG: SnakeModeConfig = {
 export const DEFAULT_GRIND_CONFIG: SnakeGrindConfig = {
   label: "Grind",
   sublabel: "Die Arena schrumpft mit jedem Apfel. Nervenkrieg.",
+  startButtonLabel: "Grind starten",
+  badges: [
+    { icon: "🪙", label: "{creditsPerApple} CR/Apfel", color: "amber" },
+    { icon: "🎁", label: "Bonus alle {bonusEveryN} Äpfel", color: "yellow" },
+    { icon: "⭐", label: "Goldener Apfel ×{goldenMult}", color: "orange" },
+    { icon: "🔥", label: "Shrink alle {shrinkEveryN} Äpfel", color: "red" },
+  ],
+  bonusMessage: "🎉 BONUS! +{bonusCrFlat} CR{comboInfo}",
+  goldenMessage: "⭐ Goldener Apfel! ×{goldenMult} CR",
   theme: DEFAULT_THEME_GRIND,
   enabled: true,
   boardSize: 64,
@@ -198,6 +355,12 @@ export const DEFAULT_GRIND_CONFIG: SnakeGrindConfig = {
 export const DEFAULT_FARM_CONFIG: SnakeModeConfig = {
   label: "Endless",
   sublabel: "Kein Wachstum, kein Risiko — entspanntes Farmen.",
+  startButtonLabel: "Spielen",
+  badges: [
+    { icon: "🪙", label: "{creditsPerApple} CR/Apfel", color: "violet" },
+  ],
+  bonusMessage: "🎉 BONUS! +{bonusCrFlat} CR{comboInfo}",
+  goldenMessage: "⭐ Goldener Apfel! ×{goldenMult} CR",
   theme: DEFAULT_THEME_FARM,
   enabled: true,
   boardSize: 20,
@@ -229,6 +392,7 @@ export const DEFAULT_SNAKE_CONFIG: SnakeConfig = {
   enabled: true,
   sectionTitle: "Snake",
   sectionSubtitle: "Sammle Äpfel, verdiene Credits",
+  texts: DEFAULT_SNAKE_TEXTS,
   x1: DEFAULT_X1_CONFIG,
   x2: DEFAULT_X2_CONFIG,
   grind: DEFAULT_GRIND_CONFIG,

@@ -3,11 +3,14 @@
 import { useState } from "react";
 import {
   RotateCcw, Save, CheckCircle, XCircle, Joystick, Gift, Star, Zap, Flame, Layers,
+  Plus, Trash2, ArrowUp, ArrowDown, MessageSquareText, Tag, Type,
 } from "lucide-react";
 import { updateSnakeConfig } from "@/lib/actions/snake";
 import {
   DEFAULT_SNAKE_CONFIG, DEFAULT_X1_CONFIG, DEFAULT_X2_CONFIG, DEFAULT_GRIND_CONFIG, DEFAULT_FARM_CONFIG,
+  DEFAULT_SNAKE_TEXTS, BADGE_COLORS, BADGE_COLOR_KEYS,
   type SnakeConfig, type SnakeModeConfig, type SnakeGrindConfig, type SnakeModeTheme,
+  type SnakeBadge, type SnakeBadgeColor, type SnakeTexts,
 } from "@/lib/snake-config";
 import { useSoundManager } from "@/lib/sound-manager";
 import { AdminTooltip } from "@/components/admin/admin-tooltip";
@@ -119,6 +122,115 @@ function Section({ label, icon, children }: { label: string; icon?: React.ReactN
         </span>
       </div>
       <div className="flex flex-col gap-3 px-4 py-3">{children}</div>
+    </div>
+  );
+}
+
+/** Full-width labelled text input (for longer strings / message templates). */
+function TextField({ label, hint, value, onChange, placeholder, maxLength }: {
+  label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string; maxLength?: number;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+        {label}
+        {hint && <AdminTooltip text={hint} />}
+      </span>
+      <input
+        type="text" value={value} placeholder={placeholder} maxLength={maxLength}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/50"
+      />
+    </div>
+  );
+}
+
+/** Dropdown to pick a badge colour preset (purge-proof, fixed class sets). */
+function BadgeColorSelect({ value, onChange }: { value: SnakeBadgeColor; onChange: (v: SnakeBadgeColor) => void }) {
+  const c = BADGE_COLORS[value] ?? BADGE_COLORS.emerald;
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`h-4 w-4 shrink-0 rounded-full border ${c.border} ${c.bg}`} />
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as SnakeBadgeColor)}
+        className="rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-purple-400/50"
+      >
+        {BADGE_COLOR_KEYS.map((k) => <option key={k} value={k} className="bg-zinc-900">{k}</option>)}
+      </select>
+    </div>
+  );
+}
+
+/** Editor for the pre-start info pills of one mode: add / edit / reorder / remove. */
+function BadgeEditor({ badges, onChange }: { badges: SnakeBadge[]; onChange: (b: SnakeBadge[]) => void }) {
+  const update = (i: number, patch: Partial<SnakeBadge>) =>
+    onChange(badges.map((b, idx) => (idx === i ? { ...b, ...patch } : b)));
+  const remove = (i: number) => onChange(badges.filter((_, idx) => idx !== i));
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= badges.length) return;
+    const next = [...badges];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  const add = () => onChange([...badges, { icon: "✨", label: "Neues Badge", color: "emerald" }]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2 text-[11px] leading-relaxed text-zinc-500">
+        Diese Pills erscheinen vor dem Start unter dem Spieltitel. <strong className="text-zinc-300">Symbol</strong> ist
+        ein Emoji (frei), <strong className="text-zinc-300">Text</strong> erlaubt Platzhalter:
+        {" "}<code className="text-emerald-300">{"{creditsPerApple}"}</code>,{" "}
+        <code className="text-emerald-300">{"{bonusEveryN}"}</code>,{" "}
+        <code className="text-emerald-300">{"{bonusCrFlat}"}</code>,{" "}
+        <code className="text-emerald-300">{"{goldenMult}"}</code>,{" "}
+        <code className="text-emerald-300">{"{shrinkEveryN}"}</code>,{" "}
+        <code className="text-emerald-300">{"{boardSize}"}</code>,{" "}
+        <code className="text-emerald-300">{"{startLength}"}</code>.
+      </p>
+      {badges.length === 0 && (
+        <p className="px-1 py-2 text-xs text-zinc-600">Keine Badges — füge welche hinzu oder lass es leer (dann zeigt das Spiel keine Pills).</p>
+      )}
+      {badges.map((b, i) => (
+        <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/8 bg-black/20 p-2">
+          <input
+            type="text" value={b.icon} maxLength={8} placeholder="🪙"
+            onChange={(e) => update(i, { icon: e.target.value })}
+            className="w-14 shrink-0 rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-center text-base outline-none focus:border-purple-400/50"
+            aria-label="Symbol"
+          />
+          <input
+            type="text" value={b.label} maxLength={60} placeholder="Text mit {creditsPerApple}"
+            onChange={(e) => update(i, { label: e.target.value })}
+            className="min-w-[140px] flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/50"
+            aria-label="Text"
+          />
+          <BadgeColorSelect value={b.color} onChange={(c) => update(i, { color: c })} />
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
+              className="rounded-md border border-white/10 p-1.5 text-zinc-400 hover:text-zinc-200 disabled:opacity-30" aria-label="Hoch">
+              <ArrowUp className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" onClick={() => move(i, 1)} disabled={i === badges.length - 1}
+              className="rounded-md border border-white/10 p-1.5 text-zinc-400 hover:text-zinc-200 disabled:opacity-30" aria-label="Runter">
+              <ArrowDown className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" onClick={() => remove(i)}
+              className="rounded-md border border-red-500/20 p-1.5 text-red-400 hover:bg-red-500/10" aria-label="Entfernen">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {/* Live preview */}
+          <span className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold ${BADGE_COLORS[b.color]?.border} ${BADGE_COLORS[b.color]?.bg} ${BADGE_COLORS[b.color]?.text}`}>
+            {b.icon && <span className="leading-none">{b.icon}</span>}{b.label || "—"}
+          </span>
+        </div>
+      ))}
+      <button type="button" onClick={add}
+        className="flex items-center gap-1.5 self-start rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/10">
+        <Plus className="h-3.5 w-3.5" /> Badge hinzufügen
+      </button>
     </div>
   );
 }
@@ -294,6 +406,35 @@ function ModeEditor<T extends SnakeModeConfig>({
         </Row>
       </Section>
 
+      {/* Start button + in-game messages (per mode) */}
+      <Section label="Button & Nachrichten" icon={<MessageSquareText className="h-3.5 w-3.5" />}>
+        <TextField
+          label="Start-Button" hint="Beschriftung des Start-Buttons auf dem Idle-Screen"
+          value={cfg.startButtonLabel} maxLength={28}
+          onChange={(v) => set("startButtonLabel" as keyof T, v as T[keyof T])}
+        />
+        <TextField
+          label="Bonus-Nachricht"
+          hint="Schwebende Nachricht beim Bonus. Platzhalter: {bonusCrFlat}, {bonusEveryN}, {comboInfo} (fügt automatisch den 2×-Combo-Hinweis an)."
+          value={cfg.bonusMessage} maxLength={120} placeholder="🎉 BONUS! +{bonusCrFlat} CR{comboInfo}"
+          onChange={(v) => set("bonusMessage" as keyof T, v as T[keyof T])}
+        />
+        <TextField
+          label="Goldener-Apfel-Nachricht"
+          hint="Schwebende Nachricht beim Essen eines goldenen Apfels. Platzhalter: {goldenMult}, {creditsPerApple}."
+          value={cfg.goldenMessage} maxLength={120} placeholder="⭐ Goldener Apfel! ×{goldenMult} CR"
+          onChange={(v) => set("goldenMessage" as keyof T, v as T[keyof T])}
+        />
+      </Section>
+
+      {/* Badges (pre-start info pills) — per mode */}
+      <Section label="Badges (Info-Pills vor dem Start)" icon={<Tag className="h-3.5 w-3.5" />}>
+        <BadgeEditor
+          badges={cfg.badges}
+          onChange={(b) => set("badges" as keyof T, b as T[keyof T])}
+        />
+      </Section>
+
       {/* Grind-specific */}
       {isGrind && (
         <Section label="Grind-Modus: Schließende Wände" icon={<Flame className="h-3.5 w-3.5 text-amber-400" />}>
@@ -322,6 +463,106 @@ function ModeEditor<T extends SnakeModeConfig>({
         className="flex items-center gap-1.5 self-start rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-500 hover:border-white/20 hover:text-zinc-300"
       >
         <RotateCcw className="h-3 w-3" /> Standard wiederherstellen
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared texts editor — every non per-mode UI string on the Snake page
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TEXT_GROUPS: { title: string; fields: { key: keyof SnakeTexts; label: string; hint?: string }[] }[] = [
+  {
+    title: "Kopf & Steuerung",
+    fields: [
+      { key: "backLabel", label: "Zurück-Link" },
+      { key: "crChip", label: "CR-Chip (Kopf)", hint: "Platzhalter: {creditsPerApple}" },
+      { key: "controlsHintDesktop", label: "Steuerungs-Hinweis (Desktop)" },
+      { key: "controlsHintMobile", label: "Steuerungs-Hinweis (Mobil)" },
+    ],
+  },
+  {
+    title: "HUD (Anzeige während des Spiels)",
+    fields: [
+      { key: "hudScore", label: "Score-Label" },
+      { key: "hudEarned", label: "Verdient-Label" },
+      { key: "hudNextBonus", label: "Nächster-Bonus-Label" },
+      { key: "hudNextBonusNow", label: "Nächster Bonus: JETZT" },
+      { key: "hudNextBonusAt", label: "Nächster Bonus: bei Apfel", hint: "Platzhalter: {apple}" },
+      { key: "hudShrinkIn", label: "Shrink-in-Label" },
+      { key: "hudShrinkValue", label: "Shrink-in-Wert", hint: "Platzhalter: {apples}" },
+      { key: "hudComboLabel", label: "Combo-Label" },
+      { key: "hudDailyRemaining", label: "Heute-noch-Label" },
+      { key: "hudDailyCrValue", label: "Heute-noch-Wert", hint: "Platzhalter: {cr}" },
+      { key: "hudGamesRemaining", label: "Spiele-übrig (mit CR-Limit)", hint: "Platzhalter: {remaining}, {limit}" },
+      { key: "hudGamesToday", label: "Spiele-heute-Label" },
+      { key: "hudGamesTodayValue", label: "Spiele-heute-Wert", hint: "Platzhalter: {remaining}, {limit}" },
+      { key: "abortLabel", label: "Abbrechen-Button" },
+    ],
+  },
+  {
+    title: "Game Over / Ergebnis",
+    fields: [
+      { key: "gameOverTitle", label: "Game-Over-Titel" },
+      { key: "gameOverStats", label: "Game-Over-Statistik", hint: "Platzhalter: {score}, {credits}" },
+      { key: "shrinkSurvived", label: "Shrink-überlebt (Grind)", hint: "Platzhalter: {count}" },
+      { key: "saving", label: "Wird-gespeichert-Text" },
+      { key: "newRecord", label: "Neuer-Rekord-Text", hint: "Platzhalter: {previousBest}" },
+      { key: "earnedLine", label: "Verdient-Zeile", hint: "Platzhalter: {credits}" },
+      { key: "playAgain", label: "Nochmal-Button" },
+      { key: "dailyCrLimitReached", label: "CR-Tageslimit erreicht" },
+      { key: "dailyGameLimitReached", label: "Spiele-Tageslimit erreicht", hint: "Platzhalter: {limit}" },
+    ],
+  },
+  {
+    title: "Bestenliste",
+    fields: [
+      { key: "leaderboardTitle", label: "Bestenliste-Titel" },
+      { key: "leaderboardEmpty", label: "Bestenliste leer" },
+      { key: "leaderboardYou", label: "„Du\"-Label" },
+      { key: "myBestLabel", label: "Dein-Best-Label" },
+    ],
+  },
+  {
+    title: "Grind: Shrink-Warnungen (schwebend)",
+    fields: [
+      { key: "shrinkWarning", label: "Shrink-Warnung", hint: "Platzhalter: {apples}, {plural} (n bei Mehrzahl)" },
+      { key: "shrinkLastWarning", label: "Letzte Warnung" },
+    ],
+  },
+];
+
+function SharedTextsEditor({ texts, onChange }: { texts: SnakeTexts; onChange: (t: SnakeTexts) => void }) {
+  const set = (key: keyof SnakeTexts, value: string) => onChange({ ...texts, [key]: value });
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] px-4 py-3 text-[11px] leading-relaxed text-purple-200/90">
+        Hier bearbeitest du <strong>alle</strong> allgemeinen Texte der Snake-Seite (gelten für jeden Modus). Modus-spezifische
+        Texte — Start-Button, Bonus-/Goldener-Apfel-Nachricht und die Badges — bearbeitest du im jeweiligen Modus-Tab.
+        Leeres Feld = Standardtext.
+      </p>
+      {TEXT_GROUPS.map((grp) => (
+        <Section key={grp.title} label={grp.title} icon={<Type className="h-3.5 w-3.5" />}>
+          {grp.fields.map((f) => (
+            <TextField
+              key={f.key}
+              label={f.label}
+              hint={f.hint}
+              value={texts[f.key]}
+              placeholder={DEFAULT_SNAKE_TEXTS[f.key]}
+              maxLength={160}
+              onChange={(v) => set(f.key, v)}
+            />
+          ))}
+        </Section>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange(DEFAULT_SNAKE_TEXTS)}
+        className="flex items-center gap-1.5 self-start rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-500 hover:border-white/20 hover:text-zinc-300"
+      >
+        <RotateCcw className="h-3 w-3" /> Texte auf Standard zurücksetzen
       </button>
     </div>
   );
@@ -418,9 +659,14 @@ export function SnakeConfigEditor({ config }: { config: SnakeConfig }) {
           </Section>
           <div className="rounded-xl border border-white/8 bg-white/[0.01] px-4 py-3">
             <p className="text-xs text-zinc-500">
-              Klicke auf <span className="text-emerald-300 font-bold">Classic x1</span>, <span className="text-cyan-300 font-bold">Turbo x2</span>, <span className="text-amber-300 font-bold">Grind</span> oder <span className="text-violet-300 font-bold">Endless</span>, um den jeweiligen Modus einzeln zu konfigurieren — jeder Modus hat eine vollständig getrennte Bestenliste und eigene Einstellungen.
+              Klicke auf <span className="text-emerald-300 font-bold">Classic x1</span>, <span className="text-cyan-300 font-bold">Turbo x2</span>, <span className="text-amber-300 font-bold">Grind</span> oder <span className="text-violet-300 font-bold">Endless</span>, um den jeweiligen Modus einzeln zu konfigurieren — jeder Modus hat eine vollständig getrennte Bestenliste und eigene Einstellungen (inkl. Start-Button, Nachrichten & Badges).
             </p>
           </div>
+
+          <SharedTextsEditor
+            texts={form.texts ?? DEFAULT_SNAKE_TEXTS}
+            onChange={(t) => setForm((f) => ({ ...f, texts: t }))}
+          />
         </div>
       )}
 

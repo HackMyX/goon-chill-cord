@@ -5,15 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Zap, Crown, Trophy, Medal, Star, Coins, Skull,
-  RotateCcw, ChevronDown, ShieldAlert, Sparkles, Gift, Flame,
-  ChevronUp, X,
+  RotateCcw, ChevronDown, ShieldAlert, Sparkles, Flame, X,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { useSoundManager } from "@/lib/sound-manager";
 import { setMusicTempoMult, resetMusicTempoMult, setMusicMode } from "@/lib/music-dynamics";
 import { submitSnakeScore, getSnakeConfig } from "@/lib/actions/snake";
 import { useLiveConfig } from "@/lib/use-live-config";
-import type { SnakeConfig, SnakeMode, SnakeModeConfig, SnakeGrindConfig, SnakeModeTheme } from "@/lib/snake-config";
+import { formatSnakeText, BADGE_COLORS } from "@/lib/snake-config";
+import type { SnakeConfig, SnakeMode, SnakeModeConfig, SnakeGrindConfig, SnakeModeTheme, SnakeTexts } from "@/lib/snake-config";
 import type { SnakeLeaderboardEntry } from "@/lib/actions/snake";
 import { StyledUsername } from "@/components/ui/styled-username";
 import { ActiveBonusDock } from "@/components/rewards/active-bonus-dock";
@@ -713,8 +713,8 @@ function RankIcon({ rank }: { rank: number }) {
   return <span className="w-4 text-center text-xs font-bold text-zinc-500">#{rank}</span>;
 }
 
-function Leaderboard({ entries, myBest, userId, mode }: {
-  entries: SnakeLeaderboardEntry[]; myBest: number; userId: string; mode: SnakeMode;
+function Leaderboard({ entries, myBest, userId, mode, texts }: {
+  entries: SnakeLeaderboardEntry[]; myBest: number; userId: string; mode: SnakeMode; texts: SnakeTexts;
 }) {
   const myRank = entries.findIndex((e) => e.userId === userId) + 1;
   const modeColor = mode === "x2" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-300"
@@ -726,19 +726,19 @@ function Leaderboard({ entries, myBest, userId, mode }: {
     <div className="flex flex-col overflow-hidden rounded-2xl border border-white/8 bg-[#080712]">
       <div className="flex items-center gap-2 border-b border-white/8 px-4 py-3">
         <Crown className="h-4 w-4 text-amber-400" />
-        <span className="text-sm font-bold text-zinc-100">Highscores</span>
+        <span className="text-sm font-bold text-zinc-100">{texts.leaderboardTitle}</span>
         <span className={`ml-auto rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${modeColor}`}>{modeLabel}</span>
       </div>
       <div className="flex flex-col">
         {entries.length === 0 ? (
-          <div className="py-8 text-center text-sm text-zinc-600">Noch keine Scores</div>
+          <div className="py-8 text-center text-sm text-zinc-600">{texts.leaderboardEmpty}</div>
         ) : entries.map((entry) => {
           const isSelf = entry.userId === userId;
           return (
             <div key={entry.userId} className={`flex items-center gap-3 px-4 py-2.5 ${isSelf ? "bg-purple-500/10 ring-1 ring-inset ring-purple-500/20" : "hover:bg-white/[0.02]"}`}>
               <RankIcon rank={entry.rank} />
               <span className={`flex-1 truncate text-sm ${isSelf ? "font-bold text-purple-200" : "text-zinc-300"}`}>
-                {isSelf ? "Du" : <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} userId={entry.userId} size="md" />}
+                {isSelf ? texts.leaderboardYou : <StyledUsername name={entry.username} styleKey={entry.nameStyleKey} userId={entry.userId} size="md" />}
               </span>
               <span className={`font-mono text-sm font-bold ${entry.rank === 1 ? "text-amber-400" : entry.rank <= 3 ? "text-amber-500/80" : "text-zinc-200"}`}>
                 {entry.bestScore}
@@ -749,7 +749,7 @@ function Leaderboard({ entries, myBest, userId, mode }: {
       </div>
       <div className="border-t border-white/8 px-4 py-3">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-600">Dein Best</span>
+          <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-600">{texts.myBestLabel}</span>
           {myRank > 0 && <span className="text-[10px] text-zinc-600">#{myRank}</span>}
         </div>
         <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/5">
@@ -874,7 +874,22 @@ export function SnakeShell({
   const [submitting, setSubmitting] = useState(false);
   const [lastResult, setLastResult] = useState<{ creditsAwarded: number; isNewRecord: boolean; previousBest: number } | null>(null);
   const [dailyCr, setDailyCr] = useState(initDaily);
-  const [bonusBannerText, setBonusBannerText] = useState<string | null>(null);
+  // Floating game messages (bonus / golden apple). Rendered in a FIXED overlay
+  // so they never reflow the page — this is the fix for the "screen jumps when a
+  // message appears" bug (the old inline banner pushed the whole layout down).
+  const [toasts, setToasts] = useState<{ id: number; text: string; tone: "bonus" | "golden" }[]>([]);
+  const toastIdRef = useRef(0);
+  const toastTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const pushToast = (text: string, tone: "bonus" | "golden") => {
+    if (!text) return;
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev, { id, text, tone }].slice(-3));
+    const timer = setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2600);
+    toastTimersRef.current.push(timer);
+  };
+  const pushToastRef = useRef(pushToast);
+  pushToastRef.current = pushToast;
+  useEffect(() => () => { toastTimersRef.current.forEach(clearTimeout); }, []);
   const [scorePopKey, setScorePopKey] = useState(0);
   const [comboActive, setComboActive] = useState(false);
   const [shrinkWarning, setShrinkWarning] = useState(false);
@@ -1022,6 +1037,10 @@ export function SnakeShell({
           if (modeCfg.goldenAppleSpeedReduction > 0) {
             g.speedBonusMs = Math.min(g.speedBonusMs + modeCfg.goldenAppleSpeedReduction, modeCfg.goldenAppleSpeedReduction * 4);
           }
+          pushToastRef.current(
+            formatSnakeText(modeCfg.goldenMessage, { goldenMult: modeCfg.goldenAppleCrMultiplier, creditsPerApple: modeCfg.creditsPerApple }),
+            "golden",
+          );
         }
         if (g.comboMultLeft > 0) { crBase *= 2; g.comboMultLeft--; if (g.comboMultLeft === 0) setComboActive(false); }
         g.creditsEarned += crBase;
@@ -1046,8 +1065,11 @@ export function SnakeShell({
           if (modeCfg.bonusMultiplierApples > 0) { g.comboMultLeft = modeCfg.bonusMultiplierApples; setComboActive(true); }
           if (modeCfg.particlesEnabled) spawnBonusBurst(g, W / 2, W / 2, theme);
           g.floatingTexts.push({ x: W / 2, y: W * 0.35, vy: -0.5, text: `BONUS! +${modeCfg.bonusCrFlat}`, life: 1, decay: 0.011, color: "#fbbf24", size: Math.max(12, cell * 0.65) });
-          setBonusBannerText(`🎉 BONUS! +${modeCfg.bonusCrFlat} CR${modeCfg.bonusMultiplierApples > 0 ? ` + 2× für ${modeCfg.bonusMultiplierApples} Äpfel` : ""}`);
-          setTimeout(() => setBonusBannerText(null), 2800);
+          const comboInfo = modeCfg.bonusMultiplierApples > 0 ? ` + 2× für ${modeCfg.bonusMultiplierApples} Äpfel` : "";
+          pushToastRef.current(
+            formatSnakeText(modeCfg.bonusMessage, { bonusCrFlat: modeCfg.bonusCrFlat, bonusEveryN: modeCfg.bonusEveryN, comboInfo }),
+            "bonus",
+          );
         }
 
         if (g.mode === "grind") {
@@ -1313,7 +1335,7 @@ export function SnakeShell({
     g.ambientParticles = initAmbientParticles(canvasRef.current?.width ?? 560, mode, resolveTheme(configRef.current[mode].theme).ambientColors);
 
     setScore(0); setCreditsEarned(0); setPhase("playing");
-    setLastResult(null); setBonusBannerText(null); setComboActive(false); setShrinkWarning(false);
+    setLastResult(null); setToasts([]); setComboActive(false); setShrinkWarning(false);
     resetMusicTempoMult(); // every run starts at the base tempo, then steps up per apple
     sound.click();
   }
@@ -1331,11 +1353,23 @@ export function SnakeShell({
     resetMusicTempoMult();
     setPhase("idle");
     setScore(0); setCreditsEarned(0);
-    setShrinkWarning(false); setComboActive(false); setBonusBannerText(null);
+    setShrinkWarning(false); setComboActive(false); setToasts([]);
     setLastResult(null);
   }
 
   const modeCfg = activeMode === "grind" ? config.grind : activeMode === "x2" ? config.x2 : activeMode === "farm" ? config.farm : config.x1;
+  const T = config.texts;
+  // Token values available to admin-editable badge labels on the idle screen.
+  const badgeVars: Record<string, string | number> = {
+    creditsPerApple: modeCfg.creditsPerApple,
+    bonusEveryN: modeCfg.bonusEveryN,
+    bonusCrFlat: modeCfg.bonusCrFlat,
+    goldenMult: modeCfg.goldenAppleCrMultiplier,
+    shrinkEveryN: activeMode === "grind" ? (modeCfg as SnakeGrindConfig).shrinkEveryN : 0,
+    boardSize: modeCfg.boardSize,
+    startLength: modeCfg.startLength,
+    dailyGameLimit: modeCfg.dailyGameLimit ?? 0,
+  };
   const dailyLimitReached = modeCfg.dailyCrLimit !== null && dailyCr >= modeCfg.dailyCrLimit;
   const dailyRemaining = modeCfg.dailyCrLimit !== null ? Math.max(0, modeCfg.dailyCrLimit - dailyCr) : null;
   const dailyGamesUsed = dailyGames[activeMode];
@@ -1365,7 +1399,7 @@ export function SnakeShell({
           <div className="flex items-center gap-3">
             <Link href="/" onMouseEnter={sound.hover} onClick={sound.click}
               className="flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-300">
-              <ArrowLeft className="h-4 w-4" /> Zurück
+              <ArrowLeft className="h-4 w-4" /> {T.backLabel}
             </Link>
             <div className="h-5 w-px bg-white/10" />
             <div className="flex items-center gap-2">
@@ -1376,7 +1410,7 @@ export function SnakeShell({
           <div className="flex items-center gap-3">
             <div className="hidden items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 sm:flex">
               <Coins className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-xs font-bold text-emerald-300">{modeCfg.creditsPerApple} CR / Apfel</span>
+              <span className="text-xs font-bold text-emerald-300">{formatSnakeText(T.crChip, { creditsPerApple: modeCfg.creditsPerApple })}</span>
             </div>
             {isAdmin && (
               <Link href="/admin"
@@ -1388,31 +1422,50 @@ export function SnakeShell({
         </div>
       </div>
 
-      {/* Shrink warning banner */}
-      {shrinkWarning && phase === "playing" && (
-        shrinkLastApple ? (
-          <div className="relative overflow-hidden border-b border-red-600/60 bg-red-600/20 py-2 text-center text-sm font-black text-red-300"
-            style={{ animation: "snake-banner-in 0.2s ease forwards" }}>
-            <span className="animate-pulse">🔴 LETZTE WARNUNG — NÄCHSTER APFEL SHRINK!</span>
-          </div>
-        ) : (
-          <div className="relative overflow-hidden border-b border-red-500/30 bg-red-500/10 py-1.5 text-center text-xs font-extrabold text-red-400"
-            style={{ animation: "snake-banner-in 0.3s ease forwards" }}>
-            ⚠ ACHTUNG — Wände schließen sich in {gameRef.current.applesUntilShrink} Apfel{gameRef.current.applesUntilShrink !== 1 ? "n" : ""}!
-          </div>
-        )
-      )}
+      {/* Floating message overlay — FIXED & pointer-events-none so messages float
+          OVER the game and never reflow the layout (fixes the screen-jump bug).
+          Holds the sticky shrink warning (grind) plus transient bonus/golden toasts. */}
+      <div className="pointer-events-none fixed inset-x-0 top-16 z-[60] flex flex-col items-center gap-2 px-3 sm:top-[4.5rem]">
+        {shrinkWarning && phase === "playing" && (
+          shrinkLastApple ? (
+            <div
+              className="flex items-center gap-2 rounded-full border border-red-500/60 bg-gradient-to-r from-red-600/35 via-red-500/30 to-red-600/35 px-5 py-2 text-sm font-black text-red-50 shadow-[0_10px_40px_rgba(239,68,68,0.4)] backdrop-blur-md"
+              style={{ animation: "snake-toast-in 0.22s ease forwards" }}
+            >
+              <span className="animate-pulse">{T.shrinkLastWarning}</span>
+            </div>
+          ) : (
+            <div
+              className="flex items-center gap-2 rounded-full border border-red-500/45 bg-gradient-to-r from-red-500/22 via-red-400/18 to-red-500/22 px-4 py-1.5 text-xs font-extrabold text-red-100 shadow-[0_8px_30px_rgba(239,68,68,0.28)] backdrop-blur-md"
+              style={{ animation: "snake-toast-in 0.28s ease forwards" }}
+            >
+              {formatSnakeText(T.shrinkWarning, {
+                apples: gameRef.current.applesUntilShrink,
+                plural: gameRef.current.applesUntilShrink !== 1 ? "n" : "",
+              })}
+            </div>
+          )
+        )}
 
-      {/* Bonus banner */}
-      {bonusBannerText && (
-        <div className="relative overflow-hidden border-b border-amber-400/20 bg-amber-500/10 py-2 text-center text-sm font-extrabold text-amber-300"
-          style={{ animation: "snake-banner-in 2.8s ease forwards" }}>
-          <div className="absolute inset-0 -translate-x-full animate-[mine-shimmer_1.5s_ease_forwards] bg-gradient-to-r from-transparent via-amber-400/20 to-transparent" />
-          <Sparkles className="mr-2 inline h-4 w-4" />
-          {bonusBannerText}
-          <Sparkles className="ml-2 inline h-4 w-4" />
-        </div>
-      )}
+        {toasts.map((t) => {
+          const cls = t.tone === "golden"
+            ? "border-yellow-300/55 bg-gradient-to-r from-yellow-500/30 via-amber-300/25 to-yellow-500/30 text-yellow-50 shadow-[0_10px_40px_rgba(250,204,21,0.32)]"
+            : "border-amber-400/45 bg-gradient-to-r from-amber-500/28 via-amber-400/22 to-amber-500/28 text-amber-50 shadow-[0_10px_40px_rgba(251,191,36,0.3)]";
+          const Icon = t.tone === "golden" ? Star : Sparkles;
+          return (
+            <div
+              key={t.id}
+              className={`relative flex items-center gap-2 overflow-hidden rounded-full border px-5 py-2 text-sm font-extrabold backdrop-blur-md ${cls}`}
+              style={{ animation: "snake-toast 2.6s ease forwards" }}
+            >
+              <div className="absolute inset-0 -translate-x-full animate-[mine-shimmer_1.6s_ease_forwards] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="relative">{t.text}</span>
+              <Icon className="h-4 w-4 shrink-0" />
+            </div>
+          );
+        })}
+      </div>
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 gap-4 px-2 py-2 sm:px-4 sm:py-5">
         {/* Game area */}
@@ -1442,7 +1495,7 @@ export function SnakeShell({
           {/* HUD */}
           <div className={`flex items-stretch gap-3 rounded-xl border ${modeBorderColor} bg-[#080712] px-4 py-3`}>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Score</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">{T.hudScore}</p>
               <p className="text-2xl font-extrabold text-zinc-50"
                 key={scorePopKey}
                 style={{ animation: phase === "playing" ? "score-pop 0.3s ease" : undefined }}>
@@ -1451,7 +1504,7 @@ export function SnakeShell({
             </div>
             <div className="w-px bg-white/8" />
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Verdient</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">{T.hudEarned}</p>
               <p className="flex items-center gap-1 text-xl font-extrabold text-emerald-400">
                 +{creditsEarned.toLocaleString("de-DE")} <Coins className="h-4 w-4" />
               </p>
@@ -1460,11 +1513,11 @@ export function SnakeShell({
               <>
                 <div className="w-px bg-white/8" />
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Nächster Bonus</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">{T.hudNextBonus}</p>
                   <p className="text-sm font-bold text-amber-400">
-                    {score === 0 ? `Apfel ${modeCfg.bonusEveryN}` :
-                      score % modeCfg.bonusEveryN === 0 ? "JETZT!" :
-                      `Apfel ${Math.ceil(score / modeCfg.bonusEveryN) * modeCfg.bonusEveryN}`}
+                    {score === 0 ? formatSnakeText(T.hudNextBonusAt, { apple: modeCfg.bonusEveryN }) :
+                      score % modeCfg.bonusEveryN === 0 ? T.hudNextBonusNow :
+                      formatSnakeText(T.hudNextBonusAt, { apple: Math.ceil(score / modeCfg.bonusEveryN) * modeCfg.bonusEveryN })}
                   </p>
                 </div>
               </>
@@ -1473,9 +1526,9 @@ export function SnakeShell({
               <>
                 <div className="w-px bg-white/8" />
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Shrink in</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">{T.hudShrinkIn}</p>
                   <p className={`text-sm font-bold ${gameRef.current.applesUntilShrink <= 3 ? "text-red-400 animate-pulse" : "text-amber-400"}`}>
-                    {gameRef.current.applesUntilShrink} Äpfel
+                    {formatSnakeText(T.hudShrinkValue, { apples: gameRef.current.applesUntilShrink })}
                   </p>
                 </div>
               </>
@@ -1483,18 +1536,18 @@ export function SnakeShell({
             {comboActive && (
               <div className="ml-auto flex items-center gap-1.5 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3">
                 <Zap className="h-3.5 w-3.5 text-amber-400" />
-                <span className="text-xs font-extrabold text-amber-300">2× COMBO</span>
+                <span className="text-xs font-extrabold text-amber-300">{T.hudComboLabel}</span>
               </div>
             )}
             {dailyRemaining !== null && (
               <div className="ml-auto text-right">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Heute noch</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">{T.hudDailyRemaining}</p>
                 <p className={`text-sm font-bold ${dailyRemaining === 0 ? "text-red-400" : "text-zinc-300"}`}>
-                  {dailyRemaining.toLocaleString("de-DE")} CR
+                  {formatSnakeText(T.hudDailyCrValue, { cr: dailyRemaining.toLocaleString("de-DE") })}
                 </p>
                 {dailyGamesRemaining !== null && (
                   <p className={`text-[11px] font-bold ${dailyGamesRemaining === 0 ? "text-orange-400" : "text-zinc-500"}`}>
-                    {dailyGamesRemaining} / {modeCfg.dailyGameLimit} Spiele übrig
+                    {formatSnakeText(T.hudGamesRemaining, { remaining: dailyGamesRemaining, limit: modeCfg.dailyGameLimit ?? 0 })}
                   </p>
                 )}
                 <div className="mt-0.5 flex flex-wrap justify-end gap-1.5"><ActiveAbilityBadge refreshKey={dailyGamesUsed} /><ActiveBonusDock game="snake" suffix="Spiele" refreshKey={dailyGamesUsed} /></div>
@@ -1508,14 +1561,14 @@ export function SnakeShell({
                 className="ml-auto flex shrink-0 items-center gap-1.5 self-center rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition-all hover:border-red-400/60 hover:bg-red-500/20 hover:shadow-[0_0_14px_rgba(239,68,68,0.3)]"
               >
                 <X className="h-3.5 w-3.5" />
-                Abbrechen
+                {T.abortLabel}
               </button>
             )}
             {dailyRemaining === null && dailyGamesRemaining !== null && (
               <div className="ml-auto text-right">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Spiele heute</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">{T.hudGamesToday}</p>
                 <p className={`text-sm font-bold ${dailyGamesRemaining === 0 ? "text-orange-400" : "text-zinc-300"}`}>
-                  {dailyGamesRemaining} / {modeCfg.dailyGameLimit} übrig
+                  {formatSnakeText(T.hudGamesTodayValue, { remaining: dailyGamesRemaining, limit: modeCfg.dailyGameLimit ?? 0 })}
                 </p>
               </div>
             )}
@@ -1543,35 +1596,25 @@ export function SnakeShell({
                   <h2 className="text-2xl sm:text-3xl font-extrabold text-zinc-50">{config.sectionTitle}</h2>
                   <p className="mt-1 text-xs sm:text-sm text-zinc-400">{config.sectionSubtitle}</p>
                 </div>
-                <div className="flex flex-wrap justify-center gap-2 text-xs">
-                  <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 font-bold text-emerald-300">
-                    <Coins className="h-3 w-3" />{modeCfg.creditsPerApple} CR/Apfel
-                  </span>
-                  {modeCfg.bonusEveryN > 0 && (
-                    <span className="flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 font-bold text-amber-300">
-                      <Gift className="h-3 w-3" />Bonus alle {modeCfg.bonusEveryN} Äpfel
-                    </span>
-                  )}
-                  {modeCfg.goldenAppleEnabled && (
-                    <span className="flex items-center gap-1 rounded-full border border-yellow-400/30 bg-yellow-500/10 px-3 py-1 font-bold text-yellow-300">
-                      <Star className="h-3 w-3" />Goldener Apfel ×{modeCfg.goldenAppleCrMultiplier}
-                    </span>
-                  )}
-                  {activeMode === "grind" && (
-                    <span className="flex items-center gap-1 rounded-full border border-red-400/30 bg-red-500/10 px-3 py-1 font-bold text-red-300">
-                      <Flame className="h-3 w-3" />Shrink alle {(modeCfg as SnakeGrindConfig).shrinkEveryN} Äpfel
-                    </span>
-                  )}
-                </div>
-                {isMobileDevice
-                  ? <p className="text-xs text-zinc-500">Swipe oder D-Pad zum Steuern</p>
-                  : <p className="text-xs text-zinc-600">← → ↑ ↓ oder WASD · Swipe auf Handy</p>
-                }
+                {modeCfg.badges.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-2 text-xs">
+                    {modeCfg.badges.map((b, i) => {
+                      const c = BADGE_COLORS[b.color] ?? BADGE_COLORS.emerald;
+                      return (
+                        <span key={i} className={`flex items-center gap-1 rounded-full border px-3 py-1 font-bold ${c.border} ${c.bg} ${c.text}`}>
+                          {b.icon && <span className="leading-none">{b.icon}</span>}
+                          {formatSnakeText(b.label, badgeVars)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-xs text-zinc-500">{isMobileDevice ? T.controlsHintMobile : T.controlsHintDesktop}</p>
                 {dailyLimitReached ? (
-                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-3 text-sm font-bold text-red-400">CR-Tageslimit erreicht</div>
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-3 text-sm font-bold text-red-400">{T.dailyCrLimitReached}</div>
                 ) : dailyGameLimitReached ? (
                   <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-6 py-3 text-center text-sm font-bold text-orange-400">
-                    Tageslimit: {modeCfg.dailyGameLimit} Spiele gespielt — komm morgen wieder!
+                    {formatSnakeText(T.dailyGameLimitReached, { limit: modeCfg.dailyGameLimit ?? 0 })}
                   </div>
                 ) : (
                   <button onClick={startGame} onMouseEnter={sound.hover}
@@ -1582,9 +1625,10 @@ export function SnakeShell({
                       : "bg-emerald-600 text-white shadow-emerald-500/30 hover:bg-emerald-500 hover:shadow-emerald-400/60"
                     }`}>
                     <div className="absolute inset-0 -translate-x-full animate-[mine-shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
-                    {activeMode === "grind" ? <span className="flex items-center gap-2"><Flame className="h-6 w-6" />Grind starten</span>
-                     : activeMode === "x2" ? <span className="flex items-center gap-2"><Zap className="h-6 w-6" />Turbo starten</span>
-                     : "Spielen"}
+                    <span className="flex items-center gap-2">
+                      {activeMode === "grind" ? <Flame className="h-6 w-6" /> : activeMode === "x2" ? <Zap className="h-6 w-6" /> : null}
+                      {modeCfg.startButtonLabel}
+                    </span>
                   </button>
                 )}
               </div>
@@ -1595,38 +1639,38 @@ export function SnakeShell({
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 sm:gap-4 bg-black/80 backdrop-blur-sm">
                 <Skull className="h-10 w-10 sm:h-14 sm:w-14 text-red-400 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)]" />
                 <div className="text-center">
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-zinc-50">Game Over</h2>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-zinc-50">{T.gameOverTitle}</h2>
                   <p className="mt-1 text-zinc-400">
-                    {score} Äpfel · {creditsEarned.toLocaleString("de-DE")} CR
+                    {formatSnakeText(T.gameOverStats, { score, credits: creditsEarned.toLocaleString("de-DE") })}
                   </p>
                   {activeMode === "grind" && gameRef.current.shrinkCount > 0 && (
-                    <p className="mt-0.5 text-sm text-amber-400">{gameRef.current.shrinkCount}× Shrink überlebt!</p>
+                    <p className="mt-0.5 text-sm text-amber-400">{formatSnakeText(T.shrinkSurvived, { count: gameRef.current.shrinkCount })}</p>
                   )}
                 </div>
                 {submitting ? (
                   <div className="flex items-center gap-2 text-sm text-zinc-500">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />Wird gespeichert…
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />{T.saving}
                   </div>
                 ) : lastResult && (
                   <div className="flex flex-col items-center gap-2">
                     {lastResult.isNewRecord && (
                       <div className="flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/15 px-4 py-1.5 text-sm font-bold text-amber-300">
-                        <Star className="h-4 w-4" />Neuer Rekord! (vorher: {lastResult.previousBest})
+                        <Star className="h-4 w-4" />{formatSnakeText(T.newRecord, { previousBest: lastResult.previousBest })}
                       </div>
                     )}
                     <div className="flex items-center gap-1.5 text-lg font-bold text-emerald-400">
-                      <Coins className="h-5 w-5" />+{lastResult.creditsAwarded.toLocaleString("de-DE")} CR
+                      <Coins className="h-5 w-5" />{formatSnakeText(T.earnedLine, { credits: lastResult.creditsAwarded.toLocaleString("de-DE") })}
                     </div>
                   </div>
                 )}
                 <div className="flex gap-3">
                   <button onClick={startGame} onMouseEnter={sound.hover}
                     className="flex items-center gap-2 rounded-xl bg-purple-600 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_16px_rgba(147,51,234,0.4)] hover:bg-purple-500">
-                    <RotateCcw className="h-4 w-4" />Nochmal
+                    <RotateCcw className="h-4 w-4" />{T.playAgain}
                   </button>
                   <Link href="/"
                     className="flex items-center gap-2 rounded-xl border border-white/15 px-6 py-2.5 text-sm font-semibold text-zinc-300 hover:border-white/30">
-                    <ArrowLeft className="h-4 w-4" />Zurück
+                    <ArrowLeft className="h-4 w-4" />{T.backLabel}
                   </Link>
                 </div>
               </div>
@@ -1692,7 +1736,7 @@ export function SnakeShell({
               </button>
             ))}
           </div>
-          <Leaderboard entries={lbEntries} myBest={myBest} userId={userId} mode={lbTab} />
+          <Leaderboard entries={lbEntries} myBest={myBest} userId={userId} mode={lbTab} texts={T} />
         </div>
       </main>
 
@@ -1701,7 +1745,7 @@ export function SnakeShell({
         <details className="rounded-2xl border border-white/8 bg-[#080712]">
           <summary className="flex cursor-pointer items-center gap-2 px-4 py-3">
             <Crown className="h-4 w-4 text-amber-400" />
-            <span className="text-sm font-bold text-zinc-200">Highscores</span>
+            <span className="text-sm font-bold text-zinc-200">{T.leaderboardTitle}</span>
             <ChevronDown className="ml-auto h-4 w-4 text-zinc-500" />
           </summary>
           <div className="flex gap-1 border-t border-white/8 p-2">
@@ -1719,7 +1763,7 @@ export function SnakeShell({
               </button>
             ))}
           </div>
-          <Leaderboard entries={lbEntries} myBest={myBest} userId={userId} mode={lbTab} />
+          <Leaderboard entries={lbEntries} myBest={myBest} userId={userId} mode={lbTab} texts={T} />
         </details>
       </div>
     </div>
