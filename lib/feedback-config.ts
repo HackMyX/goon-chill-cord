@@ -162,7 +162,7 @@ export const DEFAULT_FEEDBACK_CONFIG: FeedbackConfig = {
   position: "top",
   events: {
     xp_gain:         { enabled: true, style: "toast",    accent: "#34d399", animation: "slide-up",   durationMs: 2200, sound: true, icon: "✨", confetti: false, intensity: "subtle", particleType: "confetti",  screenFlash: false },
-    level_up:        { enabled: true, style: "popup",    accent: "#a78bfa", animation: "pop",        durationMs: 3400, sound: true, icon: "⬆️", confetti: false, intensity: "normal", particleType: "stars",     screenFlash: true  },
+    level_up:        { enabled: true, style: "popup",    accent: "#a78bfa", animation: "pop",        durationMs: 3800, sound: true, icon: "⬆️", confetti: true,  intensity: "normal", particleType: "stars",     screenFlash: true  },
     level_milestone: { enabled: true, style: "confetti", accent: "#fbbf24", animation: "zoom",       durationMs: 6000, sound: true, icon: "🏆", confetti: true,  intensity: "epic",   particleType: "fireworks", screenFlash: true  },
     daily_quest:     { enabled: true, style: "fullscreen", accent: "#22d3ee", animation: "drop",     durationMs: 5200, sound: true, icon: "✅", confetti: true,  intensity: "normal", particleType: "confetti",  screenFlash: true  },
     bp_quest:        { enabled: true, style: "fullscreen", accent: "#e879f9", animation: "drop",     durationMs: 5200, sound: true, icon: "🎯", confetti: true,  intensity: "epic",   particleType: "stars",     screenFlash: true  },
