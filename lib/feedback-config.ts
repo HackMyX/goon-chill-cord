@@ -166,7 +166,7 @@ export const DEFAULT_FEEDBACK_CONFIG: FeedbackConfig = {
     level_milestone: { enabled: true, style: "confetti", accent: "#fbbf24", animation: "zoom",       durationMs: 6000, sound: true, icon: "🏆", confetti: true,  intensity: "epic",   particleType: "fireworks", screenFlash: true  },
     daily_quest:     { enabled: true, style: "fullscreen", accent: "#22d3ee", animation: "drop",     durationMs: 5200, sound: true, icon: "✅", confetti: true,  intensity: "normal", particleType: "confetti",  screenFlash: true  },
     bp_quest:        { enabled: true, style: "fullscreen", accent: "#e879f9", animation: "drop",     durationMs: 5200, sound: true, icon: "🎯", confetti: true,  intensity: "epic",   particleType: "stars",     screenFlash: true  },
-    bp_tier:         { enabled: true, style: "confetti", accent: "#fb923c", animation: "bounce",     durationMs: 4600, sound: true, icon: "🎁", confetti: true,  intensity: "epic",   particleType: "fireworks", screenFlash: true  },
+    bp_tier:         { enabled: true, style: "fullscreen", accent: "#fb923c", animation: "bounce",   durationMs: 5200, sound: true, icon: "🎁", confetti: true,  intensity: "epic",   particleType: "fireworks", screenFlash: true  },
     reward:          { enabled: true, style: "popup",    accent: "#facc15", animation: "rubber",     durationMs: 3400, sound: true, icon: "🎉", confetti: true,  intensity: "normal", particleType: "streamers", screenFlash: false },
   },
   limitMeter: DEFAULT_LIMIT_METER_CONFIG,
