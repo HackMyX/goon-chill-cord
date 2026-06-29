@@ -25,6 +25,7 @@ import { ActiveBonusDock } from "@/components/rewards/active-bonus-dock";
 import { ActiveAbilityBadge } from "@/components/rewards/active-ability-badge";
 import { LimitMeter } from "@/components/rewards/limit-meter";
 import { useGameplaySignal } from "@/lib/gameplay-activity";
+import { RotateHint } from "@/components/games/rotate-hint";
 
 interface Props {
   config: PlinkoConfig;
@@ -362,6 +363,7 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
+      <RotateHint game="plinko" label="Plinko" />
       {/* Ambient background glow */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full opacity-20"

@@ -11,6 +11,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import { useSoundManager } from "@/lib/sound-manager";
 import { setMusicTempoMult, resetMusicTempoMult, setMusicMode } from "@/lib/music-dynamics";
 import { useGameplaySignal } from "@/lib/gameplay-activity";
+import { RotateHint } from "@/components/games/rotate-hint";
 import { submitSnakeScore, getSnakeConfig } from "@/lib/actions/snake";
 import { useLiveConfig } from "@/lib/use-live-config";
 import { formatSnakeText, BADGE_COLORS } from "@/lib/snake-config";
@@ -1396,6 +1397,7 @@ export function SnakeShell({
 
   return (
     <div className="flex min-h-dvh flex-col bg-[#030305]">
+      <RotateHint game="snake" label="Snake" />
       <TopBar credits={credits} streakDays={streakDays} isAdmin={isAdmin} isModerator={isModerator} />
 
       {/* Header */}
