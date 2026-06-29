@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
-  EyeOff,
   Loader2,
   MessageSquare,
   Send,
@@ -369,6 +368,27 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
     setHydrated(true);
   }, [config.defaultOpenMobile]);
 
+  // ── Signal an den globalen SupportButton („Hilfe & Chat") ────────────────
+  // Auf Mobile liegt der schwebende Hilfe-&-Chat-Button (unten rechts) sonst
+  // GENAU über dem Sende-Button des geöffneten Chats. Wir broadcasten daher den
+  // Mobile-Offen-Zustand, damit der SupportButton sich solange ausblendet —
+  // beim Schließen taucht er automatisch wieder auf.
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("gnc:homepage-chat-open", { detail: isMobile && isOpen })
+    );
+  }, [isMobile, isOpen]);
+  // Beim Verlassen der Startseite IMMER „geschlossen" melden, damit der
+  // SupportButton auf anderen Seiten nicht fälschlich versteckt bleibt.
+  useEffect(
+    () => () => {
+      window.dispatchEvent(
+        new CustomEvent("gnc:homepage-chat-open", { detail: false })
+      );
+    },
+    []
+  );
+
   // ── Check auth + load own username ───────────────────────────────────────
   useEffect(() => {
     supabase.current.auth.getUser().then(async ({ data: { user } }) => {
@@ -643,31 +663,28 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
   if (isMobile) {
     return (
       <>
-        {/* Persistent eye toggle — floats above the SupportButton (bottom-4
-            right-4 on mobile) so they don't stack on top of each other.
-            bottom-20 gives ~80 px clearance: SupportButton ≈ 16 + 44 = 60 px */}
-        <button
-          onClick={toggleOpen}
-          className={`fixed bottom-20 right-4 z-50 flex items-center justify-center h-10 w-10 rounded-full border backdrop-blur-md shadow-xl transition-all active:scale-95 ${
-            isOpen
-              ? "bg-purple-600/90 border-purple-400/60 shadow-[0_0_24px_rgba(147,51,234,0.6)] hover:bg-purple-500/90"
-              : "bg-black/70 border-white/15 hover:border-purple-400/50 hover:bg-purple-600/30 hover:shadow-[0_0_16px_rgba(147,51,234,0.4)]"
-          }`}
-          aria-label={isOpen ? "Chat schließen" : "Chat öffnen"}
-        >
-          {isOpen ? (
-            <EyeOff className="h-5 w-5 text-purple-100" />
-          ) : (
+        {/* Auge-Toggle — NUR sichtbar, solange der Chat geschlossen ist. Beim
+            Öffnen verschwindet er (zusammen mit dem Hilfe-&-Chat-Button), damit
+            der Sende-Button frei erreichbar ist; geschlossen wird über das X im
+            Chat-Header. bottom-20 hält Abstand zum SupportButton (bottom-4). */}
+        {!isOpen && (
+          <button
+            onClick={toggleOpen}
+            className="fixed bottom-20 right-4 z-50 flex items-center justify-center h-10 w-10 rounded-full border bg-black/70 border-white/15 backdrop-blur-md shadow-xl transition-all active:scale-95 hover:border-purple-400/50 hover:bg-purple-600/30 hover:shadow-[0_0_16px_rgba(147,51,234,0.4)]"
+            aria-label="Chat öffnen"
+          >
             <Eye className="h-5 w-5 text-purple-400" />
-          )}
-          {!isOpen && newMsgCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-purple-600 text-[8px] font-bold text-white shadow-[0_0_8px_rgba(147,51,234,0.7)]">
-              {newMsgCount > 9 ? "9+" : newMsgCount}
-            </span>
-          )}
-        </button>
+            {newMsgCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-purple-600 text-[8px] font-bold text-white shadow-[0_0_8px_rgba(147,51,234,0.7)]">
+                {newMsgCount > 9 ? "9+" : newMsgCount}
+              </span>
+            )}
+          </button>
+        )}
 
-        {/* Mobile chat bottom sheet */}
+        {/* Mobile chat sheet — reicht von DIREKT UNTER der Topbar bis zum unteren
+            Rand (statt fester 70vh). So „rutscht" er beim Öffnen weit hoch, es
+            ist viel Platz, und der Sende-Button hat unten echten Abstand. */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
@@ -676,8 +693,9 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-              className={`fixed bottom-0 left-0 right-0 z-40 h-[70vh] flex flex-col border-t border-white/10 bg-black/80 ${blurCls}`}
+              className={`fixed bottom-0 left-0 right-0 z-40 flex flex-col border-t border-white/10 bg-black/80 ${blurCls}`}
               style={{
+                top: "var(--gnc-topbar-h, 56px)",
                 background: `rgba(0,0,0,${config.bgOpacity / 100 + 0.5})`,
               }}
             >
@@ -713,10 +731,12 @@ export function HomepageChatSidebar({ config: initialConfig }: HomepageChatSideb
     <motion.div
       animate={{ width: isOpen ? expandedW : COLLAPSED_W }}
       transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-      className={`fixed top-0 bottom-0 z-40 border-white/10 ${
+      className={`fixed bottom-0 z-40 border-white/10 ${
         isLeft ? "left-0 border-r" : "right-0 border-l"
       } ${blurCls}`}
       style={{
+        // Startet SAUBER direkt unter der Topbar (gemessene Höhe), nie dahinter.
+        top: "var(--gnc-topbar-h, 56px)",
         background: `linear-gradient(to bottom, rgba(0,0,0,${(config.bgOpacity + 10) / 100}), rgba(0,0,0,${config.bgOpacity / 100}))`,
       }}
     >
@@ -903,7 +923,7 @@ function ChatPanel({
 
       {/* Input */}
       {config.showInput && (
-        <div className="border-t border-white/10 p-2 shrink-0">
+        <div className="border-t border-white/10 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] shrink-0">
           {error && (
             <p className="mb-1 text-[10px] text-red-400 leading-tight">{error}</p>
           )}

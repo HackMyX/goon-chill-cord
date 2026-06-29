@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ShoppingBag,
@@ -69,6 +69,24 @@ export function TopBar({
     topbarShowLabels,
   } = useSiteConfig();
   const LogoIcon = resolveSiteLogoIcon(logoIconName);
+
+  // Misst die tatsächliche Topbar-Höhe und legt sie als CSS-Variable
+  // `--gnc-topbar-h` auf <html> ab. Damit können fixierte Overlays (z.B. der
+  // Startseiten-Chat) sich SAUBER direkt unter die Topbar setzen, statt
+  // dahinter zu verschwinden — egal wie hoch die Topbar gerade ist
+  // (Mobile/Desktop, umbrechende Pillen, Safe-Area).
+  const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const apply = () => {
+      document.documentElement.style.setProperty("--gnc-topbar-h", `${el.offsetHeight}px`);
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const [liveInventoryCount, setLiveInventoryCount] = useState(inventoryCount);
   const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
@@ -298,6 +316,7 @@ export function TopBar({
   return (
     <>
     <header
+      ref={headerRef}
       className="sticky top-0 z-50 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:gap-4 border-b border-white/[0.06] bg-[#030305]/95 px-3 sm:px-4 py-2 backdrop-blur-md"
       style={{ paddingLeft: "max(0.75rem, calc(0.75rem + env(safe-area-inset-left)))", paddingRight: "max(0.75rem, calc(0.75rem + env(safe-area-inset-right)))" }}
     >

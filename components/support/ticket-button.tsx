@@ -148,6 +148,16 @@ function SupportButtonInner() {
   const [formSuccess, setFormSuccess] = useState(false);
   const [userRole, setUserRole] = useState<string>("user");
 
+  // Auf Mobile blendet sich der schwebende „Hilfe & Chat"-Button aus, solange
+  // der Startseiten-Chat offen ist — sonst läge er GENAU über dessen
+  // Sende-Button. Der Startseiten-Chat broadcastet seinen Zustand per Event.
+  const [homepageChatOpen, setHomepageChatOpen] = useState(false);
+  useEffect(() => {
+    const handler = (e: Event) => setHomepageChatOpen(!!(e as CustomEvent).detail);
+    window.addEventListener("gnc:homepage-chat-open", handler);
+    return () => window.removeEventListener("gnc:homepage-chat-open", handler);
+  }, []);
+
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [replyAttachFile, setReplyAttachFile] = useState<File | null>(null);
@@ -451,7 +461,7 @@ function SupportButtonInner() {
 
   return (
     <>
-      {!open && (
+      {!open && !homepageChatOpen && (
         <div className="fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6">
           <div className="flex flex-col items-center gap-2">
             <div className="pointer-events-none hidden xl:flex flex-col items-center gap-1 whitespace-nowrap">
