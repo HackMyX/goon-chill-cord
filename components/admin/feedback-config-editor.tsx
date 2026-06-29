@@ -183,6 +183,13 @@ export function FeedbackConfigEditor() {
           </div>
           <Toggle checked={form.notificationToasts} onChange={(v) => setForm((f) => ({ ...f, notificationToasts: v }))} />
         </div>
+        <div className="mt-3 flex items-center justify-between gap-4 border-t border-white/8 pt-3" title="Große Vollbild-Feiern (z. B. Battle-Pass-Stufe, Meilenstein-Level) werden NICHT mitten im Spiel aufpoppen, sondern erst NACH der Runde. Während des Spiels erscheint nur ein kleines, nicht störendes Info-Pill oben, das von selbst verschwindet. Verhindert, dass jemand wegen eines Popups z. B. bei Snake stirbt.">
+          <div>
+            <p className="text-sm font-bold text-zinc-100">Große Feiern erst nach der Runde</p>
+            <p className="text-xs text-zinc-500">Vollbild-Feiern während des Spielens aufschieben — vorher nur ein kleines Info-Pill. Schützt vor Verlust durch Popups.</p>
+          </div>
+          <Toggle checked={form.deferDuringGameplay} onChange={(v) => setForm((f) => ({ ...f, deferDuringGameplay: v }))} />
+        </div>
       </div>
 
       {/* ── Spiel-Limit-Anzeige (LimitMeter) ──────────────────────────────── */}

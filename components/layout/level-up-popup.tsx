@@ -11,6 +11,7 @@ import { useSoundManager } from "@/lib/sound-manager";
 import { MilestoneCelebration } from "@/components/layout/milestone-celebration";
 import { useFeedbackSettings } from "@/lib/use-feedback";
 import { hexToRgba, INTENSITY_FACTOR, type FeedbackEventConfig } from "@/lib/feedback-config";
+import { useGameplayActive, isGameplayActive, subscribeGameplayActive } from "@/lib/gameplay-activity";
 
 interface LevelUpEvent {
   id: string;
@@ -90,13 +91,49 @@ export function LevelUpPopup({ userId }: { userId?: string | null }) {
     setQueue((q) => q.filter((e) => e.id !== id));
   }
 
+  // Defer the BIG milestone takeover while the player is mid-round: show the
+  // small level-up card now, replay the fullscreen milestone after the round.
+  const [pendingBig, setPendingBig] = useState<LevelUpEvent[]>([]);
+  const pendingBigRef = useRef(pendingBig);
+  pendingBigRef.current = pendingBig;
+  const capturedRef = useRef<Set<string>>(new Set());
+  const forceSmallRef = useRef<Set<string>>(new Set());
+  const gameplayActive = useGameplayActive();
+
   const current = queue[0] ?? null;
   // Personal prefs: minimal / reduce-motion users get the calm card, not the
   // grand fullscreen milestone takeover.
   const allowBig = userIntensity !== "minimal" && !reduceMotion;
-  const showMilestone = !!current && isMilestoneLevel(current.newLevel, roadConfig) && roadConfig.celebrateMilestones !== false && allowBig;
+  const isMs = !!current && isMilestoneLevel(current.newLevel, roadConfig) && roadConfig.celebrateMilestones !== false && allowBig;
+  // A "big" level event is one that would take over the screen: a milestone, OR a
+  // normal level-up the admin configured as a fullscreen celebration.
+  const luFullscreen = !!current && !isMs && eventConfig("level_up").style === "fullscreen";
+  const isBig = isMs || luFullscreen;
+  const deferBig = isBig && fbConfig.deferDuringGameplay && gameplayActive;
+  const forceSmall = !!current && forceSmallRef.current.has(current.id);
+  const showMilestone = isMs && !deferBig && !forceSmall;
   const tier = current ? resolveLevelRoadTier(current.newLevel, roadConfig) : null;
   const levelDef = current ? levels.find((l) => l.level === current.newLevel) : undefined;
+
+  // Capture a big level event that arrived mid-round: stash a big copy for replay
+  // after the round, and lock the original to render small only.
+  useEffect(() => {
+    if (current && deferBig && !capturedRef.current.has(current.id)) {
+      capturedRef.current.add(current.id);
+      forceSmallRef.current.add(current.id);
+      setPendingBig((p) => [...p, { ...current, id: `${current.id}-big` }]);
+    }
+  }, [current, deferBig]);
+
+  // Round over → release the deferred fullscreen milestone(s).
+  useEffect(() => {
+    return subscribeGameplayActive(() => {
+      if (!isGameplayActive() && pendingBigRef.current.length > 0) {
+        setQueue((q) => [...pendingBigRef.current, ...q]);
+        setPendingBig([]);
+      }
+    });
+  }, []);
 
   return (
     <AnimatePresence>
@@ -115,6 +152,7 @@ export function LevelUpPopup({ userId }: { userId?: string | null }) {
         <LevelUpCelebration
           key={current.id}
           ev={eventConfig("level_up")}
+          forceCard={!!(deferBig || forceSmall)}
           oldLevel={current.oldLevel}
           newLevel={current.newLevel}
           accent={tier.accent}
@@ -158,7 +196,7 @@ const LU_RINGS = [0, 1, 2];
  * centered overlay with a dark backdrop; otherwise it's a centered card.
  */
 function LevelUpCelebration({
-  ev, oldLevel, newLevel, accent, glow, title, rewards, onDone,
+  ev, oldLevel, newLevel, accent, glow, title, rewards, onDone, forceCard = false,
 }: {
   ev: FeedbackEventConfig;
   oldLevel: number;
@@ -168,10 +206,13 @@ function LevelUpCelebration({
   title?: string;
   rewards: LevelReward[];
   onDone: () => void;
+  /** Force the small bottom card even if the event is configured fullscreen
+   *  (used for the non-blocking in-game info while a round is running). */
+  forceCard?: boolean;
 }) {
   const sound = useSoundManager();
   const f = INTENSITY_FACTOR[ev.intensity] ?? INTENSITY_FACTOR.normal;
-  const fullscreen = ev.style === "fullscreen";
+  const fullscreen = ev.style === "fullscreen" && !forceCard;
   // Animated count-up old → new.
   const [shown, setShown] = useState(oldLevel);
 

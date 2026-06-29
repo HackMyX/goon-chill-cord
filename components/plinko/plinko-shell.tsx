@@ -24,6 +24,7 @@ import { StyledUsername } from "@/components/ui/styled-username";
 import { ActiveBonusDock } from "@/components/rewards/active-bonus-dock";
 import { ActiveAbilityBadge } from "@/components/rewards/active-ability-badge";
 import { LimitMeter } from "@/components/rewards/limit-meter";
+import { useGameplaySignal } from "@/lib/gameplay-activity";
 
 interface Props {
   config: PlinkoConfig;
@@ -263,6 +264,8 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
   const [activeTab, setActiveTab] = useState<"verlauf" | "leaderboard">("verlauf");
   const [betAmount, setBetAmount] = useState(config.minBetCr);
   const [autoBet, setAutoBet] = useState(false);
+  // Active while a ball drops or auto-bet runs → big celebrations wait for a pause.
+  useGameplaySignal("plinko", animating || autoBet);
   const [bigWinOverlay, setBigWinOverlay] = useState<{ mult: number; payout: number } | null>(null);
   const sound = useSoundManager();
   const autoBetRef = useRef(false);

@@ -7,13 +7,14 @@ import { Sparkles, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useFeedbackSettings } from "@/lib/use-feedback";
+import { isGameplayActive, subscribeGameplayActive } from "@/lib/gameplay-activity";
 import {
   feedbackAnimationStyle, hexToRgba, INTENSITY_FACTOR,
   type CelebrationPayload, type FeedbackEventConfig, type FeedbackEventKey,
   type FeedbackPosition, type FeedbackParticle,
 } from "@/lib/feedback-config";
 
-interface QueueItem { id: string; payload: CelebrationPayload }
+interface QueueItem { id: string; payload: CelebrationPayload; teaser?: boolean }
 
 // On phones the side-anchored positions collapse to centred so nothing clips the
 // screen edge; the desktop anchor returns at >=640px (sm).
@@ -36,11 +37,18 @@ const POSITION_CLASS: Record<FeedbackPosition, string> = {
 export function FeedbackHost({ userId }: { userId?: string | null }) {
   const [resolvedUserId, setResolvedUserId] = useState(userId ?? null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  // Big disruptive (fullscreen) celebrations that arrived DURING a game round —
+  // held back until the round ends so the player can't lose because of a popup.
+  const [deferred, setDeferred] = useState<QueueItem[]>([]);
   const { config, allows, eventConfig } = useFeedbackSettings();
   const configRef = useRef(config);
   configRef.current = config;
   const allowsRef = useRef(allows);
   allowsRef.current = allows;
+  const eventConfigRef = useRef(eventConfig);
+  eventConfigRef.current = eventConfig;
+  const deferredRef = useRef(deferred);
+  deferredRef.current = deferred;
 
   useEffect(() => {
     if (userId) { setResolvedUserId(userId); return; }
@@ -59,11 +67,32 @@ export function FeedbackHost({ userId }: { userId?: string | null }) {
         const payload = msg.payload as CelebrationPayload;
         if (!payload?.type) return;
         if (!allowsRef.current(payload.type)) return; // master / event / user-pref gate
-        setQueue((q) => [...q.slice(-3), { id: `${Date.now()}-${Math.random()}`, payload }]);
+        const id = `${Date.now()}-${Math.random()}`;
+        const ev = eventConfigRef.current(payload.type);
+        const disruptive = ev.style === "fullscreen";
+        // During an active round, a fullscreen takeover would cover the game and
+        // could cost the player the run → defer it, show only a tiny teaser now.
+        if (disruptive && configRef.current.deferDuringGameplay && isGameplayActive()) {
+          setDeferred((d) => [...d.slice(-3), { id, payload }]);
+          setQueue((q) => [...q.slice(-3), { id: `${id}-teaser`, payload, teaser: true }]);
+        } else {
+          setQueue((q) => [...q.slice(-3), { id, payload }]);
+        }
       })
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [resolvedUserId]);
+
+  // When the round ends (no game active anymore) → release the deferred big
+  // celebrations so they finally play.
+  useEffect(() => {
+    return subscribeGameplayActive(() => {
+      if (!isGameplayActive() && deferredRef.current.length > 0) {
+        setQueue((q) => [...q, ...deferredRef.current]);
+        setDeferred([]);
+      }
+    });
+  }, []);
 
   function dismiss(id: string) {
     setQueue((q) => q.filter((it) => it.id !== id));
@@ -72,8 +101,9 @@ export function FeedbackHost({ userId }: { userId?: string | null }) {
   if (queue.length === 0) return null;
 
   // Split using the EFFECTIVE per-user config (personal prefs may force a
-  // fullscreen celebration down to a corner toast).
-  const isFs = (it: QueueItem) => eventConfig(it.payload.type).style === "fullscreen";
+  // fullscreen celebration down to a corner toast). Teasers always render as
+  // small corner pills regardless of the event's style.
+  const isFs = (it: QueueItem) => !it.teaser && eventConfig(it.payload.type).style === "fullscreen";
   const cornerItems = queue.filter((it) => !isFs(it));
   const fsItems = queue.filter(isFs);
 
@@ -84,14 +114,25 @@ export function FeedbackHost({ userId }: { userId?: string | null }) {
           className={`pointer-events-none fixed z-[595] flex max-w-[calc(100vw-1.5rem)] flex-col gap-2.5 px-1 ${POSITION_CLASS[config.position] ?? POSITION_CLASS.top}`}
           aria-live="polite"
         >
-          {cornerItems.map((item) => (
-            <FeedbackItem
-              key={item.id}
-              payload={item.payload}
-              ev={eventConfig(item.payload.type)}
-              onDone={() => dismiss(item.id)}
-            />
-          ))}
+          {cornerItems.map((item) => {
+            const baseEv = eventConfig(item.payload.type);
+            // Teaser = small, calm, non-blocking pill that auto-dismisses and
+            // tells the player the big celebration comes after the round.
+            const ev: FeedbackEventConfig = item.teaser
+              ? { ...baseEv, style: "toast", confetti: false, screenFlash: false, intensity: "subtle", durationMs: 4200, sound: false }
+              : baseEv;
+            const payload = item.teaser
+              ? { ...item.payload, message: "Wird nach der Runde gefeiert ✨", amount: undefined, rewards: undefined }
+              : item.payload;
+            return (
+              <FeedbackItem
+                key={item.id}
+                payload={payload}
+                ev={ev}
+                onDone={() => dismiss(item.id)}
+              />
+            );
+          })}
         </div>
       )}
       {/* Only the most-recent fullscreen celebration at a time (avoids stacking overlays). */}

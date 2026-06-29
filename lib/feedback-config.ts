@@ -114,6 +114,9 @@ export interface FeedbackConfig {
   limitMeter: LimitMeterConfig;
   /** Pop an animated toast when a new notification arrives (trade, shop, friend …). */
   notificationToasts: boolean;
+  /** Defer big disruptive (fullscreen) celebrations until the player's round ends —
+   *  during gameplay only a small non-blocking teaser shows, so nobody loses a run. */
+  deferDuringGameplay: boolean;
 }
 
 /** The /account user pref key for live notification toasts. */
@@ -176,6 +179,7 @@ export const DEFAULT_FEEDBACK_CONFIG: FeedbackConfig = {
   },
   limitMeter: DEFAULT_LIMIT_METER_CONFIG,
   notificationToasts: true,
+  deferDuringGameplay: true,
 };
 
 /** Merge a (possibly partial) stored config with defaults — safe per event. */
@@ -192,6 +196,7 @@ export function resolveFeedbackConfig(raw: Partial<FeedbackConfig> | null | unde
     events,
     limitMeter: { ...base.limitMeter, ...(raw.limitMeter ?? {}) },
     notificationToasts: raw.notificationToasts ?? base.notificationToasts,
+    deferDuringGameplay: raw.deferDuringGameplay ?? base.deferDuringGameplay,
   };
 }
 

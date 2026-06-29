@@ -10,6 +10,7 @@ import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { ActiveBonusDock } from "@/components/rewards/active-bonus-dock";
 import { ActiveAbilityBadge } from "@/components/rewards/active-ability-badge";
 import { LimitMeter } from "@/components/rewards/limit-meter";
+import { useGameplaySignal } from "@/lib/gameplay-activity";
 import type { DonConfig } from "@/lib/don-config";
 
 function fireDoNConfetti() {
@@ -32,6 +33,8 @@ interface DoubleOrNothingProps {
 export function DoubleOrNothing({ credits, onCreditsChange, donConfig, initialFlipsToday }: DoubleOrNothingProps) {
   const [amount, setAmount] = useState(donConfig.quickAmounts[0] ?? 100);
   const [flipping, setFlipping] = useState(false);
+  // Active during a flip → defer big celebrations until it resolves.
+  useGameplaySignal("don", flipping);
   const [result, setResult] = useState<{ won: boolean; amount: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);

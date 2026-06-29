@@ -10,6 +10,7 @@ import {
 import { TopBar } from "@/components/layout/top-bar";
 import { useSoundManager } from "@/lib/sound-manager";
 import { setMusicTempoMult, resetMusicTempoMult, setMusicMode } from "@/lib/music-dynamics";
+import { useGameplaySignal } from "@/lib/gameplay-activity";
 import { submitSnakeScore, getSnakeConfig } from "@/lib/actions/snake";
 import { useLiveConfig } from "@/lib/use-live-config";
 import { formatSnakeText, BADGE_COLORS } from "@/lib/snake-config";
@@ -868,6 +869,9 @@ export function SnakeShell({
   const [credits, setCredits] = useState(initialCredits);
   const [activeMode, setActiveMode] = useState<SnakeMode>("x1");
   const [phase, setPhase] = useState<Phase>("idle");
+  // Mark the round as active so big celebrations (level milestones etc.) defer
+  // until after the run — a fullscreen takeover mid-game = certain death.
+  useGameplaySignal("snake", phase === "playing");
   const [dailyGames, setDailyGames] = useState({ x1: dailyGamesX1, x2: dailyGamesX2, grind: dailyGamesGrind, farm: dailyGamesFarm });
   const [score, setScore] = useState(0);
   const [creditsEarned, setCreditsEarned] = useState(0);
