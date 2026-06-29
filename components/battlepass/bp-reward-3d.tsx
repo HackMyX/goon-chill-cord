@@ -494,6 +494,92 @@ function RarityAura({ color, tier }: { color: string; tier: number }) {
   );
 }
 
+// ── Effekt-abhängige Fähigkeits-Modelle (pro Wirkungsbereich) ─────────────────
+
+function AbilityPickaxe() {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    ref.current.rotation.y = clock.elapsedTime * 0.9;
+    ref.current.position.y = Math.sin(clock.elapsedTime * 1.2) * 0.06;
+  });
+  return (
+    <group ref={ref} rotation={[0, 0, 0.4]}>
+      {/* Stiel */}
+      <mesh>
+        <cylinderGeometry args={[0.05, 0.06, 1.1, 12]} />
+        <meshStandardMaterial color="#92400e" emissive="#78350f" emissiveIntensity={0.2} metalness={0.2} roughness={0.7} />
+      </mesh>
+      {/* Kopf (gebogen über zwei Boxen) */}
+      <mesh position={[0, 0.5, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <boxGeometry args={[0.12, 0.7, 0.12]} />
+        <meshStandardMaterial color="#cbd5e1" emissive="#94a3b8" emissiveIntensity={0.3} metalness={0.95} roughness={0.2} />
+      </mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.34, 0.56, 0]} rotation={[0, 0, s * 0.5]}>
+          <coneGeometry args={[0.07, 0.22, 8]} />
+          <meshStandardMaterial color="#e2e8f0" emissive="#cbd5e1" emissiveIntensity={0.4} metalness={1} roughness={0.15} />
+        </mesh>
+      ))}
+      {/* Diamant am Stielende */}
+      <mesh position={[0, -0.55, 0]}>
+        <octahedronGeometry args={[0.14, 0]} />
+        <meshStandardMaterial color="#67e8f9" emissive="#22d3ee" emissiveIntensity={0.7} metalness={0.4} roughness={0.1} />
+      </mesh>
+    </group>
+  );
+}
+
+function AbilitySword() {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    ref.current.rotation.y = clock.elapsedTime * 1.0;
+    ref.current.position.y = Math.sin(clock.elapsedTime * 1.3) * 0.06;
+  });
+  return (
+    <group ref={ref} rotation={[0, 0, 0.25]}>
+      {/* Klinge */}
+      <mesh position={[0, 0.42, 0]}>
+        <boxGeometry args={[0.12, 0.95, 0.04]} />
+        <meshStandardMaterial color="#e5e7eb" emissive="#cbd5e1" emissiveIntensity={0.45} metalness={1} roughness={0.12} />
+      </mesh>
+      {/* Spitze */}
+      <mesh position={[0, 0.95, 0]}>
+        <coneGeometry args={[0.085, 0.2, 4]} />
+        <meshStandardMaterial color="#f1f5f9" emissive="#e2e8f0" emissiveIntensity={0.5} metalness={1} roughness={0.1} />
+      </mesh>
+      {/* Parierstange */}
+      <mesh position={[0, -0.08, 0]}>
+        <boxGeometry args={[0.55, 0.1, 0.1]} />
+        <meshStandardMaterial color="#f59e0b" emissive="#d97706" emissiveIntensity={0.5} metalness={0.9} roughness={0.2} />
+      </mesh>
+      {/* Griff */}
+      <mesh position={[0, -0.32, 0]}>
+        <cylinderGeometry args={[0.05, 0.05, 0.4, 10]} />
+        <meshStandardMaterial color="#78350f" emissive="#451a03" emissiveIntensity={0.2} metalness={0.3} roughness={0.7} />
+      </mesh>
+      {/* Knauf */}
+      <mesh position={[0, -0.54, 0]}>
+        <sphereGeometry args={[0.08, 14, 14]} />
+        <meshStandardMaterial color="#f59e0b" emissive="#d97706" emissiveIntensity={0.6} metalness={0.95} roughness={0.15} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Wählt das passende 3D-Modell für eine Fähigkeit anhand ihres Wirkungsbereichs. */
+function AbilityModel({ category }: { category?: string }) {
+  switch (category) {
+    case "mine":   return <AbilityPickaxe />;
+    case "world":  return <AbilitySword />;
+    case "snake":  return <GameBonusModel game="snake" />;
+    case "plinko": return <GameBonusModel game="plinko" />;
+    case "don":    return <GameBonusModel game="don" />;
+    default:       return <SpinningAbilityOrb />; // global / xp / credits / luck …
+  }
+}
+
 // ── Reward type → 3D scene ────────────────────────────────────────────────────
 
 function BpRewardScene({
@@ -501,11 +587,14 @@ function BpRewardScene({
   rarity,
   creditsAmount,
   game,
+  effect,
 }: {
   rewardType: string;
   rarity: string;
   creditsAmount?: number;
   game?: string;
+  /** Fähigkeits-Wirkungsbereich (mine/snake/plinko/don/world/global) → eigenes Modell. */
+  effect?: string;
 }) {
   const { color: rc, tier } = rarity3d(rarity);
 
@@ -516,7 +605,7 @@ function BpRewardScene({
     case "badge": model = <SpinningTrophy />; break;
     case "xp_boost": model = <SpinningBolt />; break;
     case "name_style": model = <SpinningStyleOrb />; break;
-    case "ability": model = <SpinningAbilityOrb />; break;
+    case "ability": model = <AbilityModel category={effect} />; break;
     // Eigene Modelle: Ticket für Case-Gutscheine, pro-Spiel-Modell für Spiel-Bonus.
     case "case_voucher": model = <SpinningTicket color={rc} />; break;
     case "game_bonus": model = <GameBonusModel game={game} />; break;
@@ -573,6 +662,7 @@ export function BpRewardView3D({
   rarity = "normal",
   creditsAmount,
   game,
+  effect,
   viewIndex,
   visible = true,
   lightColor,
@@ -584,6 +674,7 @@ export function BpRewardView3D({
   rarity?: string;
   creditsAmount?: number;
   game?: string;
+  effect?: string;
   viewIndex: number;
   visible?: boolean;
   lightColor?: string;
@@ -606,7 +697,7 @@ export function BpRewardView3D({
       <BpLights color={lightColor} />
       <Suspense fallback={null}>
         <ClipToCarousel tileRef={clipTileRef} rootRef={clipRootRef}>
-          <BpRewardScene rewardType={rewardType} rarity={rarity} creditsAmount={creditsAmount} game={game} />
+          <BpRewardScene rewardType={rewardType} rarity={rarity} creditsAmount={creditsAmount} game={game} effect={effect} />
           <ContactShadows position={[0, -0.65, 0]} opacity={0.25} scale={3} blur={2.5} far={2} />
         </ClipToCarousel>
       </Suspense>
@@ -630,12 +721,14 @@ export function RewardHero3D({
   rarity = "selten",
   creditsAmount,
   game,
+  effect,
   autoRotate = true,
 }: {
   rewardType: string;
   rarity?: string;
   creditsAmount?: number;
   game?: string;
+  effect?: string;
   autoRotate?: boolean;
 }) {
   const light = rarityHeroColor(rarity);
@@ -648,7 +741,7 @@ export function RewardHero3D({
     >
       <BpLights color={light} />
       <Suspense fallback={null}>
-        <BpRewardScene rewardType={rewardType} rarity={rarity} creditsAmount={creditsAmount} game={game} />
+        <BpRewardScene rewardType={rewardType} rarity={rarity} creditsAmount={creditsAmount} game={game} effect={effect} />
         <ContactShadows position={[0, -0.7, 0]} opacity={0.22} scale={3} blur={2.5} far={2} />
       </Suspense>
       <OrbitControls enablePan={false} enableZoom={false} autoRotate={autoRotate} autoRotateSpeed={1.4} />
