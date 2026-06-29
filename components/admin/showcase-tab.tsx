@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LayoutGrid, ChevronLeft, ChevronRight, Box, Gift, Sparkles, Type, Loader2 } from "lucide-react";
+import { LayoutGrid, ChevronLeft, ChevronRight, Box, Gift, Sparkles, Type, Loader2, Swords } from "lucide-react";
 import { BpRewardView3D } from "@/components/battlepass/bp-reward-3d";
 import { RewardCardCanvas } from "@/components/rewards/reward-card-canvas";
+import { CaseDropView } from "@/components/cases/case-item-3d";
 import { BonusCard } from "@/components/rewards/bonus-card";
 import { AbilityVoucherCard } from "@/components/rewards/ability-voucher-card";
 import { StyledUsername } from "@/components/ui/styled-username";
@@ -11,6 +12,8 @@ import { BONUS_CARD_THEMES, type BonusCardRarity } from "@/lib/bonus-card-themes
 import { NAME_STYLES } from "@/lib/name-styles";
 import { ABILITY_EFFECT_META, ABILITY_CATEGORY_LABELS, type AbilityDefinition, type AbilityEffectUnit } from "@/lib/abilities";
 import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
+import { getAllGalleryItems, type GalleryItem } from "@/lib/actions/admin";
+import { WORN_TYPES } from "@/lib/case-display-config";
 import type { BonusGame } from "@/lib/bonus-games";
 
 // Effektwert nach Einheit lesbar machen (nur wenn ein Wert existiert).
@@ -65,7 +68,7 @@ const REWARD_TYPE_LABEL: Record<string, string> = {
   name_style: "Name-Style", case_voucher: "Case-Gutschein", default: "Sonstiges (Gem)",
 };
 
-type Category = "rewards3d" | "bonus" | "abilities" | "namestyles";
+type Category = "rewards3d" | "items" | "bonus" | "abilities" | "namestyles";
 
 interface RewardVariant {
   key: string; label: string; rewardType: string; rarity: string;
@@ -119,8 +122,18 @@ export function ShowcaseTab() {
     getAllAbilityDefinitions().then((d) => setAbilityDefs(d)).catch(() => setAbilityDefs([])).finally(() => setLoadingAbilities(false));
   }, [cat, abilityDefs, loadingAbilities]);
 
+  // ECHTE Items (lazy laden) → AP/DMG/Perk/Schild als Info-Badges (nur was existiert).
+  const [itemDefs, setItemDefs] = useState<GalleryItem[] | null>(null);
+  const [loadingItems, setLoadingItems] = useState(false);
+  useEffect(() => {
+    if (cat !== "items" || itemDefs || loadingItems) return;
+    setLoadingItems(true);
+    getAllGalleryItems().then((d) => setItemDefs(d)).catch(() => setItemDefs([])).finally(() => setLoadingItems(false));
+  }, [cat, itemDefs, loadingItems]);
+
   const total =
     cat === "rewards3d" ? rewardVariants.length :
+    cat === "items" ? (itemDefs?.length ?? 0) :
     cat === "bonus" ? bonusVariants.length :
     cat === "abilities" ? (abilityDefs?.length ?? 0) :
     nameStyleVariants.length;
@@ -134,6 +147,7 @@ export function ShowcaseTab() {
 
   const CATS: { key: Category; label: string; icon: React.ReactNode }[] = [
     { key: "rewards3d", label: "Belohnungen (3D)", icon: <Box className="h-4 w-4" /> },
+    { key: "items", label: "Items (AP/DMG)", icon: <Swords className="h-4 w-4" /> },
     { key: "bonus", label: "Bonus-Karten", icon: <Gift className="h-4 w-4" /> },
     { key: "abilities", label: "Fähigkeits-Karten", icon: <Sparkles className="h-4 w-4" /> },
     { key: "namestyles", label: "Name-Styles", icon: <Type className="h-4 w-4" /> },
@@ -146,8 +160,8 @@ export function ShowcaseTab() {
         <span className="text-base font-extrabold text-zinc-100">Vorschau-Galerie</span>
       </div>
       <p className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/[0.04] px-4 py-3 text-[12px] leading-relaxed text-fuchsia-100/90">
-        Hier siehst du <strong>alles in allen Varianten</strong> auf einen Blick — 3D-Belohnungsmodelle, Bonus-
-        und Fähigkeits-Karten (je Theme/Seltenheit) und alle Name-Styles. So prüfst du schnell, ob wirklich
+        Hier siehst du <strong>alles in allen Varianten</strong> auf einen Blick — 3D-Belohnungsmodelle, echte
+        Items (mit AP/DMG/Perk), Bonus- und Fähigkeits-Karten (je Theme/Seltenheit) und alle Name-Styles. So prüfst du schnell, ob wirklich
         alles korrekt &amp; geil aussieht, ohne irgendwo etwas umbauen zu müssen. Es werden <strong>max. {PAGE_SIZE}
         gleichzeitig</strong> gezeigt, damit dein PC nicht überlastet wird — blättere mit den Seiten-Pfeilen.
       </p>
@@ -220,6 +234,41 @@ export function ShowcaseTab() {
               </div>
             ))}
           </div>
+        )}
+
+        {cat === "items" && (
+          loadingItems ? (
+            <div className="flex items-center gap-2 py-10 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> Lade Items…</div>
+          ) : (itemDefs?.length ?? 0) === 0 ? (
+            <p className="py-10 text-sm text-zinc-500">Keine Items gefunden.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {(itemDefs ?? []).slice(start, start + PAGE_SIZE).map((it, i) => (
+                <div key={it.id} className="flex flex-col items-center gap-1.5 rounded-xl border border-white/8 bg-black/20 p-2">
+                  <div className="relative h-36 w-full">
+                    <CaseDropView
+                      subject={{ kind: "item", item: { id: it.id, name: it.name, rarity: it.rarity, type: it.type, damage: it.damage } }}
+                      viewIndex={i}
+                      character={WORN_TYPES.has(it.type)}
+                      gender="m"
+                      lazy
+                      rootRef={galleryRef}
+                    />
+                  </div>
+                  <span className="line-clamp-1 text-center text-[10px] font-semibold leading-tight text-zinc-300">{it.name}</span>
+                  {/* Info-Badges — nur Stats, die wirklich existieren */}
+                  <div className="flex flex-wrap justify-center gap-1">
+                    <InfoBadge value={it.rarity} tone={RARITY_TONE[it.rarity] ?? "zinc"} />
+                    <InfoBadge value={it.type} />
+                    {it.damage && it.damage > 0 ? <InfoBadge label="DMG:" value={it.damage} tone="amber" /> : null}
+                    {it.armor > 0 ? <InfoBadge label="AP:" value={it.armor} tone="sky" /> : null}
+                    {it.perkType && it.perkType !== "none" ? <InfoBadge label="Perk:" value={it.perkMagnitude > 0 ? `${it.perkType} +${it.perkMagnitude}` : it.perkType} tone="emerald" /> : null}
+                    {it.shieldHp > 0 ? <InfoBadge label="Schild:" value={it.shieldHp} tone="fuchsia" /> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         )}
 
         {cat === "bonus" && (

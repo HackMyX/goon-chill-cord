@@ -562,6 +562,38 @@ export async function searchItems(
   return data ?? [];
 }
 
+export interface GalleryItem {
+  id: string;
+  name: string;
+  rarity: Rarity;
+  type: string;
+  damage: number | null;
+  armor: number;
+  perkType: string;
+  perkMagnitude: number;
+  shieldHp: number;
+}
+
+/** Alle Items mit ihren Stats für die Admin-Vorschau-Galerie (defensiv: liest
+ *  Stat-Felder optional, falls eine Migration noch fehlt). */
+export async function getAllGalleryItems(): Promise<GalleryItem[]> {
+  const user = await requireAdmin();
+  if (!user) return [];
+  const admin = createAdminClient();
+  const { data } = await admin.from("items").select("*").order("name");
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: String(r.id),
+    name: String(r.name ?? "Item"),
+    rarity: (r.rarity as Rarity) ?? "normal",
+    type: String(r.type ?? "item"),
+    damage: typeof r.damage === "number" ? r.damage : null,
+    armor: typeof r.armor === "number" ? r.armor : 0,
+    perkType: typeof r.perk_type === "string" ? r.perk_type : "none",
+    perkMagnitude: typeof r.perk_magnitude === "number" ? r.perk_magnitude : 0,
+    shieldHp: typeof r.shield_hp === "number" ? r.shield_hp : 0,
+  }));
+}
+
 export async function grantItemToUser(
   targetUserId: string,
   itemId: string
