@@ -12,6 +12,7 @@ import {
 } from "@/lib/actions/debug-log";
 import { runSystemHealthChecks, type HealthCheck } from "@/lib/actions/system-health";
 import { useSoundManager } from "@/lib/sound-manager";
+import { VersionPanel } from "@/components/admin/version-panel";
 
 const LEVEL_STYLE: Record<DebugLogEntry["level"], string> = {
   error: "text-red-300 bg-red-500/10 border-red-500/30",
@@ -466,6 +467,7 @@ export function DebugLogTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      <VersionPanel />
       <SystemHealthPanel />
 
       <p className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] px-4 py-3 text-xs text-zinc-400">
