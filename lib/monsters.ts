@@ -24,6 +24,22 @@ export function isHoveringKind(kind: MonsterVisualKind): boolean {
   return kind === "ghost" || kind === "bat" || kind === "wisp" || kind === "reaper";
 }
 
+/** Spawn-Erscheinungs-Animation eines Monsters. */
+export type MonsterSpawnAnim = "pop" | "dig" | "rise" | "fall" | "fade" | "random";
+export const SPAWN_ANIM_VALUES: MonsterSpawnAnim[] = ["pop", "dig", "rise", "fall", "fade", "random"];
+
+/** Sinnvolle Standard-Spawn-Animation je Art (admin überschreibbar via
+ * type.spawnAnim). Bodengänger graben/erheben sich, Flieger fallen ein,
+ * Geisterhaftes materialisiert (fade). */
+export function defaultSpawnAnim(kind: MonsterVisualKind): MonsterSpawnAnim {
+  switch (kind) {
+    case "ghost": case "wisp": case "reaper": return "fade";
+    case "slime": case "imp": case "bat": case "demon": return "fall";
+    case "skeleton": case "golem": return "rise";
+    default: return "dig"; // zombie, orc, spider, brute
+  }
+}
+
 export interface MonsterTypeConfig {
   id: string;
   name: string;
@@ -53,6 +69,14 @@ export interface MonsterTypeConfig {
    * wird die Normalo-Obergrenze gesenkt — damit nie 40 Mobs + Boss zugleich
    * auf einen losgehen. Siehe monsters-field.tsx + world-spawn-config.ts. */
   isBoss?: boolean;
+  /** Erscheinungs-Animation beim Spawn (undefined = Standard je Art). */
+  spawnAnim?: MonsterSpawnAnim;
+  /** Beschwört Mini-Monster: ID des zu spawnenden Typs + max. gleichzeitig
+   * lebende eigene Minions + Intervall. Bei Bossen aktiviert. Minions werden
+   * verkleinert/abgeschwächt gespawnt (monsters-field.tsx). 0/undef = keine. */
+  minionTypeId?: string;
+  minionMaxAlive?: number;
+  minionIntervalSec?: number;
   /** Renders a held weapon prop (components/world/monster.tsx) on the
    * sword-arm — purely visual, no separate stat. Optional/code-only for
    * now (not yet surfaced in the admin editor — `enabled` and the numeric
@@ -465,6 +489,9 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     throwDamage: 14,
     throwCooldown: 2.0,
     throwRange: 9,
+    minionTypeId: "spider_giant",
+    minionMaxAlive: 3,
+    minionIntervalSec: 9,
   },
   {
     // Eis-Golem: zäher Brocken-Variante, langsam, glühend-blaue Risse.
@@ -508,6 +535,9 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     throwDamage: 30,
     throwCooldown: 2.0,
     throwRange: 13,
+    minionTypeId: "bat_swarm",
+    minionMaxAlive: 4,
+    minionIntervalSec: 7,
   },
   {
     // Erd-Titan: gigantischer Golem-Boss, verheerender Nahkampf.
@@ -527,6 +557,9 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     scale: 2.3,
     enabled: true,
     isBoss: true,
+    minionTypeId: "golem_stone",
+    minionMaxAlive: 2,
+    minionIntervalSec: 11,
   },
 ];
 

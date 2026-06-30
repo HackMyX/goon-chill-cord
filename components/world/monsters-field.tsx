@@ -39,6 +39,10 @@ interface MonsterSpawn {
   id: string;
   type: MonsterTypeConfig;
   position: [number, number, number];
+  /** Gesetzt für Mini-Monster: die Spawn-ID des beschwörenden Elternmonsters.
+   * Minions zählen nicht gegen die normale Obergrenze (sie sind pro Eltern
+   * gedeckelt). */
+  minionOf?: string;
 }
 
 interface LiveProjectile extends ThrowRequest {
@@ -121,6 +125,8 @@ export function MonstersField({
   // Boss-Track: eigener Timer (startet mit dem vollen Intervall, damit nicht
   // sofort beim Betreten ein Boss kommt). Max. 1 Boss gleichzeitig.
   const bossTimer = useRef(spawnConfig.bossSpawnIntervalMinSec);
+  // Pro beschwörendem Monster ein Minion-Timer (Spawn-ID → Restzeit).
+  const minionTimers = useRef<Map<string, number>>(new Map());
   // Live room population (lib/world-realtime.ts), always >= 1 (yourself) —
   // read in a ref, not React state, since useFrame below reads it every
   // tick and a roster sync re-rendering this whole field would be wasted
@@ -433,6 +439,62 @@ export function MonstersField({
       }
     }
 
+    // --- Minion-Beschwörung (Bosse/Giftspinne spawnen verkleinerte Mini-Mobs) -
+    {
+      const ready: { parentId: string; minionType: MonsterTypeConfig; max: number; x: number; z: number }[] = [];
+      for (const s of spawnsRef.current) {
+        const mt = s.type;
+        if (!mt.minionTypeId || !mt.minionMaxAlive || mt.minionMaxAlive <= 0) continue;
+        const interval = mt.minionIntervalSec ?? 8;
+        let timer = minionTimers.current.get(s.id);
+        if (timer === undefined) { minionTimers.current.set(s.id, interval); continue; } // erst nach 1 Intervall
+        timer -= delta;
+        if (timer > 0) { minionTimers.current.set(s.id, timer); continue; }
+        minionTimers.current.set(s.id, interval);
+        const minionType = monsterTypes.find((t) => t.id === mt.minionTypeId && t.enabled);
+        if (!minionType) continue;
+        const pos = registryRef.current.find((h) => h.id === s.id)?.getPosition();
+        ready.push({
+          parentId: s.id,
+          minionType,
+          max: mt.minionMaxAlive,
+          x: pos ? pos.x : s.position[0],
+          z: pos ? pos.z : s.position[2],
+        });
+      }
+      if (ready.length) {
+        setSpawns((curr) => {
+          let next = curr;
+          for (const rp of ready) {
+            if (next.filter((x) => x.minionOf === rp.parentId).length >= rp.max) continue;
+            // Mini-Variante: kleiner, schwächer, weniger Belohnung.
+            const mini: MonsterTypeConfig = {
+              ...rp.minionType,
+              scale: rp.minionType.scale * 0.5,
+              health: Math.max(1, Math.round(rp.minionType.health * 0.4)),
+              attackDamage: Math.max(1, Math.round(rp.minionType.attackDamage * 0.6)),
+              rewardMin: Math.max(1, Math.round(rp.minionType.rewardMin * 0.4)),
+              rewardMax: Math.max(1, Math.round(rp.minionType.rewardMax * 0.4)),
+              isBoss: false,
+              minionTypeId: undefined,
+              minionMaxAlive: 0,
+            };
+            const ang = Math.random() * Math.PI * 2;
+            next = [
+              ...next,
+              {
+                id: `${userId.slice(0, 8)}_n${++spawnSeq}`,
+                type: mini,
+                position: [rp.x + Math.cos(ang) * 1.6, 0, rp.z + Math.sin(ang) * 1.6],
+                minionOf: rp.parentId,
+              },
+            ];
+          }
+          return next;
+        });
+      }
+    }
+
     spawnTimer.current -= delta;
     if (spawnTimer.current > 0) return;
     const extra = Math.max(0, playerCount.current - 1);
@@ -453,7 +515,9 @@ export function MonstersField({
       // Normalo-Zählung getrennt vom Boss; während ein Boss lebt, sinkt die
       // Normalo-Obergrenze (Faktor) → nie 40 Mobs + Boss gleichzeitig.
       const bossAlive = curr.some((s) => s.type.isBoss);
-      const nonBossCount = bossAlive ? curr.filter((s) => !s.type.isBoss).length : curr.length;
+      // Minions (minionOf) zählen NICHT gegen die Normalo-Obergrenze (sie sind
+      // pro Elternmonster gedeckelt) — sonst würden Boss-Minions normale Spawns ersticken.
+      const nonBossCount = curr.filter((s) => !s.type.isBoss && !s.minionOf).length;
       const effCap = bossAlive ? Math.max(1, Math.ceil(aliveCap * spawnConfig.bossActiveAliveCapFactor)) : aliveCap;
       if (nonBossCount >= effCap) return curr;
       const type = pickWeightedMonsterType(monsterTypes.filter((t) => !t.isBoss));
@@ -483,6 +547,7 @@ export function MonstersField({
   }
 
   function handleDied(spawnId: string, typeId: string) {
+    minionTimers.current.delete(spawnId); // Minion-Timer des toten Beschwörers freigeben
     const lastHit = lastRemoteHitterRef.current.get(spawnId);
     lastRemoteHitterRef.current.delete(spawnId);
     // Only credit the remote attacker if their last hit was recent enough to

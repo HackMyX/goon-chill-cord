@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { Billboard } from "@react-three/drei";
 import { TextSprite } from "@/components/world/text-sprite";
 import { MonsterBody } from "@/components/world/monster-body";
-import { isHoveringKind, type MonsterTypeConfig } from "@/lib/monsters";
+import { isHoveringKind, defaultSpawnAnim, SPAWN_ANIM_VALUES, type MonsterSpawnAnim, type MonsterTypeConfig } from "@/lib/monsters";
 import type { CombatSharedState, MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { applyIncomingDamage } from "@/lib/combat";
@@ -238,6 +238,7 @@ export function Monster({
   const spawnRingRef = useRef<THREE.Mesh>(null);
   const animPrevX = useRef<number | null>(null);
   const animPrevZ = useRef(0);
+  const spawnAnimRef = useRef<MonsterSpawnAnim | null>(null);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
   // Idle-wander state — see WANDER_SPEED_FRACTION's doc comment above.
   const wanderAngle = useRef(0);
@@ -362,21 +363,51 @@ export function Monster({
       return;
     }
 
-    // Spawn-Einflug: kurz aus dem Boden nach oben „poppen" (easeOutBack-artig),
-    // damit ein neues Monster nicht einfach erscheint, sondern dramatisch auftaucht.
+    // Spawn-Erscheinung: je Monster eine andere Animation (graben/erheben/vom
+    // Himmel fallen/materialisieren/poppen). Während des Erscheinens KEINE AI
+    // (Monster taucht erst auf, bevor es jagt) → return am Ende.
     if (spawnT.current < 1) {
-      spawnT.current = Math.min(1, spawnT.current + delta * 3.2);
-      const e = 1 - Math.pow(1 - spawnT.current, 3);
-      g.scale.setScalar(type.scale * (0.2 + 0.8 * e));
-      // Spawn-Schockwelle: ein Ring expandiert kurz am Boden + fadet aus.
-      if (spawnRingRef.current) {
-        spawnRingRef.current.visible = true;
-        spawnRingRef.current.scale.setScalar(0.3 + spawnT.current * 2.4);
-        (spawnRingRef.current.material as THREE.MeshBasicMaterial).opacity = (1 - spawnT.current) * 0.65;
+      if (!spawnAnimRef.current) {
+        const a = type.spawnAnim ?? defaultSpawnAnim(type.visualKind);
+        spawnAnimRef.current = a === "random" ? SPAWN_ANIM_VALUES[Math.floor(Math.random() * 5)] : a;
       }
-    } else if (spawnRingRef.current && spawnRingRef.current.visible) {
-      spawnRingRef.current.visible = false;
+      const anim = spawnAnimRef.current;
+      spawnT.current = Math.min(1, spawnT.current + delta * (anim === "fall" ? 2.6 : 3.4));
+      const t = spawnT.current;
+      const eOut = 1 - Math.pow(1 - t, 3); // schnell rein, weich aus
+      const base = initialPosition[1];
+      if (anim === "pop") {
+        g.scale.setScalar(type.scale * (0.2 + 0.8 * eOut));
+        g.position.y = base;
+      } else if (anim === "dig") {
+        g.scale.setScalar(type.scale);
+        g.position.y = base - (1 - eOut) * 1.6; // steigt aus dem Boden
+        g.rotation.y += delta * 2; // dreht sich beim Hochgraben
+      } else if (anim === "rise") {
+        g.scale.set(type.scale, type.scale * Math.max(0.05, eOut), type.scale); // wächst empor
+        g.position.y = base;
+      } else if (anim === "fall") {
+        g.scale.setScalar(type.scale);
+        g.position.y = base + (1 - t * t) * 8; // beschleunigt nach unten (Gravitation)
+      } else {
+        // fade: materialisiert (Transparenz hochziehen)
+        g.scale.setScalar(type.scale);
+        g.position.y = base;
+        g.traverse((o) => {
+          const mat = (o as THREE.Mesh).material as THREE.Material & { transparent: boolean; opacity: number };
+          if (mat && !Array.isArray(mat)) { mat.transparent = true; mat.opacity = eOut; }
+        });
+      }
+      // Boden-Schockwelle bei „bodenständigen" Anims
+      if (spawnRingRef.current && (anim === "dig" || anim === "fall" || anim === "pop")) {
+        spawnRingRef.current.visible = true;
+        spawnRingRef.current.scale.setScalar(0.3 + t * 2.6);
+        (spawnRingRef.current.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.7;
+      }
+      return; // keine AI/Bewegung während des Erscheinens
     }
+    if (spawnRingRef.current && spawnRingRef.current.visible) spawnRingRef.current.visible = false;
+    g.scale.setScalar(type.scale); // nach „rise" volle Größe sicherstellen
 
     // Geister schweben sanft auf und ab (Apparition-Feeling).
     if (isGhost) {
