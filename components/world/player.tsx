@@ -764,11 +764,17 @@ export function Player({
       const shieldLost = prevShield.current - shieldNow;
       if (shieldLost > 0.01 && !combatRef.current.dead) {
         onPlayerHit?.("shield", shieldLost);
+        // Sichtbarer Treffer AUF der Schild-Blase (heller Flash + Pop, ShieldAura).
+        combatRef.current.shieldHitFlash = 1;
         // Schild-Block: leichter Flinch + kleiner Shake (auch für Monster-Treffer,
         // nicht nur PvP). hurtTimer treibt die 'hurt'-Animation, die auch an
         // andere Spieler gebroadcastet wird → für jeden sichtbar.
         hurtTimer.current = Math.max(hurtTimer.current, 0.22);
         cameraShake.current = Math.max(cameraShake.current, 0.6);
+      }
+      // Treffer-Flash der Blase abklingen lassen.
+      if (combatRef.current.shieldHitFlash > 0) {
+        combatRef.current.shieldHitFlash = Math.max(0, combatRef.current.shieldHitFlash - delta * 4);
       }
       prevShield.current = shieldNow;
       const hpLost = prevHp.current - combatRef.current.hp;

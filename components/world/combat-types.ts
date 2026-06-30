@@ -34,6 +34,10 @@ export interface CombatSharedState {
   shieldMaxHp: number;
   shieldRegenCooldown: number;
   shieldRegenCooldownDuration: number;
+  /** Kurzer Treffer-Impuls (0..1) den die Schild-Blase visuell ausspielt
+   * (heller Flash + Scale-Pop), wenn der Schild Schaden absorbiert. Wird von
+   * player.tsx auf 1 gesetzt und pro Frame heruntergedämpft. */
+  shieldHitFlash: number;
   /** True from the instant `hp` hits 0 until the death-screen's Respawn
    * button actually triggers the reset (components/world/player.tsx no
    * longer auto-respawns the instant hp hits 0 — see its death-screen
@@ -71,6 +75,7 @@ export function createCombatSharedState(init?: CombatSharedStateInit): CombatSha
     shieldMaxHp,
     shieldRegenCooldown: 0,
     shieldRegenCooldownDuration: init?.shieldRegenCooldownDuration ?? 0,
+    shieldHitFlash: 0,
     dead: false,
   };
 }

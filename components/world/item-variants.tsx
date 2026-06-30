@@ -2261,9 +2261,10 @@ export function ShieldAura({
   stateRef,
 }: {
   item: EquippedItem;
-  stateRef?: React.RefObject<{ shieldHpRemaining: number; shieldMaxHp: number }>;
+  stateRef?: React.RefObject<{ shieldHpRemaining: number; shieldMaxHp: number; shieldHitFlash?: number }>;
 }) {
   const color = rarityColorFor(item, "#22d3ee");
+  const HIT_WHITE = useMemo(() => new THREE.Color("#ffffff"), []);
   const rarity = item.rarity as Rarity;
 
   const bubbleRef = useRef<THREE.Mesh>(null);
@@ -2291,6 +2292,7 @@ export function ShieldAura({
     const t = state.clock.elapsedTime;
     const s = stateRef?.current;
     const frac = s ? (s.shieldMaxHp > 0 ? s.shieldHpRemaining / s.shieldMaxHp : 0) : 1;
+    const hit = s?.shieldHitFlash ?? 0; // 0..1 Treffer-Impuls
 
     // ── Main bubble ────────────────────────────────────────────────────────────
     const b = bubbleRef.current;
@@ -2298,16 +2300,19 @@ export function ShieldAura({
       b.visible = frac > 0;
       const pulseSpd = rarity === "ultra" ? 9 : rarity === "mythisch" ? 3.5 : 1.5;
       const pulseAmp = rarity === "ultra" ? 0.03 : 0.015;
-      const pulse = 1 + Math.sin(t * pulseSpd) * pulseAmp;
+      // Treffer = kräftiger Scale-Pop nach außen.
+      const pulse = 1 + Math.sin(t * pulseSpd) * pulseAmp + hit * 0.14;
       b.scale.set(SHIELD_BUBBLE_SCALE.x * pulse, SHIELD_BUBBLE_SCALE.y * pulse, SHIELD_BUBBLE_SCALE.z * pulse);
       const mat = b.material as THREE.MeshBasicMaterial;
       const baseOp = rarity === "ultra" ? 0.18 : rarity === "mythisch" ? 0.15 : rarity === "selten" ? 0.13 : 0.11;
-      mat.opacity = (baseOp + Math.sin(t * 2) * 0.025) * frac;
+      // Treffer = die Blase leuchtet kurz hell auf.
+      mat.opacity = (baseOp + Math.sin(t * 2) * 0.025) * frac + hit * 0.5;
       if (rarity === "ultra") {
         mat.color.setHSL((t * 0.15) % 1, 0.9, 0.6);
       } else {
         mat.color.set(color);
       }
+      if (hit > 0.01) mat.color.lerp(HIT_WHITE, Math.min(1, hit * 0.7)); // weiß aufblitzen
     }
 
     // ── Ring 1 — horizontal, rotates around Y (mythisch + ultra) ───────────────
