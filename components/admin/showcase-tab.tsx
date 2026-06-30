@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LayoutGrid, ChevronLeft, ChevronRight, Box, Gift, Sparkles, Type, Loader2, Swords } from "lucide-react";
+import { LayoutGrid, ChevronLeft, ChevronRight, Box, Gift, Sparkles, Type, Loader2, Swords, Search, X } from "lucide-react";
 import { BpRewardView3D } from "@/components/battlepass/bp-reward-3d";
 import { RewardCardCanvas } from "@/components/rewards/reward-card-canvas";
 import { CaseDropView } from "@/components/cases/case-item-3d";
@@ -115,6 +115,20 @@ function buildRewardVariants(): RewardVariant[] {
   return out;
 }
 
+const SORT_RANK: Record<string, number> = { normal: 0, selten: 1, episch: 2, mythisch: 3, ultra: 4 };
+type SortKey = "rar-desc" | "rar-asc" | "name-asc" | "name-desc";
+function sortCmp(aN: string, aR: string, bN: string, bR: string, sort: SortKey): number {
+  switch (sort) {
+    case "name-asc": return aN.localeCompare(bN);
+    case "name-desc": return bN.localeCompare(aN);
+    case "rar-asc": return (SORT_RANK[aR] ?? 0) - (SORT_RANK[bR] ?? 0) || aN.localeCompare(bN);
+    default: return (SORT_RANK[bR] ?? 0) - (SORT_RANK[aR] ?? 0) || aN.localeCompare(bN);
+  }
+}
+const SORT_LABEL: Record<SortKey, string> = {
+  "rar-desc": "Seltenheit ↓", "rar-asc": "Seltenheit ↑", "name-asc": "Name A→Z", "name-desc": "Name Z→A",
+};
+
 export function ShowcaseTab() {
   const [cat, setCat] = useState<Category>("rewards3d");
   const [page, setPage] = useState(0);
@@ -149,12 +163,27 @@ export function ShowcaseTab() {
     getAllGalleryItems().then((d) => setItemDefs(d)).catch(() => setItemDefs([])).finally(() => setLoadingItems(false));
   }, [cat, itemDefs, loadingItems]);
 
+  // ── Suche / Filter / Sortierung ──────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [rarityFilter, setRarityFilter] = useState<string>("all");
+  const [sort, setSort] = useState<SortKey>("rar-desc");
+  useEffect(() => { setPage(0); }, [search, rarityFilter, sort, cat]);
+  const q = search.trim().toLowerCase();
+  const hit = (s: string) => !q || s.toLowerCase().includes(q);
+  const rOk = (r: string) => rarityFilter === "all" || r === rarityFilter;
+
+  const fRewards = useMemo(() => rewardVariants.filter((v) => hit(v.label) && rOk(v.rarity)).sort((a, b) => sortCmp(a.label, a.rarity, b.label, b.rarity, sort)), [rewardVariants, q, rarityFilter, sort]);
+  const fItems = useMemo(() => (itemDefs ?? []).filter((it) => hit(it.name) && rOk(it.rarity)).sort((a, b) => sortCmp(a.name, a.rarity, b.name, b.rarity, sort)), [itemDefs, q, rarityFilter, sort]);
+  const fBonus = useMemo(() => bonusVariants.filter((v) => hit(v.theme) && rOk(v.rarity)).sort((a, b) => sortCmp(a.theme, a.rarity, b.theme, b.rarity, sort)), [bonusVariants, q, rarityFilter, sort]);
+  const fAbilities = useMemo(() => (abilityDefs ?? []).filter((d) => hit(d.name) && rOk(d.rarity)).sort((a, b) => sortCmp(a.name, a.rarity, b.name, b.rarity, sort)), [abilityDefs, q, rarityFilter, sort]);
+  const fNames = useMemo(() => nameStyleVariants.filter((s) => hit(s.label) && rOk(s.rarity)).sort((a, b) => sortCmp(a.label, a.rarity, b.label, b.rarity, sort)), [nameStyleVariants, q, rarityFilter, sort]);
+
   const total =
-    cat === "rewards3d" ? rewardVariants.length :
-    cat === "items" ? (itemDefs?.length ?? 0) :
-    cat === "bonus" ? bonusVariants.length :
-    cat === "abilities" ? (abilityDefs?.length ?? 0) :
-    nameStyleVariants.length;
+    cat === "rewards3d" ? fRewards.length :
+    cat === "items" ? fItems.length :
+    cat === "bonus" ? fBonus.length :
+    cat === "abilities" ? fAbilities.length :
+    fNames.length;
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safePage = Math.min(page, pages - 1);
@@ -201,6 +230,48 @@ export function ShowcaseTab() {
         ))}
       </div>
 
+      {/* Suche / Filter / Sortierung */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5">
+        <div className="relative min-w-[180px] flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Suchen…"
+            className="w-full rounded-lg border border-white/10 bg-black/40 py-1.5 pl-8 pr-7 text-xs text-zinc-200 outline-none focus:border-fuchsia-400/50"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        {/* Seltenheits-Filter */}
+        <div className="flex flex-wrap items-center gap-1">
+          {(["all", "normal", "selten", "episch", "mythisch", "ultra"] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRarityFilter(r)}
+              className={`rounded-md border px-2 py-1 text-[10px] font-bold capitalize transition-colors ${
+                rarityFilter === r ? "border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-200" : "border-white/10 bg-white/[0.02] text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {r === "all" ? "Alle" : r}
+            </button>
+          ))}
+        </div>
+        {/* Sortierung */}
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortKey)}
+          className="rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-fuchsia-400/50"
+        >
+          {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+            <option key={k} value={k} className="bg-zinc-900">{SORT_LABEL[k]}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Seiten-Navigation */}
       <div className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-black/20 px-4 py-2.5">
         <span className="text-xs text-zinc-400">
@@ -229,7 +300,7 @@ export function ShowcaseTab() {
       <div ref={galleryRef} className="relative">
         {cat === "rewards3d" && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {rewardVariants.slice(start, start + PAGE_SIZE).map((v, i) => (
+            {fRewards.slice(start, start + PAGE_SIZE).map((v, i) => (
               <div key={v.key} onClick={() => setPreview(rewardSubject(v))} title="Zum Drehen & Ansehen anklicken" className="flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-white/8 bg-black/20 p-2 transition-colors hover:border-fuchsia-400/40 hover:bg-fuchsia-500/[0.04]">
                 <div className="relative h-28 w-full pointer-events-none">
                   <BpRewardView3D
@@ -257,7 +328,7 @@ export function ShowcaseTab() {
         {cat === "items" && (
           loadingItems ? (
             <div className="flex items-center gap-2 py-10 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> Lade Items…</div>
-          ) : (itemDefs?.length ?? 0) === 0 ? (
+          ) : fItems.length === 0 ? (
             <p className="py-10 text-sm text-zinc-500">Keine Items gefunden.</p>
           ) : (
             <>
@@ -277,7 +348,7 @@ export function ShowcaseTab() {
               ))}
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {(itemDefs ?? []).slice(start, start + PAGE_SIZE).map((it, i) => (
+              {fItems.slice(start, start + PAGE_SIZE).map((it, i) => (
                 <div
                   key={it.id}
                   onClick={() => setPreview({ kind: "item", gender: itemGender, item: { id: it.id, name: it.name, rarity: it.rarity, type: it.type, damage: it.damage, armor: it.armor, perk_type: it.perkType, perk_magnitude: it.perkMagnitude, shield_hp: it.shieldHp } })}
@@ -313,7 +384,7 @@ export function ShowcaseTab() {
 
         {cat === "bonus" && (
           <div className="flex flex-wrap justify-center gap-4">
-            {bonusVariants.slice(start, start + PAGE_SIZE).map((v, i) => (
+            {fBonus.slice(start, start + PAGE_SIZE).map((v, i) => (
               <div
                 key={v.key}
                 onClick={() => setPreview({ kind: "game_bonus", game: v.game, amount: (RARITIES.indexOf(v.rarity) + 1) * 3, durationHours: 24 })}
@@ -340,7 +411,7 @@ export function ShowcaseTab() {
             <div className="flex items-center gap-2 py-10 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> Lade Fähigkeiten…</div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {(abilityDefs ?? []).slice(start, start + PAGE_SIZE).map((def, i) => {
+              {fAbilities.slice(start, start + PAGE_SIZE).map((def, i) => {
                 const meta = ABILITY_EFFECT_META[def.effectType];
                 const effVal = meta ? formatEffectValue(def.effectValue, meta.unit) : null;
                 return (
@@ -379,7 +450,7 @@ export function ShowcaseTab() {
 
         {cat === "namestyles" && (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {nameStyleVariants.slice(start, start + PAGE_SIZE).map((s) => (
+            {fNames.slice(start, start + PAGE_SIZE).map((s) => (
               <div
                 key={s.key}
                 onClick={() => setPreview({ kind: "name_style", styleKey: s.key, displayName: "SpielerName" })}
