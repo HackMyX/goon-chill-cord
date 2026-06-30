@@ -102,6 +102,7 @@ function buildRewardVariants(): RewardVariant[] {
 export function ShowcaseTab() {
   const [cat, setCat] = useState<Category>("rewards3d");
   const [page, setPage] = useState(0);
+  const [itemGender, setItemGender] = useState<"m" | "w">("m");
   const galleryRef = useRef<HTMLDivElement>(null);
 
   const rewardVariants = useMemo(buildRewardVariants, []);
@@ -242,6 +243,22 @@ export function ShowcaseTab() {
           ) : (itemDefs?.length ?? 0) === 0 ? (
             <p className="py-10 text-sm text-zinc-500">Keine Items gefunden.</p>
           ) : (
+            <>
+            {/* Geschlecht der Vorschau — so prüfst du, dass z.B. Haare für Frauen feminin aussehen */}
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-zinc-500">Vorschau-Geschlecht:</span>
+              {(["m", "w"] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setItemGender(g)}
+                  className={`rounded-lg border px-3 py-1 text-xs font-bold transition-colors ${
+                    itemGender === g ? "border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-200" : "border-white/10 bg-white/[0.02] text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {g === "m" ? "♂ Männlich" : "♀ Weiblich"}
+                </button>
+              ))}
+            </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {(itemDefs ?? []).slice(start, start + PAGE_SIZE).map((it, i) => (
                 <div key={it.id} className="flex flex-col items-center gap-1.5 rounded-xl border border-white/8 bg-black/20 p-2">
@@ -250,7 +267,7 @@ export function ShowcaseTab() {
                       subject={{ kind: "item", item: { id: it.id, name: it.name, rarity: it.rarity, type: it.type, damage: it.damage } }}
                       viewIndex={i}
                       character={WORN_TYPES.has(it.type)}
-                      gender="m"
+                      gender={itemGender}
                       lazy
                       rootRef={galleryRef}
                     />
@@ -268,6 +285,7 @@ export function ShowcaseTab() {
                 </div>
               ))}
             </div>
+            </>
           )
         )}
 
