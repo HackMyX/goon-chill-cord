@@ -206,6 +206,9 @@ export function WorldShell({
   // real credits; closing the tab or dying forfeits it.
   const [pendingStreakCr, setPendingStreakCr] = useState(0);
   const [streakKillCount, setStreakKillCount] = useState(0);
+  // Combo: schnell aufeinanderfolgende Kills (Fenster 2.5s) → wachsende Anzeige.
+  const [combo, setCombo] = useState(0);
+  const comboTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [respawnSignal, setRespawnSignal] = useState(0);
   // null = still checking, true = allowed, false = blocked by another session
   const [worldAllowed, setWorldAllowed] = useState<boolean | null>(null);
@@ -443,6 +446,10 @@ export function WorldShell({
         else sound.monsterKill();
         if (res.newPendingStreakCr !== undefined) setPendingStreakCr(res.newPendingStreakCr);
         if (res.newStreakKillCount !== undefined) setStreakKillCount(res.newStreakKillCount);
+        // Combo hochzählen + Fenster (2.5s) neu starten.
+        setCombo((c) => c + 1);
+        if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+        comboTimerRef.current = setTimeout(() => setCombo(0), 2500);
         const id = ++rewardPopupSeq;
         setRewardPopups((curr) => [...curr, { id, amount: res.reward! }]);
         setTimeout(() => setRewardPopups((curr) => curr.filter((p) => p.id !== id)), 1400);
@@ -1171,6 +1178,24 @@ export function WorldShell({
                   : "inset 0 0 120px 36px rgba(239,68,68,0.55)",
             }}
           />
+        )}
+
+        {/* Combo-Anzeige — schnelle Kill-Ketten, wächst & eskaliert farblich */}
+        {combo >= 2 && (
+          <div key={combo} className="world-combo pointer-events-none absolute left-1/2 top-[16%] z-[45] -translate-x-1/2 text-center">
+            <div
+              className="text-6xl font-black tracking-tight drop-shadow-[0_2px_14px_rgba(0,0,0,0.75)]"
+              style={{ color: combo >= 15 ? "#fbbf24" : combo >= 8 ? "#fb923c" : "#ffffff" }}
+            >
+              ×{combo}
+            </div>
+            <div
+              className="text-sm font-bold uppercase tracking-[0.35em] drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]"
+              style={{ color: combo >= 15 ? "#fbbf24" : combo >= 8 ? "#fb923c" : "#e5e7eb" }}
+            >
+              Combo
+            </div>
+          </div>
         )}
 
         {/* Premium Black-Intro beim Betreten der Welt — kurz schwarz, dann sanft auf */}
