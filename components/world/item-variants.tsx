@@ -2719,19 +2719,47 @@ function ShortHair({ color, gender }: { color: string; gender: "m" | "w" }) {
   );
 }
 
-function LongHair({ color, gender }: { color: string; gender: "m" | "w" }) {
-  const flowHeight = gender === "w" ? 0.85 : 0.55;
-  const flowY = 2.28 - flowHeight / 2 - 0.07;
+// Weiche, feminine Basis für ALLE Damenfrisuren: runde Krone (kein flacher
+// Block), weicher Seitenscheitel-Pony und Gesichtssträhnen links/rechts — so
+// wirkt jede Frauenfrisur natürlich & weiblich (nie „Beethoven").
+function FemCap({ color }: { color: string }) {
   return (
     <group>
-      <mesh position={[0, 2.28, -0.05]}>
-        <boxGeometry args={[0.58, 0.18, 0.58]} />
-        <meshStandardMaterial color={color} />
+      <mesh position={[0, 2.26, -0.02]} scale={[1.02, 0.66, 1.04]}>
+        <sphereGeometry args={[0.35, 20, 16]} />
+        <meshStandardMaterial color={color} roughness={0.82} />
       </mesh>
-      <mesh position={[0, flowY, -0.28]}>
-        <boxGeometry args={[gender === "w" ? 0.54 : 0.5, flowHeight, 0.16]} />
-        <meshStandardMaterial color={color} />
+      {/* weicher, leicht gefegter Pony über der Stirn */}
+      <mesh position={[0.05, 2.18, 0.26]} rotation={[0.4, 0, 0.06]}>
+        <boxGeometry args={[0.5, 0.12, 0.12]} />
+        <meshStandardMaterial color={color} roughness={0.82} />
       </mesh>
+      {/* Gesichtssträhnen, die das Gesicht weich umrahmen */}
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.31, 2.05, 0.07]} rotation={[0, 0, s * 0.05]}>
+          <boxGeometry args={[0.09, 0.34, 0.2]} />
+          <meshStandardMaterial color={color} roughness={0.82} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function LongHair({ color }: { color: string; gender: "m" | "w" }) {
+  return (
+    <group>
+      <FemCap color={color} />
+      {/* volle, lange Mähne über den Rücken */}
+      <mesh position={[0, 1.78, -0.27]} rotation={[0.06, 0, 0]}>
+        <boxGeometry args={[0.56, 0.95, 0.17]} />
+        <meshStandardMaterial color={color} roughness={0.82} />
+      </mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.3, 1.7, -0.05]}>
+          <boxGeometry args={[0.12, 0.8, 0.2]} />
+          <meshStandardMaterial color={color} roughness={0.82} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -2748,17 +2776,18 @@ function MohawkHair({ color, gender }: { color: string; gender: "m" | "w" }) {
   );
 }
 
-function PonytailHair({ color, gender }: { color: string; gender: "m" | "w" }) {
-  const tailLength = gender === "w" ? 0.68 : 0.4;
+function PonytailHair({ color }: { color: string; gender: "m" | "w" }) {
   return (
     <group>
-      <mesh position={[0, 2.28, -0.05]}>
-        <boxGeometry args={[0.58, 0.18, 0.58]} />
-        <meshStandardMaterial color={color} />
+      <FemCap color={color} />
+      {/* hoher, schwungvoller Pferdeschwanz */}
+      <mesh position={[0, 2.36, -0.2]}>
+        <sphereGeometry args={[0.1, 12, 12]} />
+        <meshStandardMaterial color={color} roughness={0.82} />
       </mesh>
-      <mesh position={[0, 2.05 - (tailLength - 0.5) * 0.3, -0.42]} rotation={[0.3, 0, 0]}>
-        <cylinderGeometry args={[0.06, 0.04, tailLength, 8]} />
-        <meshStandardMaterial color={color} />
+      <mesh position={[0, 1.92, -0.42]} rotation={[0.35, 0, 0]}>
+        <cylinderGeometry args={[0.08, 0.04, 0.78, 10]} />
+        <meshStandardMaterial color={color} roughness={0.82} />
       </mesh>
     </group>
   );
@@ -2794,40 +2823,33 @@ function AfroHair({ color, gender }: { color: string; gender: "m" | "w" }) {
   );
 }
 
-function BunHair({ color, gender }: { color: string; gender: "m" | "w" }) {
-  // Cap + a rolled-up bun at the back — bigger/higher bun for "w" (classic
-  // top-knot/dancer-bun silhouette), small tight one for "m".
-  const bunRadius = gender === "w" ? 0.16 : 0.11;
+function BunHair({ color }: { color: string; gender: "m" | "w" }) {
   return (
     <group>
-      <mesh position={[0, 2.28, -0.05]}>
-        <boxGeometry args={[0.56, 0.16, 0.56]} />
-        <meshStandardMaterial color={color} />
+      <FemCap color={color} />
+      {/* eleganter, hoher Dutt */}
+      <mesh position={[0, 2.5, -0.14]}>
+        <sphereGeometry args={[0.17, 16, 16]} />
+        <meshStandardMaterial color={color} roughness={0.82} />
       </mesh>
-      <mesh position={[0, 2.3 + bunRadius * 0.4, -0.36]}>
-        <sphereGeometry args={[bunRadius, 12, 12]} />
-        <meshStandardMaterial color={color} />
+      <mesh position={[0, 2.5, -0.14]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.17, 0.03, 8, 24]} />
+        <meshStandardMaterial color={color} roughness={0.82} />
       </mesh>
     </group>
   );
 }
 
-function BraidHair({ color, gender }: { color: string; gender: "m" | "w" }) {
-  // Segmented braid (stacked rings give it a woven look instead of a
-  // smooth cylinder) — one long braid for "w", a shorter single plait for
-  // "m" so it still reads as a deliberate style, not a scaled-down copy.
-  const segments = gender === "w" ? 6 : 3;
+function BraidHair({ color }: { color: string; gender: "m" | "w" }) {
   return (
     <group>
-      <mesh position={[0, 2.28, -0.05]}>
-        <boxGeometry args={[0.58, 0.18, 0.58]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      <group position={[0, 1.98, -0.4]} rotation={[0.15, 0, 0]}>
-        {Array.from({ length: segments }).map((_, i) => (
-          <mesh key={i} position={[0, -i * 0.13, 0]}>
-            <sphereGeometry args={[0.07 - i * 0.003, 8, 8]} />
-            <meshStandardMaterial color={color} />
+      <FemCap color={color} />
+      {/* langer, geflochtener Zopf über die Schulter */}
+      <group position={[0.12, 1.98, -0.3]} rotation={[0.18, 0, -0.12]}>
+        {Array.from({ length: 7 }).map((_, i) => (
+          <mesh key={i} position={[0, -i * 0.14, 0]}>
+            <sphereGeometry args={[0.08 - i * 0.004, 10, 10]} />
+            <meshStandardMaterial color={color} roughness={0.82} />
           </mesh>
         ))}
       </group>
@@ -2842,12 +2864,12 @@ function BraidHair({ color, gender }: { color: string; gender: "m" | "w" }) {
 function BobHair({ color }: { color: string; gender: "m" | "w" }) {
   return (
     <group>
-      <mesh position={[0, 2.3, -0.04]}><boxGeometry args={[0.62, 0.2, 0.62]} /><meshStandardMaterial color={color} /></mesh>
+      <FemCap color={color} />
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.31, 2.05, 0.05]}><boxGeometry args={[0.11, 0.48, 0.42]} /><meshStandardMaterial color={color} /></mesh>
+        <mesh key={s} position={[s * 0.33, 1.92, 0.06]}><boxGeometry args={[0.1, 0.5, 0.34]} /><meshStandardMaterial color={color} roughness={0.82} /></mesh>
       ))}
       {[-1, 1].map((s) => (
-        <mesh key={`c${s}`} position={[s * 0.27, 1.82, 0.12]} rotation={[0.35, 0, 0]}><boxGeometry args={[0.11, 0.13, 0.2]} /><meshStandardMaterial color={color} /></mesh>
+        <mesh key={`c${s}`} position={[s * 0.29, 1.68, 0.14]} rotation={[0.4, 0, 0]}><boxGeometry args={[0.1, 0.14, 0.2]} /><meshStandardMaterial color={color} roughness={0.82} /></mesh>
       ))}
     </group>
   );
@@ -2857,28 +2879,26 @@ function BobHair({ color }: { color: string; gender: "m" | "w" }) {
 function WavyHair({ color }: { color: string; gender: "m" | "w" }) {
   return (
     <group>
-      <mesh position={[0, 2.3, -0.04]}><boxGeometry args={[0.64, 0.2, 0.64]} /><meshStandardMaterial color={color} /></mesh>
+      <FemCap color={color} />
       {[0, 1, 2].map((i) => (
-        <mesh key={i} position={[0, 2.02 - i * 0.3, -0.3]} rotation={[0.12 * (i + 1), 0, 0]}>
-          <boxGeometry args={[0.6 - i * 0.05, 0.36, 0.16]} /><meshStandardMaterial color={color} />
+        <mesh key={i} position={[0, 1.92 - i * 0.3, -0.28]} rotation={[0.12 * (i + 1), 0, 0]}>
+          <boxGeometry args={[0.58 - i * 0.05, 0.36, 0.16]} /><meshStandardMaterial color={color} roughness={0.82} />
         </mesh>
       ))}
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.33, 1.98, -0.02]}><boxGeometry args={[0.13, 0.56, 0.36]} /><meshStandardMaterial color={color} /></mesh>
+        <mesh key={s} position={[s * 0.33, 1.78, -0.02]}><boxGeometry args={[0.13, 0.62, 0.34]} /><meshStandardMaterial color={color} roughness={0.82} /></mesh>
       ))}
     </group>
   );
 }
 
-// Pixie — kurz, aber feminin: weiche Kappe + gefegter Pony.
+// Pixie — kurz, aber feminin: weiche Kappe + gefegter Pony (nur die Basis).
 function PixieHair({ color }: { color: string; gender: "m" | "w" }) {
   return (
     <group>
-      <mesh position={[0, 2.3, -0.03]}><boxGeometry args={[0.6, 0.2, 0.58]} /><meshStandardMaterial color={color} /></mesh>
-      <mesh position={[0.14, 2.25, 0.27]} rotation={[0, 0, -0.45]}><boxGeometry args={[0.36, 0.11, 0.14]} /><meshStandardMaterial color={color} /></mesh>
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.29, 2.15, 0.07]}><boxGeometry args={[0.09, 0.18, 0.18]} /><meshStandardMaterial color={color} /></mesh>
-      ))}
+      <FemCap color={color} />
+      {/* etwas längerer, gefegter Seitenpony — macht's eindeutig feminin */}
+      <mesh position={[0.16, 2.12, 0.22]} rotation={[0.2, 0, -0.5]}><boxGeometry args={[0.34, 0.1, 0.14]} /><meshStandardMaterial color={color} roughness={0.82} /></mesh>
     </group>
   );
 }
@@ -2887,10 +2907,10 @@ function PixieHair({ color }: { color: string; gender: "m" | "w" }) {
 function SidePartHair({ color }: { color: string; gender: "m" | "w" }) {
   return (
     <group>
-      <mesh position={[0, 2.3, -0.04]}><boxGeometry args={[0.62, 0.2, 0.62]} /><meshStandardMaterial color={color} /></mesh>
-      <mesh position={[-0.1, 2.29, 0.28]} rotation={[0, 0, 0.28]}><boxGeometry args={[0.42, 0.11, 0.15]} /><meshStandardMaterial color={color} /></mesh>
+      <FemCap color={color} />
+      <mesh position={[-0.12, 2.24, 0.27]} rotation={[0.15, 0, 0.32]}><boxGeometry args={[0.42, 0.11, 0.14]} /><meshStandardMaterial color={color} roughness={0.82} /></mesh>
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.32, 1.96, 0]}><boxGeometry args={[0.11, 0.6, 0.38]} /><meshStandardMaterial color={color} /></mesh>
+        <mesh key={s} position={[s * 0.33, 1.84, 0]}><boxGeometry args={[0.11, 0.66, 0.36]} /><meshStandardMaterial color={color} roughness={0.82} /></mesh>
       ))}
     </group>
   );
