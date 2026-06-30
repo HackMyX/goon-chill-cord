@@ -13,7 +13,7 @@ import {
 } from "@/lib/actions/cases-admin";
 import {
   RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, ALL_ITEM_TYPES,
-  CASE_ICON_OPTIONS, normalizeExtraDrops,
+  CASE_ICON_OPTIONS, normalizeExtraDrops, getTypeLabel,
   type Rarity, type CaseIconName, type CaseExtraDrop, type CaseExtraDropKind,
 } from "@/lib/cases";
 import { getCaseIcon } from "@/lib/case-icons";
@@ -514,7 +514,7 @@ function RarityItemPicker({
               >
                 <span className={`h-2 w-2 flex-shrink-0 rounded-full border ${sel ? `${RARITY_DOT[rarity]} border-transparent` : "border-zinc-700"}`} />
                 <span className="flex-1 truncate">{item.name}</span>
-                <span className="text-zinc-600">{item.type}</span>
+                <span className="text-zinc-600">{getTypeLabel(item.type)}</span>
               </button>
             );
           })

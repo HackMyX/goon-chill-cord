@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Save, Search, X } from "lucide-react";
 import { updateCaseTier } from "@/lib/actions/admin";
-import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, ALL_ITEM_TYPES, findCaseTier, type Rarity } from "@/lib/cases";
+import { RARITY_LABELS, RARITY_ORDER, RARITY_STYLES, ALL_ITEM_TYPES, findCaseTier, getTypeLabel, type Rarity } from "@/lib/cases";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
@@ -353,7 +353,7 @@ export function CaseTierEditor({ tier, items }: { tier: CaseTierRow; items: Item
                       }`}
                     />
                     <span className="flex-1 truncate">{item.name}</span>
-                    <span className="text-zinc-600">{item.type}</span>
+                    <span className="text-zinc-600">{getTypeLabel(item.type)}</span>
                     <span className={`ml-1 text-[10px] font-semibold ${RARITY_STYLES[rarity]?.text ?? "text-zinc-500"}`}>
                       {RARITY_LABELS[rarity] ?? item.rarity}
                     </span>

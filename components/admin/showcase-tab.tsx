@@ -14,6 +14,9 @@ import { ABILITY_EFFECT_META, ABILITY_CATEGORY_LABELS, type AbilityDefinition, t
 import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
 import { getAllGalleryItems, type GalleryItem } from "@/lib/actions/admin";
 import { WORN_TYPES } from "@/lib/case-display-config";
+import { getTypeLabel } from "@/lib/cases";
+import { BONUS_GAME_LABELS } from "@/lib/bonus-games";
+import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
 import type { BonusGame } from "@/lib/bonus-games";
 
@@ -317,8 +320,8 @@ export function ShowcaseTab() {
                 <div className="flex flex-wrap justify-center gap-1">
                   <InfoBadge value={v.rarity} tone={RARITY_TONE[v.rarity]} />
                   {v.creditsAmount ? <InfoBadge label="" value={`${v.creditsAmount.toLocaleString("de-DE")} CR`} tone="amber" /> : null}
-                  {v.game ? <InfoBadge value={v.game} tone="sky" /> : null}
-                  {v.effect ? <InfoBadge value={v.effect} tone="emerald" /> : null}
+                  {v.game ? <InfoBadge value={BONUS_GAME_LABELS[v.game] ?? v.game} tone="sky" /> : null}
+                  {v.effect ? <InfoBadge value={(ABILITY_CATEGORY_LABELS as Record<string, string>)[v.effect] ?? v.effect} tone="emerald" /> : null}
                 </div>
               </div>
             ))}
@@ -366,14 +369,21 @@ export function ShowcaseTab() {
                     />
                   </div>
                   <span className="line-clamp-1 text-center text-[10px] font-semibold leading-tight text-zinc-300">{it.name}</span>
-                  {/* Info-Badges — nur Stats, die wirklich existieren */}
+                  {/* Übersetzte Badges: Seltenheit + Typ-Label + echte Stats (DMG/AP/Perk/Schild) */}
                   <div className="flex flex-wrap justify-center gap-1">
                     <InfoBadge value={it.rarity} tone={RARITY_TONE[it.rarity] ?? "zinc"} />
-                    <InfoBadge value={it.type} />
-                    {it.damage && it.damage > 0 ? <InfoBadge label="DMG:" value={it.damage} tone="amber" /> : null}
-                    {it.armor > 0 ? <InfoBadge label="AP:" value={it.armor} tone="sky" /> : null}
-                    {it.perkType && it.perkType !== "none" ? <InfoBadge label="Perk:" value={it.perkMagnitude > 0 ? `${it.perkType} +${it.perkMagnitude}` : it.perkType} tone="emerald" /> : null}
-                    {it.shieldHp > 0 ? <InfoBadge label="Schild:" value={it.shieldHp} tone="fuchsia" /> : null}
+                    <InfoBadge value={getTypeLabel(it.type)} />
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-1">
+                    <ItemStatBadges
+                      damage={it.damage}
+                      armor={it.armor}
+                      perk_type={it.perkType}
+                      perk_magnitude={it.perkMagnitude}
+                      shield_hp={it.shieldHp}
+                      itemName={it.name}
+                      itemType={it.type}
+                    />
                   </div>
                 </div>
               ))}
@@ -399,7 +409,7 @@ export function ShowcaseTab() {
                 <div className="flex flex-wrap justify-center gap-1">
                   <InfoBadge label="Theme:" value={v.theme} />
                   <InfoBadge value={v.rarity} tone={RARITY_TONE[v.rarity]} />
-                  <InfoBadge value={v.game} tone="sky" />
+                  <InfoBadge value={BONUS_GAME_LABELS[v.game] ?? v.game} tone="sky" />
                 </div>
               </div>
             ))}
