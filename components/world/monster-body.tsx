@@ -248,6 +248,12 @@ export function MonsterBody({
             </mesh>
           ) : (
             <>
+              {/* Becken/Hüfte — schließt die Lücke zwischen Beinen (~y0.86) und
+                  Torso (~y1.15); vorher fehlte hier ein Stück. */}
+              <mesh position={[0, 1.0, 0]} castShadow>
+                <boxGeometry args={[0.46, 0.42, 0.3]} />
+                <meshStandardMaterial color={type.colorHex} transparent={isGhost} opacity={bodyOpacity} />
+              </mesh>
               <group ref={refs.legL} position={[-0.15, 0.85, 0]}>
                 <mesh position={[0, -0.42, 0]} castShadow>
                   <boxGeometry args={[limbWidth + 0.02, 0.85, limbWidth + 0.02]} />

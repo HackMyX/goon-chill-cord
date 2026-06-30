@@ -236,6 +236,8 @@ export function Monster({
   const hitGlow = useRef(0);
   const auraRef = useRef<THREE.Mesh>(null);
   const spawnRingRef = useRef<THREE.Mesh>(null);
+  const animPrevX = useRef<number | null>(null);
+  const animPrevZ = useRef(0);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
   // Idle-wander state — see WANDER_SPEED_FRACTION's doc comment above.
   const wanderAngle = useRef(0);
@@ -498,9 +500,20 @@ export function Monster({
       torsoMaterial.current.emissiveIntensity = hitGlow.current * 1.4;
     }
 
-    walkClock.current += delta * (moving ? 7.5 : 1.2);
+    // Lauf-Animation anhand der ECHTEN Horizontalbewegung — so animieren Mobs
+    // auch beim Umherwandern (vorher „schwebten" sie durch die Map und liefen
+    // erst beim direkten Anlauf auf den Spieler).
+    let walkingNow = moving;
+    if (animPrevX.current !== null) {
+      const sp = Math.hypot(g.position.x - animPrevX.current, g.position.z - animPrevZ.current) / Math.max(0.0001, delta);
+      walkingNow = sp > 0.4;
+    }
+    animPrevX.current = g.position.x;
+    animPrevZ.current = g.position.z;
+
+    walkClock.current += delta * (walkingNow ? 7.5 : 1.2);
     // Kräftigerer Gang: größere Schritt-Amplitude + Arm-Gegenschwung.
-    const swing = moving ? Math.sin(walkClock.current) * 0.62 : Math.sin(walkClock.current) * 0.07;
+    const swing = walkingNow ? Math.sin(walkClock.current) * 0.62 : Math.sin(walkClock.current) * 0.07;
     if (legL.current) legL.current.rotation.x = swing;
     if (legR.current) legR.current.rotation.x = -swing;
     if (armL.current) armL.current.rotation.x = -swing * 1.0 - lunge.current * 0.6;
@@ -508,8 +521,8 @@ export function Monster({
     if (upperBody.current) upperBody.current.rotation.x = slouch + lunge.current * 0.5; // stärkerer Vorlehn-Schlag
     // Humanoide: Lauf-Wippen (vertikal) + Seitwärts-Schwanken → lebendiger, schwerer Gang.
     if (!isGhost && !isSlime) {
-      g.position.y = initialPosition[1] + (moving ? Math.abs(Math.sin(walkClock.current)) * 0.09 : 0);
-      if (upperBody.current) upperBody.current.rotation.z = moving ? Math.sin(walkClock.current) * 0.1 : 0;
+      g.position.y = initialPosition[1] + (walkingNow ? Math.abs(Math.sin(walkClock.current)) * 0.09 : 0);
+      if (upperBody.current) upperBody.current.rotation.z = walkingNow ? Math.sin(walkClock.current) * 0.1 : 0;
     }
 
     // Cosmetic vertical bob — ghosts hover in place, slimes hop while
@@ -519,7 +532,7 @@ export function Monster({
     if (isGhost) {
       g.position.y = initialPosition[1] + 0.3 + Math.sin(walkClock.current * 0.9) * 0.15;
     } else if (isSlime) {
-      g.position.y = initialPosition[1] + (moving ? Math.max(0, Math.sin(walkClock.current * 3)) * 0.22 : 0);
+      g.position.y = initialPosition[1] + (walkingNow ? Math.max(0, Math.sin(walkClock.current * 3)) * 0.22 : 0);
     }
 
     // „Atmen": dezentes Auf/Ab der Oberkörper-Skalierung → die Mobs wirken

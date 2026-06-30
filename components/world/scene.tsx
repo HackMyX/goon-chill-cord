@@ -46,9 +46,6 @@ interface SceneProps {
    * desktop, start-portal dismissed on mobile) — gates monster spawning so
    * nothing appears behind the "Click to play" overlay. Latched upstream. */
   active?: boolean;
-  /** Spieler verlässt gerade die Welt (Disconnect-Countdown) — stoppt
-   * Broadcast (despawnt bei anderen) + macht unverwundbar. */
-  leaving?: boolean;
   onAttack?: (damage: number, hit: boolean) => void;
   onPlayerHit?: (kind: "hp" | "shield", amount: number) => void;
   onStatsChange?: (stats: PlayerStatsSnapshot) => void;
@@ -149,7 +146,6 @@ export function Scene({
   environmentConfig,
   streakKillCount,
   active = false,
-  leaving = false,
   onAttack,
   onPlayerHit,
   onStatsChange,
@@ -251,7 +247,6 @@ export function Scene({
         remotePlayerRegistryRef={remotePlayerRegistryRef}
         petTypes={petTypes}
         active={active}
-        leaving={leaving}
         onAttack={onAttack}
         onStatsChange={onStatsChange}
         onDeath={onDeath}

@@ -66,9 +66,6 @@ interface PlayerProps {
    * den Transform-Broadcast, damit man für andere erst dann sichtbar/präsent
    * ist (kein „Geist am Spawn" vor dem Klick). */
   active?: boolean;
-  /** Spieler verlässt gerade (Disconnect-Countdown): stoppt Broadcast (despawnt
-   * bei anderen) und macht unverwundbar, damit Monster ihn nicht mehr töten. */
-  leaving?: boolean;
   combatRef: React.RefObject<CombatSharedState>;
   monsterRegistryRef: MonsterRegistry;
   remotePlayerRegistryRef: RemotePlayerRegistry;
@@ -242,7 +239,6 @@ export function Player({
   cameraControls,
   canvasRef,
   active = false,
-  leaving = false,
   combatRef,
   monsterRegistryRef,
   remotePlayerRegistryRef,
@@ -438,17 +434,19 @@ export function Player({
     respawnRequested.current = true;
   }, [respawnSignal]);
 
-  // Spawn-Schutz auch beim JOIN (Betreten der Welt), nicht nur beim Respawn:
-  // gleiches Fenster (characterConfig.respawnInvulnerableSec). Monster sehen/
-  // greifen den Spieler in dieser Zeit nicht an (monster.tsx) und der Spieler
-  // kann selbst nicht angreifen (Monster nicht angreifbar). Der Timer wird in
-  // useFrame heruntergezählt und löscht invulnerable wieder.
+  // Spawn-Schutz startet GENAU wenn der Spieler „Klicken zum Spielen" drückt
+  // (active wird true) — NICHT beim Mount (die Scene rendert schon hinter dem
+  // Klick-Overlay, sonst wäre das 2s-Fenster längst abgelaufen, bevor man
+  // klickt). Fenster = characterConfig.respawnInvulnerableSec (Standard 2s).
+  // In dieser Zeit sehen/greifen Monster den Spieler nicht an (monster.tsx) und
+  // er kann selbst nicht angreifen; der Timer läuft in useFrame ab.
+  const spawnProtectStartedRef = useRef(false);
   useEffect(() => {
+    if (!active || spawnProtectStartedRef.current) return;
+    spawnProtectStartedRef.current = true;
     combatRef.current.invulnerable = true;
     respawnInvulnTimer.current = characterConfig.respawnInvulnerableSec;
-    // Nur einmal beim Mount/Join.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [active, combatRef, characterConfig.respawnInvulnerableSec]);
 
   // PvP damage is never applied locally — it only ever arrives as a
   // server-broadcast event (lib/actions/pvp.ts rolled it, lib/world-
@@ -526,9 +524,6 @@ export function Player({
       respawnInvulnTimer.current -= delta;
       if (respawnInvulnTimer.current <= 0) combatRef.current.invulnerable = false;
     }
-    // Beim Verlassen (Disconnect-Countdown) unverwundbar — Monster sehen/töten
-    // den abreisenden Spieler nicht mehr (invulnerable gated in monster.tsx).
-    if (leaving) combatRef.current.invulnerable = true;
 
     const locked = cameraControls.locked || mobileMode;
     const alive = !combatRef.current.dead;
@@ -1245,7 +1240,7 @@ export function Player({
       // and reusing this timer means no second interval to keep in sync.
       // NUR broadcasten, wenn der Spieler aktiv beigetreten ist (nach „Klicken
       // zum Spielen") → kein Geist-Avatar am Spawn für andere vor dem Klick.
-      if (active && !leaving) broadcastTransform({
+      if (active) broadcastTransform({
         id: userId,
         x: g.position.x,
         z: g.position.z,

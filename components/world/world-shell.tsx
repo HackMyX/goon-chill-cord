@@ -1283,7 +1283,6 @@ export function WorldShell({
               environmentConfig={environmentConfig}
               streakKillCount={streakKillCount}
               active={hasEnteredWorld}
-              leaving={disconnectCountdown !== null}
               onAttack={handleAttack}
               onPlayerHit={handlePlayerHit}
               onStatsChange={handleStatsChange}
