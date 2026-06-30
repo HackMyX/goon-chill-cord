@@ -164,6 +164,15 @@ export function RemoteMonster({
   }, [hp, maxHp]);
 
   useEffect(() => {
+    // Übergang lebendig → tot: kräftige Explosion (wie lokal in monster.tsx),
+    // damit ein Kill für ALLE Spieler gleich befriedigend aussieht.
+    if (aliveRef.current && !alive) {
+      for (let k = 0; k < 3; k++) {
+        const dId = ++remoteBurstSeq;
+        setBloodBursts((curr) => [...curr, { id: dId }]);
+        setTimeout(() => setBloodBursts((curr) => curr.filter((b) => b.id !== dId)), BLOOD_BURST_LIFETIME_MS);
+      }
+    }
     aliveRef.current = alive;
   }, [alive]);
 

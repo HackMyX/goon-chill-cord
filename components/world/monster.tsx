@@ -305,6 +305,13 @@ export function Monster({
         );
         if (health.current <= 0) {
           alive.current = false;
+          // Tod = kräftige Explosion: mehrere überlagerte Bursts für ein
+          // befriedigendes Kill-Feedback (statt nur Wegsinken).
+          for (let k = 0; k < 3; k++) {
+            const dId = ++bloodBurstSeq;
+            setBloodBursts((curr) => [...curr, { id: dId }]);
+            setTimeout(() => setBloodBursts((curr) => curr.filter((b) => b.id !== dId)), BLOOD_BURST_LIFETIME_MS);
+          }
           onDied(type.id);
         }
         return amount;
