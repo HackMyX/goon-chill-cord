@@ -211,6 +211,14 @@ export function RemoteMonster({
     group.current.position.z = THREE.MathUtils.lerp(group.current.position.z, predZ, Math.min(1, delta * 16));
     group.current.position.y = THREE.MathUtils.lerp(group.current.position.y, targetPos.current.y, Math.min(1, delta * 10));
 
+    // In Laufrichtung drehen — exakt wie das lokale Monster (atan2(vx,vz),
+    // lerp delta*6). Ohne das würden Remote-Mobs seitwärts/rückwärts gleiten,
+    // statt dahin zu schauen, wo sie hinlaufen (Sync-Lücke geschlossen).
+    if (movingRef.current && (Math.abs(velocity.current.vx) > 0.01 || Math.abs(velocity.current.vz) > 0.01)) {
+      const targetYaw = Math.atan2(velocity.current.vx, velocity.current.vz);
+      group.current.rotation.y = THREE.MathUtils.lerp(group.current.rotation.y, targetYaw, Math.min(1, delta * 6));
+    }
+
     // Walk + idle animation. walkClock keeps advancing even while idle (slow)
     // so the limbs sway subtly instead of snapping to a dead-still rest pose —
     // the "statue" fix. Amplitude blends from a small idle sway (0.06) up to a
