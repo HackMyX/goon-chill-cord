@@ -142,6 +142,14 @@ export function MonstersField({
   // Tracks whether the player was dead last frame so we can fire the
   // despawn exactly once on the transition, not every frame while dead.
   const wasDeadRef = useRef(false);
+  // Graceful death-fade: beim Tod des Besitzers werden die Monster für
+  // MONSTER_DEATH_CLEANUP_MS als alive:false weitergesendet, damit andere
+  // Spieler sie sanft ausfaden sehen (Death-Animation) statt sie abrupt zu
+  // verlieren — auch wenn sie gerade mit ihnen kämpfen.
+  const dyingSnapshotRef = useRef<
+    { id: string; typeId: string; x: number; y: number; z: number; hp: number; maxHp: number; alive: boolean }[] | null
+  >(null);
+  const dyingUntilRef = useRef(0);
 
   // Cross-player aggro: when a remote attacker hits one of our monsters,
   // all our monsters temporarily chase the attacker's last known position.
@@ -195,6 +203,12 @@ export function MonstersField({
   // Broadcast own monster pool at ~8Hz so other players can render smooth movement.
   useEffect(() => {
     const intervalId = setInterval(() => {
+      // Während des Death-Fade-Fensters die sterbenden Monster (alive:false)
+      // weitersenden, damit Peers die Death-Animation spielen statt Instant-Pop.
+      if (dyingUntilRef.current > Date.now() && dyingSnapshotRef.current) {
+        broadcastMonsterSync({ ownerId: userId, monsters: dyingSnapshotRef.current });
+        return;
+      }
       const ownIds = new Set(spawnsRef.current.map((s) => s.id));
       const snapshot = spawnsRef.current
         .map((s) => {
@@ -357,8 +371,22 @@ export function MonstersField({
     // clears them immediately — no need to wait for the next 8Hz sync tick.
     if (isDead && !wasDeadRef.current) {
       wasDeadRef.current = true;
-      spawnsRef.current = []; // sync update so the setInterval broadcast sends [] next tick
-      broadcastMonsterSync({ ownerId: userId, monsters: [] });
+      // Graceful death-fade: eine alive:false-Momentaufnahme aller Monster bauen,
+      // die der Sync-Interval für MONSTER_DEATH_CLEANUP_MS weitersendet → Peers
+      // sehen die Death-Animation (sink & fade) statt eines abrupten Verschwindens.
+      dyingSnapshotRef.current = spawnsRef.current.map((s) => {
+        const h = registryRef.current.find((x) => x.id === s.id);
+        const pos = h ? h.getPosition() : null;
+        return {
+          id: s.id, typeId: s.type.id,
+          x: pos?.x ?? 0, y: pos?.y ?? 0, z: pos?.z ?? 0,
+          hp: 0, maxHp: s.type.health, alive: false,
+        };
+      });
+      dyingUntilRef.current = Date.now() + MONSTER_DEATH_CLEANUP_MS;
+      broadcastMonsterSync({ ownerId: userId, monsters: dyingSnapshotRef.current });
+      // Lokal sofort entfernen (der Spieler sieht ohnehin den Death-Screen).
+      spawnsRef.current = [];
       setSpawns([]);
       setProjectiles([]);
       // Cleanup state tied to the now-despawned mobs: stale kill-attribution
@@ -371,6 +399,8 @@ export function MonstersField({
     // When the player respawns, add a short delay before the first mob appears.
     if (!isDead && wasDeadRef.current) {
       wasDeadRef.current = false;
+      dyingSnapshotRef.current = null;
+      dyingUntilRef.current = 0;
       spawnTimer.current = 3.0;
     }
 

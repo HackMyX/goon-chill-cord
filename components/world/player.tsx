@@ -762,10 +762,21 @@ export function Player({
     {
       const shieldNow = combatRef.current.shieldHpRemaining;
       const shieldLost = prevShield.current - shieldNow;
-      if (shieldLost > 0.01 && !combatRef.current.dead) onPlayerHit?.("shield", shieldLost);
+      if (shieldLost > 0.01 && !combatRef.current.dead) {
+        onPlayerHit?.("shield", shieldLost);
+        // Schild-Block: leichter Flinch + kleiner Shake (auch für Monster-Treffer,
+        // nicht nur PvP). hurtTimer treibt die 'hurt'-Animation, die auch an
+        // andere Spieler gebroadcastet wird → für jeden sichtbar.
+        hurtTimer.current = Math.max(hurtTimer.current, 0.22);
+        cameraShake.current = Math.max(cameraShake.current, 0.6);
+      }
       prevShield.current = shieldNow;
       const hpLost = prevHp.current - combatRef.current.hp;
-      if (hpLost > 0.01 && !combatRef.current.dead && combatRef.current.hp > 0) onPlayerHit?.("hp", hpLost);
+      if (hpLost > 0.01 && !combatRef.current.dead && combatRef.current.hp > 0) {
+        onPlayerHit?.("hp", hpLost);
+        hurtTimer.current = Math.max(hurtTimer.current, 0.4);
+        cameraShake.current = Math.max(cameraShake.current, 1.1);
+      }
     }
 
     if (combatRef.current.hp < prevHp.current) hpRegenTimer.current = 0;
