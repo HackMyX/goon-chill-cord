@@ -6,8 +6,10 @@ import { Instances, Instance } from "@react-three/drei";
 import * as THREE from "three";
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { DEFAULT_WORLD_ENVIRONMENT, type WorldEnvironmentConfig } from "@/lib/world-environment-config";
-import type { Obstacle } from "@/lib/world-obstacles";
+import type { Obstacle, ObstacleKind } from "@/lib/world-obstacles";
 import type { CombatSharedState } from "@/components/world/combat-types";
+import { MODEL_SWAPPABLE_KINDS, isModelKind, modelForKind } from "@/lib/world-models";
+import { WorldModelInstances } from "@/components/world/world-model-instances";
 
 // Post-Apokalypse: tote, verkohlte Stämme + spärliches, vertrocknetes/giftiges Laub.
 const TRUNK_COLOR = "#231a13";
@@ -670,6 +672,12 @@ export function Environment({
   const wrecks = useMemo(() => obstacles.filter((o) => o.kind === "wreck"), [obstacles]);
   const debris = useMemo(() => obstacles.filter((o) => o.kind === "debris"), [obstacles]);
 
+  // Kind → Obstacle-Liste, damit registrierte GLTF-Modelle automatisch die passende
+  // Teilmenge bekommen. Nur Kinds aus MODEL_SWAPPABLE_KINDS werden modellfähig.
+  const kindItems: Partial<Record<ObstacleKind, Obstacle[]>> = {
+    tree: trees, rock: rocks, ruin: ruins, wreck: wrecks, debris, crate: crates, lamp: lamps, campfire: campfires,
+  };
+
   const grassTufts = useMemo(() => {
     const rand = mulberry32(4242);
     const outerRadius = WORLD_RADIUS - 4;
@@ -710,26 +718,32 @@ export function Environment({
 
   return (
     <>
+      {/* Registrierte GLTF-Modelle ersetzen die prozedurale Optik ihres Kinds
+          (Frustum-Culling + Suspense-Fallback in world-model-instances.tsx).
+          Registry leer → nichts hiervon rendert, alles bleibt prozedural. */}
+      {MODEL_SWAPPABLE_KINDS.map((kind) => {
+        const def = modelForKind(kind);
+        return def ? <WorldModelInstances key={`m-${kind}`} def={def} items={kindItems[kind] ?? []} /> : null;
+      })}
+
       {roads.map((o, i) => (
         <Road key={`rd${i}`} o={o} />
       ))}
-      {campfires.map((o, i) => (
-        <Campfire key={`cf${i}`} o={o} />
-      ))}
-      <InstancedTrees trees={trees} />
+      {!isModelKind("campfire") &&
+        campfires.map((o, i) => <Campfire key={`cf${i}`} o={o} />)}
+      {!isModelKind("tree") && <InstancedTrees trees={trees} />}
       <InstancedGrass tufts={grassTufts} />
-      <InstancedRocks rocks={rocks} />
-      <InstancedDebris debris={debris} />
-      {wrecks.map((o, i) => (
-        <Wreck key={`wk${i}`} o={o} />
-      ))}
-      {ruins.map((r, i) => (
-        <RuinPillar key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot ?? 0} h={r.h ?? 1.5} />
-      ))}
-      <CityStructures walls={walls} roofs={roofs} crates={crates} combatRef={combatRef} />
-      {lamps.map((o, i) => (
-        <LampPost key={`l${i}`} o={o} />
-      ))}
+      {!isModelKind("rock") && <InstancedRocks rocks={rocks} />}
+      {!isModelKind("debris") && <InstancedDebris debris={debris} />}
+      {!isModelKind("wreck") &&
+        wrecks.map((o, i) => <Wreck key={`wk${i}`} o={o} />)}
+      {!isModelKind("ruin") &&
+        ruins.map((r, i) => (
+          <RuinPillar key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot ?? 0} h={r.h ?? 1.5} />
+        ))}
+      <CityStructures walls={walls} roofs={roofs} crates={isModelKind("crate") ? [] : crates} combatRef={combatRef} />
+      {!isModelKind("lamp") &&
+        lamps.map((o, i) => <LampPost key={`l${i}`} o={o} />)}
       <InstancedMushrooms mushrooms={mushrooms} />
       {borderCrystals.map((c, i) => (
         <DeadSpire key={i} x={c.x} z={c.z} scale={c.scale} />
