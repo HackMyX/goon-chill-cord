@@ -334,15 +334,18 @@ function genCamp(out: Obstacle[], ox: number, oz: number, rand: () => number) {
 export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIRONMENT): Obstacle[] {
   const out: Obstacle[] = [];
 
-  // Bäume — locker über die Map gestreut (der dichte Wald kommt als eigene Zone).
+  // Bäume — dicht über die GANZE Map gestreut, inkl. Außenring (sqrt-Verteilung
+  // → gleichmäßige Flächendichte, keine leeren Ränder). Der dichte Wald kommt
+  // zusätzlich als eigene Zone.
   {
     const rand = mulberry32(1337);
-    const count = dens(60, env.treeDensity);
-    const inner = 11;
-    const outer = WORLD_RADIUS - 6;
+    const count = dens(170, env.treeDensity);
+    const inner = 9;
+    const outer = WORLD_RADIUS - 3;
     for (let i = 0; i < count; i++) {
       const angle = rand() * Math.PI * 2;
-      const radius = inner + rand() * (outer - inner);
+      // sqrt → flächengleiche Verteilung (sonst klumpt alles in der Mitte).
+      const radius = Math.sqrt(inner * inner + rand() * (outer * outer - inner * inner));
       const scale = 0.8 + rand() * 0.7;
       out.push({
         kind: "tree",
@@ -356,14 +359,15 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
     }
   }
 
-  // Felsen — niedrig, ÜBERSPRINGBAR.
+  // Felsen — niedrig, ÜBERSPRINGBAR, ebenfalls flächendeckend.
   {
     const rand = mulberry32(7654);
-    const outer = WORLD_RADIUS - 6;
-    const count = dens(60, env.rockDensity);
+    const inner = 5;
+    const outer = WORLD_RADIUS - 3;
+    const count = dens(130, env.rockDensity);
     for (let i = 0; i < count; i++) {
       const angle = rand() * Math.PI * 2;
-      const radius = 5 + rand() * (outer - 5);
+      const radius = Math.sqrt(inner * inner + rand() * (outer * outer - inner * inner));
       const scale = 0.55 + rand() * 0.9;
       out.push({
         kind: "rock",

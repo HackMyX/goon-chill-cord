@@ -186,8 +186,12 @@ function InstancedCrates({ crates }: { crates: Obstacle[] }) {
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial color="#6b4f2a" emissive="#160d05" emissiveIntensity={0.2} roughness={0.9} flatShading />
       {crates.map((o, i) => {
-        const s = (o.hx ?? 0.4) * 2;
-        return <Instance key={i} position={[o.x, s * 0.5, o.z]} scale={s} rotation={[0, o.rot ?? 0, 0]} />;
+        // Echte Box: Breite hx*2, Höhe = blockH, Tiefe hz*2 (vorher fälschlich ein
+        // Würfel der Seite hx*2 → lange Theken/Regale wurden zu Riesenwürfeln).
+        const sx = (o.hx ?? 0.4) * 2;
+        const sz = (o.hz ?? o.hx ?? 0.4) * 2;
+        const sy = o.blockH ?? sx;
+        return <Instance key={i} position={[o.x, sy * 0.5, o.z]} scale={[sx, sy, sz]} rotation={[0, o.rot ?? 0, 0]} />;
       })}
     </Instances>
   );
@@ -289,9 +293,10 @@ function Road({ o }: { o: Obstacle }) {
   const len = o.len ?? (o.hx ?? 1) * 2;
   const width = (o.hz ?? 1.5) * 2;
   return (
-    <mesh position={[o.x, 0.03, o.z]} rotation={[0, o.rot ?? 0, 0]} receiveShadow>
-      <boxGeometry args={[len, 0.05, width]} />
-      <meshStandardMaterial color="#2b2724" roughness={1} />
+    <mesh position={[o.x, 0.04, o.z]} rotation={[0, o.rot ?? 0, 0]}>
+      <boxGeometry args={[len, 0.06, width]} />
+      {/* unbeleuchtet → fängt kein warmes Licht ein (keine orange Kippfläche) */}
+      <meshBasicMaterial color="#241f1c" toneMapped={false} />
     </mesh>
   );
 }
