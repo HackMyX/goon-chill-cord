@@ -11,6 +11,7 @@ import { getKillStreakConfig } from "@/lib/actions/kill-streak";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import { getCharacterConfig } from "@/lib/actions/character-config";
 import { getWorldSpawnConfig } from "@/lib/actions/world-spawn";
+import { getWorldEnvironmentConfig } from "@/lib/actions/world-environment";
 import { getSiteConfig } from "@/lib/actions/site-config";
 import { getModPermissions } from "@/lib/actions/mod";
 import { getChatConfig } from "@/lib/actions/global-chat";
@@ -157,6 +158,7 @@ export default async function AdminPage() {
     modPermissions,
     chatConfig,
     worldSpawnConfig,
+    worldEnvironmentConfig,
     allPatchNotes,
     adminDonConfig,
     adminSnakeConfig,
@@ -191,6 +193,7 @@ export default async function AdminPage() {
     getModPermissions(),
     getChatConfig(),
     getWorldSpawnConfig(),
+    getWorldEnvironmentConfig(),
     getAllNotes(),
     getDonConfig(),
     getSnakeConfig(),
@@ -243,6 +246,7 @@ export default async function AdminPage() {
       worldSessionConfig={worldSessionConfig}
       characterConfig={characterConfig}
       worldSpawnConfig={worldSpawnConfig}
+      worldEnvironmentConfig={worldEnvironmentConfig}
       siteConfig={siteConfig}
       modPermissions={modPermissions}
       chatConfig={chatConfig}

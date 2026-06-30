@@ -35,6 +35,8 @@ import { useRealtimeProfile } from "@/lib/use-realtime-profile";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
 import { useLiveConfig } from "@/lib/use-live-config";
 import { getWorldSpawnConfig } from "@/lib/actions/world-spawn";
+import { getWorldEnvironmentConfig } from "@/lib/actions/world-environment";
+import type { WorldEnvironmentConfig } from "@/lib/world-environment-config";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import { getCharacterConfig } from "@/lib/actions/character-config";
 import { getKillStreakConfig } from "@/lib/actions/kill-streak";
@@ -71,6 +73,8 @@ interface WorldShellProps {
   characterConfig: CharacterConfig;
   /** Admin-configured monster spawn tuning (lib/world-spawn-config.ts). */
   spawnConfig: WorldSpawnConfig;
+  /** Admin-configured world look (lib/world-environment-config.ts). */
+  environmentConfig: WorldEnvironmentConfig;
   isAdmin?: boolean;
   isModerator?: boolean;
   nameStyleKey?: string | null;
@@ -134,6 +138,7 @@ export function WorldShell({
   pvpEnabled: initialPvpEnabled = true,
   characterConfig: initialCharacterConfig,
   spawnConfig: initialSpawnConfig,
+  environmentConfig: initialEnvironmentConfig,
   isAdmin = false,
   isModerator = false,
   nameStyleKey = null,
@@ -144,11 +149,13 @@ export function WorldShell({
   // Player stats (hp/stamina) are seeded once below and intentionally stay
   // session-stable; combat params / spawn rules read these on each use.
   const [spawnConfig, setSpawnConfig] = useState(initialSpawnConfig);
+  const [environmentConfig, setEnvironmentConfig] = useState(initialEnvironmentConfig);
   const [killStreakConfig, setKillStreakConfig] = useState(initialKillStreakConfig);
   const [characterConfig, setCharacterConfig] = useState(initialCharacterConfig);
   const [pvpEnabled, setPvpEnabled] = useState(initialPvpEnabled);
   const [disconnectCountdownSec, setDisconnectCountdownSec] = useState(initialDisconnectCountdownSec);
   useLiveConfig("world-spawn-live", getWorldSpawnConfig, setSpawnConfig);
+  useLiveConfig("world-environment-live", getWorldEnvironmentConfig, setEnvironmentConfig);
   useLiveConfig("killstreak-live", getKillStreakConfig, setKillStreakConfig);
   useLiveConfig("character-live", getCharacterConfig, setCharacterConfig);
   useLiveConfig("world-session-live", getWorldSessionConfig, (c) => { setPvpEnabled(c.pvpEnabled); setDisconnectCountdownSec(c.disconnectCountdownSec); });
@@ -1191,6 +1198,7 @@ export function WorldShell({
               killStreakConfig={killStreakConfig}
               characterConfig={characterConfig}
               spawnConfig={spawnConfig}
+              environmentConfig={environmentConfig}
               streakKillCount={streakKillCount}
               active={hasEnteredWorld}
               onAttack={handleAttack}

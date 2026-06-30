@@ -7,6 +7,7 @@ import { getKillStreakConfig } from "@/lib/actions/kill-streak";
 import { getWorldSessionConfig } from "@/lib/actions/world-session";
 import { getCharacterConfig } from "@/lib/actions/character-config";
 import { getWorldSpawnConfig } from "@/lib/actions/world-spawn";
+import { getWorldEnvironmentConfig } from "@/lib/actions/world-environment";
 import { isAdmin, isModerator } from "@/lib/admin";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -60,12 +61,13 @@ export default async function WorldPage() {
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id);
 
-  const [monsterTypes, petTypes, killStreakConfig, characterConfig, spawnConfig] = await Promise.all([
+  const [monsterTypes, petTypes, killStreakConfig, characterConfig, spawnConfig, environmentConfig] = await Promise.all([
     getMonsterTypes(),
     getPetConfigs(),
     getKillStreakConfig(),
     getCharacterConfig(),
     getWorldSpawnConfig(),
+    getWorldEnvironmentConfig(),
   ]);
 
   const equippedByCategory: Record<string, EquippedItem> = {};
@@ -94,6 +96,7 @@ export default async function WorldPage() {
       killStreakConfig={killStreakConfig}
       characterConfig={characterConfig}
       spawnConfig={spawnConfig}
+      environmentConfig={environmentConfig}
       disconnectCountdownSec={worldSessionConfig.disconnectCountdownSec}
       pvpEnabled={worldSessionConfig.pvpEnabled}
       isAdmin={isAdmin(profile)}

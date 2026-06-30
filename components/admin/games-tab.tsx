@@ -17,6 +17,7 @@ import {
 import { AdminTooltip } from "@/components/admin/admin-tooltip";
 import { WorldSessionConfigEditor } from "@/components/admin/world-session-config-editor";
 import { WorldSpawnConfigEditor } from "@/components/admin/world-spawn-editor";
+import { WorldEnvironmentConfigEditor } from "@/components/admin/world-environment-editor";
 import { CharacterConfigEditor } from "@/components/admin/character-config-editor";
 import { DonConfigEditor } from "@/components/admin/don-config-editor";
 import { SnakeConfigEditor } from "@/components/admin/snake-config-editor";
@@ -31,6 +32,7 @@ import type { ProfileRow } from "@/components/admin/admin-shell";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
+import type { WorldEnvironmentConfig } from "@/lib/world-environment-config";
 import type { DonConfig } from "@/lib/don-config";
 import type { SnakeConfig } from "@/lib/snake-config";
 import type { MineConfig } from "@/lib/mine-config";
@@ -55,6 +57,7 @@ interface GamesTabProps {
   worldSessionConfig: WorldSessionConfig;
   characterConfig: CharacterConfig;
   worldSpawnConfig: WorldSpawnConfig;
+  worldEnvironmentConfig: WorldEnvironmentConfig;
   topProfiles: ProfileRow[];
   donConfig: DonConfig;
   snakeConfig: SnakeConfig;
@@ -312,6 +315,7 @@ export function GamesTab({
   worldSessionConfig,
   characterConfig,
   worldSpawnConfig,
+  worldEnvironmentConfig,
   topProfiles,
   donConfig,
   snakeConfig,
@@ -410,6 +414,8 @@ export function GamesTab({
                 <WorldSessionConfigEditor config={worldSessionConfig} />
                 <CharacterConfigEditor config={characterConfig} />
                 <WorldSpawnConfigEditor config={worldSpawnConfig} />
+
+                <WorldEnvironmentConfigEditor config={worldEnvironmentConfig} />
 
                 <div className="rounded-xl border border-white/10 bg-[#0f0e18] p-5">
                   <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-zinc-100">

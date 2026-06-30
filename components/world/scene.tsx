@@ -16,6 +16,7 @@ import type { PetTypeConfig } from "@/lib/pets";
 import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
+import { TIME_OF_DAY_PRESETS, type WorldEnvironmentConfig } from "@/lib/world-environment-config";
 import type { CameraControls } from "@/components/world/use-camera-controls";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -31,6 +32,7 @@ interface SceneProps {
   killStreakConfig: KillStreakConfig;
   characterConfig: CharacterConfig;
   spawnConfig: WorldSpawnConfig;
+  environmentConfig: WorldEnvironmentConfig;
   /** Current player's kill-streak count — scales locally-spawned
    * monsters' health/attackDamage slightly upward the longer it runs
    * (lib/kill-streak.ts' streakMobScale). Necessarily client-local: this
@@ -141,6 +143,7 @@ export function Scene({
   killStreakConfig,
   characterConfig,
   spawnConfig,
+  environmentConfig,
   streakKillCount,
   active = false,
   onAttack,
@@ -173,6 +176,13 @@ export function Scene({
   const monsterRegistryRef = useRef<MonsterHandle[]>([]);
   const remotePlayerRegistryRef = useRef<RemotePlayerHandle[]>([]);
 
+  // Admin-konfigurierbare Welt-Optik: Tageszeit-Preset + Feintuning-Multiplikatoren.
+  const tp = TIME_OF_DAY_PRESETS[environmentConfig.timeOfDay];
+  const fogMul = Math.max(0.4, environmentConfig.fogDensity);
+  const fogNear = 14 / fogMul;
+  const fogFar = (WORLD_RADIUS + 10) / fogMul;
+  const starCount = Math.round(3200 * Math.max(0, environmentConfig.starIntensity));
+
   return (
     <>
       {/* Dusk sky — sun held low near the horizon (rather than drei's Sky
@@ -180,48 +190,44 @@ export function Scene({
           instead of a bright cartoon-blue day, matching the rest of the
           site's neon-purple branding. The existing starfield then sits
           believably in the darker upper half of that gradient. */}
+      {/* Tageszeit-gesteuerter Himmel (admin: timeOfDay-Preset) */}
       <Sky
         distance={450000}
-        sunPosition={[-40, 5, -65]}
-        turbidity={16}
-        rayleigh={1.6}
+        sunPosition={tp.sun}
+        turbidity={tp.turbidity}
+        rayleigh={tp.rayleigh}
         mieCoefficient={0.015}
         mieDirectionalG={0.94}
       />
-      {/* Tighter fog start for more depth and atmosphere — world feels
-          moody and dense rather than a flat open clearing. */}
-      <fog attach="fog" args={["#120a22", 14, WORLD_RADIUS + 10]} />
+      {/* Nebel — Farbe vom Preset, Dichte admin-konfigurierbar */}
+      <fog attach="fog" args={[tp.fog, fogNear, fogFar]} />
 
-      <ambientLight intensity={0.5} color="#a78bfa" />
-      <directionalLight position={[-20, 25, -30]} intensity={1.1} color="#ffd9b3" castShadow />
-      {/* Main purple accent fill */}
-      <pointLight position={[-6, 3, -4]} intensity={22} color="#8b5cf6" distance={40} decay={2} />
-      {/* Cool blue rim from the opposite side for depth separation */}
-      <pointLight position={[6, 3, 6]} intensity={16} color="#3b82f6" distance={35} decay={2} />
-      {/* Danger-red rim light — adds warmth contrast and reads as "there are
-          threats out here" without being obvious */}
-      <pointLight position={[0, 5, -18]} intensity={10} color="#7f1d1d" distance={30} decay={2} />
+      <ambientLight intensity={0.5 * environmentConfig.ambientIntensity} color={tp.ambient} />
+      <directionalLight position={tp.sun} intensity={tp.dirIntensity} color={tp.dir} castShadow />
+      {/* Akzent-Punktlichter (admin: accentIntensity) — lila Fill, blauer Rim, Gefahr-Rot */}
+      <pointLight position={[-6, 3, -4]} intensity={22 * environmentConfig.accentIntensity} color="#8b5cf6" distance={40} decay={2} />
+      <pointLight position={[6, 3, 6]} intensity={16 * environmentConfig.accentIntensity} color="#3b82f6" distance={35} decay={2} />
+      <pointLight position={[0, 5, -18]} intensity={10 * environmentConfig.accentIntensity} color="#7f1d1d" distance={30} decay={2} />
       {/* Pulsing spawn heart */}
       <SpawnHeartLight />
 
-      <Stars radius={120} depth={50} count={3200} factor={2.8} fade speed={0.4} />
+      {starCount > 0 && <Stars radius={120} depth={50} count={starCount} factor={2.8} fade speed={0.4} />}
 
       {/* grass ground, sized to the actual playable world radius — two
-          overlapping tones instead of one flat fill so it doesn't read as
-          a single dead-flat color from above */}
+          overlapping tones (Preset-Tönung) so it doesn't read as flat from above */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]} receiveShadow>
         <circleGeometry args={[WORLD_RADIUS, 96]} />
-        <meshStandardMaterial color="#253d28" />
+        <meshStandardMaterial color={tp.ground} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]}>
         <circleGeometry args={[WORLD_RADIUS * 0.62, 80]} />
-        <meshStandardMaterial color="#2c5530" transparent opacity={0.6} />
+        <meshStandardMaterial color={tp.groundInner} transparent opacity={0.6} />
       </mesh>
 
       <SpawnGlow />
       <BorderRing />
 
-      <Environment />
+      <Environment env={environmentConfig} />
 
       <ContactShadows position={[0, 0, 0]} opacity={0.6} scale={12} blur={2.2} far={4} />
 

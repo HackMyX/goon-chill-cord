@@ -298,6 +298,7 @@ const COLUMN_CHECKS: Array<{
   { id: "col_world_alivecapmax",     category: "World",       table: "world_config",      col: "alive_cap_max",          detail: "node scripts/full-db-sync.cjs" },
   { id: "col_world_alivecapplayer",  category: "World",       table: "world_config",      col: "alive_cap_per_extra_player", detail: "node scripts/full-db-sync.cjs" },
   { id: "col_world_perkmuliplicap",  category: "World",       table: "world_config",      col: "perk_multiplier_cap",    detail: "node scripts/full-db-sync.cjs" },
+  { id: "col_world_envconfig",       category: "World",       table: "world_config",      col: "environment_config",     detail: "node scripts/add-world-environment-config.cjs" },
   // Character config — combat columns (2026-06-25)
   { id: "col_char_attackcooldown",   category: "World",       table: "character_config",  col: "attack_cooldown",        detail: "node scripts/full-db-sync.cjs" },
   { id: "col_char_hpregenpersec",    category: "World",       table: "character_config",  col: "hp_regen_per_sec",       detail: "node scripts/full-db-sync.cjs" },

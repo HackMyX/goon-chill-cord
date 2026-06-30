@@ -65,6 +65,7 @@ import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
+import type { WorldEnvironmentConfig } from "@/lib/world-environment-config";
 import type { SiteConfig } from "@/lib/site-config";
 import type { XpConfig } from "@/lib/level-system";
 import type { SoundConfig } from "@/lib/sound-config";
@@ -158,6 +159,7 @@ interface AdminShellProps {
   worldSessionConfig: WorldSessionConfig;
   characterConfig: CharacterConfig;
   worldSpawnConfig: WorldSpawnConfig;
+  worldEnvironmentConfig: WorldEnvironmentConfig;
   siteConfig: SiteConfig;
   modPermissions: ModPermissions;
   chatConfig: ChatConfig;
@@ -363,6 +365,7 @@ export function AdminShell({
   worldSessionConfig,
   characterConfig,
   worldSpawnConfig,
+  worldEnvironmentConfig,
   siteConfig,
   modPermissions: _modPermissions,
   chatConfig,
@@ -711,6 +714,7 @@ export function AdminShell({
             worldSessionConfig={worldSessionConfig}
             characterConfig={characterConfig}
             worldSpawnConfig={worldSpawnConfig}
+            worldEnvironmentConfig={worldEnvironmentConfig}
             topProfiles={profiles}
             donConfig={donConfig}
             snakeConfig={snakeConfig}
