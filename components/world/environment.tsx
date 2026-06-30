@@ -85,7 +85,7 @@ function InstancedTrees({ trees }: { trees: Obstacle[] }) {
   if (!trees.length) return null;
   return (
     <group>
-      <Instances limit={trees.length} range={trees.length} castShadow>
+      <Instances limit={trees.length} range={trees.length} castShadow frustumCulled={false}>
         <cylinderGeometry args={[0.16, 0.2, 1.2, 6]} />
         <meshStandardMaterial color={TRUNK_COLOR} />
         {trees.map((t, i) => (
@@ -93,7 +93,7 @@ function InstancedTrees({ trees }: { trees: Obstacle[] }) {
         ))}
       </Instances>
       {FOLIAGE_LAYERS.map((c, li) => (
-        <Instances key={li} limit={trees.length} range={trees.length} castShadow>
+        <Instances key={li} limit={trees.length} range={trees.length} castShadow frustumCulled={false}>
           <coneGeometry args={[c.r, c.h, 7]} />
           <meshStandardMaterial emissive="#0c241a" emissiveIntensity={0.32} />
           {trees.map((t, i) => (
@@ -109,14 +109,14 @@ function InstancedRocks({ rocks }: { rocks: Obstacle[] }) {
   if (!rocks.length) return null;
   return (
     <group>
-      <Instances limit={rocks.length} range={rocks.length} castShadow>
+      <Instances limit={rocks.length} range={rocks.length} castShadow frustumCulled={false}>
         <dodecahedronGeometry args={[0.55, 0]} />
         <meshStandardMaterial color="#5b6066" emissive="#1a241c" emissiveIntensity={0.25} flatShading />
         {rocks.map((r, i) => (
           <Instance key={i} position={[r.x, 0.28 * r.scale, r.z]} scale={r.scale} rotation={[0.3, (r.rot ?? 0) + 0.6, 0.2]} />
         ))}
       </Instances>
-      <Instances limit={rocks.length} range={rocks.length} castShadow>
+      <Instances limit={rocks.length} range={rocks.length} castShadow frustumCulled={false}>
         <dodecahedronGeometry args={[0.3, 0]} />
         <meshStandardMaterial color="#4d5258" emissive="#16201a" emissiveIntensity={0.25} flatShading />
         {rocks.map((r, i) => {
@@ -147,7 +147,7 @@ function InstancedGrass({ tufts }: { tufts: { x: number; z: number }[] }) {
   }, [tufts]);
   if (!blades.length) return null;
   return (
-    <Instances limit={blades.length} range={blades.length}>
+    <Instances limit={blades.length} range={blades.length} frustumCulled={false}>
       <coneGeometry args={[0.05, 0.24, 5]} />
       <meshStandardMaterial />
       {blades.map((b, i) => (
@@ -161,14 +161,14 @@ function InstancedMushrooms({ mushrooms }: { mushrooms: { x: number; z: number; 
   if (!mushrooms.length) return null;
   return (
     <group>
-      <Instances limit={mushrooms.length} range={mushrooms.length}>
+      <Instances limit={mushrooms.length} range={mushrooms.length} frustumCulled={false}>
         <cylinderGeometry args={[0.05, 0.08, 0.36, 6]} />
         <meshStandardMaterial color="#d9c7b8" />
         {mushrooms.map((m, i) => (
           <Instance key={i} position={[m.x, 0.18 * m.scale, m.z]} scale={m.scale} />
         ))}
       </Instances>
-      <Instances limit={mushrooms.length} range={mushrooms.length}>
+      <Instances limit={mushrooms.length} range={mushrooms.length} frustumCulled={false}>
         <sphereGeometry args={[0.18, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
         <meshBasicMaterial toneMapped={false} />
         {mushrooms.map((m, i) => (
@@ -182,7 +182,7 @@ function InstancedMushrooms({ mushrooms }: { mushrooms: { x: number; z: number; 
 function InstancedCrates({ crates }: { crates: Obstacle[] }) {
   if (!crates.length) return null;
   return (
-    <Instances limit={crates.length} range={crates.length} castShadow>
+    <Instances limit={crates.length} range={crates.length} castShadow frustumCulled={false}>
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial color="#6b4f2a" emissive="#160d05" emissiveIntensity={0.2} roughness={0.9} flatShading />
       {crates.map((o, i) => {
