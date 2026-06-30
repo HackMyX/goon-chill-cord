@@ -185,6 +185,10 @@ export function Scene({
 
   return (
     <>
+      {/* Opaker GL-Hintergrund: macht die Canvas blickdicht (Nebelfarbe der
+          Tageszeit). Falls der Render-Loop je 1 Frame stockt, sieht man dann
+          höchstens diesen dunklen Ton — NIE den weißen Browser-Hintergrund. */}
+      <color attach="background" args={[tp.fog]} />
       {/* Dusk sky — sun held low near the horizon (rather than drei's Sky
           default midday look) so it reads as a moody purple/orange evening
           instead of a bright cartoon-blue day, matching the rest of the

@@ -934,7 +934,7 @@ export function WorldShell({
 
       <div
         ref={canvasWrapRef}
-        className={isMobile && !showPortraitGate ? "absolute inset-0" : "relative min-h-0 flex-1"}
+        className={`bg-[#0a0712] ${isMobile && !showPortraitGate ? "absolute inset-0" : "relative min-h-0 flex-1"}`}
       >
 
         {/* Settings button — only visible in ESC/pause mode, not during active play */}
