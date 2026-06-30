@@ -25,6 +25,7 @@ import { XpGainToast } from "@/components/layout/xp-gain-toast";
 import { FeedbackHost } from "@/components/layout/feedback-host";
 import { NotificationToast } from "@/components/layout/notification-toast";
 import { VersionWatcher } from "@/components/layout/version-watcher";
+import { VersionUpdateBanner } from "@/components/layout/version-update-banner";
 import { PatchnotePopupLoader } from "@/components/layout/patchnote-popup-loader";
 import { GlobalBroadcast } from "@/components/global/global-broadcast";
 import { GenderGate } from "@/components/auth/gender-gate";
@@ -104,6 +105,7 @@ export default async function RootLayout({
         <FeedbackHost />
         <NotificationToast />
         <VersionWatcher />
+        <VersionUpdateBanner />
         <GlobalBroadcast />
         <GenderGate />
         <SupportButton />
