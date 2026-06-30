@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf, Settings, RotateCcw, Maximize2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
@@ -121,6 +121,21 @@ function StatBar({
       <span className="sr-only">{label}</span>
     </div>
   );
+}
+
+/** Feuert genau einmal beim ersten gerenderten Frame INNERHALB der Scene-
+ * Suspense. Da troika-Text (z.B. das Spieler-Namensschild) beim ersten Mount
+ * seinen Font async lädt und dabei die Suspense neu auslöst, läuft dieses
+ * useFrame erst, wenn ALLES (inkl. Font) geladen & gerendert ist — der ideale
+ * Moment, den schwarzen Intro-Cover auszublenden, ohne den „Font-Flicker". */
+function FirstFrameSignal({ onReady }: { onReady: () => void }) {
+  const fired = useRef(false);
+  useFrame(() => {
+    if (fired.current) return;
+    fired.current = true;
+    onReady();
+  });
+  return null;
 }
 
 export function WorldShell({
@@ -268,10 +283,21 @@ export function WorldShell({
   useEffect(() => {
     if (cameraControls.locked) setHasEnteredWorld(true);
   }, [cameraControls.locked]);
-  // Black-Intro: kurz schwarz halten beim ersten Betreten, dann sanft aufdecken.
+  // Black-Intro: schwarz halten bis die Scene WIRKLICH gerendert hat (erstes
+  // Frame innerhalb der Suspense — nach Font-/Asset-Load), mind. 700ms, sonst
+  // Sicherheits-Abbruch nach 6s. So gibt es keinen zweiten „Font-Flicker".
+  const enteredAtRef = useRef(0);
+  useEffect(() => {
+    if (hasEnteredWorld && !enteredAtRef.current) enteredAtRef.current = Date.now();
+  }, [hasEnteredWorld]);
+  const handleSceneReady = useCallback(() => {
+    const elapsed = Date.now() - (enteredAtRef.current || Date.now());
+    const wait = Math.max(0, 700 - elapsed);
+    setTimeout(() => setIntroCover(false), wait);
+  }, []);
   useEffect(() => {
     if (!hasEnteredWorld) return;
-    const t = setTimeout(() => setIntroCover(false), 1000);
+    const t = setTimeout(() => setIntroCover(false), 6000); // Safety: nie schwarz hängen bleiben
     return () => clearTimeout(t);
   }, [hasEnteredWorld]);
   useEffect(() => {
@@ -1215,6 +1241,7 @@ export function WorldShell({
               verified={verified}
               prioBadges={prioBadges}
             />
+            <FirstFrameSignal onReady={handleSceneReady} />
           </Suspense>
         </Canvas>
       </div>
