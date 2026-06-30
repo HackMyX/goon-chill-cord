@@ -9,7 +9,7 @@ import { DEFAULT_WORLD_ENVIRONMENT, type WorldEnvironmentConfig } from "@/lib/wo
 // Deterministisch (mulberry32-Seeds) wie zuvor; dichte-abhängig (env-Config).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ObstacleKind = "tree" | "rock" | "ruin" | "monument" | "wall" | "lamp" | "crate";
+export type ObstacleKind = "tree" | "rock" | "ruin" | "monument" | "wall" | "lamp" | "crate" | "roof";
 
 export interface Obstacle {
   kind: ObstacleKind;
@@ -54,11 +54,13 @@ function pushWall(out: Obstacle[], axis: "x" | "z", x: number, z: number, half: 
   out.push({ kind: "wall", x, z, scale: 1, shape: "box", hx, hz, r: Math.max(hx, hz), blockH: h, h, len: half * 2 });
 }
 
-/** Dachloses Ruinen-Haus: 4 Wände mit einer Türöffnung auf Seite `door`. */
-function emitHouse(out: Obstacle[], cx: number, cz: number, w: number, d: number, wallH: number, door: number, rand: () => number) {
+/** Haus: 4 Wände mit Türöffnungen auf MEHREREN Seiten (mehrere Ausgänge → man
+ * sitzt nicht in der Falle). `intact` = höhere, gleichmäßige Wände + Dach;
+ * sonst verfallene, ungleiche Ruinen-Wände. */
+function emitHouse(out: Obstacle[], cx: number, cz: number, w: number, d: number, wallH: number, doorSides: number[], intact: boolean, rand: () => number) {
   const hw = w / 2;
   const hd = d / 2;
-  const doorHalf = 0.7;
+  const doorHalf = 0.75;
   type Side = { axis: "x" | "z"; x: number; z: number; half: number };
   const sides: Side[] = [
     { axis: "x", x: cx, z: cz + hd, half: hw },
@@ -67,13 +69,13 @@ function emitHouse(out: Obstacle[], cx: number, cz: number, w: number, d: number
     { axis: "z", x: cx - hw, z: cz, half: hd },
   ];
   sides.forEach((s, i) => {
-    const h = wallH * (0.7 + rand() * 0.55); // verfallene, ungleiche Wandhöhen
-    if (i !== door) {
+    const h = intact ? wallH : wallH * (0.5 + rand() * 0.65); // heil = voll, Ruine = uneben/gebrochen
+    if (!doorSides.includes(i)) {
       pushWall(out, s.axis, s.x, s.z, s.half, h);
       return;
     }
     const segHalf = (s.half - doorHalf) / 2;
-    if (segHalf <= 0.2) return; // Tür zu breit → ganze Seite offen
+    if (segHalf <= 0.2) return; // Türöffnung füllt die ganze Seite
     const off = doorHalf + segHalf;
     if (s.axis === "x") {
       pushWall(out, "x", s.x - off, s.z, segHalf, h);
@@ -83,6 +85,10 @@ function emitHouse(out: Obstacle[], cx: number, cz: number, w: number, d: number
       pushWall(out, "z", s.x, s.z + off, segHalf, h);
     }
   });
+  // Fast heile Häuser bekommen ein Dach (render-only, blockH 0 → keine Kollision).
+  if (intact) {
+    out.push({ kind: "roof", x: cx, z: cz, scale: 1, shape: "box", hx: hw + 0.25, hz: hd + 0.25, r: 0, blockH: 0, h: wallH, len: w });
+  }
 }
 
 export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIRONMENT): Obstacle[] {
@@ -91,7 +97,7 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
   // Bäume — hoher Stamm, NICHT überspringbar.
   {
     const rand = mulberry32(1337);
-    const count = dens(80, env.treeDensity);
+    const count = dens(120, env.treeDensity);
     const inner = 11;
     const outer = WORLD_RADIUS - 6;
     for (let i = 0; i < count; i++) {
@@ -114,7 +120,7 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
   {
     const rand = mulberry32(7654);
     const outer = WORLD_RADIUS - 6;
-    const count = dens(55, env.rockDensity);
+    const count = dens(90, env.rockDensity);
     for (let i = 0; i < count; i++) {
       const angle = rand() * Math.PI * 2;
       const radius = 5 + rand() * (outer - 5);
@@ -164,27 +170,46 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
   // Türöffnung) + Laternen + Kisten/Trümmer. buildingDensity steuert die Menge.
   {
     const rand = mulberry32(80808);
-    const clusters = Math.max(0, Math.round(2 * (env.buildingDensity ?? 1)));
+    // Mehr & größere Stadtviertel auf der größeren Map.
+    const clusters = Math.max(0, Math.round(3.5 * (env.buildingDensity ?? 1)));
+    // Hilfsfunktion: wähle 2–3 verschiedene Türseiten (mehrere Ausgänge).
+    const pickDoors = () => {
+      const all = [0, 1, 2, 3];
+      const n = 2 + Math.floor(rand() * 2); // 2–3 Türen
+      const picked: number[] = [];
+      for (let k = 0; k < n; k++) picked.push(all.splice(Math.floor(rand() * all.length), 1)[0]);
+      return picked;
+    };
     for (let cl = 0; cl < clusters; cl++) {
       const ca = rand() * Math.PI * 2;
       const cr = 14 + rand() * (WORLD_RADIUS - 26);
       const ox = Math.cos(ca) * cr;
       const oz = Math.sin(ca) * cr;
-      const houses = 3 + Math.floor(rand() * 3);
+      const spread = 22;
+      const houses = 5 + Math.floor(rand() * 4); // 5–8 Häuser je Viertel
       for (let h = 0; h < houses; h++) {
-        const w = 3.5 + rand() * 3.2;
-        const d = 3.5 + rand() * 3.2;
-        emitHouse(out, ox + (rand() - 0.5) * 17, oz + (rand() - 0.5) * 17, w, d, 1.9 + rand() * 1.3, Math.floor(rand() * 4), rand);
+        const intact = rand() < 0.45; // ~45% fast heil (mit Dach), Rest Ruine
+        const w = (intact ? 4 : 3.5) + rand() * 3.5;
+        const d = (intact ? 4 : 3.5) + rand() * 3.5;
+        const wallH = intact ? 2.6 + rand() * 1.0 : 1.6 + rand() * 1.2;
+        emitHouse(out, ox + (rand() - 0.5) * spread, oz + (rand() - 0.5) * spread, w, d, wallH, pickDoors(), intact, rand);
       }
-      const lamps = 2 + Math.floor(rand() * 3);
+      const lamps = 3 + Math.floor(rand() * 4);
       for (let l = 0; l < lamps; l++) {
-        out.push({ kind: "lamp", x: ox + (rand() - 0.5) * 19, z: oz + (rand() - 0.5) * 19, scale: 1, shape: "circle", r: 0.18, blockH: 3.2, hue: Math.floor(rand() * 3) });
+        out.push({ kind: "lamp", x: ox + (rand() - 0.5) * spread, z: oz + (rand() - 0.5) * spread, scale: 1, shape: "circle", r: 0.18, blockH: 3.2, hue: Math.floor(rand() * 3) });
       }
-      const crates = 3 + Math.floor(rand() * 4);
+      const crates = 4 + Math.floor(rand() * 5);
       for (let c2 = 0; c2 < crates; c2++) {
-        const s = 0.4 + rand() * 0.35;
-        out.push({ kind: "crate", x: ox + (rand() - 0.5) * 17, z: oz + (rand() - 0.5) * 17, scale: s, shape: "box", hx: s, hz: s, r: s, blockH: s * 1.4 + 0.18, rot: rand() * Math.PI * 2 });
+        const s = 0.4 + rand() * 0.4;
+        out.push({ kind: "crate", x: ox + (rand() - 0.5) * spread, z: oz + (rand() - 0.5) * spread, scale: s, shape: "box", hx: s, hz: s, r: s, blockH: s * 1.4 + 0.18, rot: rand() * Math.PI * 2 });
       }
+    }
+    // Vereinzelte Ruinen-Häuser quer über die Map (apokalyptisch verstreut).
+    const strays = Math.round(6 * (env.buildingDensity ?? 1));
+    for (let s = 0; s < strays; s++) {
+      const a = rand() * Math.PI * 2;
+      const r = 16 + rand() * (WORLD_RADIUS - 24);
+      emitHouse(out, Math.cos(a) * r, Math.sin(a) * r, 3.5 + rand() * 2.5, 3.5 + rand() * 2.5, 1.3 + rand() * 1.1, pickDoors(), false, rand);
     }
   }
 

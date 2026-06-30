@@ -6,4 +6,4 @@
  * in sync with one constant is the whole point: changing this number alone
  * grows or shrinks the entire world consistently.
  */
-export const WORLD_RADIUS = 55;
+export const WORLD_RADIUS = 78;

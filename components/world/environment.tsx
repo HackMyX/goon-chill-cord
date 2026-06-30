@@ -165,6 +165,26 @@ function RuinWall({ o }: { o: Obstacle }) {
   );
 }
 
+/** Dach eines (fast heilen) Hauses — leicht überstehende Platte + flacher First. */
+function Roof({ o }: { o: Obstacle }) {
+  const hx = o.hx ?? 2;
+  const hz = o.hz ?? 2;
+  const base = o.h ?? 2.5;
+  return (
+    <group position={[o.x, base, o.z]}>
+      <mesh position={[0, 0.12, 0]} castShadow>
+        <boxGeometry args={[hx * 2, 0.24, hz * 2]} />
+        <meshStandardMaterial color="#3a2a22" roughness={0.95} flatShading />
+      </mesh>
+      {/* First-Balken */}
+      <mesh position={[0, 0.32, 0]}>
+        <boxGeometry args={[hx * 1.4, 0.16, 0.18]} />
+        <meshStandardMaterial color="#2a1d16" roughness={1} />
+      </mesh>
+    </group>
+  );
+}
+
 /** Verlassene Straßenlaterne — Pfosten + flackernd-glühendes Licht oben. */
 function LampPost({ o }: { o: Obstacle }) {
   const tint = ["#fbbf24", "#a855f7", "#38bdf8"][o.hue ?? 0];
@@ -344,6 +364,7 @@ export function Environment({
   const walls = useMemo(() => obstacles.filter((o) => o.kind === "wall"), [obstacles]);
   const lamps = useMemo(() => obstacles.filter((o) => o.kind === "lamp"), [obstacles]);
   const crates = useMemo(() => obstacles.filter((o) => o.kind === "crate"), [obstacles]);
+  const roofs = useMemo(() => obstacles.filter((o) => o.kind === "roof"), [obstacles]);
 
   const grassTufts = useMemo(() => {
     const rand = mulberry32(4242);
@@ -399,6 +420,9 @@ export function Environment({
       ))}
       {walls.map((o, i) => (
         <RuinWall key={`w${i}`} o={o} />
+      ))}
+      {roofs.map((o, i) => (
+        <Roof key={`rf${i}`} o={o} />
       ))}
       {lamps.map((o, i) => (
         <LampPost key={`l${i}`} o={o} />
