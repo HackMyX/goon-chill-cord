@@ -1,0 +1,11 @@
+CC0-3D-Modelle (Public Domain, KEINE Namensnennung erforderlich — hier nur zur
+Nachverfolgung der Herkunft). Alle von Quaternius via poly.pizza, Lizenz CC0 1.0.
+
+tree.glb    "Dead Tree with Snow" by Quaternius (CC0 1.0) — https://poly.pizza/m/PILl2nbDNz
+rock.glb    "Rock"                by Quaternius (CC0 1.0) — https://poly.pizza/m/RtLRqYjfMs
+ruin.glb    "Column"              by Quaternius (CC0 1.0) — https://poly.pizza/m/wLubNpOTX4
+debris.glb  "Debris Pile"         by Quaternius (CC0 1.0) — https://poly.pizza/m/WrIiMMxyEP
+wreck.glb   "Police Car"          by Quaternius (CC0 1.0) — https://poly.pizza/m/BwwnUrWGmV
+
+Lizenz: https://creativecommons.org/publicdomain/zero/1.0/
+(lamp + campfire bleiben prozedural — tragen Licht/Animation.)

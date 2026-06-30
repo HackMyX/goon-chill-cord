@@ -40,12 +40,21 @@ export interface WorldModelDef {
  * besser prozedural, weil ihre Form direkt an die Kollision/Nav gekoppelt ist.
  */
 export const WORLD_MODEL_REGISTRY: Partial<Record<ObstacleKind, WorldModelDef>> = {
-  // (absichtlich leer — Modelle werden hier nach dem Drop-in aktiviert)
+  // CC0-Modelle von Quaternius (poly.pizza), Skalierung/yOffset aus echter
+  // Bounding-Box auf die jeweilige Kollisionsform abgestimmt. Siehe ATTRIBUTION.txt.
+  tree: { url: "/models/world/tree.glb", scale: 1.199, yOffset: 0.086 }, // "Dead Tree with Snow"
+  rock: { url: "/models/world/rock.glb", scale: 1.72, yOffset: 0.031 }, // "Rock"
+  ruin: { url: "/models/world/ruin.glb", scale: 0.589, yOffset: 0 }, // "Column"
+  debris: { url: "/models/world/debris.glb", scale: 0.571, yOffset: 0 }, // "Debris Pile"
+  // Auto-Länge ist nativ Z → 90° drehen, damit sie zur Kollisionsbox (lang in X) passt.
+  wreck: { url: "/models/world/wreck.glb", scale: 0.617, yOffset: 0, yawOffset: Math.PI / 2 }, // "Police Car"
 };
 
-/** Kinds, die überhaupt per Modell ersetzbar sind (Rest bleibt immer prozedural). */
+/** Kinds, die überhaupt per Modell ersetzbar sind (Rest bleibt immer prozedural).
+ * crate = dimensionsgetrieben (Theken/Regale/Zelte) → NICHT swappen. campfire/lamp
+ * tragen Licht/Animation → bleiben prozedural (können bei Bedarf hier ergänzt werden). */
 export const MODEL_SWAPPABLE_KINDS: ObstacleKind[] = [
-  "tree", "rock", "ruin", "wreck", "debris", "crate", "lamp", "campfire",
+  "tree", "rock", "ruin", "wreck", "debris", "lamp", "campfire",
 ];
 
 export function modelForKind(kind: ObstacleKind): WorldModelDef | undefined {

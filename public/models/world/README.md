@@ -39,4 +39,15 @@ der Suspense-Fallback laufen automatisch (`components/world/world-model-instance
 
 ## Aktuell abgelegte Modelle
 
-_(noch keine — Registry leer, alles prozedural)_
+Alle CC0 von Quaternius (poly.pizza), Maße/Skalierung siehe `lib/world-models.ts`:
+
+| Datei | Kind | Modell | Größe |
+|-------|------|--------|-------|
+| `tree.glb` | tree | „Dead Tree with Snow" | 56 KB |
+| `rock.glb` | rock | „Rock" | 30 KB |
+| `ruin.glb` | ruin | „Column" | 30 KB |
+| `debris.glb` | debris | „Debris Pile" | 26 KB |
+| `wreck.glb` | wreck | „Police Car" (yaw 90°) | 176 KB |
+
+`campfire` + `lamp` bleiben **prozedural** (Licht/Flammen-Animation). `crate` bleibt
+prozedural (dimensionsgetrieben). Lizenz-Nachweis: `ATTRIBUTION.txt`.
