@@ -116,9 +116,8 @@ function emitShop(out: Obstacle[], cx: number, cz: number, w: number, d: number,
   } else {
     out.push({ kind: "crate", x: front.x, z: front.z, scale: 1, shape: "box", hx: 0.28, hz: front.half * 0.8, r: front.half * 0.8, blockH: counterH, rot: 0 });
   }
-  // Dach + leuchtendes Ladenschild (als Laterne mit Glow)
+  // Dach (Beleuchtung kommt von den Straßenlaternen — NICHT im Eingang).
   out.push({ kind: "roof", x: cx, z: cz, scale: 1, shape: "box", hx: hw + 0.3, hz: hd + 0.3, r: 0, blockH: 0, h: wallH, tone });
-  out.push({ kind: "lamp", x: front.x, z: front.z, scale: 1, shape: "circle", r: 0.16, blockH: 3, hue: Math.floor(rand() * 3) });
 }
 
 /** Straße/Pfad (render-only, blockH 0): Mittelpunkt + Länge/Breite + Winkel. */
@@ -147,67 +146,134 @@ function pickDoors(rand: () => number): number[] {
 
 // ── Orts-Generatoren (jeder erzeugt einen eigenständigen, erkennbaren Platz) ──
 
-/** DORF: Häuser-Raster mit Straßen, Plätzen, Laternen, ein paar Läden. */
-function genVillage(out: Obstacle[], ox: number, oz: number, rand: () => number) {
-  const cols = 4;
-  const rows = 4;
-  const cell = 12;
-  const halfW = ((cols - 1) * cell) / 2;
-  const halfD = ((rows - 1) * cell) / 2;
-  // Straßen (Längs + Quer zwischen den Häuserreihen)
-  for (let gx = 0; gx < cols - 1; gx++) {
-    const rx = ox - halfW + gx * cell + cell / 2;
-    roadBetween(out, rx, oz - halfD - 5, rx, oz + halfD + 5, 3.6);
-  }
-  for (let gz = 0; gz < rows - 1; gz++) {
-    const rz = oz - halfD + gz * cell + cell / 2;
-    roadBetween(out, ox - halfW - 5, rz, ox + halfW + 5, rz, 3.6);
-  }
-  for (let gx = 0; gx < cols; gx++) {
-    for (let gz = 0; gz < rows; gz++) {
-      if (rand() < 0.26) continue; // Lücke / Platz
-      const hx0 = ox - halfW + gx * cell + (rand() - 0.5) * 2;
-      const hz0 = oz - halfD + gz * cell + (rand() - 0.5) * 2;
-      if (rand() < 0.22) {
-        // Laden mit offener Front (zur nächsten Straße gewandt)
-        emitShop(out, hx0, hz0, 4.5 + rand() * 1.5, 4.5 + rand() * 1.5, 2.6 + rand() * 0.6, Math.floor(rand() * 4), rand, 0);
-      } else {
-        const intact = rand() < 0.5;
-        const w = (intact ? 4.5 : 3.8) + rand() * 2.5;
-        const d = (intact ? 4.5 : 3.8) + rand() * 2.5;
-        // gelegentlich „zweistöckig" wirkende, höhere Häuser → weniger Einerlei
-        const tall = rand() < 0.25;
-        const wallH = (intact ? 2.7 + rand() * 1.0 : 1.5 + rand() * 1.2) + (tall ? 1.6 : 0);
-        emitHouse(out, hx0, hz0, w, d, wallH, pickDoors(rand), intact, rand, 0);
-      }
-    }
-  }
-  const span = Math.max(halfW, halfD) + 4;
-  for (let l = 0; l < 6; l++) {
-    out.push({ kind: "lamp", x: ox + (rand() - 0.5) * span * 2, z: oz + (rand() - 0.5) * span * 2, scale: 1, shape: "circle", r: 0.18, blockH: 3.2, hue: Math.floor(rand() * 3) });
-  }
-  for (let c = 0; c < 7; c++) {
-    const s = 0.4 + rand() * 0.4;
-    out.push({ kind: "crate", x: ox + (rand() - 0.5) * span * 2, z: oz + (rand() - 0.5) * span * 2, scale: s, shape: "box", hx: s, hz: s, r: s, blockH: s * 1.4 + 0.18, rot: rand() * Math.PI * 2 });
+function addLamp(out: Obstacle[], x: number, z: number, rand: () => number) {
+  out.push({ kind: "lamp", x, z, scale: 1, shape: "circle", r: 0.18, blockH: 3.2, hue: Math.floor(rand() * 3) });
+}
+
+/** Laternen entlang einer Straße — am Straßenrand, in Abständen, abwechselnd
+ * links/rechts (nie in Türen, weil sie auf der Straße sitzen). */
+function lampLine(out: Obstacle[], ax: number, az: number, bx: number, bz: number, spacing: number, rand: () => number) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const len = Math.hypot(dx, dz);
+  if (len < 1) return;
+  const n = Math.max(1, Math.floor(len / spacing));
+  const ux = dx / len;
+  const uz = dz / len;
+  const px = -uz; // Senkrechte (Straßenrand-Versatz)
+  const pz = ux;
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const side = i % 2 === 0 ? 1 : -1;
+    addLamp(out, ax + dx * t + px * 3.2 * side, az + dz * t + pz * 3.2 * side, rand);
   }
 }
 
-/** MARKT: zwei Reihen leerer Läden an einer Mittel-Gasse. */
+/** Ein Gebäude (Haus / Laden / Ruine), dessen EINGANG zur Straße (doorSide) zeigt. */
+function placeBuilding(out: Obstacle[], cx: number, cz: number, doorSide: number, rand: () => number, tone: number) {
+  const back = doorSide ^ 1; // gegenüberliegende Seite = Hinterausgang (0↔1, 2↔3)
+  const roll = rand();
+  if (roll < 0.22) {
+    emitShop(out, cx, cz, 5 + rand() * 1.5, 4.5 + rand() * 1.2, 2.6 + rand() * 0.5, doorSide, rand, tone);
+  } else if (roll < 0.42) {
+    emitHouse(out, cx, cz, 4 + rand() * 2.2, 4 + rand() * 2.2, 1.2 + rand() * 1.0, [doorSide, back], false, rand, tone); // Ruine
+  } else {
+    const tall = rand() < 0.3;
+    const w = 4.5 + rand() * 2.2;
+    const d = 4.5 + rand() * 2.2;
+    const wallH = 2.6 + rand() * 0.9 + (tall ? 1.5 : 0);
+    emitHouse(out, cx, cz, w, d, wallH, [doorSide, back], true, rand, tone);
+  }
+}
+
+/** Leerstehender Supermarkt: großes Gebäude, breiter Eingang zur Straße,
+ * Regalreihen mit alten Sachen (niedrige Boxen) + Kasse + Flachdach + Schild. */
+function emitSupermarket(out: Obstacle[], cx: number, cz: number, facing: number, rand: () => number) {
+  const w = 12;
+  const d = 8;
+  const wallH = 3.4;
+  const tone = 1;
+  const hw = w / 2;
+  const hd = d / 2;
+  type Side = { axis: "x" | "z"; x: number; z: number; half: number };
+  const sides: Side[] = [
+    { axis: "x", x: cx, z: cz + hd, half: hw },
+    { axis: "x", x: cx, z: cz - hd, half: hw },
+    { axis: "z", x: cx + hw, z: cz, half: hd },
+    { axis: "z", x: cx - hw, z: cz, half: hd },
+  ];
+  const entHalf = 2.2;
+  sides.forEach((s, i) => {
+    if (i !== facing) {
+      pushWall(out, s.axis, s.x, s.z, s.half, wallH, tone);
+      return;
+    }
+    const seg = (s.half - entHalf) / 2;
+    if (seg <= 0.2) return;
+    const off = entHalf + seg;
+    if (s.axis === "x") {
+      pushWall(out, "x", s.x - off, s.z, seg, wallH, tone);
+      pushWall(out, "x", s.x + off, s.z, seg, wallH, tone);
+    } else {
+      pushWall(out, "z", s.x, s.z - off, seg, wallH, tone);
+      pushWall(out, "z", s.x, s.z + off, seg, wallH, tone);
+    }
+  });
+  // Regalreihen (entlang X) mit Gängen dazwischen — „alte Sachen" im Inneren.
+  for (let row = 0; row < 2; row++) {
+    const rz = cz + (row === 0 ? -1.9 : 1.9);
+    for (let k = -2; k <= 2; k++) {
+      out.push({ kind: "crate", x: cx + k * 2.1, z: rz, scale: 1, shape: "box", hx: 0.85, hz: 0.5, r: 0.85, blockH: 1.35, rot: 0 });
+    }
+  }
+  // Kasse nahe Eingang
+  const front = sides[facing];
+  out.push({ kind: "crate", x: cx - 3, z: cz + (facing === 1 ? -hd + 1.3 : hd - 1.3), scale: 1, shape: "box", hx: 1.2, hz: 0.4, r: 1.2, blockH: 1.0, rot: 0 });
+  // Flachdach + Laterne NEBEN dem Eingang (nicht drin).
+  out.push({ kind: "roof", x: cx, z: cz, scale: 1, shape: "box", hx: hw + 0.3, hz: hd + 0.3, r: 0, blockH: 0, h: wallH, tone });
+  addLamp(out, cx - hw - 1, front.z, rand);
+}
+
+/** DORF: Hauptstraße mit Häusern beidseitig (Eingang zur Straße), Querstraßen,
+ * Laternen am Straßenrand, Supermarkt + Dorfplatz mit Brunnen. */
+function genVillage(out: Obstacle[], ox: number, oz: number, rand: () => number) {
+  const tone = 0;
+  const avHalf = 34;
+  roadBetween(out, ox - avHalf, oz, ox + avHalf, oz, 5.5); // Hauptstraße (Ost–West)
+  roadBetween(out, ox - 22, oz - 15, ox - 22, oz + 15, 3.4); // Querstraße links
+  roadBetween(out, ox + 22, oz - 15, ox + 22, oz + 15, 3.4); // Querstraße rechts
+  lampLine(out, ox - avHalf + 4, oz, ox + avHalf - 4, oz, 9, rand); // Laternen am Straßenrand
+
+  // Nordreihe: Eingänge zeigen nach Süden (Seite 0 = +z) zur Straße.
+  for (const lx of [-30, -22, -14, 14, 22, 30]) placeBuilding(out, ox + lx, oz - 8, 0, rand, tone);
+  // Südreihe rechts: Eingänge nach Norden (Seite 1 = −z).
+  for (const lx of [14, 22, 30]) placeBuilding(out, ox + lx, oz + 8, 1, rand, tone);
+  // Supermarkt links auf der Südseite (Front zur Straße).
+  emitSupermarket(out, ox - 24, oz + 9.5, 1, rand);
+
+  // Dorfplatz in der Mitte (offen): Brunnen/Denkmal + Bänke + Laternen.
+  out.push({ kind: "ruin", x: ox, z: oz + 9, scale: 1.1, r: 0.6, blockH: 2.2, rot: 0, h: 1.5 });
+  addLamp(out, ox - 6, oz + 7, rand);
+  addLamp(out, ox + 6, oz + 7, rand);
+  for (let i = 0; i < 4; i++) {
+    const s = 0.4 + rand() * 0.2;
+    out.push({ kind: "crate", x: ox + (rand() - 0.5) * 12, z: oz + 6 + rand() * 7, scale: s, shape: "box", hx: s, hz: s, r: s, blockH: s * 1.4 + 0.18, rot: rand() * Math.PI * 2 });
+  }
+}
+
+/** MARKT: zwei Reihen leerer Marktstände an einer Mittel-Gasse + Laternen. */
 function genMarket(out: Obstacle[], ox: number, oz: number, rand: () => number) {
   const n = 4;
-  const gap = 6.5;
+  const gap = 7;
   roadBetween(out, ox - (n * gap) / 2 - 3, oz, ox + (n * gap) / 2 + 3, oz, 5); // Mittel-Gasse
+  lampLine(out, ox - (n * gap) / 2, oz, ox + (n * gap) / 2, oz, 9, rand);
   for (let i = 0; i < n; i++) {
     const sx = ox - ((n - 1) * gap) / 2 + i * gap;
-    emitShop(out, sx, oz - 4.2, 4.2, 3.6, 2.5 + rand() * 0.5, 0, rand, 1); // Front zur Gasse (+z Seite open → facing 0)
-    emitShop(out, sx, oz + 4.2, 4.2, 3.6, 2.5 + rand() * 0.5, 1, rand, 1); // gegenüber (facing 1)
-  }
-  for (let c = 0; c < 8; c++) {
-    const s = 0.4 + rand() * 0.4;
-    out.push({ kind: "crate", x: ox + (rand() - 0.5) * n * gap, z: oz + (rand() - 0.5) * 3, scale: s, shape: "box", hx: s, hz: s, r: s, blockH: s * 1.4 + 0.18, rot: rand() * Math.PI * 2 });
-  }
-  for (let l = 0; l < 3; l++) {
-    out.push({ kind: "lamp", x: ox - 8 + l * 8, z: oz, scale: 1, shape: "circle", r: 0.18, blockH: 3.2, hue: Math.floor(rand() * 3) });
+    emitShop(out, sx, oz - 5, 4.4, 3.6, 2.5 + rand() * 0.5, 0, rand, 1); // Front zur Gasse (−z Seite zur Gasse → facing 0)
+    emitShop(out, sx, oz + 5, 4.4, 3.6, 2.5 + rand() * 0.5, 1, rand, 1);
+    // Markttisch direkt vor dem Stand
+    out.push({ kind: "crate", x: sx, z: oz - 2.4, scale: 1, shape: "box", hx: 1.0, hz: 0.4, r: 1.0, blockH: 0.95, rot: 0 });
+    out.push({ kind: "crate", x: sx, z: oz + 2.4, scale: 1, shape: "box", hx: 1.0, hz: 0.4, r: 1.0, blockH: 0.95, rot: 0 });
   }
 }
 
