@@ -2835,26 +2835,134 @@ function BraidHair({ color, gender }: { color: string; gender: "m" | "w" }) {
   );
 }
 
-const HAIR_VARIANTS = [
-  ShortHair,
-  LongHair,
-  MohawkHair,
-  PonytailHair,
-  BuzzcutHair,
-  AfroHair,
-  BunHair,
-  BraidHair,
+// ── Zusätzliche, eindeutig WEIBLICHE Frisuren ─────────────────────────────────
+// (kommen NUR in der FEMALE_HAIR-Liste vor → Frauen sehen nie eine Männerfrisur)
+
+// Bob — kinnlanger Rahmen ums Gesicht, weich nach innen gerollt.
+function BobHair({ color }: { color: string; gender: "m" | "w" }) {
+  return (
+    <group>
+      <mesh position={[0, 2.3, -0.04]}><boxGeometry args={[0.62, 0.2, 0.62]} /><meshStandardMaterial color={color} /></mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.31, 2.05, 0.05]}><boxGeometry args={[0.11, 0.48, 0.42]} /><meshStandardMaterial color={color} /></mesh>
+      ))}
+      {[-1, 1].map((s) => (
+        <mesh key={`c${s}`} position={[s * 0.27, 1.82, 0.12]} rotation={[0.35, 0, 0]}><boxGeometry args={[0.11, 0.13, 0.2]} /><meshStandardMaterial color={color} /></mesh>
+      ))}
+    </group>
+  );
+}
+
+// Wavy — volle, lange Wellen über Rücken & Seiten.
+function WavyHair({ color }: { color: string; gender: "m" | "w" }) {
+  return (
+    <group>
+      <mesh position={[0, 2.3, -0.04]}><boxGeometry args={[0.64, 0.2, 0.64]} /><meshStandardMaterial color={color} /></mesh>
+      {[0, 1, 2].map((i) => (
+        <mesh key={i} position={[0, 2.02 - i * 0.3, -0.3]} rotation={[0.12 * (i + 1), 0, 0]}>
+          <boxGeometry args={[0.6 - i * 0.05, 0.36, 0.16]} /><meshStandardMaterial color={color} />
+        </mesh>
+      ))}
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.33, 1.98, -0.02]}><boxGeometry args={[0.13, 0.56, 0.36]} /><meshStandardMaterial color={color} /></mesh>
+      ))}
+    </group>
+  );
+}
+
+// Pixie — kurz, aber feminin: weiche Kappe + gefegter Pony.
+function PixieHair({ color }: { color: string; gender: "m" | "w" }) {
+  return (
+    <group>
+      <mesh position={[0, 2.3, -0.03]}><boxGeometry args={[0.6, 0.2, 0.58]} /><meshStandardMaterial color={color} /></mesh>
+      <mesh position={[0.14, 2.25, 0.27]} rotation={[0, 0, -0.45]}><boxGeometry args={[0.36, 0.11, 0.14]} /><meshStandardMaterial color={color} /></mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.29, 2.15, 0.07]}><boxGeometry args={[0.09, 0.18, 0.18]} /><meshStandardMaterial color={color} /></mesh>
+      ))}
+    </group>
+  );
+}
+
+// Side-Part — Seitenscheitel mit gefegtem Pony, schulterlange Seiten.
+function SidePartHair({ color }: { color: string; gender: "m" | "w" }) {
+  return (
+    <group>
+      <mesh position={[0, 2.3, -0.04]}><boxGeometry args={[0.62, 0.2, 0.62]} /><meshStandardMaterial color={color} /></mesh>
+      <mesh position={[-0.1, 2.29, 0.28]} rotation={[0, 0, 0.28]}><boxGeometry args={[0.42, 0.11, 0.15]} /><meshStandardMaterial color={color} /></mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.32, 1.96, 0]}><boxGeometry args={[0.11, 0.6, 0.38]} /><meshStandardMaterial color={color} /></mesh>
+      ))}
+    </group>
+  );
+}
+
+// ── Zusätzliche, eindeutig MÄNNLICHE Frisuren ─────────────────────────────────
+
+// Spiky — mehrere kurze Stacheln.
+function SpikyHair({ color }: { color: string; gender: "m" | "w" }) {
+  const spikes: [number, number][] = [[-0.18, -0.12], [0.18, -0.12], [0, 0.04], [-0.16, 0.16], [0.16, 0.16], [0, -0.2]];
+  return (
+    <group>
+      <mesh position={[0, 2.25, -0.04]}><boxGeometry args={[0.56, 0.12, 0.56]} /><meshStandardMaterial color={color} /></mesh>
+      {spikes.map(([x, z], i) => (
+        <mesh key={i} position={[x, 2.42, z]}><coneGeometry args={[0.07, 0.2, 5]} /><meshStandardMaterial color={color} /></mesh>
+      ))}
+    </group>
+  );
+}
+
+// Undercut — volle Box oben, rasiert-dünne Seiten.
+function UndercutHair({ color }: { color: string; gender: "m" | "w" }) {
+  return (
+    <group>
+      <mesh position={[0, 2.36, -0.02]}><boxGeometry args={[0.5, 0.28, 0.56]} /><meshStandardMaterial color={color} /></mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.28, 2.18, 0]}><boxGeometry args={[0.06, 0.16, 0.52]} /><meshStandardMaterial color={color} /></mesh>
+      ))}
+    </group>
+  );
+}
+
+// Slick-Back — flacher, nach hinten gekämmter Schopf.
+function SlickBackHair({ color }: { color: string; gender: "m" | "w" }) {
+  return (
+    <mesh position={[0, 2.31, -0.09]} rotation={[-0.16, 0, 0]}>
+      <boxGeometry args={[0.56, 0.16, 0.68]} /><meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+
+// Flat-Top — hoher, flacher Block (klassisch maskulin).
+function FlatTopHair({ color }: { color: string; gender: "m" | "w" }) {
+  return (
+    <mesh position={[0, 2.41, -0.02]}>
+      <boxGeometry args={[0.54, 0.3, 0.56]} /><meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+
+// Geschlechts-getrennte, GLEICH indexierte Listen: dasselbe Item ergibt für
+// Männer eine Männerfrisur, für Frauen eine Frauenfrisur — nie „Opa-Haare".
+type HairFn = ({ color, gender }: { color: string; gender: "m" | "w" }) => React.JSX.Element;
+
+const MALE_HAIR: HairFn[] = [
+  ShortHair, BuzzcutHair, MohawkHair, AfroHair, SpikyHair, UndercutHair, SlickBackHair, FlatTopHair,
+];
+const FEMALE_HAIR: HairFn[] = [
+  BobHair, LongHair, PonytailHair, BunHair, BraidHair, WavyHair, PixieHair, SidePartHair,
 ];
 
-const EXACT_HAIR_SHAPE: Record<string, typeof ShortHair> = {
-  "Void-Haare": AfroHair,
-  "Sternen-Haare": BraidHair,
+// Spezial-Items zeigen einen festen Listen-Index (pro Geschlecht passend aufgelöst).
+const EXACT_HAIR_INDEX: Record<string, number> = {
+  "Void-Haare": 3,
+  "Sternen-Haare": 4,
 };
 
 export function HairVariant({ item, gender }: { item: EquippedItem; gender: "m" | "w" }) {
   const color = rarityColorFor(item, "#404040");
-  const Variant =
-    EXACT_HAIR_SHAPE[item.name] ?? HAIR_VARIANTS[variantIndex(item.name, HAIR_VARIANTS.length, item.rarity)];
+  const list = gender === "w" ? FEMALE_HAIR : MALE_HAIR;
+  const idx = EXACT_HAIR_INDEX[item.name] ?? variantIndex(item.name, list.length, item.rarity);
+  const Variant = list[idx] ?? list[0];
   return (
     <RarityFX rarity={item.rarity}>
       <Variant color={color} gender={gender} />
