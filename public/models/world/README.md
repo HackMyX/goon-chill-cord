@@ -41,13 +41,15 @@ der Suspense-Fallback laufen automatisch (`components/world/world-model-instance
 
 Alle CC0 von Quaternius (poly.pizza), Maße/Skalierung siehe `lib/world-models.ts`:
 
-| Datei | Kind | Modell | Größe |
-|-------|------|--------|-------|
-| `tree.glb` | tree | „Dead Tree with Snow" | 56 KB |
-| `rock.glb` | rock | „Rock" | 30 KB |
-| `ruin.glb` | ruin | „Column" | 30 KB |
-| `debris.glb` | debris | „Debris Pile" | 26 KB |
-| `wreck.glb` | wreck | „Police Car" (yaw 90°) | 176 KB |
+| Datei | Kind | Modell | Größe | aktiv? |
+|-------|------|--------|-------|--------|
+| `ruin.glb` | ruin | „Column" | 30 KB | ✅ |
+| `debris.glb` | debris | „Debris Pile" | 26 KB | ✅ |
+| `wreck.glb` | wreck | „Police Car" (yaw 90°) | 176 KB | ✅ |
+| `tree.glb` | tree | „Dead Tree with Snow" | 56 KB | ⏳ Phase 2 |
+| `rock.glb` | rock | „Rock" | 30 KB | ⏳ Phase 2 |
 
+`tree`/`rock` liegen bereit, sind aber **noch nicht in der Registry aktiv**: zu hohe
+Stückzahl für `<Clone>` (1 Draw-Call/Instanz) → erst mit GPU-Instancing in Phase 2.
 `campfire` + `lamp` bleiben **prozedural** (Licht/Flammen-Animation). `crate` bleibt
 prozedural (dimensionsgetrieben). Lizenz-Nachweis: `ATTRIBUTION.txt`.

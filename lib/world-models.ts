@@ -42,8 +42,14 @@ export interface WorldModelDef {
 export const WORLD_MODEL_REGISTRY: Partial<Record<ObstacleKind, WorldModelDef>> = {
   // CC0-Modelle von Quaternius (poly.pizza), Skalierung/yOffset aus echter
   // Bounding-Box auf die jeweilige Kollisionsform abgestimmt. Siehe ATTRIBUTION.txt.
-  tree: { url: "/models/world/tree.glb", scale: 1.199, yOffset: 0.086 }, // "Dead Tree with Snow"
-  rock: { url: "/models/world/rock.glb", scale: 1.72, yOffset: 0.031 }, // "Rock"
+  //
+  // NUR niedrig-zählige Kinds! <Clone> ist KEIN GPU-Instancing → 1 Draw-Call pro
+  // Instanz. wreck(~10)/ruin(~25)/debris(~15) sind unkritisch. tree(~224)/rock(~150)
+  // würden hunderte Draw-Calls erzeugen und das Mobile-60-FPS-Ziel killen → die GLBs
+  // liegen gemessen bereit (tree.glb/rock.glb), werden aber erst in PHASE 2 mit echtem
+  // GPU-Instancing (InstancedMesh/<Merged>) aktiviert. NICHT vorher hier eintragen.
+  //   tree:  { url: "/models/world/tree.glb", scale: 1.199, yOffset: 0.086 }, // Phase 2
+  //   rock:  { url: "/models/world/rock.glb", scale: 1.72,  yOffset: 0.031 }, // Phase 2
   ruin: { url: "/models/world/ruin.glb", scale: 0.589, yOffset: 0 }, // "Column"
   debris: { url: "/models/world/debris.glb", scale: 0.571, yOffset: 0 }, // "Debris Pile"
   // Auto-Länge ist nativ Z → 90° drehen, damit sie zur Kollisionsbox (lang in X) passt.
