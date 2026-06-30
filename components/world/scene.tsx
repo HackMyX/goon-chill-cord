@@ -235,12 +235,7 @@ export function Scene({
           Buchstaben schon beim Laden bauen, damit die ERSTE Schadenszahl bzw.
           der erste neue Name keinen einmaligen Worker-/GPU-Hänger verursacht
           (~5s nach Spawn beim ersten Treffer). Unsichtbar weit unter der Map. */}
-      <Text
-        position={[0, -300, 0]}
-        fontSize={0.01}
-        color="#000000"
-        characters="-+!?.,:0123456789 abcdefghijklmnopqrstuvwxyzäöüßABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ×"
-      >
+      <Text position={[0, -300, 0]} fontSize={0.01} color="#000000" characters="-+0123456789!×">
         -0123456789!
       </Text>
 
