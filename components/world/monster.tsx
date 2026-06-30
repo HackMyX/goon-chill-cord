@@ -275,6 +275,7 @@ export function Monster({
   const deathT = useRef(0);
   const spawnT = useRef(0);
   const hitGlow = useRef(0);
+  const auraRef = useRef<THREE.Mesh>(null);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
   // Idle-wander state — see WANDER_SPEED_FRACTION's doc comment above.
   const wanderAngle = useRef(0);
@@ -396,6 +397,12 @@ export function Monster({
         : type.visualKind === "skeleton"
           ? "#e8e4d8"
           : "#ffffff";
+
+  // Tier-Gefahr-Aura (vor useFrame berechnet, da der Puls sie liest).
+  const tier = type.health >= 200 ? 2 : type.health >= 100 ? 1 : 0;
+  const auraColor = tier === 2 ? "#ef4444" : tier === 1 ? "#f59e0b" : eyeColor;
+  const auraOuter = 0.55 + tier * 0.2;
+  const auraOpacity = 0.16 + tier * 0.1;
 
   useFrame((_, delta) => {
     const g = group.current;
@@ -561,6 +568,17 @@ export function Monster({
       g.position.y = initialPosition[1] + (moving ? Math.max(0, Math.sin(walkClock.current * 3)) * 0.22 : 0);
     }
 
+    // „Atmen": dezentes Auf/Ab der Oberkörper-Skalierung → die Mobs wirken
+    // lebendig statt wie Statuen (rotation.x bleibt davon unberührt).
+    if (upperBody.current) {
+      upperBody.current.scale.y = 1 + Math.sin(walkClock.current * 2.2) * 0.035;
+    }
+    // Gefahr-Aura pulsiert/pocht — stärkere Monster „atmen" Bedrohung.
+    if (auraRef.current) {
+      const am = auraRef.current.material as THREE.MeshBasicMaterial;
+      am.opacity = auraOpacity * (0.65 + 0.5 * Math.sin(walkClock.current * 2.6));
+    }
+
     if (healthFill.current) {
       const frac = Math.max(0, health.current / type.health);
       healthFill.current.scale.x = Math.max(0.001, frac);
@@ -570,18 +588,11 @@ export function Monster({
     }
   });
 
-  // Tier-Gefahr-Aura: ein glühender Boden-Ring, der stärkere Monster sofort
-  // lesbar macht (Gelb = mittel, Rot = stark). Skaliert mit der Monstergröße.
-  const tier = type.health >= 200 ? 2 : type.health >= 100 ? 1 : 0;
-  const auraColor = tier === 2 ? "#ef4444" : tier === 1 ? "#f59e0b" : eyeColor;
-  const auraOuter = 0.55 + tier * 0.2;
-  const auraOpacity = 0.16 + tier * 0.1;
-
   return (
     <group ref={group} position={initialPosition} scale={type.scale}>
       {/* Gefahr-Aura am Boden (nicht für Geister, die schweben) */}
       {!isGhost && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+        <mesh ref={auraRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
           <ringGeometry args={[auraOuter - 0.13, auraOuter, 36]} />
           <meshBasicMaterial color={auraColor} transparent opacity={auraOpacity} toneMapped={false} side={2} />
         </mesh>

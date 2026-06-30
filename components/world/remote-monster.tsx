@@ -104,6 +104,7 @@ export function RemoteMonster({
   const hasReceivedFirst = useRef(false);
   const movingRef = useRef(false);
   const walkClock = useRef(0);
+  const auraRef = useRef<THREE.Mesh>(null);
   const walkAmplitude = useRef(0);
 
   // Keep hp/maxHp in refs so the registry handle closure always reads current values.
@@ -243,6 +244,13 @@ export function RemoteMonster({
     }
     lunge.current = Math.max(0, lunge.current - delta * 3.5);
 
+    // Gefahr-Aura pulsiert — identisch zum lokalen Monster (für alle gleich).
+    if (auraRef.current) {
+      const t2 = type.health >= 200 ? 2 : type.health >= 100 ? 1 : 0;
+      const base = 0.16 + t2 * 0.1;
+      (auraRef.current.material as THREE.MeshBasicMaterial).opacity = base * (0.65 + 0.5 * Math.sin(walkClock.current * 2.6));
+    }
+
     if (legL.current) legL.current.rotation.x = swing;
     if (legR.current) legR.current.rotation.x = -swing;
     if (armL.current) armL.current.rotation.x = -swing * 0.8 - lunge.current * 0.5;
@@ -331,7 +339,7 @@ export function RemoteMonster({
   return (
     <group ref={group} position={[x, y, z]} scale={type.scale}>
       {!isGhost && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+        <mesh ref={auraRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
           <ringGeometry args={[auraOuter - 0.13, auraOuter, 36]} />
           <meshBasicMaterial color={auraColor} transparent opacity={auraOpacity} toneMapped={false} side={2} />
         </mesh>
