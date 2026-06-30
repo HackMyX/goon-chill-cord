@@ -103,6 +103,10 @@ export function MonsterBody({
   const isGolem = type.visualKind === "golem";
   const isSpider = type.visualKind === "spider";
   const isImp = type.visualKind === "imp";
+  const isBat = type.visualKind === "bat";
+  const isWisp = type.visualKind === "wisp";
+  const isBrute = type.visualKind === "brute";
+  const isReaper = type.visualKind === "reaper";
   const limbWidth = isSkeleton ? 0.16 : isOrc ? 0.3 : isDemon ? 0.27 : 0.22;
   const bodyOpacity = isGhost ? 0.5 : 1;
   const eyeColor =
@@ -114,6 +118,9 @@ export function MonsterBody({
     : isGolem ? "#f59e0b"
     : isSpider ? "#ef4444"
     : isImp ? "#fde047"
+    : isBat ? "#f87171"
+    : isWisp ? "#e0f2fe"
+    : isReaper ? "#a855f7"
     : "#fca5a5";
 
   const tier = type.health >= 200 ? 2 : type.health >= 100 ? 1 : 0;
@@ -199,6 +206,82 @@ export function MonsterBody({
             )),
           )}
         </group>
+      ) : isBat ? (
+        // Fledermaus: kleiner Körper + 2 große Flügel + Ohren + Augen. Schwebt
+        // (Parent-Hover). Körper auf upperBody (Atmen „flattert" die Flügel).
+        <group ref={refs.upperBody} position={[0, 0.9, 0]}>
+          <mesh castShadow>
+            <sphereGeometry args={[0.22, 14, 12]} />
+            <meshStandardMaterial ref={refs.torsoMaterial} color={type.colorHex} roughness={0.6} />
+          </mesh>
+          {[-1, 1].map((s) => (
+            <mesh key={s} position={[s * 0.34, 0.02, -0.04]} rotation={[0, s * 0.3, s * 0.5]}>
+              <boxGeometry args={[0.5, 0.34, 0.02]} />
+              <meshStandardMaterial color={type.colorHex} side={THREE.DoubleSide} roughness={0.7} />
+            </mesh>
+          ))}
+          {[-1, 1].map((s) => (
+            <mesh key={s} position={[s * 0.08, 0.2, 0.02]} rotation={[0, 0, s * 0.2]} castShadow>
+              <coneGeometry args={[0.05, 0.16, 5]} />
+              <meshStandardMaterial color={type.colorHex} />
+            </mesh>
+          ))}
+          <Eyes color={eyeColor} y={0.02} z={0.2} spread={0.07} r={0.04} />
+        </group>
+      ) : isWisp ? (
+        // Irrlicht: glühender Kern + Hülle + umkreisende Funken. Schwebt.
+        <group ref={refs.upperBody} position={[0, 1.0, 0]}>
+          <mesh>
+            <sphereGeometry args={[0.26, 16, 14]} />
+            <meshStandardMaterial ref={refs.torsoMaterial} color={type.colorHex} emissive={type.colorHex} emissiveIntensity={0.9} transparent opacity={0.5} roughness={0.1} />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[0.13, 12, 12]} />
+            <meshBasicMaterial color="#ffffff" toneMapped={false} />
+          </mesh>
+          {[0, 1, 2, 3, 4].map((i) => {
+            const a = (i / 5) * Math.PI * 2;
+            return (
+              <mesh key={i} position={[Math.cos(a) * 0.34, Math.sin(a) * 0.18, Math.sin(a) * 0.34]}>
+                <sphereGeometry args={[0.04, 8, 8]} />
+                <meshBasicMaterial color={eyeColor} toneMapped={false} />
+              </mesh>
+            );
+          })}
+        </group>
+      ) : isReaper ? (
+        // Seelenschnitter (Boss): hohe Kapuzen-Robe (Kegel) + dunkle Kapuze +
+        // glühende Augen + Sense auf armR (Lunge animiert sie). Schwebt.
+        <>
+          <group ref={refs.upperBody} position={[0, 1.0, 0]}>
+            <mesh position={[0, 0.2, 0]}>
+              <coneGeometry args={[0.5, 1.7, 12]} />
+              <meshStandardMaterial ref={refs.torsoMaterial} color={type.colorHex} emissive={type.colorHex} emissiveIntensity={0.25} transparent opacity={0.92} side={THREE.DoubleSide} />
+            </mesh>
+            <mesh position={[0, 1.0, 0.04]}>
+              <sphereGeometry args={[0.26, 14, 12, 0, Math.PI * 2, 0, Math.PI / 1.6]} />
+              <meshStandardMaterial color="#0a0a12" side={THREE.DoubleSide} />
+            </mesh>
+            <Eyes color={eyeColor} y={0.92} z={0.17} spread={0.08} r={0.05} />
+            <group ref={refs.armR} position={[0.42, 0.7, 0.05]}>
+              {/* Sensenstiel + Klinge */}
+              <mesh position={[0, -0.3, 0]} castShadow>
+                <cylinderGeometry args={[0.035, 0.035, 1.5, 6]} />
+                <meshStandardMaterial color="#2a2118" />
+              </mesh>
+              <mesh position={[-0.28, 0.42, 0]} rotation={[0, 0, 1.1]} castShadow>
+                <coneGeometry args={[0.1, 0.6, 4]} />
+                <meshStandardMaterial color="#c7d2fe" emissive="#a855f7" emissiveIntensity={0.6} metalness={0.5} />
+              </mesh>
+            </group>
+            <group ref={refs.armL} position={[-0.34, 0.7, 0.05]}>
+              <mesh position={[0, -0.3, 0]} castShadow>
+                <boxGeometry args={[0.1, 0.5, 0.1]} />
+                <meshStandardMaterial color={type.colorHex} />
+              </mesh>
+            </group>
+          </group>
+        </>
       ) : (
         <>
           <group ref={refs.upperBody} position={[0, 1.1, 0]}>
@@ -314,11 +397,25 @@ export function MonsterBody({
               </>
             )}
 
+            {/* Troll/Brute: Rücken-Buckel → hünenhafte, gebeugte Silhouette. */}
+            {isBrute && (
+              <mesh position={[0, 0.66, -0.14]} castShadow>
+                <sphereGeometry args={[0.28, 12, 10]} />
+                <meshStandardMaterial color={type.colorHex} />
+              </mesh>
+            )}
+
             <group ref={refs.armL} position={[-0.32, 0.65, 0]}>
               <mesh position={[0, -0.32, 0]} castShadow>
                 <boxGeometry args={[limbWidth, 0.62, limbWidth]} />
                 <meshStandardMaterial color={type.colorHex} transparent={isGhost} opacity={bodyOpacity} />
               </mesh>
+              {isBrute && (
+                <mesh position={[0, -0.66, 0.04]} castShadow>
+                  <boxGeometry args={[limbWidth + 0.12, 0.22, limbWidth + 0.12]} />
+                  <meshStandardMaterial color={type.colorHex} />
+                </mesh>
+              )}
             </group>
             <group ref={refs.armR} position={[0.32, 0.65, 0]}>
               <mesh position={[0, -0.32, 0]} castShadow>

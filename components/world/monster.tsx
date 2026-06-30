@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { Billboard } from "@react-three/drei";
 import { TextSprite } from "@/components/world/text-sprite";
 import { MonsterBody } from "@/components/world/monster-body";
-import type { MonsterTypeConfig } from "@/lib/monsters";
+import { isHoveringKind, type MonsterTypeConfig } from "@/lib/monsters";
 import type { CombatSharedState, MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { applyIncomingDamage } from "@/lib/combat";
@@ -329,6 +329,7 @@ export function Monster({
   const isGhost = type.visualKind === "ghost";
   const isOrc = type.visualKind === "orc";
   const isDemon = type.visualKind === "demon";
+  const hovering = isHoveringKind(type.visualKind);
   // slouch wird in useFrame für die Oberkörper-Neigung genutzt; Body-Geometrie
   // (limbWidth/eyeColor/bodyOpacity) liegt jetzt im geteilten <MonsterBody>.
   const slouch = type.visualKind === "zombie" ? 0.22 : isOrc ? 0.12 : 0;
@@ -521,8 +522,9 @@ export function Monster({
     if (armL.current) armL.current.rotation.x = -swing * 1.0 - lunge.current * 0.6;
     if (armR.current) armR.current.rotation.x = swing * 1.0 - lunge.current * 2.1; // Angriff: Arm hoch & runter
     if (upperBody.current) upperBody.current.rotation.x = slouch + lunge.current * 0.5; // stärkerer Vorlehn-Schlag
-    // Humanoide: Lauf-Wippen (vertikal) + Seitwärts-Schwanken → lebendiger, schwerer Gang.
-    if (!isGhost && !isSlime) {
+    // Bodengänger: Lauf-Wippen + Seitwärts-Schwanken. Schweber (Geist/Fledermaus/
+    // Irrlicht/Schnitter) NICHT — die hovern unten separat.
+    if (!hovering && !isSlime) {
       g.position.y = initialPosition[1] + (walkingNow ? Math.abs(Math.sin(walkClock.current)) * 0.09 : 0);
       if (upperBody.current) upperBody.current.rotation.z = walkingNow ? Math.sin(walkClock.current) * 0.1 : 0;
     }
@@ -531,7 +533,7 @@ export function Monster({
     // closing distance. Purely visual: every chase/range/hit calculation
     // above only ever reads `g.position.x/z`, never `.y`, so this can't
     // affect anything but how the monster looks.
-    if (isGhost) {
+    if (hovering) {
       g.position.y = initialPosition[1] + 0.3 + Math.sin(walkClock.current * 0.9) * 0.15;
     } else if (isSlime) {
       g.position.y = initialPosition[1] + (walkingNow ? Math.max(0, Math.sin(walkClock.current * 3)) * 0.22 : 0);

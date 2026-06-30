@@ -147,6 +147,30 @@ export function WorldSpawnConfigEditor({ config }: { config: WorldSpawnConfig })
         />
       </div>
 
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <NumField
+          label="Boss-Intervall Min (Sek.)"
+          hint="Mindestzeit zwischen zwei Boss-Erscheinen. Bosse spawnen über einen EIGENEN Track, max. 1 gleichzeitig. Erfordert Migration scripts/add-boss-spawn-config.cjs"
+          value={form.bossSpawnIntervalMinSec}
+          min={0} max={1200} step={5}
+          onChange={(v) => set("bossSpawnIntervalMinSec", v)}
+        />
+        <NumField
+          label="Boss-Intervall Max (Sek.)"
+          hint="Maximalzeit zwischen Boss-Erscheinen. 0 (Min+Max) = keine Bosse."
+          value={form.bossSpawnIntervalMaxSec}
+          min={0} max={1800} step={5}
+          onChange={(v) => set("bossSpawnIntervalMaxSec", v)}
+        />
+        <NumField
+          label="Normalo-Cap bei Boss (Faktor 0–1)"
+          hint="Während ein Boss lebt, wird die normale Monster-Obergrenze mit diesem Faktor multipliziert — damit nicht 40 Mobs + Boss zugleich kommen. z.B. 0.5 = halb so viele Normalos."
+          value={form.bossActiveAliveCapFactor}
+          min={0} max={1} step={0.05}
+          onChange={(v) => set("bossActiveAliveCapFactor", v)}
+        />
+      </div>
+
       <div className="mt-5 flex items-center gap-3">
         <button
           onMouseEnter={sound.hover}

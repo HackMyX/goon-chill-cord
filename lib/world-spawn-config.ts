@@ -28,6 +28,13 @@ export interface WorldSpawnConfig {
    * Admin-configurable; requires the cross_player_aggro_duration_sec column
    * in world_config (scripts/add-cross-player-aggro.mjs). */
   crossPlayerAggroDurationSec: number;
+  /** Boss-Spawn (eigener Track): Min/Max Sekunden zwischen Boss-Erscheinen.
+   * Max. 1 Boss gleichzeitig. 0/0 = Bosse aus. */
+  bossSpawnIntervalMinSec: number;
+  bossSpawnIntervalMaxSec: number;
+  /** Während ein Boss lebt, wird die Normalo-Obergrenze mit diesem Faktor
+   * multipliziert (0–1) → nicht 40 Mobs + Boss zugleich. */
+  bossActiveAliveCapFactor: number;
 }
 
 export const DEFAULT_WORLD_SPAWN_CONFIG: WorldSpawnConfig = {
@@ -39,4 +46,7 @@ export const DEFAULT_WORLD_SPAWN_CONFIG: WorldSpawnConfig = {
   aliveCapMax: 35,
   spawnIntervalFloor: 0.4,
   crossPlayerAggroDurationSec: 8,
+  bossSpawnIntervalMinSec: 90,
+  bossSpawnIntervalMaxSec: 180,
+  bossActiveAliveCapFactor: 0.5,
 };

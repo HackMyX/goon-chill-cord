@@ -16,6 +16,9 @@ interface WorldSpawnRow {
   alive_cap_max: number | null;
   spawn_interval_floor: number | null;
   cross_player_aggro_duration_sec: number | null;
+  boss_spawn_interval_min_sec: number | null;
+  boss_spawn_interval_max_sec: number | null;
+  boss_active_alive_cap_factor: number | null;
 }
 
 function withDefault<T extends number>(val: T | null | undefined, fallback: T): T {
@@ -30,7 +33,7 @@ export async function getWorldSpawnConfig(): Promise<WorldSpawnConfig> {
   const { data, error } = await admin
     .from("world_config")
     .select(
-      "max_alive_monsters, spawn_interval_min_sec, spawn_interval_max_sec, spawn_safe_radius, alive_cap_per_extra_player, alive_cap_max, spawn_interval_floor, cross_player_aggro_duration_sec"
+      "max_alive_monsters, spawn_interval_min_sec, spawn_interval_max_sec, spawn_safe_radius, alive_cap_per_extra_player, alive_cap_max, spawn_interval_floor, cross_player_aggro_duration_sec, boss_spawn_interval_min_sec, boss_spawn_interval_max_sec, boss_active_alive_cap_factor"
     )
     .eq("id", "default")
     .maybeSingle();
@@ -46,6 +49,9 @@ export async function getWorldSpawnConfig(): Promise<WorldSpawnConfig> {
     aliveCapMax:                  withDefault(row.alive_cap_max,                   def.aliveCapMax),
     spawnIntervalFloor:           withDefault(row.spawn_interval_floor,            def.spawnIntervalFloor),
     crossPlayerAggroDurationSec:  withDefault(row.cross_player_aggro_duration_sec, def.crossPlayerAggroDurationSec),
+    bossSpawnIntervalMinSec:      withDefault(row.boss_spawn_interval_min_sec,     def.bossSpawnIntervalMinSec),
+    bossSpawnIntervalMaxSec:      withDefault(row.boss_spawn_interval_max_sec,     def.bossSpawnIntervalMaxSec),
+    bossActiveAliveCapFactor:     withDefault(row.boss_active_alive_cap_factor,    def.bossActiveAliveCapFactor),
   };
 }
 
@@ -97,6 +103,9 @@ export async function updateWorldSpawnConfig(input: WorldSpawnConfig): Promise<W
     alive_cap_max:                   Math.round(input.aliveCapMax),
     spawn_interval_floor:            input.spawnIntervalFloor,
     cross_player_aggro_duration_sec: input.crossPlayerAggroDurationSec,
+    boss_spawn_interval_min_sec: input.bossSpawnIntervalMinSec,
+    boss_spawn_interval_max_sec: Math.max(input.bossSpawnIntervalMinSec, input.bossSpawnIntervalMaxSec),
+    boss_active_alive_cap_factor: Math.max(0, Math.min(1, input.bossActiveAliveCapFactor)),
     updated_at: new Date().toISOString(),
   });
 

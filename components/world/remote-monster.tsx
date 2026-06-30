@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import type { MonsterTypeConfig } from "@/lib/monsters";
+import { isHoveringKind, type MonsterTypeConfig } from "@/lib/monsters";
 import type { MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import type { CharacterConfig } from "@/lib/character-config";
 import { broadcastMonsterHit } from "@/lib/world-realtime";
@@ -257,8 +257,9 @@ export function RemoteMonster({
     if (legR.current) legR.current.rotation.x = -swing;
     if (armL.current) armL.current.rotation.x = -swing * 1.0 - lunge.current * 0.6;
     if (armR.current) armR.current.rotation.x = swing * 1.0 - lunge.current * 2.1;
-    // Lauf-Wippen (vertikal) wie lokal — nur für nicht-schwebende, nicht-Slime.
-    if (!isGhost && !isSlime) {
+    // Lauf-Wippen (vertikal) wie lokal — nur Bodengänger. Schweber übernehmen
+    // die gesyncte Hover-Höhe (targetPos.y, vom Besitzer berechnet).
+    if (!hovering && !isSlime) {
       group.current.position.y = THREE.MathUtils.lerp(
         group.current.position.y,
         targetPos.current.y + (movingRef.current ? Math.abs(Math.sin(walkClock.current)) * 0.09 : 0),
@@ -323,6 +324,7 @@ export function RemoteMonster({
   // Hier nur noch, was die Animation in useFrame braucht.
   const isSlime = type.visualKind === "slime";
   const isGhost = type.visualKind === "ghost";
+  const hovering = isHoveringKind(type.visualKind);
 
   return (
     <group ref={group} position={[x, y, z]} scale={type.scale}>

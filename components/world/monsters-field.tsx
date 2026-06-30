@@ -118,6 +118,9 @@ export function MonstersField({
   const [remoteMonsters, setRemoteMonsters] = useState<Map<string, MonsterSyncPayload["monsters"]>>(new Map());
 
   const spawnTimer = useRef(spawnConfig.spawnIntervalMinSec);
+  // Boss-Track: eigener Timer (startet mit dem vollen Intervall, damit nicht
+  // sofort beim Betreten ein Boss kommt). Max. 1 Boss gleichzeitig.
+  const bossTimer = useRef(spawnConfig.bossSpawnIntervalMinSec);
   // Live room population (lib/world-realtime.ts), always >= 1 (yourself) —
   // read in a ref, not React state, since useFrame below reads it every
   // tick and a roster sync re-rendering this whole field would be wasted
@@ -399,6 +402,7 @@ export function MonstersField({
     // When the player respawns, add a short delay before the first mob appears.
     if (!isDead && wasDeadRef.current) {
       wasDeadRef.current = false;
+      bossTimer.current = spawnConfig.bossSpawnIntervalMinSec; // Boss-Timer nach Respawn neu
       dyingSnapshotRef.current = null;
       dyingUntilRef.current = 0;
       spawnTimer.current = 3.0;
@@ -406,6 +410,28 @@ export function MonstersField({
 
     // No spawning while dead.
     if (isDead) return;
+
+    // --- Boss-Spawn (eigener, seltener Track; max. 1 Boss gleichzeitig) ------
+    if (spawnConfig.bossSpawnIntervalMaxSec > 0) {
+      bossTimer.current -= delta;
+      if (bossTimer.current <= 0) {
+        bossTimer.current =
+          spawnConfig.bossSpawnIntervalMinSec +
+          Math.random() * Math.max(0, spawnConfig.bossSpawnIntervalMaxSec - spawnConfig.bossSpawnIntervalMinSec);
+        setSpawns((curr) => {
+          if (curr.some((s) => s.type.isBoss)) return curr; // schon ein Boss aktiv
+          const bosses = monsterTypes.filter((t) => t.isBoss && t.enabled);
+          if (!bosses.length) return curr;
+          const bossType = bosses[Math.floor(Math.random() * bosses.length)];
+          const scale = streakMobScale(streakKillCount, killStreakConfig);
+          const scaledBoss: MonsterTypeConfig =
+            scale === 1
+              ? bossType
+              : { ...bossType, health: Math.round(bossType.health * scale), attackDamage: Math.round(bossType.attackDamage * scale) };
+          return [...curr, { id: `${userId.slice(0, 8)}_b${++spawnSeq}`, type: scaledBoss, position: randomSpawnPosition(spawnConfig.spawnSafeRadius) }];
+        });
+      }
+    }
 
     spawnTimer.current -= delta;
     if (spawnTimer.current > 0) return;
@@ -424,8 +450,13 @@ export function MonstersField({
     );
 
     setSpawns((curr) => {
-      if (curr.length >= aliveCap) return curr;
-      const type = pickWeightedMonsterType(monsterTypes);
+      // Normalo-Zählung getrennt vom Boss; während ein Boss lebt, sinkt die
+      // Normalo-Obergrenze (Faktor) → nie 40 Mobs + Boss gleichzeitig.
+      const bossAlive = curr.some((s) => s.type.isBoss);
+      const nonBossCount = bossAlive ? curr.filter((s) => !s.type.isBoss).length : curr.length;
+      const effCap = bossAlive ? Math.max(1, Math.ceil(aliveCap * spawnConfig.bossActiveAliveCapFactor)) : aliveCap;
+      if (nonBossCount >= effCap) return curr;
+      const type = pickWeightedMonsterType(monsterTypes.filter((t) => !t.isBoss));
       if (!type) return curr;
       const scale = streakMobScale(streakKillCount, killStreakConfig);
       // A fresh object, never mutating the shared `type` config other

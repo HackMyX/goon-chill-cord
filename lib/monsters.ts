@@ -11,9 +11,18 @@
  */
 export type MonsterVisualKind =
   | "zombie" | "skeleton" | "slime" | "orc" | "ghost" | "demon"
-  // Neue Arten: Steingolem (tankig, glühende Risse), Riesenspinne (8 Beine,
-  // schnell, Augen-Cluster), Kobold/Imp (klein, schnell, Feuerball-Werfer).
-  | "golem" | "spider" | "imp";
+  // Steingolem (tankig, glühende Risse), Riesenspinne (8 Beine, Augen-Cluster),
+  // Kobold/Imp (klein, Feuerball-Werfer).
+  | "golem" | "spider" | "imp"
+  // Fledermaus & Irrlicht (fliegen/schweben), Troll-Brute (hünenhaft),
+  // Seelenschnitter (Boss, schwebt, Sense).
+  | "bat" | "wisp" | "brute" | "reaper";
+
+/** Schwebende/fliegende Arten — hovern statt zu laufen (Animation in
+ * monster.tsx / remote-monster.tsx liest das). */
+export function isHoveringKind(kind: MonsterVisualKind): boolean {
+  return kind === "ghost" || kind === "bat" || kind === "wisp" || kind === "reaper";
+}
 
 export interface MonsterTypeConfig {
   id: string;
@@ -39,6 +48,11 @@ export interface MonsterTypeConfig {
   scale: number;
   /** Admin kill-switch for one variant without touching the other three. */
   enabled: boolean;
+  /** Boss-Gegner: spawnen über einen EIGENEN, seltenen Boss-Timer (nicht im
+   * normalen Gewichts-Pool), max. 1 gleichzeitig, und während ein Boss lebt
+   * wird die Normalo-Obergrenze gesenkt — damit nie 40 Mobs + Boss zugleich
+   * auf einen losgehen. Siehe monsters-field.tsx + world-spawn-config.ts. */
+  isBoss?: boolean;
   /** Renders a held weapon prop (components/world/monster.tsx) on the
    * sword-arm — purely visual, no separate stat. Optional/code-only for
    * now (not yet surfaced in the admin editor — `enabled` and the numeric
@@ -368,6 +382,151 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     throwDamage: 15,
     throwCooldown: 1.9,
     throwRange: 10,
+  },
+
+  // --- Welle 2: fliegende & hünenhafte Arten + 2 Bosse -----------------------
+  {
+    // Fledermaus: fliegt, sehr schnell, schwach — kommt im Schwarm.
+    id: "bat_swarm",
+    name: "Fledermaus",
+    visualKind: "bat",
+    health: 40,
+    attackDamage: 9,
+    moveSpeed: 7.2,
+    aggroRange: 13,
+    attackRange: 1.3,
+    attackCooldown: 0.7,
+    rewardMin: 12,
+    rewardMax: 20,
+    spawnWeight: 18,
+    colorHex: "#4b5563",
+    scale: 0.7,
+    enabled: true,
+  },
+  {
+    // Irrlicht: schwebt, hält Abstand, beschießt aus der Ferne.
+    id: "wisp_caster",
+    name: "Irrlicht",
+    visualKind: "wisp",
+    health: 72,
+    attackDamage: 10,
+    moveSpeed: 5.8,
+    aggroRange: 15,
+    attackRange: 1.4,
+    attackCooldown: 1.0,
+    rewardMin: 28,
+    rewardMax: 44,
+    spawnWeight: 10,
+    colorHex: "#38bdf8",
+    scale: 0.85,
+    enabled: true,
+    canThrow: true,
+    throwDamage: 13,
+    throwCooldown: 1.8,
+    throwRange: 11,
+  },
+  {
+    // Troll: hünenhaft, zäh, harter Nahkämpfer mit Keule.
+    id: "brute_troll",
+    name: "Troll",
+    visualKind: "brute",
+    health: 240,
+    attackDamage: 28,
+    moveSpeed: 4.9,
+    aggroRange: 11,
+    attackRange: 2.0,
+    attackCooldown: 1.25,
+    rewardMin: 70,
+    rewardMax: 110,
+    spawnWeight: 9,
+    colorHex: "#5b7553",
+    scale: 1.5,
+    enabled: true,
+    hasWeapon: true,
+  },
+  {
+    // Giftspinne: stärkere, größere Spinne mit Giftschuss.
+    id: "spider_venom",
+    name: "Giftspinne",
+    visualKind: "spider",
+    health: 200,
+    attackDamage: 24,
+    moveSpeed: 6.5,
+    aggroRange: 13,
+    attackRange: 1.8,
+    attackCooldown: 0.75,
+    rewardMin: 65,
+    rewardMax: 95,
+    spawnWeight: 8,
+    colorHex: "#14532d",
+    scale: 1.35,
+    enabled: true,
+    canThrow: true,
+    throwDamage: 14,
+    throwCooldown: 2.0,
+    throwRange: 9,
+  },
+  {
+    // Eis-Golem: zäher Brocken-Variante, langsam, glühend-blaue Risse.
+    id: "golem_ice",
+    name: "Eis-Golem",
+    visualKind: "golem",
+    health: 300,
+    attackDamage: 30,
+    moveSpeed: 4.6,
+    aggroRange: 11,
+    attackRange: 2.0,
+    attackCooldown: 1.25,
+    rewardMin: 85,
+    rewardMax: 130,
+    spawnWeight: 7,
+    colorHex: "#60a5fa",
+    scale: 1.4,
+    enabled: true,
+  },
+  // --- BOSSE (eigener Boss-Timer, max. 1 gleichzeitig) -----------------------
+  {
+    // Seelenschnitter: schwebender Sensen-Boss, Nah- + Fernkampf.
+    id: "boss_reaper",
+    name: "Seelenschnitter",
+    visualKind: "reaper",
+    health: 900,
+    attackDamage: 50,
+    moveSpeed: 5.2,
+    aggroRange: 18,
+    attackRange: 2.3,
+    attackCooldown: 1.0,
+    rewardMin: 300,
+    rewardMax: 460,
+    spawnWeight: 0,
+    colorHex: "#312e81",
+    scale: 1.7,
+    enabled: true,
+    isBoss: true,
+    hasWeapon: true,
+    canThrow: true,
+    throwDamage: 30,
+    throwCooldown: 2.0,
+    throwRange: 13,
+  },
+  {
+    // Erd-Titan: gigantischer Golem-Boss, verheerender Nahkampf.
+    id: "boss_titan",
+    name: "Erd-Titan",
+    visualKind: "golem",
+    health: 1500,
+    attackDamage: 66,
+    moveSpeed: 4.3,
+    aggroRange: 15,
+    attackRange: 2.7,
+    attackCooldown: 1.4,
+    rewardMin: 480,
+    rewardMax: 720,
+    spawnWeight: 0,
+    colorHex: "#57534e",
+    scale: 2.3,
+    enabled: true,
+    isBoss: true,
   },
 ];
 
