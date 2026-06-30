@@ -19,8 +19,8 @@ import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import { streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import { WORLD_RADIUS } from "@/lib/world-config";
-import { resolveObstacleCollision, isSpawnClear, type Obstacle } from "@/lib/world-obstacles";
-import type { NavGrid } from "@/lib/world-nav";
+import { resolveObstacleCollision, isSpawnClear, randomZonePoint, type Obstacle, type SpawnZone } from "@/lib/world-obstacles";
+import { isReachable, type NavGrid } from "@/lib/world-nav";
 import {
   subscribeToWorldRoster,
   subscribeToMonsterSync,
@@ -75,6 +75,8 @@ interface MonstersFieldProps {
   obstaclesRef?: React.RefObject<Obstacle[]>;
   /** Navigations-Gitter (A*) für schlaue Wegfindung um Wände/in Labyrinth. */
   navGridRef?: React.RefObject<NavGrid>;
+  /** Ortsgewichtete Spawn-Zonen (in/um Ruinen etc.) — aus buildSpawnZones(env). */
+  spawnZones?: SpawnZone[];
 }
 
 let spawnSeq = 0;
@@ -88,24 +90,54 @@ let spawnSeq = 0;
  * earlier exchange. */
 const REMOTE_KILL_CREDIT_WINDOW_MS = 600;
 
-function randomSpawnPosition(spawnSafeRadius: number, obstacles?: Obstacle[] | null): [number, number, number] {
-  let x = 0;
-  let z = 0;
-  // Mehrere Versuche, einen FREIEN Punkt zu finden (nicht in Häusern/Wänden) —
-  // sonst hängen frisch gespawnte Mobs in Gebäuden fest.
-  for (let attempt = 0; attempt < 24; attempt++) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = spawnSafeRadius + Math.random() * (WORLD_RADIUS - spawnSafeRadius - 6);
-    x = Math.cos(angle) * radius;
-    z = Math.sin(angle) * radius;
+/** Mindestabstand frischer Spawns zum Spieler — verhindert, dass ein orts-
+ * gewichteter Spawn dem Spieler direkt vor die Nase poppt (z.B. wenn er gerade
+ * in einer Ruine steht). Klein gehalten, damit Zonen-Spawns trotzdem stattfinden. */
+const SPAWN_MIN_PLAYER_DIST = 9;
+
+/**
+ * Spawn-Position wählen — Inkrement 3: ortsgewichtet IN/UM die Orte (v.a. Ruinen,
+ * via `ruinSpawnBias`) ODER gleichverteilt; IMMER hindernisfrei, mit Mindest-
+ * abstand zum Spieler und — entscheidend — auf den Spieler ERREICHBAR (strikte
+ * navGrid-BFS), damit kein Mob in einer versiegelten Ruinen-Tasche strandet.
+ * Schlägt die Erreichbarkeit für alle Versuche fehl, wird der erste geometrisch
+ * freie Kandidat als Fallback genommen (Spawnen nie ganz blockieren).
+ */
+function pickSpawnPosition(
+  cfg: WorldSpawnConfig,
+  obstacles: Obstacle[] | null | undefined,
+  navGrid: NavGrid | null | undefined,
+  zones: SpawnZone[] | undefined,
+  player: { x: number; z: number },
+): [number, number, number] {
+  const bias = zones && zones.length ? Math.max(0, Math.min(1, cfg.ruinSpawnBias ?? 0)) : 0;
+  const safe = cfg.spawnSafeRadius;
+  let fx = 0, fz = 0, haveFallback = false;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    let x: number, z: number;
+    if (bias > 0 && Math.random() < bias) {
+      const zp = randomZonePoint(zones!);
+      if (!zp) continue;
+      x = zp.x; z = zp.z;
+    } else {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = safe + Math.random() * (WORLD_RADIUS - safe - 6);
+      x = Math.cos(angle) * radius;
+      z = Math.sin(angle) * radius;
+    }
+    // aus überlappenden Hindernissen herausschieben (mehrfach für enge Stellen)
     for (let k = 0; k < 2; k++) {
       const r = resolveObstacleCollision(obstacles, x, z, 0, 0.6);
-      x = r.x;
-      z = r.z;
+      x = r.x; z = r.z;
     }
-    if (isSpawnClear(obstacles, x, z, 1.8)) return [x, 0, z];
+    if (Math.hypot(x, z) > WORLD_RADIUS - 4) continue;          // nicht über den Rand
+    if (!isSpawnClear(obstacles, x, z, 1.8)) continue;          // nicht in einer Wand/Ruine
+    if (Math.hypot(x - player.x, z - player.z) < SPAWN_MIN_PLAYER_DIST) continue; // nicht auf den Spieler
+    if (!haveFallback) { fx = x; fz = z; haveFallback = true; } // erster freier Punkt als Notnagel
+    if (navGrid && !isReachable(navGrid, x, z, player.x, player.z)) continue; // kein Mob in versiegelter Tasche
+    return [x, 0, z];
   }
-  return [x, 0, z];
+  return haveFallback ? [fx, 0, fz] : [0, 0, 0];
 }
 
 /**
@@ -133,6 +165,7 @@ export function MonstersField({
   active,
   obstaclesRef,
   navGridRef,
+  spawnZones,
 }: MonstersFieldProps) {
   const [spawns, setSpawns] = useState<MonsterSpawn[]>([]);
   // Owned here, not by each Monster — see monster.tsx's onThrow doc
@@ -480,7 +513,8 @@ export function MonstersField({
             attackDamage: Math.max(1, Math.round(bossType.attackDamage * scale * dmgMult)),
             throwDamage: bossType.throwDamage ? Math.max(1, Math.round(bossType.throwDamage * dmgMult)) : bossType.throwDamage,
           };
-          return [...curr, { id: `${userId.slice(0, 8)}_b${++spawnSeq}`, type: scaledBoss, position: randomSpawnPosition(spawnConfig.spawnSafeRadius, obstaclesRef?.current) }];
+          const bossPos = combatRef.current.playerPos;
+          return [...curr, { id: `${userId.slice(0, 8)}_b${++spawnSeq}`, type: scaledBoss, position: pickSpawnPosition(spawnConfig, obstaclesRef?.current, navGridRef?.current, spawnZones, { x: bossPos.x, z: bossPos.z }) }];
         });
       }
     }
@@ -581,7 +615,8 @@ export function MonstersField({
       };
       // Namespace the spawn id with the first 8 chars of userId to avoid id
       // collisions with remote monsters that also use sequential counters.
-      return [...curr, { id: `${userId.slice(0, 8)}_m${++spawnSeq}`, type: scaledType, position: randomSpawnPosition(spawnConfig.spawnSafeRadius, obstaclesRef?.current) }];
+      const spawnPos = combatRef.current.playerPos;
+      return [...curr, { id: `${userId.slice(0, 8)}_m${++spawnSeq}`, type: scaledType, position: pickSpawnPosition(spawnConfig, obstaclesRef?.current, navGridRef?.current, spawnZones, { x: spawnPos.x, z: spawnPos.z }) }];
     });
   });
 

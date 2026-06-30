@@ -304,6 +304,7 @@ const COLUMN_CHECKS: Array<{
   { id: "col_world_bosscapfactor",   category: "World",       table: "world_config",      col: "boss_active_alive_cap_factor", detail: "node scripts/add-boss-spawn-config.cjs" },
   { id: "col_world_minaggressors",   category: "World",       table: "world_config",      col: "min_aggressors",         detail: "node scripts/add-min-aggressors.cjs" },
   { id: "col_world_mondmgmult",      category: "World",       table: "world_config",      col: "monster_damage_multiplier", detail: "node scripts/add-monster-damage-mult.cjs" },
+  { id: "col_world_ruinspawnbias",   category: "World",       table: "world_config",      col: "ruin_spawn_bias",        detail: "node scripts/add-ruin-spawn-bias.cjs" },
   { id: "col_mon_spawnanim",         category: "World",       table: "monster_types",     col: "spawn_anim",             detail: "node scripts/add-monster-spawn-minion-cols.cjs" },
   { id: "col_mon_miniontype",        category: "World",       table: "monster_types",     col: "minion_type_id",         detail: "node scripts/add-monster-spawn-minion-cols.cjs" },
   { id: "col_mon_minionmax",         category: "World",       table: "monster_types",     col: "minion_max_alive",       detail: "node scripts/add-monster-spawn-minion-cols.cjs" },

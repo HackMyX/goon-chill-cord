@@ -42,6 +42,11 @@ export interface WorldSpawnConfig {
   /** Globaler Schadens-Multiplikator für ALLE Monster (Nah- + Fernkampf) —
    * zentrale Schwierigkeits-Stellschraube. 1 = wie eingestellt, <1 = leichter. */
   monsterDamageMultiplier: number;
+  /** Anteil der Spawns, die ortsgewichtet IN/UM die Orte (v.a. Ruinen) erscheinen
+   * statt gleichverteilt. 0 = wie früher (rein zufällig), 1 = immer an einer Zone.
+   * Spawns werden zusätzlich auf Erreichbarkeit geprüft (kein Mob in versiegelter
+   * Ruine). Erfordert die Spalte ruin_spawn_bias (scripts/add-ruin-spawn-bias.cjs). */
+  ruinSpawnBias: number;
 }
 
 export const DEFAULT_WORLD_SPAWN_CONFIG: WorldSpawnConfig = {
@@ -58,4 +63,5 @@ export const DEFAULT_WORLD_SPAWN_CONFIG: WorldSpawnConfig = {
   bossActiveAliveCapFactor: 0.5,
   minAggressors: 2,
   monsterDamageMultiplier: 0.8,
+  ruinSpawnBias: 0.5,
 };

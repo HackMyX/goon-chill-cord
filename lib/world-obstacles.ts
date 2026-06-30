@@ -52,6 +52,64 @@ function mulberry32(seed: number) {
 
 const dens = (base: number, mul: number) => Math.max(0, Math.round(base * mul));
 
+// ── EINE Quelle für die Orts-Layouts ────────────────────────────────────────
+// Platzierung der Generatoren, der Wildwuchs-Ausschluss UND die Monster-Spawn-
+// Zonen (Inkrement 3) lesen ALLE hieraus → kein Drift zwischen „wo steht die
+// Ruine" und „wo spawnen die Mobs". ang/dist wie die bisherige Platzierung
+// (verändert die Map NICHT); radius/weight steuern nur das ortsgewichtete Spawnen.
+export interface SpawnZone {
+  id: string;
+  x: number;
+  z: number;
+  /** Spawn-Streuradius um das Zonenzentrum. */
+  radius: number;
+  /** Relatives Spawn-Gewicht (Ruinen am höchsten → „in/um Ruinen spawnen"). */
+  weight: number;
+}
+interface ZoneSpec { id: string; ang: number; dist: number; radius: number; weight: number; }
+const WORLD_ZONES: ZoneSpec[] = [
+  { id: "village",     ang: 0.00, dist: 0.40, radius: 18, weight: 1.0 },
+  { id: "supermarket", ang: 0.14, dist: 0.62, radius: 17, weight: 1.5 },
+  { id: "market",      ang: 0.28, dist: 0.44, radius: 15, weight: 1.0 },
+  { id: "ruins",       ang: 0.43, dist: 0.66, radius: 20, weight: 2.6 }, // höchstes Gewicht
+  { id: "forest",      ang: 0.57, dist: 0.50, radius: 18, weight: 1.2 },
+  { id: "camp",        ang: 0.71, dist: 0.70, radius: 15, weight: 1.7 },
+  { id: "maze",        ang: 0.86, dist: 0.56, radius: 20, weight: 1.4 },
+];
+function zoneXZ(s: { ang: number; dist: number }) {
+  const a = s.ang * Math.PI * 2;
+  const r = s.dist * (WORLD_RADIUS - 12);
+  return { x: Math.cos(a) * r, z: Math.sin(a) * r };
+}
+function zoneById(id: string): ZoneSpec {
+  const z = WORLD_ZONES.find((s) => s.id === id);
+  if (!z) throw new Error(`unknown zone ${id}`);
+  return z;
+}
+
+/** Spawn-Zonen für ortsgewichtetes Monster-Spawnen (Inkrement 3). Leer, wenn die
+ * Bebauung aus ist (buildingDensity 0) → dann rein gleichverteiltes Spawnen. */
+export function buildSpawnZones(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIRONMENT): SpawnZone[] {
+  const bq = env.buildingDensity ?? 1;
+  if (bq <= 0) return [];
+  return WORLD_ZONES.map((s) => ({ id: s.id, ...zoneXZ(s), radius: s.radius, weight: s.weight }));
+}
+
+/** Wählt eine Zone gewichtet (Ruinen am häufigsten) und einen Punkt darin
+ * (flächengleich via sqrt). Roh — der Aufrufer schiebt aus Hindernissen raus und
+ * prüft Erreichbarkeit. Gibt null, wenn keine Zonen existieren. */
+export function randomZonePoint(zones: SpawnZone[]): { x: number; z: number } | null {
+  if (!zones.length) return null;
+  let total = 0;
+  for (const z of zones) total += z.weight;
+  let r = Math.random() * total;
+  let chosen = zones[0];
+  for (const z of zones) { r -= z.weight; if (r <= 0) { chosen = z; break; } }
+  const a = Math.random() * Math.PI * 2;
+  const rad = Math.sqrt(Math.random()) * chosen.radius;
+  return { x: chosen.x + Math.cos(a) * rad, z: chosen.z + Math.sin(a) * rad };
+}
+
 /** Eine Wand-Segment (Box) als Hindernis. axis="x" → entlang X, sonst entlang Z. */
 function pushWall(out: Obstacle[], axis: "x" | "z", x: number, z: number, half: number, h: number, tone = 0) {
   const t = 0.22; // halbe Wanddicke
@@ -486,18 +544,11 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
   // wird KEIN Wildwuchs (Baum/Fels) gestreut, damit nichts Straßen/Eingänge
   // blockiert. (Wald/Ruinen/Camp dürfen Streuung haben — die sind wild.)
   const bq = env.buildingDensity ?? 1;
-  const atc = (af: number, df: number) => {
-    const a = af * Math.PI * 2;
-    const r = df * (WORLD_RADIUS - 12);
-    return { x: Math.cos(a) * r, z: Math.sin(a) * r };
-  };
+  // Wildwuchs-Ausschluss um die BEBAUTEN Orte (Dorf/Supermarkt/Markt/Labyrinth) —
+  // Zentren aus der zentralen Zonen-Quelle, eigene (größere) Ausschlussradien.
+  const EXCLUDE: Record<string, number> = { village: 28, supermarket: 20, market: 18, maze: 28 };
   const builtZones = bq > 0
-    ? [
-        { ...atc(0.0, 0.4), r: 28 }, // Dorf
-        { ...atc(0.14, 0.62), r: 20 }, // Supermarkt-Parkplatz
-        { ...atc(0.28, 0.44), r: 18 }, // Markt
-        { ...atc(0.86, 0.56), r: 28 }, // Labyrinth (n=11)
-      ]
+    ? Object.keys(EXCLUDE).map((id) => ({ ...zoneXZ(zoneById(id)), r: EXCLUDE[id] }))
     : [];
   const inBuilt = (x: number, z: number) => builtZones.some((c) => (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r);
 
@@ -589,35 +640,22 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
   {
     const rand = mulberry32(80808);
     const dq = env.buildingDensity ?? 1;
-    const at = (angFrac: number, distFrac: number) => {
-      const a = angFrac * Math.PI * 2;
-      const r = distFrac * (WORLD_RADIUS - 12);
-      return { x: Math.cos(a) * r, z: Math.sin(a) * r };
-    };
     if (dq > 0) {
-      // 6 Orte gleichmäßig um die Map verteilt (≈60° auseinander) + verschiedene
-      // Radien → klar getrennt, kein Overlap.
-      // 7 Orte gleichmäßig ums ganze Rund verteilt (≈1/7 Winkel-Abstand) mit
-      // variierenden Radien → füllen die GANZE Map statt im ersten Drittel zu klumpen.
-      const village = at(0.00, 0.40);
-      const superm = at(0.14, 0.62);
-      const market = at(0.28, 0.44);
-      const ruinsF = at(0.43, 0.66);
-      const forest = at(0.57, 0.50);
-      const camp = at(0.71, 0.70);
-      const maze = at(0.86, 0.56);
-      genVillage(out, village.x, village.z, rand);
-      genSupermarketLot(out, superm.x, superm.z, rand);
-      genMarket(out, market.x, market.z, rand);
-      genRuinsField(out, ruinsF.x, ruinsF.z, rand);
-      genForest(out, forest.x, forest.z, rand);
-      genCamp(out, camp.x, camp.z, rand);
-      genMaze(out, maze.x, maze.z, rand);
+      // 7 Orte aus der zentralen Zonen-Quelle (WORLD_ZONES): gleichmäßig ums Rund,
+      // variierende Radien. Generator-REIHENFOLGE bleibt fix (Seed-Determinismus).
+      const Z = Object.fromEntries(WORLD_ZONES.map((s) => [s.id, zoneXZ(s)])) as Record<string, { x: number; z: number }>;
+      genVillage(out, Z.village.x, Z.village.z, rand);
+      genSupermarketLot(out, Z.supermarket.x, Z.supermarket.z, rand);
+      genMarket(out, Z.market.x, Z.market.z, rand);
+      genRuinsField(out, Z.ruins.x, Z.ruins.z, rand);
+      genForest(out, Z.forest.x, Z.forest.z, rand);
+      genCamp(out, Z.camp.x, Z.camp.z, rand);
+      genMaze(out, Z.maze.x, Z.maze.z, rand);
       // Verbindungs-Straßenzug entlang des bewohnten Bogens (Dorf↔Supermarkt↔Markt)
       // + ein Pfad zum nahen Ruinenfeld. Nicht zu jedem Ort — sonst Wirrwarr.
-      roadBetween(out, village.x, village.z, superm.x, superm.z, 3);
-      roadBetween(out, superm.x, superm.z, market.x, market.z, 3);
-      roadBetween(out, market.x, market.z, ruinsF.x, ruinsF.z, 2.6);
+      roadBetween(out, Z.village.x, Z.village.z, Z.supermarket.x, Z.supermarket.z, 3);
+      roadBetween(out, Z.supermarket.x, Z.supermarket.z, Z.market.x, Z.market.z, 3);
+      roadBetween(out, Z.market.x, Z.market.z, Z.ruins.x, Z.ruins.z, 2.6);
     }
   }
 

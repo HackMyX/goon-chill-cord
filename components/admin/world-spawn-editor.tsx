@@ -135,6 +135,13 @@ export function WorldSpawnConfigEditor({ config }: { config: WorldSpawnConfig })
           min={0} max={60} step={1}
           onChange={(v) => set("spawnSafeRadius", v)}
         />
+        <NumField
+          label="Ruin-/Orts-Spawn-Anteil (0–1)"
+          hint="Anteil der Monster, die ortsgewichtet IN/UM die Orte (v.a. Ruinen, dann Camp/Supermarkt/Labyrinth) erscheinen statt rein zufällig. 0 = wie früher (gleichverteilt), 1 = immer an einer Zone. Spawns werden zusätzlich auf Erreichbarkeit geprüft (kein Mob in versiegelter Ruine). Erfordert Migration scripts/add-ruin-spawn-bias.cjs"
+          value={form.ruinSpawnBias}
+          min={0} max={1} step={0.05}
+          onChange={(v) => set("ruinSpawnBias", v)}
+        />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">

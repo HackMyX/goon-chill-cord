@@ -84,6 +84,51 @@ function nearestFree(grid: NavGrid, gx: number, gz: number): [number, number] | 
   return null;
 }
 
+/**
+ * STRIKTE Erreichbarkeit (BFS, nicht best-effort wie findPath): Ist (gx,gz) vom
+ * Start (sx,sz) über freie Zellen erreichbar? Für Spawn-Validierung (Inkrement 3):
+ * verhindert, dass ein Mob in einer versiegelten Ruinen-Tasche landet, aus der
+ * findPath nie herausfindet (→ idle). Start/Ziel werden auf die nächste freie
+ * Zelle gesnappt. Logik: Ziel gefunden → erreichbar. Queue läuft leer, OHNE das
+ * Ziel zu finden → kleine abgeschottete Region → UNerreichbar. Iter-Limit
+ * erreicht → riesige Region (= Hauptkarte) → als erreichbar gewertet.
+ */
+export function isReachable(
+  grid: NavGrid,
+  sx: number, sz: number,
+  gxw: number, gzw: number,
+  maxIter = 6000,
+): boolean {
+  const start = nearestFree(grid, cellOf(grid, sx), cellOf(grid, sz));
+  const goal = nearestFree(grid, cellOf(grid, gxw), cellOf(grid, gzw));
+  if (!start || !goal) return true; // unbestimmbar → Spawn nicht blockieren
+  const size = grid.size;
+  const startI = start[1] * size + start[0];
+  const goalI = goal[1] * size + goal[0];
+  if (startI === goalI) return true;
+  const seen = new Uint8Array(size * size);
+  // Kapazität = Zellenzahl (seen-dedupliziert → nie mehr Einträge) → kein Overflow.
+  const queue = new Int32Array(size * size);
+  let head = 0, tail = 0, iter = 0;
+  queue[tail++] = startI; seen[startI] = 1;
+  while (head < tail && iter++ < maxIter) {
+    const cur = queue[head++];
+    if (cur === goalI) return true;
+    const cx = cur % size, cz = (cur / size) | 0;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nx = cx + dx, nz = cz + dz;
+      if (!isFree(grid, nx, nz)) continue;
+      const ni = nz * size + nx;
+      if (seen[ni]) continue;
+      seen[ni] = 1;
+      if (tail < queue.length) queue[tail++] = ni;
+    }
+  }
+  // Queue leer ohne Ziel → versiegelte Tasche (unerreichbar). Iter-Limit → riesige
+  // Region, Ziel mit sehr hoher Wahrscheinlichkeit darin → erreichbar.
+  return iter >= maxIter;
+}
+
 const NEI = [
   [1, 0, 10], [-1, 0, 10], [0, 1, 10], [0, -1, 10],
   [1, 1, 14], [1, -1, 14], [-1, 1, 14], [-1, -1, 14],
