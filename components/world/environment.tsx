@@ -82,11 +82,11 @@ function BorderCrystal({ x, z, scale }: { x: number; z: number; scale: number })
 function Rock({ x, z, scale, rot }: { x: number; z: number; scale: number; rot: number }) {
   return (
     <group position={[x, 0, z]} scale={scale} rotation={[0, rot, 0]}>
-      <mesh position={[0, 0.28, 0]} rotation={[0.3, 0.6, 0.2]} castShadow>
+      <mesh position={[0, 0.28, 0]} rotation={[0.3, 0.6, 0.2]}>
         <dodecahedronGeometry args={[0.55, 0]} />
         <meshStandardMaterial color="#5b6066" emissive="#1a241c" emissiveIntensity={0.25} flatShading />
       </mesh>
-      <mesh position={[0.45, 0.16, 0.2]} rotation={[0.5, 1.1, 0.3]} castShadow>
+      <mesh position={[0.45, 0.16, 0.2]} rotation={[0.5, 1.1, 0.3]}>
         <dodecahedronGeometry args={[0.3, 0]} />
         <meshStandardMaterial color="#4d5258" emissive="#16201a" emissiveIntensity={0.25} flatShading />
       </mesh>
@@ -100,17 +100,17 @@ function RuinPillar({ x, z, scale, rot, h }: { x: number; z: number; scale: numb
   return (
     <group position={[x, 0, z]} scale={scale} rotation={[0, rot, 0]}>
       {/* base block */}
-      <mesh position={[0, 0.12, 0]} castShadow>
+      <mesh position={[0, 0.12, 0]}>
         <boxGeometry args={[0.95, 0.24, 0.95]} />
         <meshStandardMaterial color="#3c4048" emissive="#241a3a" emissiveIntensity={0.2} />
       </mesh>
       {/* column shaft */}
-      <mesh position={[0, 0.24 + h / 2, 0]} castShadow>
+      <mesh position={[0, 0.24 + h / 2, 0]}>
         <cylinderGeometry args={[0.32, 0.38, h, 10]} />
         <meshStandardMaterial color="#54585f" emissive="#2a1d4a" emissiveIntensity={0.22} />
       </mesh>
       {/* broken cap, slightly tilted */}
-      <mesh position={[0.08, 0.24 + h + 0.1, 0.05]} rotation={[0.18, 0.4, 0.12]} castShadow>
+      <mesh position={[0.08, 0.24 + h + 0.1, 0.05]} rotation={[0.18, 0.4, 0.12]}>
         <cylinderGeometry args={[0.36, 0.3, 0.28, 10]} />
         <meshStandardMaterial color="#4a4e55" emissive="#2a1d4a" emissiveIntensity={0.22} />
       </mesh>
@@ -203,11 +203,11 @@ function CentralMonument() {
   });
   return (
     <group position={[0, 0, -9]}>
-      <mesh position={[0, 2.6, 0]} castShadow>
+      <mesh position={[0, 2.6, 0]}>
         <coneGeometry args={[0.75, 5.0, 6]} />
         <meshStandardMaterial color="#3b1e6d" emissive="#a855f7" emissiveIntensity={1.5} />
       </mesh>
-      <mesh position={[0, 0.4, 0]} castShadow>
+      <mesh position={[0, 0.4, 0]}>
         <cylinderGeometry args={[1.1, 1.35, 0.8, 8]} />
         <meshStandardMaterial color="#1c1330" emissive="#7c3aed" emissiveIntensity={0.45} />
       </mesh>

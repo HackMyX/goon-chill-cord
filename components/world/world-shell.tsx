@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Canvas, useFrame } from "@react-three/fiber";
+import { Preload } from "@react-three/drei";
 import * as THREE from "three";
 import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf, Settings, RotateCcw, Maximize2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
@@ -1285,6 +1286,9 @@ export function WorldShell({
               verified={verified}
               prioBadges={prioBadges}
             />
+            {/* Kompiliert ALLE Material-/Shadow-Shader beim Laden (während des
+                schwarzen Covers) → kein 388ms-Compile-Stall mehr mitten im Spiel. */}
+            <Preload all />
             <FirstFrameSignal onReady={handleSceneReady} />
           </Suspense>
         </Canvas>
