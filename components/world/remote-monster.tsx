@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { Billboard, Text } from "@react-three/drei";
+import { Billboard } from "@react-three/drei";
+import { TextSprite } from "@/components/world/text-sprite";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import type { CharacterConfig } from "@/lib/character-config";
@@ -451,9 +452,7 @@ export function RemoteMonster({
           <planeGeometry args={[1, 0.1]} />
           <meshBasicMaterial color="#4ade80" toneMapped={false} />
         </mesh>
-        <Text position={[0, 0.22, 0]} fontSize={0.16} color="#c084fc" outlineWidth={0.015} outlineColor="#000">
-          {type.name}
-        </Text>
+        <TextSprite text={type.name} position={[0, 0.22, 0]} height={0.18} color="#c084fc" outline="#000000" />
       </Billboard>
 
       {popups.map((p) => (

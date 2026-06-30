@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { Billboard, Text } from "@react-three/drei";
+import { Billboard } from "@react-three/drei";
+import { TextSprite } from "@/components/world/text-sprite";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { CombatSharedState, MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
@@ -92,9 +93,7 @@ export function FloatingDamageNumber({ amount }: { amount: number }) {
   });
   return (
     <Billboard ref={ref} position={[0, 0.4, 0]}>
-      <Text fontSize={size} color={color} outlineWidth={crit ? 0.035 : 0.02} outlineColor={outline}>
-        {crit ? `-${amount}!` : `-${amount}`}
-      </Text>
+      <TextSprite text={crit ? `-${amount}!` : `-${amount}`} height={size} color={color} outline={outline} />
     </Billboard>
   );
 }
@@ -756,9 +755,7 @@ export function Monster({
           <planeGeometry args={[1, 0.1]} />
           <meshBasicMaterial color="#4ade80" toneMapped={false} />
         </mesh>
-        <Text position={[0, 0.22, 0]} fontSize={0.16} color="#e5e7eb" outlineWidth={0.015} outlineColor="#000">
-          {type.name}
-        </Text>
+        <TextSprite text={type.name} position={[0, 0.22, 0]} height={0.18} color="#e5e7eb" outline="#000000" />
       </Billboard>
 
       {popups.map((p) => (

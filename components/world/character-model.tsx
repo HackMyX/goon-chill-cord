@@ -3,7 +3,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { Billboard, Text } from "@react-three/drei";
+import { Billboard } from "@react-three/drei";
+import { TextSprite } from "@/components/world/text-sprite";
 import { type EquippedItem } from "@/lib/rarity-colors";
 import { debugWarn } from "@/lib/debug";
 import { getPetSpeciesId, DEFAULT_PET_TYPES, resolvePetStatsForRarity, type PetTypeConfig } from "@/lib/pets";
@@ -163,9 +164,7 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
       <group>
         {name && (
           <Billboard position={[0, 2.95, 0]}>
-            <Text fontSize={0.26} color="#e9d5ff" outlineWidth={0.02} outlineColor="#1e1033">
-              {name}
-            </Text>
+            <TextSprite text={name} height={0.3} color="#e9d5ff" outline="#1e1033" />
           </Billboard>
         )}
 

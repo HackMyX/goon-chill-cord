@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { Html, Billboard, Text } from "@react-three/drei";
+import { Html, Billboard } from "@react-three/drei";
+import { TextSprite } from "@/components/world/text-sprite";
 import { CharacterModel, type CharacterLimbRefs } from "@/components/world/character-model";
 import { angleDelta } from "@/components/world/player";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
@@ -46,9 +47,7 @@ function FloatingDamageNumber({ amount }: { amount: number }) {
   });
   return (
     <Billboard ref={ref} position={[0, 0.4, 0]}>
-      <Text fontSize={0.42} color="#fca5a5" outlineWidth={0.025} outlineColor="#3f0a0a">
-        -{amount}
-      </Text>
+      <TextSprite text={`-${amount}`} height={0.45} color="#fca5a5" outline="#3f0a0a" />
     </Billboard>
   );
 }
