@@ -49,14 +49,13 @@ const COLORS = [
   { f: "Türkise", m: "Türkiser" },
 ];
 
-// Prefix tiers (cosmetic naming) -> actual game rarity.
+// Eine Variante pro Seltenheit — KEIN Seltenheits-Präfix mehr im Namen (die
+// Seltenheit wird ohnehin farblich/als Badge angezeigt). Gleicher Name kann in
+// mehreren Seltenheiten existieren; Eindeutigkeit = (type, name, rarity).
 const PREFIX_TIERS = [
   { prefix: "", rarity: "normal" },
-  { prefix: "Ungewöhnliche", rarity: "normal" },
-  { prefix: "Seltene", rarity: "selten" },
-  { prefix: "Epische", rarity: "selten" },
-  { prefix: "Legendäre", rarity: "mythisch" },
-  { prefix: "Mythische", rarity: "mythisch" },
+  { prefix: "", rarity: "selten" },
+  { prefix: "", rarity: "mythisch" },
 ];
 
 const PRICE_BY_RARITY = { normal: 150, selten: 600, mythisch: 3000, ultra: 20000 };
@@ -173,14 +172,14 @@ console.log(`Generated ${items.length} items.`);
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const { data: existingRows, error: fetchError } = await supabase.from("items").select("type, name");
+  const { data: existingRows, error: fetchError } = await supabase.from("items").select("type, name, rarity");
   if (fetchError) {
     console.error("Failed to fetch existing items:", fetchError.message);
     process.exit(1);
   }
 
-  const existingKeys = new Set(existingRows.map((row) => `${row.type}::${row.name}`));
-  const toInsert = items.filter((item) => !existingKeys.has(`${item.type}::${item.name}`));
+  const existingKeys = new Set(existingRows.map((row) => `${row.type}::${row.name}::${row.rarity}`));
+  const toInsert = items.filter((item) => !existingKeys.has(`${item.type}::${item.name}::${item.rarity}`));
   const skipped = items.length - toInsert.length;
   console.log(`Skipping ${skipped} items that already exist; inserting ${toInsert.length} new items.`);
 
