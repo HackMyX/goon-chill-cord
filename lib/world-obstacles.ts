@@ -182,26 +182,37 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
     };
     for (let cl = 0; cl < clusters; cl++) {
       const ca = rand() * Math.PI * 2;
-      const cr = 14 + rand() * (WORLD_RADIUS - 26);
+      const cr = 16 + rand() * (WORLD_RADIUS - 30);
       const ox = Math.cos(ca) * cr;
       const oz = Math.sin(ca) * cr;
-      const spread = 22;
-      const houses = 5 + Math.floor(rand() * 4); // 5–8 Häuser je Viertel
-      for (let h = 0; h < houses; h++) {
-        const intact = rand() < 0.45; // ~45% fast heil (mit Dach), Rest Ruine
-        const w = (intact ? 4 : 3.5) + rand() * 3.5;
-        const d = (intact ? 4 : 3.5) + rand() * 3.5;
-        const wallH = intact ? 2.6 + rand() * 1.0 : 1.6 + rand() * 1.2;
-        emitHouse(out, ox + (rand() - 0.5) * spread, oz + (rand() - 0.5) * spread, w, d, wallH, pickDoors(), intact, rand);
+      // Häuser auf einem lockeren Raster (Straßen dazwischen, keine Überlappung)
+      // → wirkt wie ein echtes Stadtviertel statt zufälliger Klumpen.
+      const cols = 3 + Math.floor(rand() * 2); // 3–4
+      const rows = 3 + Math.floor(rand() * 2);
+      const cell = 11; // Zellabstand (Haus ~4–7 + Straße ~4–7)
+      const halfW = ((cols - 1) * cell) / 2;
+      const halfD = ((rows - 1) * cell) / 2;
+      for (let gx = 0; gx < cols; gx++) {
+        for (let gz = 0; gz < rows; gz++) {
+          if (rand() < 0.22) continue; // Lücke / kleiner Platz
+          const intact = rand() < 0.45; // ~45% fast heil (mit Dach), Rest Ruine
+          const w = (intact ? 4 : 3.5) + rand() * 3;
+          const d = (intact ? 4 : 3.5) + rand() * 3;
+          const wallH = intact ? 2.6 + rand() * 1.0 : 1.5 + rand() * 1.3;
+          const hx0 = ox - halfW + gx * cell + (rand() - 0.5) * 2.5;
+          const hz0 = oz - halfD + gz * cell + (rand() - 0.5) * 2.5;
+          emitHouse(out, hx0, hz0, w, d, wallH, pickDoors(), intact, rand);
+        }
       }
-      const lamps = 3 + Math.floor(rand() * 4);
+      const blockR = Math.max(halfW, halfD) + 6;
+      const lamps = 4 + Math.floor(rand() * 4);
       for (let l = 0; l < lamps; l++) {
-        out.push({ kind: "lamp", x: ox + (rand() - 0.5) * spread, z: oz + (rand() - 0.5) * spread, scale: 1, shape: "circle", r: 0.18, blockH: 3.2, hue: Math.floor(rand() * 3) });
+        out.push({ kind: "lamp", x: ox + (rand() - 0.5) * blockR * 2, z: oz + (rand() - 0.5) * blockR * 2, scale: 1, shape: "circle", r: 0.18, blockH: 3.2, hue: Math.floor(rand() * 3) });
       }
-      const crates = 4 + Math.floor(rand() * 5);
+      const crates = 5 + Math.floor(rand() * 5);
       for (let c2 = 0; c2 < crates; c2++) {
         const s = 0.4 + rand() * 0.4;
-        out.push({ kind: "crate", x: ox + (rand() - 0.5) * spread, z: oz + (rand() - 0.5) * spread, scale: s, shape: "box", hx: s, hz: s, r: s, blockH: s * 1.4 + 0.18, rot: rand() * Math.PI * 2 });
+        out.push({ kind: "crate", x: ox + (rand() - 0.5) * blockR * 2, z: oz + (rand() - 0.5) * blockR * 2, scale: s, shape: "box", hx: s, hz: s, r: s, blockH: s * 1.4 + 0.18, rot: rand() * Math.PI * 2 });
       }
     }
     // Vereinzelte Ruinen-Häuser quer über die Map (apokalyptisch verstreut).

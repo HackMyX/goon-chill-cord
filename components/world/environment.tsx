@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { DEFAULT_WORLD_ENVIRONMENT, type WorldEnvironmentConfig } from "@/lib/world-environment-config";
 import type { Obstacle } from "@/lib/world-obstacles";
+import type { CombatSharedState } from "@/components/world/combat-types";
 
 const TRUNK_COLOR = "#2e2015";
 const FOLIAGE_COLORS = ["#0e3322", "#163d2a", "#1a4a32"];
@@ -145,22 +146,35 @@ function GlowMushroom({ x, z, scale, color }: { x: number; z: number; scale: num
   );
 }
 
-/** Ruinen-Wand eines Hauses (verfallener Stein mit glühenden Rissen). */
+const STONE_TONES = ["#4b4842", "#524d44", "#45433d", "#565049", "#403e38"];
+
+/** Hauswand: verwitterter Stein (Farbe variiert je Position) + zerbröckelte
+ * Oberkante; hohe (heile) Wände bekommen ein warm glühendes Fenster. */
 function RuinWall({ o }: { o: Obstacle }) {
   const hx = o.hx ?? 0.22;
   const hz = o.hz ?? 0.22;
   const h = o.h ?? 2;
+  const tone = STONE_TONES[Math.abs(Math.round(o.x * 7 + o.z * 13)) % STONE_TONES.length];
+  const alongX = hx > hz;
+  const tall = h > 2.3;
+  const long = (o.len ?? 0) > 1.7;
   return (
     <group position={[o.x, 0, o.z]}>
-      <mesh position={[0, h / 2, 0]} castShadow>
+      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[hx * 2, h, hz * 2]} />
-        <meshStandardMaterial color="#4b4842" emissive="#1c1418" emissiveIntensity={0.25} roughness={0.95} />
+        <meshStandardMaterial color={tone} emissive="#140d08" emissiveIntensity={0.16} roughness={0.97} />
       </mesh>
       {/* zerbröckelte Oberkante */}
       <mesh position={[0, h, 0]} castShadow>
-        <boxGeometry args={[hx * 2 * 0.7, 0.14, hz * 2 * 0.7]} />
-        <meshStandardMaterial color="#3c3a35" roughness={1} flatShading />
+        <boxGeometry args={[hx * 2 * 0.72, 0.14, hz * 2 * 0.72]} />
+        <meshStandardMaterial color="#39372f" roughness={1} flatShading />
       </mesh>
+      {tall && long && (
+        <mesh position={[0, h * 0.55, 0]}>
+          <boxGeometry args={[alongX ? 0.6 : hx * 2 + 0.03, 0.52, alongX ? hz * 2 + 0.03 : 0.6]} />
+          <meshBasicMaterial color="#ffcf85" toneMapped={false} />
+        </mesh>
+      )}
     </group>
   );
 }
@@ -170,16 +184,18 @@ function Roof({ o }: { o: Obstacle }) {
   const hx = o.hx ?? 2;
   const hz = o.hz ?? 2;
   const base = o.h ?? 2.5;
+  const radius = Math.hypot(hx, hz) * 1.02;
   return (
     <group position={[o.x, base, o.z]}>
-      <mesh position={[0, 0.12, 0]} castShadow>
-        <boxGeometry args={[hx * 2, 0.24, hz * 2]} />
-        <meshStandardMaterial color="#3a2a22" roughness={0.95} flatShading />
-      </mesh>
-      {/* First-Balken */}
-      <mesh position={[0, 0.32, 0]}>
-        <boxGeometry args={[hx * 1.4, 0.16, 0.18]} />
+      {/* Traufe / Dachkante */}
+      <mesh position={[0, 0.06, 0]} castShadow>
+        <boxGeometry args={[hx * 2 + 0.3, 0.16, hz * 2 + 0.3]} />
         <meshStandardMaterial color="#2a1d16" roughness={1} />
+      </mesh>
+      {/* Spitzdach (4-seitige Pyramide, achsen-ausgerichtet) */}
+      <mesh position={[0, 0.62, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>
+        <coneGeometry args={[radius, 1.15, 4]} />
+        <meshStandardMaterial color="#3b2a22" roughness={0.95} flatShading />
       </mesh>
     </group>
   );
@@ -219,6 +235,79 @@ function Crate({ o }: { o: Obstacle }) {
       <boxGeometry args={[s, s, s]} />
       <meshStandardMaterial color="#6b4f2a" emissive="#160d05" emissiveIntensity={0.2} roughness={0.9} flatShading />
     </mesh>
+  );
+}
+
+/** Faded die Materialien einer Gruppe sanft Richtung `target`-Opazität. */
+function fadeGroup(g: THREE.Object3D, target: number) {
+  g.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    const m = mesh.material as (THREE.Material & { opacity: number }) | undefined;
+    if (m && !Array.isArray(m)) {
+      m.transparent = true;
+      m.opacity += (target - m.opacity) * 0.16;
+      mesh.visible = m.opacity > 0.04;
+    }
+  });
+}
+
+/**
+ * Stadt-Strukturen (Wände + Dächer + Kisten) MIT Sicht-Lösung: steht der Spieler
+ * unter einem Dach (= in einem Haus), blendet das Dach aus → man sieht hinein.
+ * Wände nahe am Spieler (oder die ganze Hauswand, wenn man drin ist) werden
+ * durchsichtig → man sieht sich selbst + das Geschehen, auch im Gebäude.
+ */
+function CityStructures({
+  walls, roofs, crates, combatRef,
+}: {
+  walls: Obstacle[];
+  roofs: Obstacle[];
+  crates: Obstacle[];
+  combatRef?: React.RefObject<CombatSharedState | null>;
+}) {
+  const wallGroups = useRef<(THREE.Group | null)[]>([]);
+  const roofGroups = useRef<(THREE.Group | null)[]>([]);
+  useFrame(() => {
+    const p = combatRef?.current?.playerPos;
+    if (!p) return;
+    let underRoof = false;
+    for (const o of roofs) {
+      if (Math.abs(p.x - o.x) < (o.hx ?? 2) && Math.abs(p.z - o.z) < (o.hz ?? 2)) { underRoof = true; break; }
+    }
+    roofs.forEach((o, i) => {
+      const g = roofGroups.current[i];
+      if (!g) return;
+      const under = Math.abs(p.x - o.x) < (o.hx ?? 2) + 0.4 && Math.abs(p.z - o.z) < (o.hz ?? 2) + 0.4;
+      fadeGroup(g, under ? 0 : 1);
+    });
+    walls.forEach((o, i) => {
+      const g = wallGroups.current[i];
+      if (!g) return;
+      const hx = o.hx ?? 0.22;
+      const hz = o.hz ?? 0.22;
+      const cx = Math.max(o.x - hx, Math.min(p.x, o.x + hx));
+      const cz = Math.max(o.z - hz, Math.min(p.z, o.z + hz));
+      const d = Math.hypot(p.x - cx, p.z - cz);
+      const near = d < 3.4 || (underRoof && d < 9);
+      fadeGroup(g, near ? 0.2 : 1);
+    });
+  });
+  return (
+    <>
+      {walls.map((o, i) => (
+        <group key={`w${i}`} ref={(el) => { wallGroups.current[i] = el; }}>
+          <RuinWall o={o} />
+        </group>
+      ))}
+      {roofs.map((o, i) => (
+        <group key={`rf${i}`} ref={(el) => { roofGroups.current[i] = el; }}>
+          <Roof o={o} />
+        </group>
+      ))}
+      {crates.map((o, i) => (
+        <Crate key={`c${i}`} o={o} />
+      ))}
+    </>
   );
 }
 
@@ -347,11 +436,14 @@ function mulberry32(seed: number) {
 export function Environment({
   env = DEFAULT_WORLD_ENVIRONMENT,
   obstacles = [],
+  combatRef,
 }: {
   env?: WorldEnvironmentConfig;
   /** Kollidierbare Strukturen (Bäume/Felsen/Ruinen/Monument) — gemeinsame
    * Quelle mit der Physik (lib/world-obstacles.ts). */
   obstacles?: Obstacle[];
+  /** Für die Sicht-Lösung in Gebäuden (Dächer/Wände faden weg). */
+  combatRef?: React.RefObject<CombatSharedState | null>;
 }) {
   const dens = (base: number, mul: number) => Math.max(0, Math.round(base * mul));
   const grassCount = dens(110, env.grassDensity);
@@ -418,17 +510,9 @@ export function Environment({
       {ruins.map((r, i) => (
         <RuinPillar key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot ?? 0} h={r.h ?? 1.5} />
       ))}
-      {walls.map((o, i) => (
-        <RuinWall key={`w${i}`} o={o} />
-      ))}
-      {roofs.map((o, i) => (
-        <Roof key={`rf${i}`} o={o} />
-      ))}
+      <CityStructures walls={walls} roofs={roofs} crates={crates} combatRef={combatRef} />
       {lamps.map((o, i) => (
         <LampPost key={`l${i}`} o={o} />
-      ))}
-      {crates.map((o, i) => (
-        <Crate key={`c${i}`} o={o} />
       ))}
       {mushrooms.map((m, i) => (
         <GlowMushroom key={i} x={m.x} z={m.z} scale={m.scale} color={m.color} />

@@ -237,7 +237,7 @@ export function Scene({
       <SpawnGlow />
       <BorderRing />
 
-      <Environment env={environmentConfig} obstacles={obstacles} />
+      <Environment env={environmentConfig} obstacles={obstacles} combatRef={combatRef} />
 
       <ContactShadows position={[0, 0, 0]} opacity={0.6} scale={12} blur={2.2} far={4} />
 
