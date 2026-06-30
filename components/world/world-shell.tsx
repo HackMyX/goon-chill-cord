@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Preload } from "@react-three/drei";
+import { Preload, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { ArrowLeft, MousePointerClick, Swords, Heart, Zap, Coins, Flame, LogOut, ShieldHalf, Settings, RotateCcw, Maximize2 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
@@ -305,14 +305,22 @@ export function WorldShell({
       sound.warmupWorld(); // Kampf-Sounds vorladen → kein erster Decode-Stall
     }
   }, [hasEnteredWorld, sound]);
-  const handleSceneReady = useCallback(() => {
+  // Cover erst ausblenden, wenn BEIDES fertig ist: die Scene hat ein Frame
+  // gerendert (Shader kompiliert) UND troika hat den Glyphen-Atlas gebaut
+  // (onSync des Warmup-Texts). So passiert JEDER einmalige Build im schwarzen
+  // Cover — der 2–5s-Ruck beim ersten Monster/Namen/Zahl ist damit weg.
+  const readyFrame = useRef(false);
+  const readyGlyphs = useRef(false);
+  const tryReveal = useCallback(() => {
+    if (!readyFrame.current || !readyGlyphs.current) return;
     const elapsed = Date.now() - (enteredAtRef.current || Date.now());
-    const wait = Math.max(0, 700 - elapsed);
-    setTimeout(() => setIntroCover(false), wait);
+    setTimeout(() => setIntroCover(false), Math.max(0, 700 - elapsed));
   }, []);
+  const handleSceneReady = useCallback(() => { readyFrame.current = true; tryReveal(); }, [tryReveal]);
+  const handleGlyphsReady = useCallback(() => { readyGlyphs.current = true; tryReveal(); }, [tryReveal]);
   useEffect(() => {
     if (!hasEnteredWorld) return;
-    const t = setTimeout(() => setIntroCover(false), 6000); // Safety: nie schwarz hängen bleiben
+    const t = setTimeout(() => setIntroCover(false), 7000); // Safety: nie schwarz hängen bleiben
     return () => clearTimeout(t);
   }, [hasEnteredWorld]);
   useEffect(() => {
@@ -1289,6 +1297,19 @@ export function WorldShell({
             {/* Kompiliert ALLE Material-/Shadow-Shader beim Laden (während des
                 schwarzen Covers) → kein 388ms-Compile-Stall mehr mitten im Spiel. */}
             <Preload all />
+            {/* Glyphen-Vorwärmung: baut troikas SDF-Atlas für ALLE Spiel-Zeichen
+                (Zahlen + komplettes Alphabet + Umlaute) im schwarzen Cover; onSync
+                meldet, wann fertig → Cover bleibt bis dahin. Damit verursacht das
+                erste Monster-Namensschild / die erste Schadenszahl KEINEN Ruck. */}
+            <Text
+              position={[0, -400, 0]}
+              fontSize={0.01}
+              color="#000000"
+              characters="-+×!?.,:'0123456789 abcdefghijklmnopqrstuvwxyzäöüßABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ"
+              onSync={handleGlyphsReady}
+            >
+              ABCabc-0123456789!
+            </Text>
             <FirstFrameSignal onReady={handleSceneReady} />
           </Suspense>
         </Canvas>

@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { Sky, Stars, ContactShadows, Text } from "@react-three/drei";
+import { Sky, Stars, ContactShadows } from "@react-three/drei";
 import { Player, type PlayerStatsSnapshot } from "@/components/world/player";
 import { RemotePlayers } from "@/components/world/remote-players";
 import { Environment } from "@/components/world/environment";
@@ -230,14 +230,6 @@ export function Scene({
 
       <SpawnGlow />
       <BorderRing />
-
-      {/* Glyphen-Vorwärmung: lässt troika den SDF-Atlas für Ziffern/Symbole/
-          Buchstaben schon beim Laden bauen, damit die ERSTE Schadenszahl bzw.
-          der erste neue Name keinen einmaligen Worker-/GPU-Hänger verursacht
-          (~5s nach Spawn beim ersten Treffer). Unsichtbar weit unter der Map. */}
-      <Text position={[0, -300, 0]} fontSize={0.01} color="#000000" characters="-+0123456789!×">
-        -0123456789!
-      </Text>
 
       <Environment env={environmentConfig} />
 
