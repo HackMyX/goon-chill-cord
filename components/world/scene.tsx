@@ -178,7 +178,21 @@ export function Scene({
   const remotePlayerRegistryRef = useRef<RemotePlayerHandle[]>([]);
   // Kollidierbare Hindernisse — EINE Quelle für Render (Environment) + Physik
   // (Player/Monster). Recompute bei Dichte-Änderung; Ref für die useFrame-Reads.
-  const obstacles = useMemo(() => buildObstacles(environmentConfig), [environmentConfig]);
+  // NUR von den struktur-relevanten Dichten + Monument abhängig (nicht von der
+  // ganzen Config-Referenz) — sonst würde die Map bei jeder Licht-/Nebel-/Config-
+  // Aktualisierung neu generiert (Flackern „lädt auf einmal anders"). buildObstacles
+  // ist deterministisch (seeded), also liefert gleicher Input dieselbe Map für alle.
+  const obstacles = useMemo(
+    () => buildObstacles(environmentConfig),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      environmentConfig.treeDensity,
+      environmentConfig.rockDensity,
+      environmentConfig.ruinDensity,
+      environmentConfig.buildingDensity,
+      environmentConfig.monument,
+    ]
+  );
   const obstaclesRef = useRef<Obstacle[]>(obstacles);
   obstaclesRef.current = obstacles;
 

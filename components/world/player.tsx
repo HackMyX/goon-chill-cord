@@ -490,13 +490,19 @@ export function Player({
     const g = group.current;
     if (!g) return;
 
-    // Zufalls-Spawn beim ersten Betreten (nicht fester Mittelpunkt) — sobald
-    // aktiv + Hindernisse bekannt, einmal an einen gültigen Zufallsort setzen.
-    if (!initialSpawnRef.current && active) {
-      initialSpawnRef.current = true;
-      const sp = randomSpawnPoint(obstaclesRef?.current);
-      g.position.set(sp.x, 0, sp.z);
-      baseY.current = 0;
+    // Zufalls-Spawn an einen gültigen Ort — schon BEVOR der Spieler klickt
+    // (sobald die Hindernis-Liste geladen ist), damit die Vorschau bereits den
+    // echten Spawn-Ort zeigt und es beim Klick keinen Teleport gibt. Wartet
+    // bewusst auf obstacles.length > 0 → kein Spawn in einem Haus, weil die
+    // Kollisions-/Innen-Prüfung erst dann greift.
+    if (!initialSpawnRef.current) {
+      const obs = obstaclesRef?.current;
+      if (obs && obs.length > 0) {
+        initialSpawnRef.current = true;
+        const sp = randomSpawnPoint(obs);
+        g.position.set(sp.x, 0, sp.z);
+        baseY.current = 0;
+      }
     }
 
     // --- Death/respawn: checked first so the rest of this frame already

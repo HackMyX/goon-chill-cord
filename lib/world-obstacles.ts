@@ -465,7 +465,8 @@ export function randomSpawnPoint(obstacles: Obstacle[] | null | undefined): { x:
       x = res.x;
       z = res.z;
     }
-    if (Math.hypot(x, z) < WORLD_RADIUS - 4 && !pointInsideBlocker(obstacles, x, z, 0.55)) {
+    // 1.4 Freiraum-Radius → der Spawn liegt nie direkt in/an einer Wand/Haus.
+    if (Math.hypot(x, z) < WORLD_RADIUS - 4 && !pointInsideBlocker(obstacles, x, z, 1.4)) {
       return { x, z };
     }
   }
