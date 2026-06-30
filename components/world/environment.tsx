@@ -2,6 +2,7 @@
 
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import { Instances, Instance } from "@react-three/drei";
 import * as THREE from "three";
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { DEFAULT_WORLD_ENVIRONMENT, type WorldEnvironmentConfig } from "@/lib/world-environment-config";
@@ -10,43 +11,6 @@ import type { CombatSharedState } from "@/components/world/combat-types";
 
 const TRUNK_COLOR = "#2e2015";
 const FOLIAGE_COLORS = ["#0e3322", "#163d2a", "#1a4a32"];
-const FOLIAGE_EMISSIVES = ["#0a1f14", "#0e2a1c", "#102214"];
-
-function PineTree({ x, z, scale, hue }: { x: number; z: number; scale: number; hue: number }) {
-  return (
-    <group position={[x, 0, z]} scale={scale}>
-      <mesh position={[0, 0.6, 0]}>
-        <cylinderGeometry args={[0.16, 0.2, 1.2, 8]} />
-        <meshStandardMaterial color={TRUNK_COLOR} />
-      </mesh>
-      <mesh position={[0, 1.6, 0]}>
-        <coneGeometry args={[0.85, 1.4, 8]} />
-        <meshStandardMaterial color={FOLIAGE_COLORS[hue]} emissive={FOLIAGE_EMISSIVES[hue]} emissiveIntensity={0.35} />
-      </mesh>
-      <mesh position={[0, 2.3, 0]}>
-        <coneGeometry args={[0.6, 1.1, 8]} />
-        <meshStandardMaterial color={FOLIAGE_COLORS[hue]} emissive={FOLIAGE_EMISSIVES[hue]} emissiveIntensity={0.35} />
-      </mesh>
-      <mesh position={[0, 2.9, 0]}>
-        <coneGeometry args={[0.38, 0.85, 8]} />
-        <meshStandardMaterial color={FOLIAGE_COLORS[hue]} emissive={FOLIAGE_EMISSIVES[hue]} emissiveIntensity={0.4} />
-      </mesh>
-    </group>
-  );
-}
-
-function GrassTuft({ x, z }: { x: number; z: number }) {
-  return (
-    <group position={[x, 0, z]}>
-      {[0, 0.4, -0.4, 0.8, -0.8].map((offset, i) => (
-        <mesh key={i} position={[offset * 0.3, 0.1, offset * 0.2]} rotation={[0, offset, 0.15]}>
-          <coneGeometry args={[0.05, 0.22, 5]} />
-          <meshStandardMaterial color={i % 2 === 0 ? "#2f6b3f" : "#3a8050"} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
 
 /** Glowing crystal pillars ringing the world border — the visual half of
  * the boundary (player.tsx's circular position clamp is the physical
@@ -74,23 +38,6 @@ function BorderCrystal({ x, z, scale }: { x: number; z: number; scale: number })
       <mesh position={[0, 0.08, 0]}>
         <sphereGeometry args={[0.22, 8, 8]} />
         <meshBasicMaterial color="#a855f7" transparent opacity={0.18} toneMapped={false} />
-      </mesh>
-    </group>
-  );
-}
-
-/** Angular grey boulder — a couple of overlapping low-poly rocks with a faint
- * mossy emissive so they read in the moody lighting. */
-function Rock({ x, z, scale, rot }: { x: number; z: number; scale: number; rot: number }) {
-  return (
-    <group position={[x, 0, z]} scale={scale} rotation={[0, rot, 0]}>
-      <mesh position={[0, 0.28, 0]} rotation={[0.3, 0.6, 0.2]}>
-        <dodecahedronGeometry args={[0.55, 0]} />
-        <meshStandardMaterial color="#5b6066" emissive="#1a241c" emissiveIntensity={0.25} flatShading />
-      </mesh>
-      <mesh position={[0.45, 0.16, 0.2]} rotation={[0.5, 1.1, 0.3]}>
-        <dodecahedronGeometry args={[0.3, 0]} />
-        <meshStandardMaterial color="#4d5258" emissive="#16201a" emissiveIntensity={0.25} flatShading />
       </mesh>
     </group>
   );
@@ -125,24 +72,124 @@ function RuinPillar({ x, z, scale, rot, h }: { x: number; z: number; scale: numb
   );
 }
 
-/** Glowing mushroom — atmospheric ground accent, emissive cap. */
-function GlowMushroom({ x, z, scale, color }: { x: number; z: number; scale: number; color: string }) {
+// ─── Instanced-Renderer: alle gleichartigen Deko-Objekte = 1 Draw-Call statt
+// hunderte Einzel-Meshes → massiv schneller (Bäume/Felsen/Gras/Pilze/Kisten). ───
+
+const FOLIAGE_LAYERS = [
+  { r: 0.85, h: 1.4, y: 1.6 },
+  { r: 0.6, h: 1.1, y: 2.3 },
+  { r: 0.38, h: 0.85, y: 2.9 },
+];
+
+function InstancedTrees({ trees }: { trees: Obstacle[] }) {
+  if (!trees.length) return null;
   return (
-    <group position={[x, 0, z]} scale={scale}>
-      <mesh position={[0, 0.18, 0]}>
+    <group>
+      <Instances limit={trees.length} range={trees.length} castShadow>
+        <cylinderGeometry args={[0.16, 0.2, 1.2, 6]} />
+        <meshStandardMaterial color={TRUNK_COLOR} />
+        {trees.map((t, i) => (
+          <Instance key={i} position={[t.x, 0.6 * t.scale, t.z]} scale={t.scale} />
+        ))}
+      </Instances>
+      {FOLIAGE_LAYERS.map((c, li) => (
+        <Instances key={li} limit={trees.length} range={trees.length} castShadow>
+          <coneGeometry args={[c.r, c.h, 7]} />
+          <meshStandardMaterial emissive="#0c241a" emissiveIntensity={0.32} />
+          {trees.map((t, i) => (
+            <Instance key={i} position={[t.x, c.y * t.scale, t.z]} scale={t.scale} color={FOLIAGE_COLORS[t.hue ?? 0]} />
+          ))}
+        </Instances>
+      ))}
+    </group>
+  );
+}
+
+function InstancedRocks({ rocks }: { rocks: Obstacle[] }) {
+  if (!rocks.length) return null;
+  return (
+    <group>
+      <Instances limit={rocks.length} range={rocks.length} castShadow>
+        <dodecahedronGeometry args={[0.55, 0]} />
+        <meshStandardMaterial color="#5b6066" emissive="#1a241c" emissiveIntensity={0.25} flatShading />
+        {rocks.map((r, i) => (
+          <Instance key={i} position={[r.x, 0.28 * r.scale, r.z]} scale={r.scale} rotation={[0.3, (r.rot ?? 0) + 0.6, 0.2]} />
+        ))}
+      </Instances>
+      <Instances limit={rocks.length} range={rocks.length} castShadow>
+        <dodecahedronGeometry args={[0.3, 0]} />
+        <meshStandardMaterial color="#4d5258" emissive="#16201a" emissiveIntensity={0.25} flatShading />
+        {rocks.map((r, i) => {
+          const rot = r.rot ?? 0;
+          return (
+            <Instance
+              key={i}
+              position={[r.x + (0.45 * Math.cos(rot) - 0.2 * Math.sin(rot)) * r.scale, 0.16 * r.scale, r.z + (0.45 * Math.sin(rot) + 0.2 * Math.cos(rot)) * r.scale]}
+              scale={r.scale}
+              rotation={[0.5, rot + 1.1, 0.3]}
+            />
+          );
+        })}
+      </Instances>
+    </group>
+  );
+}
+
+function InstancedGrass({ tufts }: { tufts: { x: number; z: number }[] }) {
+  const blades = useMemo(() => {
+    const arr: { x: number; z: number; rot: number; color: string }[] = [];
+    for (const t of tufts) {
+      for (const off of [0, 0.45, -0.45]) {
+        arr.push({ x: t.x + off * 0.3, z: t.z + off * 0.2, rot: off, color: off >= 0 ? "#2f6b3f" : "#3a8050" });
+      }
+    }
+    return arr;
+  }, [tufts]);
+  if (!blades.length) return null;
+  return (
+    <Instances limit={blades.length} range={blades.length}>
+      <coneGeometry args={[0.05, 0.24, 5]} />
+      <meshStandardMaterial />
+      {blades.map((b, i) => (
+        <Instance key={i} position={[b.x, 0.11, b.z]} rotation={[0, b.rot, 0.15]} color={b.color} />
+      ))}
+    </Instances>
+  );
+}
+
+function InstancedMushrooms({ mushrooms }: { mushrooms: { x: number; z: number; scale: number; color: string }[] }) {
+  if (!mushrooms.length) return null;
+  return (
+    <group>
+      <Instances limit={mushrooms.length} range={mushrooms.length}>
         <cylinderGeometry args={[0.05, 0.08, 0.36, 6]} />
         <meshStandardMaterial color="#d9c7b8" />
-      </mesh>
-      <mesh position={[0, 0.4, 0]}>
-        <sphereGeometry args={[0.18, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.4} toneMapped={false} />
-      </mesh>
-      {/* soft ground glow */}
-      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.35, 12]} />
-        <meshBasicMaterial color={color} transparent opacity={0.12} toneMapped={false} />
-      </mesh>
+        {mushrooms.map((m, i) => (
+          <Instance key={i} position={[m.x, 0.18 * m.scale, m.z]} scale={m.scale} />
+        ))}
+      </Instances>
+      <Instances limit={mushrooms.length} range={mushrooms.length}>
+        <sphereGeometry args={[0.18, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshBasicMaterial toneMapped={false} />
+        {mushrooms.map((m, i) => (
+          <Instance key={i} position={[m.x, 0.4 * m.scale, m.z]} scale={m.scale} color={m.color} />
+        ))}
+      </Instances>
     </group>
+  );
+}
+
+function InstancedCrates({ crates }: { crates: Obstacle[] }) {
+  if (!crates.length) return null;
+  return (
+    <Instances limit={crates.length} range={crates.length} castShadow>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color="#6b4f2a" emissive="#160d05" emissiveIntensity={0.2} roughness={0.9} flatShading />
+      {crates.map((o, i) => {
+        const s = (o.hx ?? 0.4) * 2;
+        return <Instance key={i} position={[o.x, s * 0.5, o.z]} scale={s} rotation={[0, o.rot ?? 0, 0]} />;
+      })}
+    </Instances>
   );
 }
 
@@ -228,15 +275,6 @@ function LampPost({ o }: { o: Obstacle }) {
 }
 
 /** Holzkiste / Trümmerstück (überspringbar). */
-function Crate({ o }: { o: Obstacle }) {
-  const s = (o.hx ?? 0.4) * 2;
-  return (
-    <mesh position={[o.x, s * 0.5, o.z]} rotation={[0, o.rot ?? 0, 0]} castShadow>
-      <boxGeometry args={[s, s, s]} />
-      <meshStandardMaterial color="#6b4f2a" emissive="#160d05" emissiveIntensity={0.2} roughness={0.9} flatShading />
-    </mesh>
-  );
-}
 
 /** Faded die Materialien einer Gruppe sanft Richtung `target`-Opazität. */
 function fadeGroup(g: THREE.Object3D, target: number) {
@@ -304,9 +342,7 @@ function CityStructures({
           <Roof o={o} />
         </group>
       ))}
-      {crates.map((o, i) => (
-        <Crate key={`c${i}`} o={o} />
-      ))}
+      <InstancedCrates crates={crates} />
     </>
   );
 }
@@ -498,15 +534,9 @@ export function Environment({
 
   return (
     <>
-      {trees.map((t, i) => (
-        <PineTree key={i} x={t.x} z={t.z} scale={t.scale} hue={t.hue ?? 0} />
-      ))}
-      {grassTufts.map((g, i) => (
-        <GrassTuft key={i} x={g.x} z={g.z} />
-      ))}
-      {rocks.map((r, i) => (
-        <Rock key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot ?? 0} />
-      ))}
+      <InstancedTrees trees={trees} />
+      <InstancedGrass tufts={grassTufts} />
+      <InstancedRocks rocks={rocks} />
       {ruins.map((r, i) => (
         <RuinPillar key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot ?? 0} h={r.h ?? 1.5} />
       ))}
@@ -514,9 +544,7 @@ export function Environment({
       {lamps.map((o, i) => (
         <LampPost key={`l${i}`} o={o} />
       ))}
-      {mushrooms.map((m, i) => (
-        <GlowMushroom key={i} x={m.x} z={m.z} scale={m.scale} color={m.color} />
-      ))}
+      <InstancedMushrooms mushrooms={mushrooms} />
       {borderCrystals.map((c, i) => (
         <BorderCrystal key={i} x={c.x} z={c.z} scale={c.scale} />
       ))}
