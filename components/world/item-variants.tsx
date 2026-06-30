@@ -271,7 +271,7 @@ function JacketRarityTrim({ rarity, width, depth }: { rarity: Rarity; width: num
 /** Glowing rarity sole under a shoe — visible for Mythisch and Ultra only.
  * In shoe local space the sole is at y≈0 / z≈+0.08, so this strip sits
  * right below the foot, giving a visible "powered footwear" look. */
-function ShoeRarityGlow({ rarity }: { rarity: Rarity }) {
+function ShoeRarityGlow({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   if (rarity === "normal" || rarity === "selten") return null;
   const c = RARITY_HEX[rarity];
   return (
@@ -2982,10 +2982,10 @@ export function HairVariant({ item, gender }: { item: EquippedItem; gender: "m" 
 
 // --- Auras: 4 dramatically different effects ------------------------------
 
-function OrbitAura({ rarity }: { rarity: Rarity }) {
+function OrbitAura({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   const groupRef = useRef<THREE.Group>(null);
   const particleRefs = useRef<(THREE.Mesh | null)[]>([]);
-  const color = RARITY_HEX[rarity];
+  // color kommt als Prop (Namens-Farbe des Items, sonst Seltenheit als Default)
   const count = 8;
 
   useFrame((state, delta) => {
@@ -3021,9 +3021,9 @@ function OrbitAura({ rarity }: { rarity: Rarity }) {
   );
 }
 
-function EmberAura({ rarity }: { rarity: Rarity }) {
+function EmberAura({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   const refs = useRef<(THREE.Mesh | null)[]>([]);
-  const color = RARITY_HEX[rarity];
+  // color kommt als Prop (Namens-Farbe des Items, sonst Seltenheit als Default)
   const count = 10;
   // Render-time data (read in JSX below), not a per-frame mutation target —
   // useMemo is the right tool here, not useRef (refs are for values that
@@ -3073,10 +3073,10 @@ function EmberAura({ rarity }: { rarity: Rarity }) {
   );
 }
 
-function BladeAura({ rarity }: { rarity: Rarity }) {
+function BladeAura({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   const groupRef = useRef<THREE.Group>(null);
   const refs = useRef<(THREE.Mesh | null)[]>([]);
-  const color = RARITY_HEX[rarity];
+  // color kommt als Prop (Namens-Farbe des Items, sonst Seltenheit als Default)
   const count = 6;
 
   useFrame((state, delta) => {
@@ -3112,12 +3112,12 @@ function BladeAura({ rarity }: { rarity: Rarity }) {
   );
 }
 
-function DoubleRingAura({ rarity }: { rarity: Rarity }) {
+function DoubleRingAura({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   const ringA = useRef<THREE.Group>(null);
   const ringB = useRef<THREE.Group>(null);
   const meshA = useRef<THREE.Mesh>(null);
   const meshB = useRef<THREE.Mesh>(null);
-  const color = RARITY_HEX[rarity];
+  // color kommt als Prop (Namens-Farbe des Items, sonst Seltenheit als Default)
 
   useFrame((state, delta) => {
     if (ringA.current) ringA.current.rotation.y += delta * 1.6;
@@ -3149,10 +3149,10 @@ function DoubleRingAura({ rarity }: { rarity: Rarity }) {
  * spheres trailing behind a bright head, sweeping around at shoulder
  * height. This is the "Schweif" (tail) look the ring/orbit/ember/blade
  * variants above didn't cover. */
-function CometAura({ rarity }: { rarity: Rarity }) {
+function CometAura({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   const groupRef = useRef<THREE.Group>(null);
   const refs = useRef<(THREE.Mesh | null)[]>([]);
-  const color = RARITY_HEX[rarity];
+  // color kommt als Prop (Namens-Farbe des Items, sonst Seltenheit als Default)
   const count = 9;
   const seeds = useMemo(
     () => Array.from({ length: count }, (_, i) => ({ trail: i / count })),
@@ -3201,9 +3201,9 @@ function CometAura({ rarity }: { rarity: Rarity }) {
 /** A pair of slowly-flapping, segmented wing silhouettes flaring out from
  * the back — glowing feather-like slats instead of a flat plane, so it
  * reads as wings rather than two boards. */
-function WingAura({ rarity }: { rarity: Rarity }) {
+function WingAura({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   const refs = useRef<(THREE.Mesh | null)[]>([]);
-  const color = RARITY_HEX[rarity];
+  // color kommt als Prop (Namens-Farbe des Items, sonst Seltenheit als Default)
   const feathersPerWing = 5;
   const seeds = useMemo(
     () =>
@@ -3257,14 +3257,14 @@ const EXACT_AURA_SHAPE: Record<string, typeof OrbitAura> = {
 
 export function AuraVariant({ item }: { item: EquippedItem }) {
   const Variant = EXACT_AURA_SHAPE[item.name] ?? AURA_VARIANTS[variantIndex(item.name, AURA_VARIANTS.length, item.rarity)];
-  return <Variant rarity={item.rarity} />;
+  return <Variant rarity={item.rarity} color={rarityColorFor(item, RARITY_HEX[item.rarity])} />;
 }
 
 // --- Trails: 4 distinct ground-effect styles ------------------------------
 
-function GlowCirclesTrail({ rarity }: { rarity: Rarity }) {
+function GlowCirclesTrail({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   const refs = useRef<(THREE.Mesh | null)[]>([]);
-  const color = RARITY_HEX[rarity];
+  // color kommt als Prop (Namens-Farbe des Items, sonst Seltenheit als Default)
   const segments = [
     { z: -0.4, scale: 0.85, opacity: 0.55 },
     { z: -0.75, scale: 0.65, opacity: 0.38 },
@@ -3301,9 +3301,9 @@ function GlowCirclesTrail({ rarity }: { rarity: Rarity }) {
   );
 }
 
-function SparkTrail({ rarity }: { rarity: Rarity }) {
+function SparkTrail({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   const refs = useRef<(THREE.Mesh | null)[]>([]);
-  const color = RARITY_HEX[rarity];
+  // color kommt als Prop (Namens-Farbe des Items, sonst Seltenheit als Default)
   const count = 8;
   const seeds = useMemo(
     () =>
@@ -3346,9 +3346,9 @@ function SparkTrail({ rarity }: { rarity: Rarity }) {
   );
 }
 
-function RibbonTrail({ rarity }: { rarity: Rarity }) {
+function RibbonTrail({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   const refs = useRef<(THREE.Mesh | null)[]>([]);
-  const color = RARITY_HEX[rarity];
+  // color kommt als Prop (Namens-Farbe des Items, sonst Seltenheit als Default)
   const count = 6;
 
   useFrame((state) => {
@@ -3385,9 +3385,9 @@ function RibbonTrail({ rarity }: { rarity: Rarity }) {
   );
 }
 
-function SmokePuffTrail({ rarity }: { rarity: Rarity }) {
+function SmokePuffTrail({ rarity, color = RARITY_HEX[rarity] }: { rarity: Rarity; color?: string }) {
   const refs = useRef<(THREE.Mesh | null)[]>([]);
-  const color = RARITY_HEX[rarity];
+  // color kommt als Prop (Namens-Farbe des Items, sonst Seltenheit als Default)
   const count = 5;
 
   useFrame((state) => {
@@ -3433,5 +3433,5 @@ const EXACT_TRAIL_SHAPE: Record<string, typeof GlowCirclesTrail> = {
 export function TrailVariant({ item }: { item: EquippedItem }) {
   const Variant =
     EXACT_TRAIL_SHAPE[item.name] ?? TRAIL_VARIANTS[variantIndex(item.name, TRAIL_VARIANTS.length, item.rarity)];
-  return <Variant rarity={item.rarity} />;
+  return <Variant rarity={item.rarity} color={rarityColorFor(item, RARITY_HEX[item.rarity])} />;
 }
