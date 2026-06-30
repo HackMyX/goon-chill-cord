@@ -66,30 +66,33 @@ export interface TimeOfDayPreset {
   groundInner: string;
 }
 
+// Post-apokalyptische Paletten: kein lila Magie-Look mehr. Verseuchter, schmutzig-
+// gelber Smog am Abend, erstickende Dunkelheit nachts, aschiger Dunst am Morgen,
+// fahler Overcast-Tag. Boden = totes Gras/Dreck/Asche statt sattes Grün.
 export const TIME_OF_DAY_PRESETS: Record<TimeOfDay, TimeOfDayPreset> = {
   abend: {
-    label: "Abenddämmerung",
-    sun: [-40, 5, -65], turbidity: 16, rayleigh: 1.6,
-    fog: "#120a22", ambient: "#a78bfa", dir: "#ffd9b3", dirIntensity: 1.1,
-    ground: "#253d28", groundInner: "#2c5530",
+    label: "Verseuchte Dämmerung",
+    sun: [-40, 5, -65], turbidity: 22, rayleigh: 2.4,
+    fog: "#241a10", ambient: "#b8a06a", dir: "#d8b070", dirIntensity: 1.0,
+    ground: "#2e2a1c", groundInner: "#3a3422",
   },
   nacht: {
-    label: "Nacht",
-    sun: [-30, -6, -60], turbidity: 7, rayleigh: 0.45,
-    fog: "#070512", ambient: "#5566b0", dir: "#9fb6ff", dirIntensity: 0.5,
-    ground: "#16241c", groundInner: "#1c3a26",
+    label: "Tote Nacht",
+    sun: [-30, -6, -60], turbidity: 9, rayleigh: 0.5,
+    fog: "#0a0c08", ambient: "#5a6450", dir: "#8fa07a", dirIntensity: 0.45,
+    ground: "#181a12", groundInner: "#202417",
   },
   morgen: {
-    label: "Morgenröte",
-    sun: [45, 7, -38], turbidity: 10, rayleigh: 2.6,
-    fog: "#2a1d2e", ambient: "#fbcfe8", dir: "#ffe0c0", dirIntensity: 1.25,
-    ground: "#2c4a32", groundInner: "#356b3a",
+    label: "Aschiger Morgen",
+    sun: [45, 7, -38], turbidity: 14, rayleigh: 2.0,
+    fog: "#322c24", ambient: "#cabfa6", dir: "#e0cda0", dirIntensity: 1.15,
+    ground: "#2c2a1e", groundInner: "#383424",
   },
   tag: {
-    label: "Heller Tag",
-    sun: [22, 42, 12], turbidity: 5, rayleigh: 1.0,
-    fog: "#b8d4e6", ambient: "#e0e7ff", dir: "#fff6e8", dirIntensity: 1.5,
-    ground: "#2f6b3a", groundInner: "#3c8048",
+    label: "Fahler Smog-Tag",
+    sun: [22, 42, 12], turbidity: 8, rayleigh: 1.3,
+    fog: "#9a9580", ambient: "#cfc8b0", dir: "#efe8d0", dirIntensity: 1.3,
+    ground: "#3a3826", groundInner: "#46422c",
   },
 };
 

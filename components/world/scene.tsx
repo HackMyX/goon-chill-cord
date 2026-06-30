@@ -84,11 +84,11 @@ function BorderRing() {
     <>
       <mesh ref={outerRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
         <ringGeometry args={[WORLD_RADIUS - 0.6, WORLD_RADIUS, 96]} />
-        <meshBasicMaterial color="#a855f7" transparent opacity={0.4} toneMapped={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#b89a3a" transparent opacity={0.4} toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
       <mesh ref={innerRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
         <ringGeometry args={[WORLD_RADIUS - 4, WORLD_RADIUS - 1.5, 80]} />
-        <meshBasicMaterial color="#7c3aed" transparent opacity={0.14} toneMapped={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#8a6a22" transparent opacity={0.14} toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
     </>
   );
@@ -112,11 +112,11 @@ function SpawnGlow() {
     <>
       <mesh ref={outerRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.015, 0]}>
         <circleGeometry args={[18, 72]} />
-        <meshBasicMaterial color="#6d28d9" transparent opacity={0.08} toneMapped={false} />
+        <meshBasicMaterial color="#4a5a28" transparent opacity={0.08} toneMapped={false} />
       </mesh>
       <mesh ref={innerRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
         <circleGeometry args={[7, 52]} />
-        <meshBasicMaterial color="#a855f7" transparent opacity={0.12} toneMapped={false} />
+        <meshBasicMaterial color="#7a8a3a" transparent opacity={0.12} toneMapped={false} />
       </mesh>
     </>
   );
@@ -130,7 +130,7 @@ function SpawnHeartLight() {
     if (lightRef.current)
       lightRef.current.intensity = 6 + Math.sin(clock.elapsedTime * 0.6) * 3;
   });
-  return <pointLight ref={lightRef} position={[0, 1.5, 0]} color="#7c3aed" intensity={6} distance={22} decay={2} />;
+  return <pointLight ref={lightRef} position={[0, 1.5, 0]} color="#8a7a3a" intensity={6} distance={22} decay={2} />;
 }
 
 export function Scene({
@@ -236,9 +236,9 @@ export function Scene({
 
       <ambientLight intensity={0.5 * environmentConfig.ambientIntensity} color={tp.ambient} />
       <directionalLight position={tp.sun} intensity={tp.dirIntensity} color={tp.dir} castShadow />
-      {/* Akzent-Punktlichter (admin: accentIntensity) — lila Fill, blauer Rim, Gefahr-Rot */}
-      <pointLight position={[-6, 3, -4]} intensity={22 * environmentConfig.accentIntensity} color="#8b5cf6" distance={40} decay={2} />
-      <pointLight position={[6, 3, 6]} intensity={16 * environmentConfig.accentIntensity} color="#3b82f6" distance={35} decay={2} />
+      {/* Akzent-Punktlichter (admin: accentIntensity) — giftgrüner Fill, kalter Stahl-Rim, Gefahr-Rot */}
+      <pointLight position={[-6, 3, -4]} intensity={22 * environmentConfig.accentIntensity} color="#9aa84a" distance={40} decay={2} />
+      <pointLight position={[6, 3, 6]} intensity={16 * environmentConfig.accentIntensity} color="#6b7a82" distance={35} decay={2} />
       <pointLight position={[0, 5, -18]} intensity={10 * environmentConfig.accentIntensity} color="#7f1d1d" distance={30} decay={2} />
       {/* Pulsing spawn heart */}
       <SpawnHeartLight />

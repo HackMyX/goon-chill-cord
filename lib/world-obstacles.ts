@@ -9,7 +9,11 @@ import { DEFAULT_WORLD_ENVIRONMENT, type WorldEnvironmentConfig } from "@/lib/wo
 // Deterministisch (mulberry32-Seeds) wie zuvor; dichte-abhängig (env-Config).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ObstacleKind = "tree" | "rock" | "ruin" | "monument" | "wall" | "lamp" | "crate" | "roof" | "road" | "campfire";
+export type ObstacleKind =
+  | "tree" | "rock" | "ruin" | "monument" | "wall" | "lamp" | "crate" | "roof" | "road" | "campfire"
+  // Post-Apokalypse-Schutt: ausgebranntes Wrack (blockiert, Deckung) + niedriger
+  // Trümmerhaufen (überspringbar).
+  | "wreck" | "debris";
 
 export interface Obstacle {
   kind: ObstacleKind;
@@ -54,6 +58,19 @@ function pushWall(out: Obstacle[], axis: "x" | "z", x: number, z: number, half: 
   const hx = axis === "x" ? half : t;
   const hz = axis === "x" ? t : half;
   out.push({ kind: "wall", x, z, scale: 1, shape: "box", hx, hz, r: Math.max(hx, hz), blockH: h, h, len: half * 2, tone });
+}
+
+/** Ausgebranntes Fahrzeug-Wrack — blockierende Deckung (nicht überspringbar).
+ * Box-Kollision; Render baut daraus ein rostiges Auto. */
+function pushWreck(out: Obstacle[], x: number, z: number, rot: number, scale = 1) {
+  const hx = 1.05 * scale;
+  const hz = 0.55 * scale;
+  out.push({ kind: "wreck", x, z, scale, shape: "box", hx, hz, r: Math.max(hx, hz), blockH: 1.3, rot });
+}
+
+/** Niedriger Trümmerhaufen (Schutt) — ÜBERSPRINGBAR, kreisförmige Kollision. */
+function pushDebris(out: Obstacle[], x: number, z: number, rot: number, scale = 1) {
+  out.push({ kind: "debris", x, z, scale, shape: "circle", r: 0.7 * scale, blockH: 0.5 * scale + 0.12, rot });
 }
 
 /** Haus: 4 Wände mit Türöffnungen auf MEHREREN Seiten (mehrere Ausgänge → man
@@ -266,6 +283,40 @@ function genVillage(out: Obstacle[], ox: number, oz: number, rand: () => number)
   addLamp(out, ox + 4, oz + 3, rand);
 }
 
+/** VERFALLENER SUPERMARKT-PARKPLATZ: großer leerstehender Supermarkt mit breitem
+ * Eingang + davorliegender Parkplatz voller ausgebrannter Wracks, Schutt,
+ * Einkaufswagen-Reihen und einem teils eingestürzten Zaun. Eigene Zone. */
+function genSupermarketLot(out: Obstacle[], ox: number, oz: number, rand: () => number) {
+  // Gebäude im hinteren Teil der Zone, Front (facing 0 = −z) zum Parkplatz.
+  const bz = oz - 7;
+  emitSupermarket(out, ox, bz, 0, rand);
+  // Zufahrtsstraße vom Parkplatz nach Süden raus.
+  addRoad(out, ox, oz + 8, 22, 5, 0);
+  lampLine(out, ox - 9, oz + 8, ox + 9, oz + 8, 8, rand);
+  // Parkbuchten-Wracks: 2 Reihen quer vor dem Eingang, locker gefüllt.
+  for (let row = 0; row < 2; row++) {
+    const pz = oz + (row === 0 ? -1 : 4);
+    for (let i = -2; i <= 2; i++) {
+      if (rand() < 0.35) continue; // Lücken → durchfahrbar, kein Riegel
+      pushWreck(out, ox + i * 3.4, pz, (rand() - 0.5) * 0.6 + (row === 0 ? 0 : Math.PI), 0.9 + rand() * 0.3);
+    }
+  }
+  // Schutt + umgekippte Einkaufswagen (niedrige Kisten) verstreut.
+  for (let i = 0; i < 7; i++) {
+    pushDebris(out, ox + (rand() - 0.5) * 22, oz + (rand() - 0.5) * 16, rand() * Math.PI, 0.7 + rand() * 0.7);
+  }
+  for (let i = 0; i < 4; i++) {
+    const s = 0.4 + rand() * 0.3;
+    out.push({ kind: "crate", x: ox + (rand() - 0.5) * 18, z: oz + (rand() - 0.5) * 12, scale: s, shape: "box", hx: s, hz: s * 0.7, r: s, blockH: s * 1.2, rot: rand() * Math.PI });
+  }
+  // Teils eingestürzter Zaun (niedrige Mauerstücke, Markt-Ton) um den Parkplatz.
+  const fz = oz + 11;
+  for (let i = -3; i <= 3; i++) {
+    if (rand() < 0.3) continue; // Lücken = eingestürzt
+    pushWall(out, "x", ox + i * 3.2, fz, 1.4, 0.9 + rand() * 0.4, 1);
+  }
+}
+
 /** MARKT: zwei Reihen leerer Marktstände an einer Mittel-Gasse + Laternen. */
 function genMarket(out: Obstacle[], ox: number, oz: number, rand: () => number) {
   const n = 4;
@@ -302,6 +353,13 @@ function genRuinsField(out: Obstacle[], ox: number, oz: number, rand: () => numb
   for (let i = 0; i < 10; i++) {
     const scale = 0.5 + rand() * 0.8;
     out.push({ kind: "rock", x: ox + (rand() - 0.5) * 30, z: oz + (rand() - 0.5) * 30, scale, r: 0.48 * scale, blockH: 0.5 * scale + 0.22, rot: rand() * Math.PI * 2 });
+  }
+  // Ausgebrannte Wracks + Trümmerhaufen — das Viertel ist gefallen.
+  for (let i = 0; i < 4; i++) {
+    pushWreck(out, ox + (rand() - 0.5) * 28, oz + (rand() - 0.5) * 28, rand() * Math.PI * 2, 0.9 + rand() * 0.4);
+  }
+  for (let i = 0; i < 8; i++) {
+    pushDebris(out, ox + (rand() - 0.5) * 30, oz + (rand() - 0.5) * 30, rand() * Math.PI, 0.7 + rand() * 0.8);
   }
 }
 
@@ -363,7 +421,7 @@ function genCamp(out: Obstacle[], ox: number, oz: number, rand: () => number) {
 /** WILDER GARTEN / HECKEN-LABYRINTH: ein umrandetes Heckengitter mit Pfaden +
  * ein paar Bäumen + Mittelplatz. Hecken = Wände mit grünem Ton (tone 4). */
 function genMaze(out: Obstacle[], ox: number, oz: number, rand: () => number) {
-  const n = 9; // größer & krasser
+  const n = 11; // größeres, krasseres Labyrinth (Mobile-bewusst nicht übertrieben)
   const cell = 3.6;
   const half = (n * cell) / 2;
   const tone = 4; // Hecke (grün)
@@ -419,7 +477,8 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
     ? [
         { ...atc(0.0, 0.34), r: 28 },
         { ...atc(0.17, 0.62), r: 18 },
-        { ...atc(0.84, 0.6), r: 24 }, // Labyrinth (größer)
+        { ...atc(0.26, 0.44), r: 20 }, // Supermarkt-Parkplatz
+        { ...atc(0.84, 0.6), r: 28 }, // Labyrinth (jetzt n=11 → größerer Ausschluss)
       ]
     : [];
   const inBuilt = (x: number, z: number) => builtZones.some((c) => (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r);
@@ -522,18 +581,21 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
       // Radien → klar getrennt, kein Overlap.
       const village = at(0.00, 0.34);
       const market = at(0.17, 0.62);
+      const superm = at(0.26, 0.44);
       const ruinsF = at(0.34, 0.66);
       const forest = at(0.50, 0.58);
       const camp = at(0.67, 0.70);
       const maze = at(0.84, 0.60);
       genVillage(out, village.x, village.z, rand);
       genMarket(out, market.x, market.z, rand);
+      genSupermarketLot(out, superm.x, superm.z, rand);
       genRuinsField(out, ruinsF.x, ruinsF.z, rand);
       genForest(out, forest.x, forest.z, rand);
       genCamp(out, camp.x, camp.z, rand);
       genMaze(out, maze.x, maze.z, rand);
       // Ein paar Verbindungswege vom Dorf aus (nicht zu jedem — sonst Wirrwarr).
       roadBetween(out, village.x, village.z, market.x, market.z, 3);
+      roadBetween(out, village.x, village.z, superm.x, superm.z, 3);
       roadBetween(out, village.x, village.z, forest.x, forest.z, 2.6);
     }
   }

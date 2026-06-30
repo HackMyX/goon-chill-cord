@@ -9,65 +9,74 @@ import { DEFAULT_WORLD_ENVIRONMENT, type WorldEnvironmentConfig } from "@/lib/wo
 import type { Obstacle } from "@/lib/world-obstacles";
 import type { CombatSharedState } from "@/components/world/combat-types";
 
-const TRUNK_COLOR = "#2e2015";
-const FOLIAGE_COLORS = ["#0e3322", "#163d2a", "#1a4a32"];
+// Post-Apokalypse: tote, verkohlte Stämme + spärliches, vertrocknetes/giftiges Laub.
+const TRUNK_COLOR = "#231a13";
+const FOLIAGE_COLORS = ["#3a3a1e", "#42381c", "#2e3320"];
 
-/** Glowing crystal pillars ringing the world border — the visual half of
- * the boundary (player.tsx's circular position clamp is the physical
- * half). Lets the edge of the world read as "a place", not an invisible
- * wall you just bump into with no explanation. */
-function BorderCrystal({ x, z, scale }: { x: number; z: number; scale: number }) {
+/** Verrostete Warn-/Strommasten am Welt-Rand — die optische Hälfte der Grenze
+ * (player.tsx's kreisförmiger Position-Clamp ist die physische Hälfte). Lässt den
+ * Welt-Rand als "Ort" lesen statt als unsichtbare Wand: ein schiefer Stahlmast mit
+ * glimmender Notbefeuerung statt des alten Magie-Kristalls. */
+function DeadSpire({ x, z, scale }: { x: number; z: number; scale: number }) {
   return (
-    <group position={[x, 0, z]} scale={scale}>
-      {/* Main crystal spike */}
-      <mesh position={[0, 0.9, 0]}>
-        <coneGeometry args={[0.3, 1.8, 6]} />
-        <meshStandardMaterial color="#3b1e6d" emissive="#a855f7" emissiveIntensity={1.3} />
+    <group position={[x, 0, z]} scale={scale} rotation={[0, 0, (((x * 7 + z * 3) % 10) / 10 - 0.5) * 0.18]}>
+      {/* schiefer Stahl-Hauptmast */}
+      <mesh position={[0, 1.2, 0]}>
+        <cylinderGeometry args={[0.08, 0.16, 2.4, 6]} />
+        <meshStandardMaterial color="#3a2c20" roughness={0.95} metalness={0.4} />
       </mesh>
-      {/* Smaller secondary crystal beside it for silhouette interest */}
-      <mesh position={[0.25, 0.5, 0.1]} rotation={[0, 0.4, 0.3]}>
-        <coneGeometry args={[0.12, 0.95, 5]} />
-        <meshStandardMaterial color="#2a1350" emissive="#c084fc" emissiveIntensity={1.0} />
+      {/* abgeknickte Querstrebe */}
+      <mesh position={[0.18, 1.9, 0.05]} rotation={[0, 0.4, 0.5]}>
+        <boxGeometry args={[0.55, 0.07, 0.07]} />
+        <meshStandardMaterial color="#2e241a" roughness={1} metalness={0.3} />
       </mesh>
-      {/* Base plinth */}
+      {/* Beton-Fundament */}
       <mesh position={[0, 0.15, 0]}>
-        <cylinderGeometry args={[0.4, 0.45, 0.3, 8]} />
-        <meshStandardMaterial color="#1c1330" emissive="#7c3aed" emissiveIntensity={0.3} />
+        <cylinderGeometry args={[0.38, 0.46, 0.3, 6]} />
+        <meshStandardMaterial color="#4a463c" roughness={1} />
       </mesh>
-      {/* Glow orb at ground level — bleeds light onto nearby grass */}
-      <mesh position={[0, 0.08, 0]}>
-        <sphereGeometry args={[0.22, 8, 8]} />
-        <meshBasicMaterial color="#a855f7" transparent opacity={0.18} toneMapped={false} />
+      {/* schwache rote Notbefeuerung oben (kein Magie-Glow) */}
+      <mesh position={[0, 2.45, 0]}>
+        <sphereGeometry args={[0.1, 8, 8]} />
+        <meshBasicMaterial color="#c2451f" toneMapped={false} />
+      </mesh>
+      {/* matter Bodenschein der Warnleuchte */}
+      <mesh position={[0, 0.06, 0]}>
+        <sphereGeometry args={[0.2, 8, 8]} />
+        <meshBasicMaterial color="#a83a18" transparent opacity={0.12} toneMapped={false} />
       </mesh>
     </group>
   );
 }
 
-/** Broken ancient stone pillar — gives the map "ruins/structures" feel.
- * Cracked column on a base block, with faint purple rune-glow. */
+/** Zerbrochener Beton-Pfeiler mit rostigem Bewehrungsstahl — gibt der Map den
+ * "Ruinen/Trümmer"-Look. Gerissene Säule auf Sockel, abgebrochene Krone, keine
+ * Magie mehr (statt Runen-Glow ragt verbogener Moniereisen-Stahl heraus). */
 function RuinPillar({ x, z, scale, rot, h }: { x: number; z: number; scale: number; rot: number; h: number }) {
   return (
     <group position={[x, 0, z]} scale={scale} rotation={[0, rot, 0]}>
-      {/* base block */}
+      {/* Beton-Sockel */}
       <mesh position={[0, 0.12, 0]}>
         <boxGeometry args={[0.95, 0.24, 0.95]} />
-        <meshStandardMaterial color="#3c4048" emissive="#241a3a" emissiveIntensity={0.2} />
+        <meshStandardMaterial color="#54514a" roughness={1} />
       </mesh>
-      {/* column shaft */}
+      {/* gerissener Beton-Schaft */}
       <mesh position={[0, 0.24 + h / 2, 0]}>
-        <cylinderGeometry args={[0.32, 0.38, h, 10]} />
-        <meshStandardMaterial color="#54585f" emissive="#2a1d4a" emissiveIntensity={0.22} />
+        <cylinderGeometry args={[0.3, 0.4, h, 8]} />
+        <meshStandardMaterial color="#6a675e" roughness={1} flatShading />
       </mesh>
-      {/* broken cap, slightly tilted */}
-      <mesh position={[0.08, 0.24 + h + 0.1, 0.05]} rotation={[0.18, 0.4, 0.12]}>
-        <cylinderGeometry args={[0.36, 0.3, 0.28, 10]} />
-        <meshStandardMaterial color="#4a4e55" emissive="#2a1d4a" emissiveIntensity={0.22} />
+      {/* abgebrochene, gekippte Krone */}
+      <mesh position={[0.1, 0.24 + h + 0.08, 0.05]} rotation={[0.22, 0.4, 0.16]}>
+        <cylinderGeometry args={[0.34, 0.28, 0.26, 7]} />
+        <meshStandardMaterial color="#5c594f" roughness={1} flatShading />
       </mesh>
-      {/* glowing rune band */}
-      <mesh position={[0, 0.24 + h * 0.55, 0]}>
-        <cylinderGeometry args={[0.4, 0.4, 0.08, 12, 1, true]} />
-        <meshBasicMaterial color="#a855f7" transparent opacity={0.5} toneMapped={false} side={2} />
-      </mesh>
+      {/* herausragender, verbogener Bewehrungsstahl (Rost) */}
+      {[0.1, -0.12, 0.02].map((dx, i) => (
+        <mesh key={i} position={[dx, 0.24 + h + 0.22 + i * 0.05, dx * 0.6]} rotation={[0.3 + i * 0.2, i, 0.25 - i * 0.15]}>
+          <cylinderGeometry args={[0.018, 0.018, 0.5, 4]} />
+          <meshStandardMaterial color="#6e3b1e" roughness={1} metalness={0.3} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -94,8 +103,8 @@ function InstancedTrees({ trees }: { trees: Obstacle[] }) {
       </Instances>
       {FOLIAGE_LAYERS.map((c, li) => (
         <Instances key={li} limit={trees.length} range={trees.length} castShadow frustumCulled={false}>
-          <coneGeometry args={[c.r, c.h, 7]} />
-          <meshStandardMaterial emissive="#0c241a" emissiveIntensity={0.32} />
+          <coneGeometry args={[c.r * 0.82, c.h, 6]} />
+          <meshStandardMaterial emissive="#1a1608" emissiveIntensity={0.12} roughness={1} flatShading />
           {trees.map((t, i) => (
             <Instance key={i} position={[t.x, c.y * t.scale, t.z]} scale={t.scale} color={FOLIAGE_COLORS[t.hue ?? 0]} />
           ))}
@@ -197,17 +206,83 @@ function InstancedCrates({ crates }: { crates: Obstacle[] }) {
   );
 }
 
-// Zonen-Paletten — machen die Orte optisch klar unterscheidbar:
-// 0 Dorf (warmes Holz/Lehm), 1 Markt (grauer Stein), 2 Ruinenfeld (dunkel/moosig),
-// 3 Camp (sandiges Braun).
+/** Ausgebranntes Auto-Wrack — rostige Karosserie, eingedrückte Kabine, platte
+ * Reifen. Box-Kollision (blockH 1.3 → blockiert, Deckung). Geringe Anzahl →
+ * je eine kleine Gruppe (kein Instancing nötig). */
+function Wreck({ o }: { o: Obstacle }) {
+  const s = o.scale ?? 1;
+  return (
+    <group position={[o.x, 0, o.z]} rotation={[0, o.rot ?? 0, 0]} scale={s}>
+      {/* Karosserie */}
+      <mesh position={[0, 0.42, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.0, 0.58, 1.0]} />
+        <meshStandardMaterial color="#5a4632" roughness={1} metalness={0.45} flatShading />
+      </mesh>
+      {/* eingedrückte Kabine (leicht versetzt) */}
+      <mesh position={[-0.18, 0.92, 0]} rotation={[0, 0, 0.05]} castShadow>
+        <boxGeometry args={[0.95, 0.46, 0.9]} />
+        <meshStandardMaterial color="#473829" roughness={1} metalness={0.45} flatShading />
+      </mesh>
+      {/* Rost-/Brandfleck auf der Haube */}
+      <mesh position={[0.65, 0.72, 0]} rotation={[0, 0, -0.06]}>
+        <boxGeometry args={[0.7, 0.06, 0.85]} />
+        <meshStandardMaterial color="#2e2018" roughness={1} />
+      </mesh>
+      {/* platte Reifen */}
+      {([[0.7, 0.5], [0.7, -0.5], [-0.7, 0.5], [-0.7, -0.5]] as const).map(([wx, wz], i) => (
+        <mesh key={i} position={[wx, 0.16, wz]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.24, 0.24, 0.18, 8]} />
+          <meshStandardMaterial color="#1b1916" roughness={1} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Trümmerhaufen (Schutt) — zwei instanzierte Brocken-Schichten, niedrig &
+ * überspringbar. Instancing → 2 Draw-Calls für alle Haufen. */
+function InstancedDebris({ debris }: { debris: Obstacle[] }) {
+  if (!debris.length) return null;
+  return (
+    <group>
+      <Instances limit={debris.length} range={debris.length} castShadow frustumCulled={false}>
+        <dodecahedronGeometry args={[0.5, 0]} />
+        <meshStandardMaterial color="#4a443a" emissive="#0e0c08" emissiveIntensity={0.2} roughness={1} flatShading />
+        {debris.map((d, i) => (
+          <Instance key={i} position={[d.x, 0.18 * d.scale, d.z]} scale={d.scale} rotation={[0.2, d.rot ?? 0, 0.1]} />
+        ))}
+      </Instances>
+      <Instances limit={debris.length} range={debris.length} castShadow frustumCulled={false}>
+        <boxGeometry args={[0.5, 0.32, 0.45]} />
+        <meshStandardMaterial color="#3e3a32" roughness={1} flatShading />
+        {debris.map((d, i) => {
+          const rot = d.rot ?? 0;
+          return (
+            <Instance
+              key={i}
+              position={[d.x + Math.cos(rot) * 0.42 * d.scale, 0.13 * d.scale, d.z + Math.sin(rot) * 0.42 * d.scale]}
+              scale={d.scale}
+              rotation={[0.3, rot + 0.7, 0.2]}
+            />
+          );
+        })}
+      </Instances>
+    </group>
+  );
+}
+
+// Zonen-Paletten (post-apokalyptisch) — Orte bleiben optisch unterscheidbar,
+// aber alles ist verwittert: 0 Dorf (fleckiger Putz/Beton), 1 Markt/Supermarkt
+// (grauer Beton + Rost), 2 Ruinenfeld (rußig/verkohlt), 3 Camp (rostiges Wellblech/
+// Holz), 4 = tote, vertrocknete Hecke (braun-grün).
 const WALL_PALETTES = [
-  ["#6b5a44", "#5f4f3c", "#73604a", "#544738"],
-  ["#5a5750", "#4f4d47", "#625f58", "#48463f"],
-  ["#3e443a", "#454b3e", "#363b32", "#4a4a40"],
-  ["#5c4a36", "#4e3f2e", "#665440", "#473a2b"],
-  ["#1f4a2a", "#21532f", "#1a4226", "#265a33"], // 4 = Hecke (grün)
+  ["#7a7363", "#6b6457", "#857c6a", "#605949"],
+  ["#6a6862", "#5c5a54", "#726f67", "#54524b"],
+  ["#3a352c", "#403a30", "#332e26", "#46402f"],
+  ["#5e4d36", "#67503a", "#4f4230", "#705a3e"],
+  ["#46492a", "#4e5230", "#3c4024", "#545832"], // 4 = tote Hecke (braun-grün)
 ];
-const ROOF_COLORS = ["#7a3b2a", "#4a4a52", "#3b2a22", "#6b4a2a", "#1a3a22"];
+const ROOF_COLORS = ["#6b3f28", "#54524a", "#2e2620", "#7a4a2a", "#3a4030"];
 
 /** Hauswand: verwitterter Stein (Farbe variiert je Position) + zerbröckelte
  * Oberkante; hohe (heile) Wände bekommen ein warm glühendes Fenster. */
@@ -225,12 +300,12 @@ function RuinWall({ o }: { o: Obstacle }) {
     <group position={[o.x, 0, o.z]}>
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[hx * 2, h, hz * 2]} />
-        <meshStandardMaterial color={tone} emissive={isHedge ? "#0a2413" : "#140d08"} emissiveIntensity={0.16} roughness={isHedge ? 1 : 0.97} flatShading={isHedge} />
+        <meshStandardMaterial color={tone} emissive={isHedge ? "#161808" : "#140d08"} emissiveIntensity={0.12} roughness={isHedge ? 1 : 0.97} flatShading={isHedge} />
       </mesh>
-      {/* Oberkante (Hecke: grün/buschig, sonst zerbröckelter Stein) */}
+      {/* Oberkante (Hecke: vertrocknet/struppig, sonst zerbröckelter Beton) */}
       <mesh position={[0, h, 0]} castShadow>
         <boxGeometry args={[hx * 2 * (isHedge ? 1.05 : 0.72), isHedge ? 0.22 : 0.14, hz * 2 * (isHedge ? 1.4 : 0.72)]} />
-        <meshStandardMaterial color={isHedge ? "#2c6b3a" : "#39372f"} roughness={1} flatShading />
+        <meshStandardMaterial color={isHedge ? "#4c4d2a" : "#3a352c"} roughness={1} flatShading />
       </mesh>
       {tall && long && (
         <mesh position={[0, h * 0.55, 0]}>
@@ -424,8 +499,10 @@ function CityStructures({
   );
 }
 
-const MUSHROOM_COLORS = ["#22d3ee", "#a855f7", "#34d399", "#f472b6"];
-const FIREFLY_COLORS = ["#fde68a", "#a855f7", "#22d3ee", "#86efac"];
+// Giftige, fahle Pilze (Verseuchung) statt neon-bunter Magie-Pilze.
+const MUSHROOM_COLORS = ["#9aa83a", "#b6a838", "#7a8a2e", "#a86a3a"];
+// Treibende Asche/Glutfunken statt magischer Glühpunkte.
+const FIREFLY_COLORS = ["#c2451f", "#8a6a3a", "#a8552a", "#6e6258"];
 
 /** Schwebende, langsam treibende & funkelnde Glühpartikel in der Luft —
  * füllt den Himmelsraum mit Leben und ist sofort von überall sichtbar. */
@@ -470,47 +547,65 @@ function Fireflies({ count }: { count: number }) {
   );
 }
 
-/** Leuchtendes Monument direkt im Blickfeld des Spawns (Spieler schaut anfangs
- * Richtung −z) — Obelisk + orbitierende Kristall-Shards + rotierender Runen-
- * Kreis am Boden. Das „Wahrzeichen" der Welt. */
+/** Verfallenes Wahrzeichen direkt im Blickfeld des Spawns (Spieler schaut anfangs
+ * Richtung −z) — abgebrochener, rostiger Funkturm-Stumpf auf Betonsockel, schwache
+ * rote Notbake, orbitierende Trümmer/Asche und ein Brand-/Hazard-Ring am Boden
+ * statt des alten Magie-Obelisken. Das „Wahrzeichen" der toten Welt. */
 function CentralMonument() {
   const ringRef = useRef<THREE.Group>(null);
   const shardsRef = useRef<THREE.Group>(null);
+  const beaconRef = useRef<THREE.PointLight>(null);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
-    if (ringRef.current) ringRef.current.rotation.z = t * 0.18;
-    if (shardsRef.current) shardsRef.current.rotation.y = t * 0.5;
+    if (ringRef.current) ringRef.current.rotation.z = t * 0.12;
+    if (shardsRef.current) shardsRef.current.rotation.y = t * 0.35;
+    // unregelmäßig flackernde Notbake
+    if (beaconRef.current) beaconRef.current.intensity = 9 + Math.sin(t * 7) * 4 + Math.sin(t * 23) * 2;
   });
   return (
     <group position={[0, 0, -9]}>
-      <mesh position={[0, 2.6, 0]}>
-        <coneGeometry args={[0.75, 5.0, 6]} />
-        <meshStandardMaterial color="#3b1e6d" emissive="#a855f7" emissiveIntensity={1.5} />
+      {/* abgeknickter Stahl-Funkturm */}
+      <mesh position={[0.18, 2.6, 0]} rotation={[0, 0, 0.08]}>
+        <cylinderGeometry args={[0.22, 0.6, 5.0, 6]} />
+        <meshStandardMaterial color="#4a3a2a" roughness={0.95} metalness={0.45} flatShading />
       </mesh>
+      {/* zersplitterte Turmspitze */}
+      <mesh position={[0.42, 5.0, 0.05]} rotation={[0.2, 0, 0.5]}>
+        <coneGeometry args={[0.18, 1.0, 5]} />
+        <meshStandardMaterial color="#3e3022" roughness={1} metalness={0.4} flatShading />
+      </mesh>
+      {/* Beton-Sockel */}
       <mesh position={[0, 0.4, 0]}>
         <cylinderGeometry args={[1.1, 1.35, 0.8, 8]} />
-        <meshStandardMaterial color="#1c1330" emissive="#7c3aed" emissiveIntensity={0.45} />
+        <meshStandardMaterial color="#56524a" roughness={1} />
       </mesh>
-      <pointLight position={[0, 3.2, 0]} color="#a855f7" intensity={24} distance={24} decay={2} />
-      <group ref={shardsRef} position={[0, 2.8, 0]}>
+      {/* rote Notbake oben + flackerndes Licht */}
+      <mesh position={[0.42, 5.5, 0.05]}>
+        <sphereGeometry args={[0.16, 10, 10]} />
+        <meshBasicMaterial color="#e0431c" toneMapped={false} />
+      </mesh>
+      <pointLight ref={beaconRef} position={[0.42, 5.5, 0.05]} color="#c2451f" intensity={9} distance={22} decay={2} />
+      {/* orbitierende Trümmerbrocken/Asche */}
+      <group ref={shardsRef} position={[0, 1.4, 0]}>
         {[0, 1, 2, 3, 4].map((i) => {
           const a = (i / 5) * Math.PI * 2;
           return (
-            <mesh key={i} position={[Math.cos(a) * 1.7, Math.sin(i) * 0.5, Math.sin(a) * 1.7]} rotation={[0.5, a, 0.3]}>
-              <octahedronGeometry args={[0.24, 0]} />
-              <meshStandardMaterial color="#c084fc" emissive="#c084fc" emissiveIntensity={1.3} />
+            <mesh key={i} position={[Math.cos(a) * 1.7, Math.sin(i) * 0.3, Math.sin(a) * 1.7]} rotation={[0.5, a, 0.3]}>
+              <dodecahedronGeometry args={[0.16, 0]} />
+              <meshStandardMaterial color="#5a564c" roughness={1} flatShading />
             </mesh>
           );
         })}
       </group>
+      {/* Brand-/Hazard-Ring am Boden */}
       <group ref={ringRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
         <mesh>
           <ringGeometry args={[2.5, 2.8, 48]} />
-          <meshBasicMaterial color="#a855f7" transparent opacity={0.55} toneMapped={false} side={2} />
+          <meshBasicMaterial color="#a8401c" transparent opacity={0.4} toneMapped={false} side={2} />
         </mesh>
         <mesh>
           <ringGeometry args={[1.7, 1.8, 6]} />
-          <meshBasicMaterial color="#c084fc" transparent opacity={0.45} toneMapped={false} side={2} />
+          <meshBasicMaterial color="#caa23a" transparent opacity={0.35} toneMapped={false} side={2} />
         </mesh>
       </group>
     </group>
@@ -572,6 +667,8 @@ export function Environment({
   const roofs = useMemo(() => obstacles.filter((o) => o.kind === "roof"), [obstacles]);
   const roads = useMemo(() => obstacles.filter((o) => o.kind === "road"), [obstacles]);
   const campfires = useMemo(() => obstacles.filter((o) => o.kind === "campfire"), [obstacles]);
+  const wrecks = useMemo(() => obstacles.filter((o) => o.kind === "wreck"), [obstacles]);
+  const debris = useMemo(() => obstacles.filter((o) => o.kind === "debris"), [obstacles]);
 
   const grassTufts = useMemo(() => {
     const rand = mulberry32(4242);
@@ -622,6 +719,10 @@ export function Environment({
       <InstancedTrees trees={trees} />
       <InstancedGrass tufts={grassTufts} />
       <InstancedRocks rocks={rocks} />
+      <InstancedDebris debris={debris} />
+      {wrecks.map((o, i) => (
+        <Wreck key={`wk${i}`} o={o} />
+      ))}
       {ruins.map((r, i) => (
         <RuinPillar key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot ?? 0} h={r.h ?? 1.5} />
       ))}
@@ -631,7 +732,7 @@ export function Environment({
       ))}
       <InstancedMushrooms mushrooms={mushrooms} />
       {borderCrystals.map((c, i) => (
-        <BorderCrystal key={i} x={c.x} z={c.z} scale={c.scale} />
+        <DeadSpire key={i} x={c.x} z={c.z} scale={c.scale} />
       ))}
       {fireflyCount > 0 && <Fireflies count={fireflyCount} />}
       {env.monument && <CentralMonument />}
