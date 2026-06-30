@@ -37,6 +37,7 @@ export interface WorldEnvironmentActionResult {
 const CLAMP_FIELDS: (keyof WorldEnvironmentConfig)[] = [
   "fogDensity", "ambientIntensity", "accentIntensity", "starIntensity",
   "treeDensity", "grassDensity", "rockDensity", "ruinDensity", "mushroomDensity",
+  "fireflyDensity",
 ];
 
 export async function updateWorldEnvironmentConfig(

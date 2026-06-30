@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { DEFAULT_WORLD_ENVIRONMENT, type WorldEnvironmentConfig } from "@/lib/world-environment-config";
 
@@ -143,6 +145,97 @@ function GlowMushroom({ x, z, scale, color }: { x: number; z: number; scale: num
 }
 
 const MUSHROOM_COLORS = ["#22d3ee", "#a855f7", "#34d399", "#f472b6"];
+const FIREFLY_COLORS = ["#fde68a", "#a855f7", "#22d3ee", "#86efac"];
+
+/** Schwebende, langsam treibende & funkelnde Glühpartikel in der Luft —
+ * füllt den Himmelsraum mit Leben und ist sofort von überall sichtbar. */
+function Fireflies({ count }: { count: number }) {
+  const refs = useRef<(THREE.Mesh | null)[]>([]);
+  const bases = useMemo(() => {
+    const rand = mulberry32(20240);
+    const reach = WORLD_RADIUS - 5;
+    return Array.from({ length: count }, () => ({
+      x: (rand() - 0.5) * 2 * reach,
+      y: 0.6 + rand() * 5.5,
+      z: (rand() - 0.5) * 2 * reach,
+      phase: rand() * Math.PI * 2,
+      speed: 0.25 + rand() * 0.7,
+      amp: 0.3 + rand() * 1.0,
+      color: FIREFLY_COLORS[Math.floor(rand() * FIREFLY_COLORS.length)],
+    }));
+  }, [count]);
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    for (let i = 0; i < refs.current.length; i++) {
+      const m = refs.current[i];
+      const b = bases[i];
+      if (!m || !b) continue;
+      m.position.x = b.x + Math.sin(t * b.speed + b.phase) * b.amp;
+      m.position.y = b.y + Math.sin(t * b.speed * 0.7 + b.phase) * b.amp * 0.7;
+      m.position.z = b.z + Math.cos(t * b.speed * 0.8 + b.phase) * b.amp;
+      m.scale.setScalar(0.55 + 0.45 * Math.sin(t * 2.2 + b.phase)); // funkeln
+    }
+  });
+
+  return (
+    <group>
+      {bases.map((b, i) => (
+        <mesh key={i} ref={(el) => { refs.current[i] = el; }} position={[b.x, b.y, b.z]}>
+          <sphereGeometry args={[0.07, 6, 6]} />
+          <meshBasicMaterial color={b.color} transparent opacity={0.9} toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Leuchtendes Monument direkt im Blickfeld des Spawns (Spieler schaut anfangs
+ * Richtung −z) — Obelisk + orbitierende Kristall-Shards + rotierender Runen-
+ * Kreis am Boden. Das „Wahrzeichen" der Welt. */
+function CentralMonument() {
+  const ringRef = useRef<THREE.Group>(null);
+  const shardsRef = useRef<THREE.Group>(null);
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    if (ringRef.current) ringRef.current.rotation.z = t * 0.18;
+    if (shardsRef.current) shardsRef.current.rotation.y = t * 0.5;
+  });
+  return (
+    <group position={[0, 0, -9]}>
+      <mesh position={[0, 2.6, 0]} castShadow>
+        <coneGeometry args={[0.75, 5.0, 6]} />
+        <meshStandardMaterial color="#3b1e6d" emissive="#a855f7" emissiveIntensity={1.5} />
+      </mesh>
+      <mesh position={[0, 0.4, 0]} castShadow>
+        <cylinderGeometry args={[1.1, 1.35, 0.8, 8]} />
+        <meshStandardMaterial color="#1c1330" emissive="#7c3aed" emissiveIntensity={0.45} />
+      </mesh>
+      <pointLight position={[0, 3.2, 0]} color="#a855f7" intensity={24} distance={24} decay={2} />
+      <group ref={shardsRef} position={[0, 2.8, 0]}>
+        {[0, 1, 2, 3, 4].map((i) => {
+          const a = (i / 5) * Math.PI * 2;
+          return (
+            <mesh key={i} position={[Math.cos(a) * 1.7, Math.sin(i) * 0.5, Math.sin(a) * 1.7]} rotation={[0.5, a, 0.3]}>
+              <octahedronGeometry args={[0.24, 0]} />
+              <meshStandardMaterial color="#c084fc" emissive="#c084fc" emissiveIntensity={1.3} />
+            </mesh>
+          );
+        })}
+      </group>
+      <group ref={ringRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+        <mesh>
+          <ringGeometry args={[2.5, 2.8, 48]} />
+          <meshBasicMaterial color="#a855f7" transparent opacity={0.55} toneMapped={false} side={2} />
+        </mesh>
+        <mesh>
+          <ringGeometry args={[1.7, 1.8, 6]} />
+          <meshBasicMaterial color="#c084fc" transparent opacity={0.45} toneMapped={false} side={2} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
 
 /** Mulberry32 — tiny, deterministic, seedable PRNG. Math.random() at
  * render time would make every tree/grass tuft jump to a new spot on every
@@ -175,11 +268,12 @@ function mulberry32(seed: number) {
  * anymore. */
 export function Environment({ env = DEFAULT_WORLD_ENVIRONMENT }: { env?: WorldEnvironmentConfig }) {
   const dens = (base: number, mul: number) => Math.max(0, Math.round(base * mul));
-  const treeCount = dens(70, env.treeDensity);
-  const grassCount = dens(90, env.grassDensity);
-  const rockCount = dens(40, env.rockDensity);
-  const ruinCount = dens(12, env.ruinDensity);
-  const mushroomCount = dens(30, env.mushroomDensity);
+  const treeCount = dens(80, env.treeDensity);
+  const grassCount = dens(110, env.grassDensity);
+  const rockCount = dens(55, env.rockDensity);
+  const ruinCount = dens(16, env.ruinDensity);
+  const mushroomCount = dens(46, env.mushroomDensity);
+  const fireflyCount = dens(80, env.fireflyDensity);
 
   const trees = useMemo(() => {
     const rand = mulberry32(1337);
@@ -212,7 +306,7 @@ export function Environment({ env = DEFAULT_WORLD_ENVIRONMENT }: { env?: WorldEn
     const outerRadius = WORLD_RADIUS - 6;
     return Array.from({ length: rockCount }, () => {
       const angle = rand() * Math.PI * 2;
-      const radius = 9 + rand() * (outerRadius - 9);
+      const radius = 5 + rand() * (outerRadius - 5);
       return {
         x: Math.cos(angle) * radius,
         z: Math.sin(angle) * radius,
@@ -252,7 +346,7 @@ export function Environment({ env = DEFAULT_WORLD_ENVIRONMENT }: { env?: WorldEn
     const outerRadius = WORLD_RADIUS - 5;
     return Array.from({ length: mushroomCount }, () => {
       const angle = rand() * Math.PI * 2;
-      const radius = 7 + rand() * (outerRadius - 7);
+      const radius = 4 + rand() * (outerRadius - 4);
       return {
         x: Math.cos(angle) * radius,
         z: Math.sin(angle) * radius,
@@ -295,6 +389,8 @@ export function Environment({ env = DEFAULT_WORLD_ENVIRONMENT }: { env?: WorldEn
       {borderCrystals.map((c, i) => (
         <BorderCrystal key={i} x={c.x} z={c.z} scale={c.scale} />
       ))}
+      {fireflyCount > 0 && <Fireflies count={fireflyCount} />}
+      {env.monument && <CentralMonument />}
     </>
   );
 }

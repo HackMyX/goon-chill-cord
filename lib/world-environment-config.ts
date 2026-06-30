@@ -24,6 +24,10 @@ export interface WorldEnvironmentConfig {
   rockDensity: number;
   ruinDensity: number;
   mushroomDensity: number;
+  /** Schwebende Glühpartikel (Fireflies) in der Luft. 0 = aus. */
+  fireflyDensity: number;
+  /** Leuchtendes Monument + Runen-Kreis nahe Spawn. */
+  monument: boolean;
 }
 
 export const DEFAULT_WORLD_ENVIRONMENT: WorldEnvironmentConfig = {
@@ -37,6 +41,8 @@ export const DEFAULT_WORLD_ENVIRONMENT: WorldEnvironmentConfig = {
   rockDensity: 1,
   ruinDensity: 1,
   mushroomDensity: 1,
+  fireflyDensity: 1,
+  monument: true,
 };
 
 export interface TimeOfDayPreset {
@@ -102,5 +108,7 @@ export function normalizeEnvironmentConfig(
     rockDensity: num(raw?.rockDensity, d.rockDensity),
     ruinDensity: num(raw?.ruinDensity, d.ruinDensity),
     mushroomDensity: num(raw?.mushroomDensity, d.mushroomDensity),
+    fireflyDensity: num(raw?.fireflyDensity, d.fireflyDensity),
+    monument: typeof raw?.monument === "boolean" ? raw.monument : d.monument,
   };
 }

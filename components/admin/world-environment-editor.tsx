@@ -110,6 +110,29 @@ export function WorldEnvironmentConfigEditor({ config }: { config: WorldEnvironm
         <NumField label="Leuchtpilze" hint="Dichte der leuchtenden Pilze." value={form.mushroomDensity} min={0} max={3} step={0.1} onChange={(v) => set("mushroomDensity", v)} />
       </div>
 
+      {/* Highlights */}
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <NumField label="Fireflies (Glühpartikel)" hint="Schwebende Leuchtpartikel in der Luft. 0 = aus, 2–3 = sehr dicht." value={form.fireflyDensity} min={0} max={3} step={0.1} onChange={(v) => set("fireflyDensity", v)} />
+        <label className="flex flex-col gap-1">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400">
+            Monument
+            <AdminTooltip text="Leuchtendes Wahrzeichen (Obelisk + orbitierende Kristalle + Runen-Kreis) nahe dem Spawn." />
+          </span>
+          <button
+            type="button"
+            onMouseEnter={sound.hover}
+            onClick={() => { sound.click(); set("monument", !form.monument); }}
+            className={`rounded-lg border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+              form.monument
+                ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-200"
+                : "border-white/10 bg-white/[0.02] text-zinc-400 hover:border-white/30"
+            }`}
+          >
+            {form.monument ? "An" : "Aus"}
+          </button>
+        </label>
+      </div>
+
       <div className="mt-5 flex items-center gap-3">
         <button
           onMouseEnter={sound.hover}
