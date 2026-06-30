@@ -14,7 +14,23 @@ import { ABILITY_EFFECT_META, ABILITY_CATEGORY_LABELS, type AbilityDefinition, t
 import { getAllAbilityDefinitions } from "@/lib/actions/abilities";
 import { getAllGalleryItems, type GalleryItem } from "@/lib/actions/admin";
 import { WORN_TYPES } from "@/lib/case-display-config";
+import { UniversalPreviewModal, type PreviewSubject } from "@/components/ui/universal-preview-modal";
 import type { BonusGame } from "@/lib/bonus-games";
+
+// Baut aus einer synthetischen Belohnungs-Variante ein Vorschau-Subjekt fürs Modal.
+function rewardSubject(v: { rewardType: string; rarity: string; game?: BonusGame; effect?: string; creditsAmount?: number }): PreviewSubject {
+  switch (v.rewardType) {
+    case "credits":     return { kind: "credits", amount: v.creditsAmount ?? 1000 };
+    case "xp_boost":    return { kind: "xp_boost", days: 7 };
+    case "random_item": return { kind: "random_item", rarity: v.rarity };
+    case "case_voucher":return { kind: "case_voucher", mode: "rarity", rarityFloor: v.rarity };
+    case "game_bonus":  return { kind: "game_bonus", game: (v.game ?? "plinko"), amount: 5, durationHours: 24 };
+    case "ability":     return { kind: "ability", abilityKey: "_preview", name: `Fähigkeit (${v.effect ?? "global"})`, category: v.effect, rarity: v.rarity };
+    case "badge":       return { kind: "generic", icon: "🏆", name: "Badge", accent: "#fbbf24" };
+    case "name_style":  return { kind: "generic", icon: "🎨", name: "Name-Style", accent: "#a78bfa" };
+    default:            return { kind: "generic", icon: "💎", name: "Belohnung", accent: "#7c3aed" };
+  }
+}
 
 // Effektwert nach Einheit lesbar machen (nur wenn ein Wert existiert).
 function formatEffectValue(value: number, unit: AbilityEffectUnit): string | null {
@@ -103,6 +119,7 @@ export function ShowcaseTab() {
   const [cat, setCat] = useState<Category>("rewards3d");
   const [page, setPage] = useState(0);
   const [itemGender, setItemGender] = useState<"m" | "w">("m");
+  const [preview, setPreview] = useState<PreviewSubject | null>(null);
   const galleryRef = useRef<HTMLDivElement>(null);
 
   const rewardVariants = useMemo(buildRewardVariants, []);
@@ -213,8 +230,8 @@ export function ShowcaseTab() {
         {cat === "rewards3d" && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {rewardVariants.slice(start, start + PAGE_SIZE).map((v, i) => (
-              <div key={v.key} className="flex flex-col items-center gap-1.5 rounded-xl border border-white/8 bg-black/20 p-2">
-                <div className="relative h-28 w-full">
+              <div key={v.key} onClick={() => setPreview(rewardSubject(v))} title="Zum Drehen & Ansehen anklicken" className="flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-white/8 bg-black/20 p-2 transition-colors hover:border-fuchsia-400/40 hover:bg-fuchsia-500/[0.04]">
+                <div className="relative h-28 w-full pointer-events-none">
                   <BpRewardView3D
                     rewardType={v.rewardType}
                     rarity={v.rarity}
@@ -261,8 +278,13 @@ export function ShowcaseTab() {
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {(itemDefs ?? []).slice(start, start + PAGE_SIZE).map((it, i) => (
-                <div key={it.id} className="flex flex-col items-center gap-1.5 rounded-xl border border-white/8 bg-black/20 p-2">
-                  <div className="relative h-36 w-full">
+                <div
+                  key={it.id}
+                  onClick={() => setPreview({ kind: "item", gender: itemGender, item: { id: it.id, name: it.name, rarity: it.rarity, type: it.type, damage: it.damage, armor: it.armor, perk_type: it.perkType, perk_magnitude: it.perkMagnitude, shield_hp: it.shieldHp } })}
+                  title="Zum Drehen & Ansehen anklicken"
+                  className="flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-white/8 bg-black/20 p-2 transition-colors hover:border-fuchsia-400/40 hover:bg-fuchsia-500/[0.04]"
+                >
+                  <div className="relative h-36 w-full pointer-events-none">
                     <CaseDropView
                       subject={{ kind: "item", item: { id: it.id, name: it.name, rarity: it.rarity, type: it.type, damage: it.damage } }}
                       viewIndex={i}
@@ -292,7 +314,12 @@ export function ShowcaseTab() {
         {cat === "bonus" && (
           <div className="flex flex-wrap justify-center gap-4">
             {bonusVariants.slice(start, start + PAGE_SIZE).map((v, i) => (
-              <div key={v.key} className="flex flex-col items-center gap-1">
+              <div
+                key={v.key}
+                onClick={() => setPreview({ kind: "game_bonus", game: v.game, amount: (RARITIES.indexOf(v.rarity) + 1) * 3, durationHours: 24 })}
+                title="Zum Drehen & Ansehen anklicken"
+                className="flex cursor-pointer flex-col items-center gap-1 rounded-xl p-1 transition-colors hover:bg-fuchsia-500/[0.05]"
+              >
                 <BonusCard
                   preview={{ theme: v.theme, rarity: v.rarity, game: v.game, amount: (RARITIES.indexOf(v.rarity) + 1) * 3, durationHours: 24 }}
                   animateEntry={false}
@@ -317,7 +344,12 @@ export function ShowcaseTab() {
                 const meta = ABILITY_EFFECT_META[def.effectType];
                 const effVal = meta ? formatEffectValue(def.effectValue, meta.unit) : null;
                 return (
-                  <div key={def.key} className="flex flex-col gap-1.5">
+                  <div
+                    key={def.key}
+                    onClick={() => setPreview({ kind: "ability", abilityKey: def.key, name: def.name, description: def.description, category: ABILITY_CATEGORY_LABELS[def.category], rarity: def.rarity, icon: def.icon, effectValue: def.effectValue })}
+                    title="Zum Drehen & Ansehen anklicken"
+                    className="flex cursor-pointer flex-col gap-1.5 rounded-2xl p-1 transition-colors hover:bg-fuchsia-500/[0.05]"
+                  >
                     <AbilityVoucherCard
                       name={def.name}
                       description={def.description}
@@ -348,7 +380,12 @@ export function ShowcaseTab() {
         {cat === "namestyles" && (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {nameStyleVariants.slice(start, start + PAGE_SIZE).map((s) => (
-              <div key={s.key} className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2.5">
+              <div
+                key={s.key}
+                onClick={() => setPreview({ kind: "name_style", styleKey: s.key, displayName: "SpielerName" })}
+                title="Zum Ansehen anklicken"
+                className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2.5 transition-colors hover:border-fuchsia-400/40 hover:bg-fuchsia-500/[0.04]"
+              >
                 <StyledUsername name="SpielerName" styleDef={s} size="md" />
                 <div className="flex shrink-0 flex-wrap justify-end gap-1">
                   <InfoBadge value={s.rarity} tone={RARITY_TONE[s.rarity] ?? "zinc"} />
@@ -362,6 +399,9 @@ export function ShowcaseTab() {
         {/* EINE geteilte 3D-Canvas für die ≤20 sichtbaren Modelle dieser Seite. */}
         {uses3D && <RewardCardCanvas eventSourceRef={galleryRef} zIndex={5} />}
       </div>
+
+      {/* Klick auf alles → großes Dreh-/Zoom-Popup */}
+      {preview && <UniversalPreviewModal subject={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }
