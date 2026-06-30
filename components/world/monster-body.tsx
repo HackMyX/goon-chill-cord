@@ -67,15 +67,41 @@ function WispOrbit({ color }: { color: string }) {
   );
 }
 
-/** Spinnen-Beine: 8 Beine, die beim „Scuttle" leicht zucken. */
+/** Spinnen-Beine mit echtem Gang: alternierender Tetrapod-Schritt — Beine
+ * schwingen vor/zurück, heben beim Vorschwung an, schneller & weiter wenn die
+ * Spinne tatsächlich läuft (selbst gemessen über die Welt-Position). */
 function SpiderLegs({ color }: { color: string }) {
   const refs = useRef<(THREE.Group | null)[]>([]);
-  useFrame((s) => {
-    const t = s.clock.elapsedTime;
-    for (let i = 0; i < refs.current.length; i++) {
-      const g = refs.current[i];
+  const prev = useRef<THREE.Vector3 | null>(null);
+  const wp = useRef(new THREE.Vector3());
+  const speed = useRef(0);
+  const phase = useRef(0);
+  useFrame((s, delta) => {
+    // Eigene Horizontalgeschwindigkeit messen (am ersten Bein-Knoten).
+    const anchor = refs.current[0];
+    let mv = 0;
+    if (anchor) {
+      anchor.getWorldPosition(wp.current);
+      if (prev.current) {
+        mv = Math.hypot(wp.current.x - prev.current.x, wp.current.z - prev.current.z) / Math.max(0.0001, delta);
+        prev.current.copy(wp.current);
+      } else {
+        prev.current = wp.current.clone();
+      }
+    }
+    speed.current = THREE.MathUtils.lerp(speed.current, mv > 0.4 ? 1 : 0, Math.min(1, delta * 8));
+    // Schritt-Takt: ruhig im Stand, schnell beim Laufen.
+    phase.current += delta * (3 + speed.current * 11);
+    const amp = 0.12 + speed.current * 0.4; // Vor/Zurück-Schwung
+    const lift = 0.05 + speed.current * 0.12; // Anheben beim Schritt
+    for (let k = 0; k < refs.current.length; k++) {
+      const g = refs.current[k];
       if (!g) continue;
-      g.rotation.x = Math.sin(t * 9 + i * 1.3) * 0.18; // schnelles Zucken
+      // Tetrapod: benachbarte Beine gegenphasig → diagonales Schreiten.
+      const ph = (k % 2 === 0 ? 0 : Math.PI) + Math.floor(k / 2) * 0.5;
+      const sw = Math.sin(phase.current + ph);
+      g.rotation.x = sw * amp;
+      g.position.y = 0.02 + Math.max(0, sw) * lift; // nur beim Vorschwung heben
     }
   });
   let idx = 0;
@@ -91,9 +117,14 @@ function SpiderLegs({ color }: { color: string }) {
               position={[side * 0.18, 0.02, 0.2 - i * 0.16]}
               rotation={[0, 0, side * (0.9 - i * 0.08)]}
             >
-              <mesh position={[side * 0.28, -0.02, 0]} castShadow>
-                <cylinderGeometry args={[0.02, 0.015, 0.58, 6]} />
+              {/* Oberschenkel (schräg nach außen) + geknicktes Unterbein nach unten */}
+              <mesh position={[side * 0.2, 0.04, 0]} castShadow>
+                <cylinderGeometry args={[0.022, 0.018, 0.42, 6]} />
                 <meshStandardMaterial color={color} roughness={0.7} />
+              </mesh>
+              <mesh position={[side * 0.36, -0.16, 0]} rotation={[0, 0, side * -0.9]} castShadow>
+                <cylinderGeometry args={[0.016, 0.01, 0.36, 6]} />
+                <meshStandardMaterial color={color} roughness={0.75} />
               </mesh>
             </group>
           );
