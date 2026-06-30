@@ -176,6 +176,13 @@ export function WorldSpawnConfigEditor({ config }: { config: WorldSpawnConfig })
           min={0} max={20} step={1}
           onChange={(v) => set("minAggressors", v)}
         />
+        <NumField
+          label="Monster-Schaden ×(Schwierigkeit)"
+          hint="Globaler Schadens-Multiplikator für ALLE Monster (Nah- + Fernkampf). 1 = wie eingestellt, 0.8 = 20% weniger (leichter), 1.2 = härter. Erfordert Migration scripts/add-monster-damage-mult.cjs"
+          value={form.monsterDamageMultiplier}
+          min={0.1} max={3} step={0.05}
+          onChange={(v) => set("monsterDamageMultiplier", v)}
+        />
       </div>
 
       <div className="mt-5 flex items-center gap-3">

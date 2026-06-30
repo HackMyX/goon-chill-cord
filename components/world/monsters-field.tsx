@@ -19,7 +19,7 @@ import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import { streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import { WORLD_RADIUS } from "@/lib/world-config";
-import { resolveObstacleCollision, type Obstacle } from "@/lib/world-obstacles";
+import { resolveObstacleCollision, isSpawnClear, type Obstacle } from "@/lib/world-obstacles";
 import {
   subscribeToWorldRoster,
   subscribeToMonsterSync,
@@ -86,15 +86,21 @@ let spawnSeq = 0;
 const REMOTE_KILL_CREDIT_WINDOW_MS = 600;
 
 function randomSpawnPosition(spawnSafeRadius: number, obstacles?: Obstacle[] | null): [number, number, number] {
-  const angle = Math.random() * Math.PI * 2;
-  const radius = spawnSafeRadius + Math.random() * (WORLD_RADIUS - spawnSafeRadius - 6);
-  let x = Math.cos(angle) * radius;
-  let z = Math.sin(angle) * radius;
-  // nicht in Wänden/Häusern spawnen → aus Hindernissen rausschieben
-  for (let k = 0; k < 3; k++) {
-    const r = resolveObstacleCollision(obstacles, x, z, 0, 0.6);
-    x = r.x;
-    z = r.z;
+  let x = 0;
+  let z = 0;
+  // Mehrere Versuche, einen FREIEN Punkt zu finden (nicht in Häusern/Wänden) —
+  // sonst hängen frisch gespawnte Mobs in Gebäuden fest.
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = spawnSafeRadius + Math.random() * (WORLD_RADIUS - spawnSafeRadius - 6);
+    x = Math.cos(angle) * radius;
+    z = Math.sin(angle) * radius;
+    for (let k = 0; k < 2; k++) {
+      const r = resolveObstacleCollision(obstacles, x, z, 0, 0.6);
+      x = r.x;
+      z = r.z;
+    }
+    if (isSpawnClear(obstacles, x, z, 1.8)) return [x, 0, z];
   }
   return [x, 0, z];
 }
@@ -463,10 +469,13 @@ export function MonstersField({
           if (!bosses.length) return curr;
           const bossType = bosses[Math.floor(Math.random() * bosses.length)];
           const scale = streakMobScale(streakKillCount, killStreakConfig);
-          const scaledBoss: MonsterTypeConfig =
-            scale === 1
-              ? bossType
-              : { ...bossType, health: Math.round(bossType.health * scale), attackDamage: Math.round(bossType.attackDamage * scale) };
+          const dmgMult = spawnConfig.monsterDamageMultiplier ?? 1;
+          const scaledBoss: MonsterTypeConfig = {
+            ...bossType,
+            health: Math.round(bossType.health * scale),
+            attackDamage: Math.max(1, Math.round(bossType.attackDamage * scale * dmgMult)),
+            throwDamage: bossType.throwDamage ? Math.max(1, Math.round(bossType.throwDamage * dmgMult)) : bossType.throwDamage,
+          };
           return [...curr, { id: `${userId.slice(0, 8)}_b${++spawnSeq}`, type: scaledBoss, position: randomSpawnPosition(spawnConfig.spawnSafeRadius, obstaclesRef?.current) }];
         });
       }
@@ -505,7 +514,7 @@ export function MonstersField({
               ...rp.minionType,
               scale: rp.minionType.scale * 0.5,
               health: Math.max(1, Math.round(rp.minionType.health * 0.4)),
-              attackDamage: Math.max(1, Math.round(rp.minionType.attackDamage * 0.6)),
+              attackDamage: Math.max(1, Math.round(rp.minionType.attackDamage * 0.6 * (spawnConfig.monsterDamageMultiplier ?? 1))),
               rewardMin: Math.max(1, Math.round(rp.minionType.rewardMin * 0.4)),
               rewardMax: Math.max(1, Math.round(rp.minionType.rewardMax * 0.4)),
               isBoss: false,
@@ -556,17 +565,16 @@ export function MonstersField({
       const type = pickWeightedMonsterType(monsterTypes.filter((t) => !t.isBoss));
       if (!type) return curr;
       const scale = streakMobScale(streakKillCount, killStreakConfig);
+      const dmgMult = spawnConfig.monsterDamageMultiplier ?? 1;
       // A fresh object, never mutating the shared `type` config other
-      // spawns/the admin panel still read — only this one spawn's copy
-      // gets the streak-scaled numbers.
-      const scaledType: MonsterTypeConfig =
-        scale === 1
-          ? type
-          : {
-              ...type,
-              health: Math.round(type.health * scale),
-              attackDamage: Math.round(type.attackDamage * scale),
-            };
+      // spawns/the admin panel still read — only this one spawn's copy gets
+      // the streak-scaled numbers + den globalen Schadens-Multiplikator.
+      const scaledType: MonsterTypeConfig = {
+        ...type,
+        health: Math.round(type.health * scale),
+        attackDamage: Math.max(1, Math.round(type.attackDamage * scale * dmgMult)),
+        throwDamage: type.throwDamage ? Math.max(1, Math.round(type.throwDamage * dmgMult)) : type.throwDamage,
+      };
       // Namespace the spawn id with the first 8 chars of userId to avoid id
       // collisions with remote monsters that also use sequential counters.
       return [...curr, { id: `${userId.slice(0, 8)}_m${++spawnSeq}`, type: scaledType, position: randomSpawnPosition(spawnConfig.spawnSafeRadius, obstaclesRef?.current) }];

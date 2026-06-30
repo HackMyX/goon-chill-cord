@@ -39,6 +39,9 @@ export interface WorldSpawnConfig {
    * nächsten jagen ihn unabhängig von der Aggro-Reichweite, damit man nicht
    * passiv rumstehen kann. 0 = aus (nur normale Aggro-Reichweite). */
   minAggressors: number;
+  /** Globaler Schadens-Multiplikator für ALLE Monster (Nah- + Fernkampf) —
+   * zentrale Schwierigkeits-Stellschraube. 1 = wie eingestellt, <1 = leichter. */
+  monsterDamageMultiplier: number;
 }
 
 export const DEFAULT_WORLD_SPAWN_CONFIG: WorldSpawnConfig = {
@@ -53,5 +56,6 @@ export const DEFAULT_WORLD_SPAWN_CONFIG: WorldSpawnConfig = {
   bossSpawnIntervalMinSec: 90,
   bossSpawnIntervalMaxSec: 180,
   bossActiveAliveCapFactor: 0.5,
-  minAggressors: 3,
+  minAggressors: 2,
+  monsterDamageMultiplier: 0.8,
 };

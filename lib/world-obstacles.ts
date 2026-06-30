@@ -173,10 +173,15 @@ function lampLine(out: Obstacle[], ax: number, az: number, bx: number, bz: numbe
 function placeBuilding(out: Obstacle[], cx: number, cz: number, doorSide: number, rand: () => number, tone: number) {
   const back = doorSide ^ 1; // gegenüberliegende Seite = Hinterausgang (0↔1, 2↔3)
   const roll = rand();
-  if (roll < 0.22) {
+  if (roll < 0.18) {
     emitShop(out, cx, cz, 4.5 + rand() * 1.0, 4 + rand() * 0.8, 2.4 + rand() * 0.4, doorSide, rand, tone);
-  } else if (roll < 0.42) {
+  } else if (roll < 0.36) {
     emitHouse(out, cx, cz, 3.8 + rand() * 1.4, 3.8 + rand() * 1.4, 1.1 + rand() * 0.8, [doorSide, back], false, rand, tone); // Ruine
+  } else if (roll < 0.52) {
+    // Größeres „Anwesen" — breiter, etwas höher, zweite Tür seitlich.
+    const w = 6.5 + rand() * 2.5;
+    const d = 6 + rand() * 2;
+    emitHouse(out, cx, cz, w, d, 3.2 + rand() * 0.9, [doorSide, doorSide < 2 ? 2 : 0], true, rand, tone);
   } else {
     const w = 4 + rand() * 1.6;
     const d = 4 + rand() * 1.6;
@@ -334,6 +339,41 @@ function genCamp(out: Obstacle[], ox: number, oz: number, rand: () => number) {
   out.push({ kind: "lamp", x: ox + 2, z: oz + 2, scale: 1, shape: "circle", r: 0.16, blockH: 3, hue: 0 });
 }
 
+/** WILDER GARTEN / HECKEN-LABYRINTH: ein umrandetes Heckengitter mit Pfaden +
+ * ein paar Bäumen + Mittelplatz. Hecken = Wände mit grünem Ton (tone 4). */
+function genMaze(out: Obstacle[], ox: number, oz: number, rand: () => number) {
+  const n = 6;
+  const cell = 3.4;
+  const half = (n * cell) / 2;
+  const tone = 4; // Hecke (grün)
+  const hedgeH = 1.9;
+  const entranceCol = Math.floor(n / 2);
+  // Waagerechte Heckenstücke (Rand immer; innen ~50% → Pfade); ein Eingang im Süden.
+  for (let gx = 0; gx < n; gx++) {
+    for (let gz = 0; gz <= n; gz++) {
+      const isBorder = gz === 0 || gz === n;
+      if (!isBorder && rand() < 0.5) continue;
+      if (gz === n && gx === entranceCol) continue; // Eingang
+      pushWall(out, "x", ox - half + gx * cell + cell / 2, oz - half + gz * cell, cell / 2, hedgeH, tone);
+    }
+  }
+  // Senkrechte Heckenstücke.
+  for (let gx = 0; gx <= n; gx++) {
+    for (let gz = 0; gz < n; gz++) {
+      const isBorder = gx === 0 || gx === n;
+      if (!isBorder && rand() < 0.5) continue;
+      pushWall(out, "z", ox - half + gx * cell, oz - half + gz * cell + cell / 2, cell / 2, hedgeH, tone);
+    }
+  }
+  // Wilde Bäume + Mittelplatz + Laterne am Eingang.
+  for (let i = 0; i < 5; i++) {
+    const s = 0.7 + rand() * 0.5;
+    out.push({ kind: "tree", x: ox + (rand() - 0.5) * half * 1.6, z: oz + (rand() - 0.5) * half * 1.6, scale: s, r: 0.34 * s, blockH: 3.2, hue: Math.floor(rand() * 3) });
+  }
+  out.push({ kind: "ruin", x: ox, z: oz, scale: 0.9, r: 0.5, blockH: 2.2, rot: 0, h: 1.3 }); // Mittelpunkt
+  addLamp(out, ox, oz - half - 2, rand);
+}
+
 export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIRONMENT): Obstacle[] {
   const out: Obstacle[] = [];
 
@@ -425,18 +465,20 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
       return { x: Math.cos(a) * r, z: Math.sin(a) * r };
     };
     if (dq > 0) {
-      // Gleichmäßig um die Map verteilt (≈72° auseinander) + verschiedene Radien
-      // → die Orte überlappen NICHT mehr und stehen klar getrennt da.
-      const village = at(0.02, 0.34);
-      const market = at(0.22, 0.62);
-      const ruinsF = at(0.44, 0.66);
-      const forest = at(0.66, 0.58);
-      const camp = at(0.86, 0.70);
+      // 6 Orte gleichmäßig um die Map verteilt (≈60° auseinander) + verschiedene
+      // Radien → klar getrennt, kein Overlap.
+      const village = at(0.00, 0.34);
+      const market = at(0.17, 0.62);
+      const ruinsF = at(0.34, 0.66);
+      const forest = at(0.50, 0.58);
+      const camp = at(0.67, 0.70);
+      const maze = at(0.84, 0.60);
       genVillage(out, village.x, village.z, rand);
       genMarket(out, market.x, market.z, rand);
       genRuinsField(out, ruinsF.x, ruinsF.z, rand);
       genForest(out, forest.x, forest.z, rand);
       genCamp(out, camp.x, camp.z, rand);
+      genMaze(out, maze.x, maze.z, rand);
       // Ein paar Verbindungswege vom Dorf aus (nicht zu jedem — sonst Wirrwarr).
       roadBetween(out, village.x, village.z, market.x, market.z, 3);
       roadBetween(out, village.x, village.z, forest.x, forest.z, 2.6);
@@ -472,6 +514,11 @@ export function randomSpawnPoint(obstacles: Obstacle[] | null | undefined): { x:
     }
   }
   return { x: 0, z: 8 }; // Fallback (nahe, aber nicht im Monument bei z=-9)
+}
+
+/** Ist die Stelle frei (kein hohes Hindernis im Radius r)? Für Spawns. */
+export function isSpawnClear(obstacles: Obstacle[] | null | undefined, x: number, z: number, r: number): boolean {
+  return !pointInsideBlocker(obstacles, x, z, r);
 }
 
 /** Steckt der Punkt (Radius r) noch in einer hohen, blockierenden Struktur? */

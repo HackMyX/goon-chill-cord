@@ -250,6 +250,11 @@ export function Monster({
   const spawnAnimRef = useRef<MonsterSpawnAnim | null>(null);
   const jumpY = useRef(0); // Sprunghöhe über Boden (für Stein-Übersprung)
   const jumpVel = useRef(0);
+  const steerMode = useRef(0); // 0=gerade, 1=links, 2=rechts, 3=zurück (Sackgasse)
+  const steerTimer = useRef(0);
+  const stuckTimer = useRef(0);
+  const stuckPrevX = useRef(0);
+  const stuckPrevZ = useRef(0);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
   // Idle-wander state — see WANDER_SPEED_FRACTION's doc comment above.
   const wanderAngle = useRef(0);
@@ -469,19 +474,37 @@ export function Monster({
     if (moving) {
       const dirX = dx / dist;
       const dirZ = dz / dist;
-      // Schlauer: liegt direkt voraus eine HOHE Struktur (Wand/Baum/Ruine), die
-      // man nicht überspringen kann, weicht das Monster seitlich aus (geht drum
-      // herum) statt sich an der Wand festzufahren.
+      // Schlauer + performant: die Ausweich-Entscheidung wird nur ~6×/Sek neu
+      // berechnet (gedrosselt → keine Lags durch LOS-Checks jeden Frame). Liegt
+      // voraus eine HOHE Struktur, geht das Monster links/rechts herum; ist beides
+      // blockiert (Sackgasse), kehrt es kurz um statt sich festzufahren.
+      const obs = obstaclesRef?.current;
+      steerTimer.current -= delta;
+      if (steerTimer.current <= 0 && obs) {
+        steerTimer.current = 0.16;
+        steerMode.current = 0;
+        const blocked = (ax: number, az: number) =>
+          segmentBlockedByObstacle(obs, g.position.x, g.position.z, g.position.x + ax * 2.4, g.position.z + az * 2.4, 1.2);
+        if (blocked(dirX, dirZ)) {
+          if (!blocked(-dirZ, dirX)) steerMode.current = 1;
+          else if (!blocked(dirZ, -dirX)) steerMode.current = 2;
+          else steerMode.current = 3;
+        }
+      }
+      // Festhäng-Erkennung: bewegt sich das Monster trotz Ziel kaum, kurz umkehren.
+      stuckTimer.current += delta;
+      if (stuckTimer.current > 0.5) {
+        const moved = Math.hypot(g.position.x - stuckPrevX.current, g.position.z - stuckPrevZ.current);
+        if (moved < 0.12) steerMode.current = 3; // steckt fest → zurück
+        stuckTimer.current = 0;
+        stuckPrevX.current = g.position.x;
+        stuckPrevZ.current = g.position.z;
+      }
       let mvX = dirX;
       let mvZ = dirZ;
-      const obs = obstaclesRef?.current;
-      if (obs && segmentBlockedByObstacle(obs, g.position.x, g.position.z, g.position.x + dirX * 2.4, g.position.z + dirZ * 2.4, 1.2)) {
-        const leftX = -dirZ;
-        const leftZ = dirX;
-        const leftFree = !segmentBlockedByObstacle(obs, g.position.x, g.position.z, g.position.x + leftX * 2.4, g.position.z + leftZ * 2.4, 1.2);
-        if (leftFree) { mvX = leftX; mvZ = leftZ; }
-        else { mvX = dirZ; mvZ = -dirX; } // sonst rechts herum
-      }
+      if (steerMode.current === 1) { mvX = -dirZ; mvZ = dirX; }
+      else if (steerMode.current === 2) { mvX = dirZ; mvZ = -dirX; }
+      else if (steerMode.current === 3) { mvX = -dirX; mvZ = -dirZ; }
       g.position.x += mvX * type.moveSpeed * delta;
       g.position.z += mvZ * type.moveSpeed * delta;
       g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, Math.atan2(mvX, mvZ), Math.min(1, delta * 6));

@@ -20,6 +20,7 @@ interface WorldSpawnRow {
   boss_spawn_interval_max_sec: number | null;
   boss_active_alive_cap_factor: number | null;
   min_aggressors: number | null;
+  monster_damage_multiplier: number | null;
 }
 
 function withDefault<T extends number>(val: T | null | undefined, fallback: T): T {
@@ -34,7 +35,7 @@ export async function getWorldSpawnConfig(): Promise<WorldSpawnConfig> {
   const { data, error } = await admin
     .from("world_config")
     .select(
-      "max_alive_monsters, spawn_interval_min_sec, spawn_interval_max_sec, spawn_safe_radius, alive_cap_per_extra_player, alive_cap_max, spawn_interval_floor, cross_player_aggro_duration_sec, boss_spawn_interval_min_sec, boss_spawn_interval_max_sec, boss_active_alive_cap_factor, min_aggressors"
+      "max_alive_monsters, spawn_interval_min_sec, spawn_interval_max_sec, spawn_safe_radius, alive_cap_per_extra_player, alive_cap_max, spawn_interval_floor, cross_player_aggro_duration_sec, boss_spawn_interval_min_sec, boss_spawn_interval_max_sec, boss_active_alive_cap_factor, min_aggressors, monster_damage_multiplier"
     )
     .eq("id", "default")
     .maybeSingle();
@@ -54,6 +55,7 @@ export async function getWorldSpawnConfig(): Promise<WorldSpawnConfig> {
     bossSpawnIntervalMaxSec:      withDefault(row.boss_spawn_interval_max_sec,     def.bossSpawnIntervalMaxSec),
     bossActiveAliveCapFactor:     withDefault(row.boss_active_alive_cap_factor,    def.bossActiveAliveCapFactor),
     minAggressors:                withDefault(row.min_aggressors,                 def.minAggressors),
+    monsterDamageMultiplier:      withDefault(row.monster_damage_multiplier,      def.monsterDamageMultiplier),
   };
 }
 
@@ -109,6 +111,7 @@ export async function updateWorldSpawnConfig(input: WorldSpawnConfig): Promise<W
     boss_spawn_interval_max_sec: Math.max(input.bossSpawnIntervalMinSec, input.bossSpawnIntervalMaxSec),
     boss_active_alive_cap_factor: Math.max(0, Math.min(1, input.bossActiveAliveCapFactor)),
     min_aggressors: Math.max(0, Math.floor(input.minAggressors)),
+    monster_damage_multiplier: Math.max(0, Math.min(3, input.monsterDamageMultiplier)),
     updated_at: new Date().toISOString(),
   });
 

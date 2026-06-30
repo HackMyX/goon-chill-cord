@@ -205,8 +205,9 @@ const WALL_PALETTES = [
   ["#5a5750", "#4f4d47", "#625f58", "#48463f"],
   ["#3e443a", "#454b3e", "#363b32", "#4a4a40"],
   ["#5c4a36", "#4e3f2e", "#665440", "#473a2b"],
+  ["#1f4a2a", "#21532f", "#1a4226", "#265a33"], // 4 = Hecke (grün)
 ];
-const ROOF_COLORS = ["#7a3b2a", "#4a4a52", "#3b2a22", "#6b4a2a"];
+const ROOF_COLORS = ["#7a3b2a", "#4a4a52", "#3b2a22", "#6b4a2a", "#1a3a22"];
 
 /** Hauswand: verwitterter Stein (Farbe variiert je Position) + zerbröckelte
  * Oberkante; hohe (heile) Wände bekommen ein warm glühendes Fenster. */
@@ -217,18 +218,19 @@ function RuinWall({ o }: { o: Obstacle }) {
   const palette = WALL_PALETTES[o.tone ?? 0] ?? WALL_PALETTES[0];
   const tone = palette[Math.abs(Math.round(o.x * 7 + o.z * 13)) % palette.length];
   const alongX = hx > hz;
+  const isHedge = o.tone === 4;
   const tall = h > 2.3;
   const long = (o.len ?? 0) > 1.7;
   return (
     <group position={[o.x, 0, o.z]}>
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[hx * 2, h, hz * 2]} />
-        <meshStandardMaterial color={tone} emissive="#140d08" emissiveIntensity={0.16} roughness={0.97} />
+        <meshStandardMaterial color={tone} emissive={isHedge ? "#0a2413" : "#140d08"} emissiveIntensity={0.16} roughness={isHedge ? 1 : 0.97} flatShading={isHedge} />
       </mesh>
-      {/* zerbröckelte Oberkante */}
+      {/* Oberkante (Hecke: grün/buschig, sonst zerbröckelter Stein) */}
       <mesh position={[0, h, 0]} castShadow>
-        <boxGeometry args={[hx * 2 * 0.72, 0.14, hz * 2 * 0.72]} />
-        <meshStandardMaterial color="#39372f" roughness={1} flatShading />
+        <boxGeometry args={[hx * 2 * (isHedge ? 1.05 : 0.72), isHedge ? 0.22 : 0.14, hz * 2 * (isHedge ? 1.4 : 0.72)]} />
+        <meshStandardMaterial color={isHedge ? "#2c6b3a" : "#39372f"} roughness={1} flatShading />
       </mesh>
       {tall && long && (
         <mesh position={[0, h * 0.55, 0]}>
