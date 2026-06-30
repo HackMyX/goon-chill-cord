@@ -426,6 +426,13 @@ function genMaze(out: Obstacle[], ox: number, oz: number, rand: () => number) {
   const half = (n * cell) / 2;
   const tone = 4; // Hecke (grün)
   const hedgeH = 2.0;
+  // Ein paar INNERE Heckenstücke sind niedrige Büsche (blockH 0.8): Spieler UND
+  // Monster können easy drüberspringen (Monster-Sprung-Apex = 1.0, Spieler ≈ 1.07,
+  // navGrid behandelt blockH ≤ 1.2 als begehbar → A* routet die Mobs MITTEN durch
+  // und sie vaulten). So ist das Labyrinth kein Heil-Safespace mehr, in den nur der
+  // Spieler reinkommt. Rand bleibt hoch (echte Wand, nur die Eingänge offen).
+  const bushH = 0.8;
+  const lowChance = 0.3; // nur „ein paar" — Großteil bleibt hohe Hecke (Struktur)
   const cx0 = Math.floor(n / 2);
   const cz0 = Math.floor(n / 2);
   // Mehrere Eingänge: je einer pro Himmelsrichtung (N/S/O/W) PLUS ein zweiter,
@@ -443,7 +450,8 @@ function genMaze(out: Obstacle[], ox: number, oz: number, rand: () => number) {
       if (!isBorder && rand() < 0.5) continue;
       if (gz === n && entSouth.includes(gx)) continue;
       if (gz === 0 && entNorth.includes(gx)) continue;
-      pushWall(out, "x", ox - half + gx * cell + cell / 2, oz - half + gz * cell, cell / 2, hedgeH, tone);
+      const h = !isBorder && rand() < lowChance ? bushH : hedgeH; // ein paar niedrige Büsche (vaultbar)
+      pushWall(out, "x", ox - half + gx * cell + cell / 2, oz - half + gz * cell, cell / 2, h, tone);
     }
   }
   // Senkrechte Heckenstücke (Rand geschlossen außer Ost-/West-Eingang).
@@ -453,7 +461,8 @@ function genMaze(out: Obstacle[], ox: number, oz: number, rand: () => number) {
       if (!isBorder && rand() < 0.5) continue;
       if (gx === 0 && gz === entWest) continue;
       if (gx === n && gz === entEast) continue;
-      pushWall(out, "z", ox - half + gx * cell, oz - half + gz * cell + cell / 2, cell / 2, hedgeH, tone);
+      const h = !isBorder && rand() < lowChance ? bushH : hedgeH; // ein paar niedrige Büsche (vaultbar)
+      pushWall(out, "z", ox - half + gx * cell, oz - half + gz * cell + cell / 2, cell / 2, h, tone);
     }
   }
   // Wilde Bäume rundherum + Mittelplatz (Denkmal + Lampen + ein paar Büsche).
