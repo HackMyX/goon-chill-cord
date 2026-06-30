@@ -72,18 +72,28 @@ export const MONSTER_DEATH_CLEANUP_MS = 1300;
 export function FloatingDamageNumber({ amount }: { amount: number }) {
   const ref = useRef<THREE.Group>(null);
   const age = useRef(0);
+  // Treffer-Stufen: schwere/krasse Treffer = größer, goldener, mit Pop & „!".
+  const crit = amount >= 32;
+  const heavy = amount >= 18;
+  const size = crit ? 0.54 : heavy ? 0.4 : 0.3;
+  const color = crit ? "#fbbf24" : heavy ? "#fb923c" : "#fca5a5";
+  const outline = crit ? "#7c2d12" : "#3f0a0a";
+  const life = crit ? 0.9 : 0.7;
   useFrame((_, delta) => {
     age.current += delta;
     const g = ref.current;
     if (!g) return;
-    g.position.y = 0.4 + age.current * 0.9;
+    g.position.y = 0.4 + age.current * (crit ? 1.25 : 0.9);
+    // Scale-Pop: groß rein, dann settle (krasse Treffer ploppen stärker).
+    const pop = age.current < 0.13 ? 1 + (0.13 - age.current) * (crit ? 6 : 3.5) : 1;
+    g.scale.setScalar(pop);
     const mat = (g.children[0] as unknown as { material?: THREE.Material & { opacity: number } })?.material;
-    if (mat) mat.opacity = Math.max(0, 1 - age.current / 0.7);
+    if (mat) mat.opacity = Math.max(0, 1 - age.current / life);
   });
   return (
     <Billboard ref={ref} position={[0, 0.4, 0]}>
-      <Text fontSize={0.32} color="#fca5a5" outlineWidth={0.02} outlineColor="#3f0a0a">
-        -{amount}
+      <Text fontSize={size} color={color} outlineWidth={crit ? 0.035 : 0.02} outlineColor={outline}>
+        {crit ? `-${amount}!` : `-${amount}`}
       </Text>
     </Billboard>
   );

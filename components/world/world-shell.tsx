@@ -435,7 +435,12 @@ export function WorldShell({
           if (!res.success) debugWarn("World", "registerStreakKill failed", res.error);
           return;
         }
-        sound.win();
+        // Eskalierende Kill-Sounds: normaler Kill = dezent, alle 5 = win,
+        // alle 10 = ultra → der Streak fühlt sich mit jedem Meilenstein krasser an.
+        const streak = res.newStreakKillCount ?? 0;
+        if (streak > 0 && streak % 10 === 0) sound.ultraWin();
+        else if (streak > 0 && streak % 5 === 0) sound.win();
+        else sound.monsterKill();
         if (res.newPendingStreakCr !== undefined) setPendingStreakCr(res.newPendingStreakCr);
         if (res.newStreakKillCount !== undefined) setStreakKillCount(res.newStreakKillCount);
         const id = ++rewardPopupSeq;
