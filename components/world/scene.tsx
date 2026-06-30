@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Sky, Stars, ContactShadows } from "@react-three/drei";
@@ -17,6 +17,7 @@ import type { KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import { TIME_OF_DAY_PRESETS, type WorldEnvironmentConfig } from "@/lib/world-environment-config";
+import { buildObstacles, type Obstacle } from "@/lib/world-obstacles";
 import type { CameraControls } from "@/components/world/use-camera-controls";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -175,6 +176,11 @@ export function Scene({
   );
   const monsterRegistryRef = useRef<MonsterHandle[]>([]);
   const remotePlayerRegistryRef = useRef<RemotePlayerHandle[]>([]);
+  // Kollidierbare Hindernisse — EINE Quelle für Render (Environment) + Physik
+  // (Player/Monster). Recompute bei Dichte-Änderung; Ref für die useFrame-Reads.
+  const obstacles = useMemo(() => buildObstacles(environmentConfig), [environmentConfig]);
+  const obstaclesRef = useRef<Obstacle[]>(obstacles);
+  obstaclesRef.current = obstacles;
 
   // Admin-konfigurierbare Welt-Optik: Tageszeit-Preset + Feintuning-Multiplikatoren.
   const tp = TIME_OF_DAY_PRESETS[environmentConfig.timeOfDay];
@@ -231,7 +237,7 @@ export function Scene({
       <SpawnGlow />
       <BorderRing />
 
-      <Environment env={environmentConfig} />
+      <Environment env={environmentConfig} obstacles={obstacles} />
 
       <ContactShadows position={[0, 0, 0]} opacity={0.6} scale={12} blur={2.2} far={4} />
 
@@ -247,6 +253,7 @@ export function Scene({
         remotePlayerRegistryRef={remotePlayerRegistryRef}
         petTypes={petTypes}
         active={active}
+        obstaclesRef={obstaclesRef}
         onAttack={onAttack}
         onStatsChange={onStatsChange}
         onDeath={onDeath}
@@ -274,6 +281,7 @@ export function Scene({
         characterConfig={characterConfig}
         spawnConfig={spawnConfig}
         active={active}
+        obstaclesRef={obstaclesRef}
         onMonsterKilled={(typeId) => onMonsterKilled?.(typeId)}
       />
     </>

@@ -17,6 +17,7 @@ import { useAttackInput } from "@/components/world/use-attack-input";
 import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
 import type { CombatSharedState, MonsterRegistry, RemotePlayerRegistry } from "@/components/world/combat-types";
 import { WORLD_RADIUS } from "@/lib/world-config";
+import { resolveObstacleCollision, type Obstacle } from "@/lib/world-obstacles";
 import { debugLog } from "@/lib/debug";
 import { mobileInput, consumeMobileAttack, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
 import {
@@ -66,6 +67,9 @@ interface PlayerProps {
    * den Transform-Broadcast, damit man für andere erst dann sichtbar/präsent
    * ist (kein „Geist am Spawn" vor dem Klick). */
   active?: boolean;
+  /** Kollidierbare Map-Hindernisse (Bäume/Steine/Ruinen) — Bewegung wird
+   * dagegen aufgelöst (nicht durchlaufbar; niedrige Steine überspringbar). */
+  obstaclesRef?: React.RefObject<Obstacle[]>;
   combatRef: React.RefObject<CombatSharedState>;
   monsterRegistryRef: MonsterRegistry;
   remotePlayerRegistryRef: RemotePlayerRegistry;
@@ -239,6 +243,7 @@ export function Player({
   cameraControls,
   canvasRef,
   active = false,
+  obstaclesRef,
   combatRef,
   monsterRegistryRef,
   remotePlayerRegistryRef,
@@ -706,6 +711,14 @@ export function Player({
     const accel = slideActive.current ? 40 : ACCEL_RATE;
     velocity.current.lerp(targetVelocity.current, 1 - Math.exp(-delta * accel));
     g.position.addScaledVector(velocity.current, delta);
+
+    // Hindernis-Kollision: man läuft nicht durch Bäume/Ruinen/Monument; niedrige
+    // Steine kann man ÜBERSPRINGEN (baseY = aktuelle Sprunghöhe > blockH = drüber).
+    {
+      const res = resolveObstacleCollision(obstaclesRef?.current, g.position.x, g.position.z, baseY.current, 0.45);
+      g.position.x = res.x;
+      g.position.z = res.z;
+    }
 
     // World border: a hard circular clamp, paired with the visible ring +
     // crystal pillars in scene.tsx/environment.tsx — push past the edge and

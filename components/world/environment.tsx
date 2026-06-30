@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { DEFAULT_WORLD_ENVIRONMENT, type WorldEnvironmentConfig } from "@/lib/world-environment-config";
+import type { Obstacle } from "@/lib/world-obstacles";
 
 const TRUNK_COLOR = "#2e2015";
 const FOLIAGE_COLORS = ["#0e3322", "#163d2a", "#1a4a32"];
@@ -266,30 +267,23 @@ function mulberry32(seed: number) {
  * occurrence in normal play, and reads as the camera continuously zooming
  * in and out while walking. No scenery here needs tagging for anything
  * anymore. */
-export function Environment({ env = DEFAULT_WORLD_ENVIRONMENT }: { env?: WorldEnvironmentConfig }) {
+export function Environment({
+  env = DEFAULT_WORLD_ENVIRONMENT,
+  obstacles = [],
+}: {
+  env?: WorldEnvironmentConfig;
+  /** Kollidierbare Strukturen (Bäume/Felsen/Ruinen/Monument) — gemeinsame
+   * Quelle mit der Physik (lib/world-obstacles.ts). */
+  obstacles?: Obstacle[];
+}) {
   const dens = (base: number, mul: number) => Math.max(0, Math.round(base * mul));
-  const treeCount = dens(80, env.treeDensity);
   const grassCount = dens(110, env.grassDensity);
-  const rockCount = dens(55, env.rockDensity);
-  const ruinCount = dens(16, env.ruinDensity);
   const mushroomCount = dens(46, env.mushroomDensity);
   const fireflyCount = dens(80, env.fireflyDensity);
-
-  const trees = useMemo(() => {
-    const rand = mulberry32(1337);
-    const innerRadius = 11;
-    const outerRadius = WORLD_RADIUS - 6;
-    return Array.from({ length: treeCount }, () => {
-      const angle = rand() * Math.PI * 2;
-      const radius = innerRadius + rand() * (outerRadius - innerRadius);
-      return {
-        x: Math.cos(angle) * radius,
-        z: Math.sin(angle) * radius,
-        scale: 0.8 + rand() * 0.7,
-        hue: Math.floor(rand() * FOLIAGE_COLORS.length),
-      };
-    });
-  }, [treeCount]);
+  // Bäume/Felsen/Ruinen kommen aus der geteilten Hindernis-Liste (= Kollision).
+  const trees = useMemo(() => obstacles.filter((o) => o.kind === "tree"), [obstacles]);
+  const rocks = useMemo(() => obstacles.filter((o) => o.kind === "rock"), [obstacles]);
+  const ruins = useMemo(() => obstacles.filter((o) => o.kind === "ruin"), [obstacles]);
 
   const grassTufts = useMemo(() => {
     const rand = mulberry32(4242);
@@ -300,46 +294,6 @@ export function Environment({ env = DEFAULT_WORLD_ENVIRONMENT }: { env?: WorldEn
       return { x: Math.cos(angle) * radius, z: Math.sin(angle) * radius };
     });
   }, [grassCount]);
-
-  const rocks = useMemo(() => {
-    const rand = mulberry32(7654);
-    const outerRadius = WORLD_RADIUS - 6;
-    return Array.from({ length: rockCount }, () => {
-      const angle = rand() * Math.PI * 2;
-      const radius = 5 + rand() * (outerRadius - 5);
-      return {
-        x: Math.cos(angle) * radius,
-        z: Math.sin(angle) * radius,
-        scale: 0.55 + rand() * 0.9,
-        rot: rand() * Math.PI * 2,
-      };
-    });
-  }, [rockCount]);
-
-  // Ruins clustered in a few spots (statt gleichmäßig verteilt) → wirkt wie
-  // verfallene Bauwerke/Plätze, nicht wie Deko-Streuung.
-  const ruins = useMemo(() => {
-    const rand = mulberry32(31337);
-    const clusters = Math.max(1, Math.ceil(ruinCount / 4));
-    const out: { x: number; z: number; scale: number; rot: number; h: number }[] = [];
-    for (let cl = 0; cl < clusters && out.length < ruinCount; cl++) {
-      const ca = rand() * Math.PI * 2;
-      const cr = 16 + rand() * (WORLD_RADIUS - 22);
-      const cx = Math.cos(ca) * cr;
-      const cz = Math.sin(ca) * cr;
-      const per = Math.min(4, ruinCount - out.length);
-      for (let i = 0; i < per; i++) {
-        out.push({
-          x: cx + (rand() - 0.5) * 4.5,
-          z: cz + (rand() - 0.5) * 4.5,
-          scale: 0.85 + rand() * 0.7,
-          rot: rand() * Math.PI * 2,
-          h: 1.1 + rand() * 1.6,
-        });
-      }
-    }
-    return out;
-  }, [ruinCount]);
 
   const mushrooms = useMemo(() => {
     const rand = mulberry32(5150);
@@ -372,16 +326,16 @@ export function Environment({ env = DEFAULT_WORLD_ENVIRONMENT }: { env?: WorldEn
   return (
     <>
       {trees.map((t, i) => (
-        <PineTree key={i} x={t.x} z={t.z} scale={t.scale} hue={t.hue} />
+        <PineTree key={i} x={t.x} z={t.z} scale={t.scale} hue={t.hue ?? 0} />
       ))}
       {grassTufts.map((g, i) => (
         <GrassTuft key={i} x={g.x} z={g.z} />
       ))}
       {rocks.map((r, i) => (
-        <Rock key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot} />
+        <Rock key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot ?? 0} />
       ))}
       {ruins.map((r, i) => (
-        <RuinPillar key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot} h={r.h} />
+        <RuinPillar key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot ?? 0} h={r.h ?? 1.5} />
       ))}
       {mushrooms.map((m, i) => (
         <GlowMushroom key={i} x={m.x} z={m.z} scale={m.scale} color={m.color} />

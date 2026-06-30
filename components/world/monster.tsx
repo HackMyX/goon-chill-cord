@@ -7,6 +7,7 @@ import { Billboard } from "@react-three/drei";
 import { TextSprite } from "@/components/world/text-sprite";
 import { MonsterBody } from "@/components/world/monster-body";
 import { isHoveringKind, defaultSpawnAnim, SPAWN_ANIM_VALUES, type MonsterSpawnAnim, type MonsterTypeConfig } from "@/lib/monsters";
+import { resolveObstacleCollision, shouldJumpObstacle, type Obstacle } from "@/lib/world-obstacles";
 import type { CombatSharedState, MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { applyIncomingDamage } from "@/lib/combat";
@@ -57,6 +58,9 @@ interface MonsterProps {
   /** Set von Monster-IDs, die den Spieler IMMER jagen (Mindest-Aggro, die N
    * nächsten — von MonstersField gepflegt). Überschreibt die Aggro-Reichweite. */
   forcedAggroRef?: React.RefObject<Set<string>>;
+  /** Kollidierbare Hindernisse — Monster laufen nicht durch & springen über
+   * niedrige Steine. */
+  obstaclesRef?: React.RefObject<Obstacle[]>;
   /** Called when this monster lands a melee hit on the cross-player aggro
    * target — MonstersField broadcasts it to the attacker's client. */
   onRemoteAttack: (amount: number) => void;
@@ -211,6 +215,7 @@ export function Monster({
   characterConfig,
   aggroTargetRef,
   forcedAggroRef,
+  obstaclesRef,
   onRemoteAttack,
   onAttack,
 }: MonsterProps) {
@@ -243,6 +248,8 @@ export function Monster({
   const animPrevX = useRef<number | null>(null);
   const animPrevZ = useRef(0);
   const spawnAnimRef = useRef<MonsterSpawnAnim | null>(null);
+  const jumpY = useRef(0); // Sprunghöhe über Boden (für Stein-Übersprung)
+  const jumpVel = useRef(0);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
   // Idle-wander state — see WANDER_SPEED_FRACTION's doc comment above.
   const wanderAngle = useRef(0);
@@ -494,6 +501,26 @@ export function Monster({
       g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, Math.atan2(wx, wz), Math.min(1, delta * 2));
     }
 
+    // Bodengänger: über niedrige Steine SPRINGEN, wenn im Weg, + Hindernis-
+    // Kollision (nicht durch Bäume/Ruinen). Flieger/Slime brauchen das nicht.
+    if (!hovering && !isSlime) {
+      if (jumpY.current <= 0 && moving && dist > 0.001) {
+        if (shouldJumpObstacle(obstaclesRef?.current, g.position.x, g.position.z, dx / dist, dz / dist, 0.35, jumpY.current)) {
+          jumpVel.current = 6;
+        }
+      }
+      if (jumpY.current > 0 || jumpVel.current > 0) {
+        jumpY.current += jumpVel.current * delta;
+        jumpVel.current += -18 * delta;
+        if (jumpY.current <= 0) { jumpY.current = 0; jumpVel.current = 0; }
+      }
+    }
+    {
+      const res = resolveObstacleCollision(obstaclesRef?.current, g.position.x, g.position.z, jumpY.current, 0.35);
+      g.position.x = res.x;
+      g.position.z = res.z;
+    }
+
     attackCooldownLeft.current -= delta;
     if (hasTarget && dist < type.attackRange && attackCooldownLeft.current <= 0) {
       attackCooldownLeft.current = type.attackCooldown;
@@ -563,7 +590,8 @@ export function Monster({
     // Bodengänger: Lauf-Wippen + Seitwärts-Schwanken. Schweber (Geist/Fledermaus/
     // Irrlicht/Schnitter) NICHT — die hovern unten separat.
     if (!hovering && !isSlime) {
-      g.position.y = initialPosition[1] + (walkingNow ? Math.abs(Math.sin(walkClock.current)) * 0.09 : 0);
+      // Sprung (über Steine) überschreibt das Lauf-Wippen.
+      g.position.y = initialPosition[1] + (jumpY.current > 0.001 ? jumpY.current : (walkingNow ? Math.abs(Math.sin(walkClock.current)) * 0.09 : 0));
       if (upperBody.current) upperBody.current.rotation.z = walkingNow ? Math.sin(walkClock.current) * 0.1 : 0;
     }
 

@@ -19,6 +19,7 @@ import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import { streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import { WORLD_RADIUS } from "@/lib/world-config";
+import type { Obstacle } from "@/lib/world-obstacles";
 import {
   subscribeToWorldRoster,
   subscribeToMonsterSync,
@@ -68,6 +69,9 @@ interface MonstersFieldProps {
    * appear (and none are broadcast) until the "Click to play" overlay is
    * dismissed. Latched upstream, so it never flips back to false mid-session. */
   active: boolean;
+  /** Kollidierbare Hindernisse — Monster laufen nicht durch & springen über
+   * niedrige Steine (lib/world-obstacles.ts). */
+  obstaclesRef?: React.RefObject<Obstacle[]>;
 }
 
 let spawnSeq = 0;
@@ -110,6 +114,7 @@ export function MonstersField({
   characterConfig,
   spawnConfig,
   active,
+  obstaclesRef,
 }: MonstersFieldProps) {
   const [spawns, setSpawns] = useState<MonsterSpawn[]>([]);
   // Owned here, not by each Monster — see monster.tsx's onThrow doc
@@ -620,6 +625,7 @@ export function MonstersField({
           characterConfig={characterConfig}
           aggroTargetRef={aggroTargetRef}
           forcedAggroRef={forcedAggroRef}
+          obstaclesRef={obstaclesRef}
           onRemoteAttack={handleRemoteAttack}
           onAttack={() => pendingAttacksRef.current.add(s.id)}
         />
