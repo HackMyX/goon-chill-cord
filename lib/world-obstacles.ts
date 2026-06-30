@@ -174,14 +174,13 @@ function placeBuilding(out: Obstacle[], cx: number, cz: number, doorSide: number
   const back = doorSide ^ 1; // gegenüberliegende Seite = Hinterausgang (0↔1, 2↔3)
   const roll = rand();
   if (roll < 0.22) {
-    emitShop(out, cx, cz, 5 + rand() * 1.5, 4.5 + rand() * 1.2, 2.6 + rand() * 0.5, doorSide, rand, tone);
+    emitShop(out, cx, cz, 4.5 + rand() * 1.0, 4 + rand() * 0.8, 2.4 + rand() * 0.4, doorSide, rand, tone);
   } else if (roll < 0.42) {
-    emitHouse(out, cx, cz, 4 + rand() * 2.2, 4 + rand() * 2.2, 1.2 + rand() * 1.0, [doorSide, back], false, rand, tone); // Ruine
+    emitHouse(out, cx, cz, 3.8 + rand() * 1.4, 3.8 + rand() * 1.4, 1.1 + rand() * 0.8, [doorSide, back], false, rand, tone); // Ruine
   } else {
-    const tall = rand() < 0.3;
-    const w = 4.5 + rand() * 2.2;
-    const d = 4.5 + rand() * 2.2;
-    const wallH = 2.6 + rand() * 0.9 + (tall ? 1.5 : 0);
+    const w = 4 + rand() * 1.6;
+    const d = 4 + rand() * 1.6;
+    const wallH = 2.3 + rand() * 0.7; // menschliche Höhe, keine riesigen Türme mehr
     emitHouse(out, cx, cz, w, d, wallH, [doorSide, back], true, rand, tone);
   }
 }
@@ -219,46 +218,40 @@ function emitSupermarket(out: Obstacle[], cx: number, cz: number, facing: number
       pushWall(out, "z", s.x, s.z + off, seg, wallH, tone);
     }
   });
-  // Regalreihen (entlang X) mit Gängen dazwischen — „alte Sachen" im Inneren.
+  // Zwei Regalreihen (lange niedrige Tische) mit Gang dazwischen — „alte Sachen".
+  const front = sides[facing];
   for (let row = 0; row < 2; row++) {
     const rz = cz + (row === 0 ? -1.9 : 1.9);
-    for (let k = -2; k <= 2; k++) {
-      out.push({ kind: "crate", x: cx + k * 2.1, z: rz, scale: 1, shape: "box", hx: 0.85, hz: 0.5, r: 0.85, blockH: 1.35, rot: 0 });
-    }
+    out.push({ kind: "crate", x: cx, z: rz, scale: 1, shape: "box", hx: hw - 1.2, hz: 0.5, r: hw - 1.2, blockH: 1.2, rot: 0 });
   }
-  // Kasse nahe Eingang
-  const front = sides[facing];
-  out.push({ kind: "crate", x: cx - 3, z: cz + (facing === 1 ? -hd + 1.3 : hd - 1.3), scale: 1, shape: "box", hx: 1.2, hz: 0.4, r: 1.2, blockH: 1.0, rot: 0 });
   // Flachdach + Laterne NEBEN dem Eingang (nicht drin).
   out.push({ kind: "roof", x: cx, z: cz, scale: 1, shape: "box", hx: hw + 0.3, hz: hd + 0.3, r: 0, blockH: 0, h: wallH, tone });
   addLamp(out, cx - hw - 1, front.z, rand);
 }
 
-/** DORF: Hauptstraße mit Häusern beidseitig (Eingang zur Straße), Querstraßen,
- * Laternen am Straßenrand, Supermarkt + Dorfplatz mit Brunnen. */
+/** DORF: kompakte Hauptstraße mit gut auseinanderstehenden Häusern beidseitig
+ * (Eingang zur Straße), Laternen am Rand, ein Supermarkt + ein Dorfplatz. */
 function genVillage(out: Obstacle[], ox: number, oz: number, rand: () => number) {
   const tone = 0;
-  const avHalf = 34;
-  roadBetween(out, ox - avHalf, oz, ox + avHalf, oz, 5.5); // Hauptstraße (Ost–West)
-  roadBetween(out, ox - 22, oz - 15, ox - 22, oz + 15, 3.4); // Querstraße links
-  roadBetween(out, ox + 22, oz - 15, ox + 22, oz + 15, 3.4); // Querstraße rechts
-  lampLine(out, ox - avHalf + 4, oz, ox + avHalf - 4, oz, 9, rand); // Laternen am Straßenrand
+  const avHalf = 20;
+  const setback = 10; // großzügiger Abstand Haus↔Straße → nicht beengt
+  roadBetween(out, ox - avHalf, oz, ox + avHalf, oz, 5); // Hauptstraße (Ost–West)
+  lampLine(out, ox - avHalf + 4, oz, ox + avHalf - 4, oz, 10, rand);
 
-  // Nordreihe: Eingänge zeigen nach Süden (Seite 0 = +z) zur Straße.
-  for (const lx of [-30, -22, -14, 14, 22, 30]) placeBuilding(out, ox + lx, oz - 8, 0, rand, tone);
-  // Südreihe rechts: Eingänge nach Norden (Seite 1 = −z).
-  for (const lx of [14, 22, 30]) placeBuilding(out, ox + lx, oz + 8, 1, rand, tone);
-  // Supermarkt links auf der Südseite (Front zur Straße).
-  emitSupermarket(out, ox - 24, oz + 9.5, 1, rand);
-
-  // Dorfplatz in der Mitte (offen): Brunnen/Denkmal + Bänke + Laternen.
-  out.push({ kind: "ruin", x: ox, z: oz + 9, scale: 1.1, r: 0.6, blockH: 2.2, rot: 0, h: 1.5 });
-  addLamp(out, ox - 6, oz + 7, rand);
-  addLamp(out, ox + 6, oz + 7, rand);
-  for (let i = 0; i < 4; i++) {
-    const s = 0.4 + rand() * 0.2;
-    out.push({ kind: "crate", x: ox + (rand() - 0.5) * 12, z: oz + 6 + rand() * 7, scale: s, shape: "box", hx: s, hz: s, r: s, blockH: s * 1.4 + 0.18, rot: rand() * Math.PI * 2 });
+  // Häuser locker entlang der Straße (10er-Abstand, mittiger Platz frei).
+  for (const lx of [-16, -6, 6, 16]) {
+    placeBuilding(out, ox + lx, oz - setback, 0, rand, tone); // Nordreihe, Eingang nach Süden
   }
+  for (const lx of [6, 16]) {
+    placeBuilding(out, ox + lx, oz + setback, 1, rand, tone); // Südreihe rechts
+  }
+  // Supermarkt links auf der Südseite (Front zur Straße).
+  emitSupermarket(out, ox - 11, oz + setback + 1, 1, rand);
+
+  // Dorfplatz (offen): nur ein Brunnen/Denkmal + zwei Laternen — kein Clutter.
+  out.push({ kind: "ruin", x: ox, z: oz - setback, scale: 1.1, r: 0.6, blockH: 2.2, rot: 0, h: 1.5 });
+  addLamp(out, ox - 4, oz + 3, rand);
+  addLamp(out, ox + 4, oz + 3, rand);
 }
 
 /** MARKT: zwei Reihen leerer Marktstände an einer Mittel-Gasse + Laternen. */
@@ -425,21 +418,21 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
       return { x: Math.cos(a) * r, z: Math.sin(a) * r };
     };
     if (dq > 0) {
-      const village = at(0.07, 0.34);
-      const market = at(0.40, 0.56);
-      const ruinsF = at(0.66, 0.60);
-      const forest = at(0.85, 0.52);
-      const camp = at(0.24, 0.78);
+      // Gleichmäßig um die Map verteilt (≈72° auseinander) + verschiedene Radien
+      // → die Orte überlappen NICHT mehr und stehen klar getrennt da.
+      const village = at(0.02, 0.34);
+      const market = at(0.22, 0.62);
+      const ruinsF = at(0.44, 0.66);
+      const forest = at(0.66, 0.58);
+      const camp = at(0.86, 0.70);
       genVillage(out, village.x, village.z, rand);
       genMarket(out, market.x, market.z, rand);
       genRuinsField(out, ruinsF.x, ruinsF.z, rand);
       genForest(out, forest.x, forest.z, rand);
       genCamp(out, camp.x, camp.z, rand);
-      // Hauptwege verbinden die Orte (über das Dorf als Knotenpunkt).
-      roadBetween(out, village.x, village.z, market.x, market.z, 3.2);
-      roadBetween(out, village.x, village.z, ruinsF.x, ruinsF.z, 2.8);
-      roadBetween(out, village.x, village.z, forest.x, forest.z, 2.8);
-      roadBetween(out, market.x, market.z, camp.x, camp.z, 2.4);
+      // Ein paar Verbindungswege vom Dorf aus (nicht zu jedem — sonst Wirrwarr).
+      roadBetween(out, village.x, village.z, market.x, market.z, 3);
+      roadBetween(out, village.x, village.z, forest.x, forest.z, 2.6);
     }
   }
 
@@ -465,8 +458,9 @@ export function randomSpawnPoint(obstacles: Obstacle[] | null | undefined): { x:
       x = res.x;
       z = res.z;
     }
-    // 1.4 Freiraum-Radius → der Spawn liegt nie direkt in/an einer Wand/Haus.
-    if (Math.hypot(x, z) < WORLD_RADIUS - 4 && !pointInsideBlocker(obstacles, x, z, 1.4)) {
+    // 3.5 Freiraum-Radius → der Spawn liegt immer im Freien, nie in/an einem
+    // Gebäude oder zwischen engen Wänden.
+    if (Math.hypot(x, z) < WORLD_RADIUS - 4 && !pointInsideBlocker(obstacles, x, z, 3.5)) {
       return { x, z };
     }
   }
@@ -610,7 +604,9 @@ export function segmentBlockedByObstacle(
   const mx = (ax + bx) / 2;
   const mz = (az + bz) / 2;
   const reach = len / 2 + 1.5;
-  const steps = Math.max(2, Math.ceil(len / 0.4));
+  // Schrittweite 0.18 < Wanddicke (0.44) → eine dünne Wand wird zuverlässig
+  // getroffen und nicht „durchsampelt" (sonst Treffer durch die Wand).
+  const steps = Math.max(2, Math.ceil(len / 0.18));
   for (const o of obstacles) {
     if (o.blockH < minBlockH) continue;
     const half = o.shape === "box" ? Math.max(o.hx ?? o.r, o.hz ?? o.r) : o.r;
