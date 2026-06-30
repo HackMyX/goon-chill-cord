@@ -9,7 +9,11 @@
  * matching `MonsterVisualKind`/render branch in components/world/
  * monster.tsx) and shipping that, not from the admin panel itself.
  */
-export type MonsterVisualKind = "zombie" | "skeleton" | "slime" | "orc" | "ghost" | "demon";
+export type MonsterVisualKind =
+  | "zombie" | "skeleton" | "slime" | "orc" | "ghost" | "demon"
+  // Neue Arten: Steingolem (tankig, glühende Risse), Riesenspinne (8 Beine,
+  // schnell, Augen-Cluster), Kobold/Imp (klein, schnell, Feuerball-Werfer).
+  | "golem" | "spider" | "imp";
 
 export interface MonsterTypeConfig {
   id: string;
@@ -277,6 +281,93 @@ export const DEFAULT_MONSTER_TYPES: MonsterTypeConfig[] = [
     throwDamage: 24,
     throwCooldown: 2.5,
     throwRange: 9,
+  },
+
+  // --- Neue Arten -------------------------------------------------------------
+  {
+    // Klein, flink, lobt Feuerbälle — nervt aus der Distanz.
+    id: "imp_scout",
+    name: "Kobold",
+    visualKind: "imp",
+    health: 64,
+    attackDamage: 11,
+    moveSpeed: 6.4,
+    aggroRange: 12,
+    attackRange: 1.4,
+    attackCooldown: 0.8,
+    rewardMin: 20,
+    rewardMax: 32,
+    spawnWeight: 16,
+    colorHex: "#b91c1c",
+    scale: 0.8,
+    enabled: true,
+    canThrow: true,
+    throwDamage: 9,
+    throwCooldown: 2.2,
+    throwRange: 9,
+  },
+  {
+    // Schnell, aggressiv, 8 Beine — kommt aus der Distanz mit Netz-Schuss.
+    id: "spider_giant",
+    name: "Riesenspinne",
+    visualKind: "spider",
+    health: 130,
+    attackDamage: 19,
+    moveSpeed: 6.8,
+    aggroRange: 13,
+    attackRange: 1.7,
+    attackCooldown: 0.7,
+    rewardMin: 48,
+    rewardMax: 74,
+    spawnWeight: 12,
+    colorHex: "#3b2f4a",
+    scale: 1.15,
+    enabled: true,
+    canThrow: true,
+    throwDamage: 12,
+    throwCooldown: 2.4,
+    throwRange: 9,
+  },
+  {
+    // Brocken-Tank: extrem zäh, langsam, glühende Risse — fette Belohnung.
+    id: "golem_stone",
+    name: "Steingolem",
+    visualKind: "golem",
+    health: 360,
+    attackDamage: 33,
+    moveSpeed: 4.7,
+    aggroRange: 11,
+    attackRange: 2.1,
+    attackCooldown: 1.3,
+    rewardMin: 95,
+    rewardMax: 150,
+    spawnWeight: 7,
+    colorHex: "#6b7280",
+    scale: 1.45,
+    enabled: true,
+    hasWeapon: false,
+  },
+  {
+    // Stärkerer Imp — Höllenbrut, schneller Feuerball-Sturm.
+    id: "imp_hellfire",
+    name: "Höllen-Imp",
+    visualKind: "imp",
+    health: 120,
+    attackDamage: 20,
+    moveSpeed: 6.9,
+    aggroRange: 14,
+    attackRange: 1.5,
+    attackCooldown: 0.7,
+    rewardMin: 55,
+    rewardMax: 85,
+    spawnWeight: 8,
+    colorHex: "#ea580c",
+    scale: 0.95,
+    enabled: true,
+    canThrow: true,
+    throwDamage: 15,
+    throwCooldown: 1.9,
+    throwRange: 10,
   },
 ];
 

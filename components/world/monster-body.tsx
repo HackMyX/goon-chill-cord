@@ -100,6 +100,9 @@ export function MonsterBody({
   const isOrc = type.visualKind === "orc";
   const isDemon = type.visualKind === "demon";
   const isSkeleton = type.visualKind === "skeleton";
+  const isGolem = type.visualKind === "golem";
+  const isSpider = type.visualKind === "spider";
+  const isImp = type.visualKind === "imp";
   const limbWidth = isSkeleton ? 0.16 : isOrc ? 0.3 : isDemon ? 0.27 : 0.22;
   const bodyOpacity = isGhost ? 0.5 : 1;
   const eyeColor =
@@ -108,6 +111,9 @@ export function MonsterBody({
     : isDemon ? "#ff2424"
     : isOrc ? "#fbbf24"
     : isSlime ? "#dcfce7"
+    : isGolem ? "#f59e0b"
+    : isSpider ? "#ef4444"
+    : isImp ? "#fde047"
     : "#fca5a5";
 
   const tier = type.health >= 200 ? 2 : type.health >= 100 ? 1 : 0;
@@ -153,6 +159,45 @@ export function MonsterBody({
             <meshBasicMaterial color={eyeColor} transparent opacity={0.6} toneMapped={false} />
           </mesh>
           <Eyes color={eyeColor} y={0.08} z={0.34} spread={0.13} r={0.06} />
+        </group>
+      ) : isSpider ? (
+        // Spinne: flacher Doppel-Körper (Hinterleib + Vorderleib) auf upperBody
+        // (damit Lunge-Neigung/Atmen greifen) + 8 abgewinkelte Beine + Augen-
+        // Cluster + Reißzähne. Keine legL/R/armL/R (Parent guard'd).
+        <group ref={refs.upperBody} position={[0, 0.52, 0]}>
+          <mesh position={[0, 0, -0.26]} castShadow>
+            <sphereGeometry args={[0.36, 16, 12]} />
+            <meshStandardMaterial ref={refs.torsoMaterial} color={type.colorHex} roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 0, 0.16]} castShadow>
+            <sphereGeometry args={[0.24, 14, 10]} />
+            <meshStandardMaterial color={type.colorHex} roughness={0.5} />
+          </mesh>
+          {/* Augen-Cluster (6 kleine glühende Augen) */}
+          {[[-0.09, 0.07], [0.09, 0.07], [-0.05, 0.12], [0.05, 0.12], [-0.12, 0.0], [0.12, 0.0]].map(([ex, ey], i) => (
+            <mesh key={i} position={[ex, ey, 0.36]}>
+              <sphereGeometry args={[0.028, 8, 8]} />
+              <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={2.2} toneMapped={false} />
+            </mesh>
+          ))}
+          {/* Reißzähne */}
+          {[-1, 1].map((s) => (
+            <mesh key={s} position={[s * 0.06, -0.12, 0.34]} rotation={[0.7, 0, 0]} castShadow>
+              <coneGeometry args={[0.025, 0.12, 6]} />
+              <meshStandardMaterial color="#e5e7eb" />
+            </mesh>
+          ))}
+          {/* 8 Beine — 4 je Seite, gestaffelt, abgewinkelt nach außen/unten */}
+          {[-1, 1].map((side) =>
+            [0, 1, 2, 3].map((i) => (
+              <group key={`${side}-${i}`} position={[side * 0.18, 0.02, 0.2 - i * 0.16]} rotation={[0, 0, side * (0.9 - i * 0.08)]}>
+                <mesh position={[side * 0.28, -0.02, 0]} castShadow>
+                  <cylinderGeometry args={[0.02, 0.015, 0.58, 6]} />
+                  <meshStandardMaterial color={type.colorHex} roughness={0.7} />
+                </mesh>
+              </group>
+            )),
+          )}
         </group>
       ) : (
         <>
@@ -224,6 +269,51 @@ export function MonsterBody({
               </>
             )}
 
+            {/* Steingolem: glühende Risse über Brust + Felsbrocken auf den
+                Schultern → massiver, „aufgeladener" Brocken. */}
+            {isGolem && (
+              <>
+                {[[-0.12, 0.5, 0.4], [0.1, 0.32, -0.5], [0, 0.62, 0.2]].map(([cx, cy, rz], i) => (
+                  <mesh key={i} position={[cx, cy, 0.16]} rotation={[0, 0, rz]}>
+                    <boxGeometry args={[0.04, 0.22, 0.02]} />
+                    <meshBasicMaterial color={eyeColor} transparent opacity={0.9} toneMapped={false} />
+                  </mesh>
+                ))}
+                <mesh position={[-0.28, 0.66, 0]} rotation={[0.3, 0.5, 0.2]} castShadow>
+                  <dodecahedronGeometry args={[0.16, 0]} />
+                  <meshStandardMaterial color={type.colorHex} flatShading roughness={0.9} />
+                </mesh>
+                <mesh position={[0.28, 0.66, 0]} rotation={[0.4, 1.1, 0.3]} castShadow>
+                  <dodecahedronGeometry args={[0.16, 0]} />
+                  <meshStandardMaterial color={type.colorHex} flatShading roughness={0.9} />
+                </mesh>
+              </>
+            )}
+
+            {/* Imp/Kobold: kleine Fledermaus-Flügel + Hörnchen + Pfeilschwanz. */}
+            {isImp && (
+              <>
+                <mesh position={[-0.06, 1.12, 0.05]} rotation={[0.2, 0, -0.4]} castShadow>
+                  <coneGeometry args={[0.03, 0.13, 5]} />
+                  <meshStandardMaterial color="#1a1010" />
+                </mesh>
+                <mesh position={[0.06, 1.12, 0.05]} rotation={[0.2, 0, 0.4]} castShadow>
+                  <coneGeometry args={[0.03, 0.13, 5]} />
+                  <meshStandardMaterial color="#1a1010" />
+                </mesh>
+                {[-1, 1].map((s) => (
+                  <mesh key={s} position={[s * 0.34, 0.46, -0.1]} rotation={[0, s * 0.5, s * 0.4]}>
+                    <boxGeometry args={[0.42, 0.34, 0.02]} />
+                    <meshStandardMaterial color={type.colorHex} emissive={type.colorHex} emissiveIntensity={0.3} transparent opacity={0.85} side={THREE.DoubleSide} />
+                  </mesh>
+                ))}
+                <mesh position={[0, 0.06, -0.18]} rotation={[0.7, 0, 0]} castShadow>
+                  <coneGeometry args={[0.04, 0.34, 6]} />
+                  <meshStandardMaterial color={type.colorHex} />
+                </mesh>
+              </>
+            )}
+
             <group ref={refs.armL} position={[-0.32, 0.65, 0]}>
               <mesh position={[0, -0.32, 0]} castShadow>
                 <boxGeometry args={[limbWidth, 0.62, limbWidth]} />
@@ -271,7 +361,7 @@ export function MonsterBody({
         </>
       )}
 
-      <Billboard ref={refs.healthGroup} position={[0, isSlime ? 1.15 : 2.35, 0]}>
+      <Billboard ref={refs.healthGroup} position={[0, isSlime || isSpider ? 1.15 : 2.35, 0]}>
         <mesh>
           <planeGeometry args={[1, 0.12]} />
           <meshBasicMaterial color="#1a1a1a" transparent opacity={0.85} />

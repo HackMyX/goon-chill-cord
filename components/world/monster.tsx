@@ -337,13 +337,15 @@ export function Monster({
   // bolt for the ghost (matches its own eye/robe color).
   const throwColor = isGhost
     ? "#b9d6ff"
-    : isDemon
-      ? "#ff6b35"
+    : isDemon || type.visualKind === "imp"
+      ? "#ff6b35" // Feuerball (Dämon/Imp)
       : isOrc
         ? "#8a8a6b"
-        : type.visualKind === "skeleton"
-          ? "#e8e4d8"
-          : "#ffffff";
+        : type.visualKind === "spider"
+          ? "#d9f99d" // Netz/Gift (Spinne)
+          : type.visualKind === "skeleton"
+            ? "#e8e4d8"
+            : "#ffffff";
 
   useFrame((_, delta) => {
     const g = group.current;
