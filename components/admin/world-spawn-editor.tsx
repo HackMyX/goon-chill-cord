@@ -169,6 +169,13 @@ export function WorldSpawnConfigEditor({ config }: { config: WorldSpawnConfig })
           min={0} max={1} step={0.05}
           onChange={(v) => set("bossActiveAliveCapFactor", v)}
         />
+        <NumField
+          label="Mindest-Angreifer (immer aktiv)"
+          hint="So viele Monster (die jeweils nächsten) jagen den Spieler IMMER aktiv — unabhängig von der Aggro-Reichweite, damit man nicht passiv rumstehen kann. 0 = aus (nur normale Aggro). Erfordert Migration scripts/add-min-aggressors.cjs"
+          value={form.minAggressors}
+          min={0} max={20} step={1}
+          onChange={(v) => set("minAggressors", v)}
+        />
       </div>
 
       <div className="mt-5 flex items-center gap-3">

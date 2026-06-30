@@ -127,6 +127,9 @@ export function MonstersField({
   const bossTimer = useRef(spawnConfig.bossSpawnIntervalMinSec);
   // Pro beschwörendem Monster ein Minion-Timer (Spawn-ID → Restzeit).
   const minionTimers = useRef<Map<string, number>>(new Map());
+  // Mindest-Aggro: IDs der Monster, die den Spieler IMMER jagen (die N nächsten).
+  const forcedAggroRef = useRef<Set<string>>(new Set());
+  const forcedAggroTimer = useRef(0);
   // Live room population (lib/world-realtime.ts), always >= 1 (yourself) —
   // read in a ref, not React state, since useFrame below reads it every
   // tick and a roster sync re-rendering this whole field would be wasted
@@ -417,6 +420,23 @@ export function MonstersField({
     // No spawning while dead.
     if (isDead) return;
 
+    // --- Mindest-Aggro: die N nächsten eigenen Monster jagen IMMER den Spieler
+    // (unabhängig von der Aggro-Reichweite) → kein passives Rumstehen. Alle 0.5s
+    // neu bestimmt (gedrosselt; vermeidet Flackern + spart Rechenzeit). Während
+    // Spawn-Schutz aus (invulnerable → kein Aggro). minAggressors=0 = aus.
+    forcedAggroTimer.current -= delta;
+    if (forcedAggroTimer.current <= 0) {
+      forcedAggroTimer.current = 0.5;
+      const set = forcedAggroRef.current;
+      set.clear();
+      if (!combatRef.current.invulnerable && spawnConfig.minAggressors > 0) {
+        const ppos = combatRef.current.playerPos;
+        const own = registryRef.current.filter((h) => !h.ownerId && h.isAlive());
+        own.sort((a, b) => a.getPosition().distanceToSquared(ppos) - b.getPosition().distanceToSquared(ppos));
+        for (let i = 0; i < Math.min(spawnConfig.minAggressors, own.length); i++) set.add(own[i].id);
+      }
+    }
+
     // --- Boss-Spawn (eigener, seltener Track; max. 1 Boss gleichzeitig) ------
     if (spawnConfig.bossSpawnIntervalMaxSec > 0) {
       bossTimer.current -= delta;
@@ -599,6 +619,7 @@ export function MonstersField({
           onThrow={handleThrow}
           characterConfig={characterConfig}
           aggroTargetRef={aggroTargetRef}
+          forcedAggroRef={forcedAggroRef}
           onRemoteAttack={handleRemoteAttack}
           onAttack={() => pendingAttacksRef.current.add(s.id)}
         />

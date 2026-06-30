@@ -54,6 +54,9 @@ interface MonsterProps {
    * instead of combatRef.playerPos, and melee damage is routed via
    * onRemoteAttack instead of applyIncomingDamage on the local player. */
   aggroTargetRef: React.RefObject<AggroTarget | null>;
+  /** Set von Monster-IDs, die den Spieler IMMER jagen (Mindest-Aggro, die N
+   * nächsten — von MonstersField gepflegt). Überschreibt die Aggro-Reichweite. */
+  forcedAggroRef?: React.RefObject<Set<string>>;
   /** Called when this monster lands a melee hit on the cross-player aggro
    * target — MonstersField broadcasts it to the attacker's client. */
   onRemoteAttack: (amount: number) => void;
@@ -207,6 +210,7 @@ export function Monster({
   onThrow,
   characterConfig,
   aggroTargetRef,
+  forcedAggroRef,
   onRemoteAttack,
   onAttack,
 }: MonsterProps) {
@@ -438,6 +442,9 @@ export function Monster({
     // er ist für sie unsichtbar. Nur eine aktive Cross-Player-Aggro auf einen
     // ANDEREN Spieler zählt in diesem Fenster noch.
     const seeLocal = !combatRef.current.invulnerable;
+    // Mindest-Aggro: gehört dieses Monster zu den N nächsten, jagt es den Spieler
+    // IMMER (egal wie weit) → kein passives Rumstehen.
+    const forced = seeLocal && (forcedAggroRef?.current?.has(id) ?? false);
     const targetX = useAggro ? aggroT.x : localPlayerPos.x;
     const targetZ = useAggro ? aggroT.z : localPlayerPos.z;
 
@@ -449,7 +456,7 @@ export function Monster({
     // the monster always considers itself "on-target" once it has a chase
     // objective — this prevents it falling back into wander mid-chase.
     // Geschützter lokaler Spieler => kein Ziel (nur Cross-Player-Aggro zählt).
-    const hasTarget = useAggro || (seeLocal && dist < type.aggroRange);
+    const hasTarget = useAggro || forced || (seeLocal && dist < type.aggroRange);
     const moving = hasTarget && dist > type.attackRange * 0.7;
 
     if (moving) {

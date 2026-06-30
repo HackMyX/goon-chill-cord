@@ -35,6 +35,10 @@ export interface WorldSpawnConfig {
   /** Während ein Boss lebt, wird die Normalo-Obergrenze mit diesem Faktor
    * multipliziert (0–1) → nicht 40 Mobs + Boss zugleich. */
   bossActiveAliveCapFactor: number;
+  /** Mindestanzahl Monster, die IMMER aktiv auf den Spieler zugehen — die N
+   * nächsten jagen ihn unabhängig von der Aggro-Reichweite, damit man nicht
+   * passiv rumstehen kann. 0 = aus (nur normale Aggro-Reichweite). */
+  minAggressors: number;
 }
 
 export const DEFAULT_WORLD_SPAWN_CONFIG: WorldSpawnConfig = {
@@ -49,4 +53,5 @@ export const DEFAULT_WORLD_SPAWN_CONFIG: WorldSpawnConfig = {
   bossSpawnIntervalMinSec: 90,
   bossSpawnIntervalMaxSec: 180,
   bossActiveAliveCapFactor: 0.5,
+  minAggressors: 3,
 };
