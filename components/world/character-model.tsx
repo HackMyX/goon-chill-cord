@@ -9,6 +9,7 @@ import { type EquippedItem } from "@/lib/rarity-colors";
 import { debugWarn } from "@/lib/debug";
 import { getPetSpeciesId, DEFAULT_PET_TYPES, resolvePetStatsForRarity, type PetTypeConfig } from "@/lib/pets";
 import type { MonsterRegistry } from "@/components/world/combat-types";
+import { segmentBlockedByObstacle, type Obstacle } from "@/lib/world-obstacles";
 import {
   PetVariant,
   HatVariant,
@@ -47,6 +48,8 @@ export interface CharacterModelProps {
    * wandering (PetCompanion below treats a missing registry as "no
    * monsters to ever find", not an error). */
   monsterRegistryRef?: MonsterRegistry;
+  /** Kollidierbare Hindernisse — Pet trifft nicht durch Wände (LOS-Check). */
+  obstaclesRef?: React.RefObject<Obstacle[]>;
   /** Admin-configured per-species stats (lib/pets.ts) — defaults to the
    * code fallbacks when omitted (Garderobe preview, remote avatars), same
    * "code defaults, DB overrides" shape as lib/monsters.ts elsewhere. */
@@ -99,7 +102,7 @@ const BUILD = {
  */
 export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>(
   function CharacterModel(
-    { equippedByCategory, gender, name, shieldStateRef, monsterRegistryRef, petTypes },
+    { equippedByCategory, gender, name, shieldStateRef, monsterRegistryRef, obstaclesRef, petTypes },
     ref
   ) {
     const hat = equippedByCategory.hat;
@@ -327,7 +330,7 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
             sphere, and now it actually wanders/orbits around its owner
             instead of sitting frozen in one spot. */}
         {pet && (
-          <PetCompanion item={pet} monsterRegistryRef={monsterRegistryRef} petTypes={petTypes} />
+          <PetCompanion item={pet} monsterRegistryRef={monsterRegistryRef} obstaclesRef={obstaclesRef} petTypes={petTypes} />
         )}
       </group>
     );
@@ -401,10 +404,12 @@ const GROUND_PET_LIFT = 0.06;
 function PetCompanion({
   item,
   monsterRegistryRef,
+  obstaclesRef,
   petTypes,
 }: {
   item: EquippedItem;
   monsterRegistryRef?: MonsterRegistry;
+  obstaclesRef?: React.RefObject<Obstacle[]>;
   petTypes?: PetTypeConfig[];
 }) {
   const groupRef = useRef<THREE.Group>(null);
@@ -506,8 +511,11 @@ function PetCompanion({
         attackCooldown.current -= delta;
         if (attackCooldown.current <= 0) {
           attackCooldown.current = petConfig.attackSpeed;
-          combatTarget.current.takeDamage(petConfig.damage);
-          attackLungeRef.current = 1;
+          // Kein Treffer durch Wände: LOS vom Pet zum Monster prüfen.
+          if (!segmentBlockedByObstacle(obstaclesRef?.current, worldPos.current.x, worldPos.current.z, monsterWorldPos.x, monsterWorldPos.z)) {
+            combatTarget.current.takeDamage(petConfig.damage);
+            attackLungeRef.current = 1;
+          }
         }
       }
       paused.current = false;

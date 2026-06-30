@@ -17,7 +17,7 @@ import { useAttackInput } from "@/components/world/use-attack-input";
 import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
 import type { CombatSharedState, MonsterRegistry, RemotePlayerRegistry } from "@/components/world/combat-types";
 import { WORLD_RADIUS } from "@/lib/world-config";
-import { resolveObstacleCollision, randomSpawnPoint, type Obstacle } from "@/lib/world-obstacles";
+import { resolveObstacleCollision, randomSpawnPoint, segmentBlockedByObstacle, type Obstacle } from "@/lib/world-obstacles";
 import { debugLog } from "@/lib/debug";
 import { mobileInput, consumeMobileAttack, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
 import {
@@ -902,6 +902,8 @@ export function Player({
         )
       )
         continue;
+      // Kein Treffer DURCH Wände: blockierende Struktur zwischen Spieler und Mob?
+      if (segmentBlockedByObstacle(obstaclesRef?.current, g.position.x, g.position.z, pos.x, pos.z)) continue;
       if (dist < nearestDist) {
         nearestDist = dist;
         nearestMonster = m;
@@ -1392,6 +1394,7 @@ export function Player({
             name=""
             shieldStateRef={combatRef}
             monsterRegistryRef={monsterRegistryRef}
+            obstaclesRef={obstaclesRef}
             petTypes={petTypes}
           />
           {/* HUD nametag — transparent, game-style, floats above the player.

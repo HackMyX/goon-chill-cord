@@ -274,7 +274,58 @@ function LampPost({ o }: { o: Obstacle }) {
   );
 }
 
-/** Holzkiste / Trümmerstück (überspringbar). */
+/** Straße/Pfad — flache, dunkle Schotterfläche knapp über dem Boden. */
+function Road({ o }: { o: Obstacle }) {
+  const len = o.len ?? (o.hx ?? 1) * 2;
+  const width = (o.hz ?? 1.5) * 2;
+  return (
+    <mesh position={[o.x, 0.03, o.z]} rotation={[0, o.rot ?? 0, 0]} receiveShadow>
+      <boxGeometry args={[len, 0.05, width]} />
+      <meshStandardMaterial color="#2b2724" roughness={1} />
+    </mesh>
+  );
+}
+
+/** Lagerfeuer — glühende Glut + Flammen + Steinkranz + warmer Lichtschein. */
+function Campfire({ o }: { o: Obstacle }) {
+  const fire = useRef<THREE.Mesh>(null);
+  useFrame((s) => {
+    if (fire.current) {
+      const f = 0.85 + Math.sin(s.clock.elapsedTime * 9) * 0.12 + Math.sin(s.clock.elapsedTime * 17) * 0.05;
+      fire.current.scale.set(1, f, 1);
+    }
+  });
+  return (
+    <group position={[o.x, 0, o.z]}>
+      {/* Steinkranz */}
+      {Array.from({ length: 7 }).map((_, i) => {
+        const a = (i / 7) * Math.PI * 2;
+        return (
+          <mesh key={i} position={[Math.cos(a) * 0.55, 0.08, Math.sin(a) * 0.55]} rotation={[0, a, 0]}>
+            <dodecahedronGeometry args={[0.16, 0]} />
+            <meshStandardMaterial color="#4d5258" flatShading />
+          </mesh>
+        );
+      })}
+      {/* Holzscheite */}
+      <mesh position={[0, 0.12, 0]} rotation={[0, 0.6, 0.2]}>
+        <cylinderGeometry args={[0.07, 0.07, 0.7, 5]} />
+        <meshStandardMaterial color="#3a2a1c" />
+      </mesh>
+      {/* Flamme */}
+      <mesh ref={fire} position={[0, 0.35, 0]}>
+        <coneGeometry args={[0.26, 0.7, 8]} />
+        <meshBasicMaterial color="#ff9d2e" toneMapped={false} />
+      </mesh>
+      <pointLight position={[0, 0.7, 0]} color="#ff8a3d" intensity={9} distance={11} decay={2} />
+      {/* Boden-Glut */}
+      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[1.8, 18]} />
+        <meshBasicMaterial color="#ff7a2a" transparent opacity={0.12} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
 
 /** Faded die Materialien einer Gruppe sanft Richtung `target`-Opazität. */
 function fadeGroup(g: THREE.Object3D, target: number) {
@@ -493,6 +544,8 @@ export function Environment({
   const lamps = useMemo(() => obstacles.filter((o) => o.kind === "lamp"), [obstacles]);
   const crates = useMemo(() => obstacles.filter((o) => o.kind === "crate"), [obstacles]);
   const roofs = useMemo(() => obstacles.filter((o) => o.kind === "roof"), [obstacles]);
+  const roads = useMemo(() => obstacles.filter((o) => o.kind === "road"), [obstacles]);
+  const campfires = useMemo(() => obstacles.filter((o) => o.kind === "campfire"), [obstacles]);
 
   const grassTufts = useMemo(() => {
     const rand = mulberry32(4242);
@@ -534,6 +587,12 @@ export function Environment({
 
   return (
     <>
+      {roads.map((o, i) => (
+        <Road key={`rd${i}`} o={o} />
+      ))}
+      {campfires.map((o, i) => (
+        <Campfire key={`cf${i}`} o={o} />
+      ))}
       <InstancedTrees trees={trees} />
       <InstancedGrass tufts={grassTufts} />
       <InstancedRocks rocks={rocks} />

@@ -7,7 +7,7 @@ import { Billboard } from "@react-three/drei";
 import { TextSprite } from "@/components/world/text-sprite";
 import { MonsterBody } from "@/components/world/monster-body";
 import { isHoveringKind, defaultSpawnAnim, SPAWN_ANIM_VALUES, type MonsterSpawnAnim, type MonsterTypeConfig } from "@/lib/monsters";
-import { resolveObstacleCollision, shouldJumpObstacle, type Obstacle } from "@/lib/world-obstacles";
+import { resolveObstacleCollision, shouldJumpObstacle, segmentBlockedByObstacle, type Obstacle } from "@/lib/world-obstacles";
 import type { CombatSharedState, MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { applyIncomingDamage } from "@/lib/combat";
@@ -469,9 +469,22 @@ export function Monster({
     if (moving) {
       const dirX = dx / dist;
       const dirZ = dz / dist;
-      g.position.x += dirX * type.moveSpeed * delta;
-      g.position.z += dirZ * type.moveSpeed * delta;
-      g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, Math.atan2(dirX, dirZ), Math.min(1, delta * 6));
+      // Schlauer: liegt direkt voraus eine HOHE Struktur (Wand/Baum/Ruine), die
+      // man nicht überspringen kann, weicht das Monster seitlich aus (geht drum
+      // herum) statt sich an der Wand festzufahren.
+      let mvX = dirX;
+      let mvZ = dirZ;
+      const obs = obstaclesRef?.current;
+      if (obs && segmentBlockedByObstacle(obs, g.position.x, g.position.z, g.position.x + dirX * 2.4, g.position.z + dirZ * 2.4, 1.2)) {
+        const leftX = -dirZ;
+        const leftZ = dirX;
+        const leftFree = !segmentBlockedByObstacle(obs, g.position.x, g.position.z, g.position.x + leftX * 2.4, g.position.z + leftZ * 2.4, 1.2);
+        if (leftFree) { mvX = leftX; mvZ = leftZ; }
+        else { mvX = dirZ; mvZ = -dirX; } // sonst rechts herum
+      }
+      g.position.x += mvX * type.moveSpeed * delta;
+      g.position.z += mvZ * type.moveSpeed * delta;
+      g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, Math.atan2(mvX, mvZ), Math.min(1, delta * 6));
     } else if (!hasTarget) {
       // Idle wander with player-seeking bias — 65% of wander direction changes
       // drift toward the local player (±0.5 rad spread), 35% fully random.
@@ -522,7 +535,12 @@ export function Monster({
     }
 
     attackCooldownLeft.current -= delta;
-    if (hasTarget && dist < type.attackRange && attackCooldownLeft.current <= 0) {
+    // Kein Treffer DURCH Wände: liegt eine blockierende Struktur zwischen Monster
+    // und Ziel, wird nicht angegriffen (gilt für Nah- und Fernkampf).
+    const atkTx = useAggro && aggroT ? aggroT.x : localPlayerPos.x;
+    const atkTz = useAggro && aggroT ? aggroT.z : localPlayerPos.z;
+    const losBlocked = segmentBlockedByObstacle(obstaclesRef?.current, g.position.x, g.position.z, atkTx, atkTz);
+    if (hasTarget && !losBlocked && dist < type.attackRange && attackCooldownLeft.current <= 0) {
       attackCooldownLeft.current = type.attackCooldown;
       lunge.current = 1;
       onAttack?.();
@@ -543,7 +561,7 @@ export function Monster({
     // against combatRef.current.playerPos which is the local player).
     // Only active for variants with canThrow, in normal mode (no aggro),
     // while target is between melee range and throwRange.
-    if (!useAggro && hasTarget && type.canThrow && type.throwDamage && type.throwCooldown && type.throwRange) {
+    if (!useAggro && hasTarget && !losBlocked && type.canThrow && type.throwDamage && type.throwCooldown && type.throwRange) {
       throwCooldownLeft.current -= delta;
       if (dist > type.attackRange && dist < type.throwRange && throwCooldownLeft.current <= 0) {
         throwCooldownLeft.current = type.throwCooldown;
