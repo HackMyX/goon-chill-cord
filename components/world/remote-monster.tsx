@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { Billboard } from "@react-three/drei";
-import { TextSprite } from "@/components/world/text-sprite";
 import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import type { CharacterConfig } from "@/lib/character-config";
 import { broadcastMonsterHit } from "@/lib/world-realtime";
-import { FloatingDamageNumber, DEATH_SINK_DURATION, MonsterWeapon } from "@/components/world/monster";
+import { FloatingDamageNumber, DEATH_SINK_DURATION } from "@/components/world/monster";
+import { MonsterBody } from "@/components/world/monster-body";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 
 interface RemoteMonsterProps {
@@ -90,6 +89,8 @@ export function RemoteMonster({
   const legL = useRef<THREE.Group>(null);
   const legR = useRef<THREE.Group>(null);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
+  const upperBody = useRef<THREE.Group>(null); // vom geteilten Body benötigt (remote nicht animiert)
+  const spawnRingRef = useRef<THREE.Mesh>(null); // vom geteilten Body benötigt (remote ungenutzt)
 
   // Dead-reckoning interpolation (mirrors remote-players.tsx, which is already
   // smooth). Instead of lerping toward the last raw snapshot — which visibly
@@ -318,159 +319,18 @@ export function RemoteMonster({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable identifiers only
   }, []);
 
+  // Body-Geometrie/Farben/Aura liegen jetzt im geteilten <MonsterBody>.
+  // Hier nur noch, was die Animation in useFrame braucht.
   const isSlime = type.visualKind === "slime";
   const isGhost = type.visualKind === "ghost";
-  const isOrc = type.visualKind === "orc";
-  const isDemon = type.visualKind === "demon";
-  const REMOTE_OPACITY = 0.65;
-  // Glowing eyes per visualKind — mirrors monster.tsx so a remote mob reads as
-  // an alive creature, not a faceless dummy. Same colors as the local rig.
-  const eyeColor =
-    type.visualKind === "skeleton"
-      ? "#7dd3fc"
-      : isGhost
-        ? "#e0f2fe"
-        : isDemon
-          ? "#ff2424"
-          : isOrc
-            ? "#fbbf24"
-            : isSlime
-              ? "#dcfce7"
-              : "#fca5a5";
-
-  // Tier-Gefahr-Aura — identisch zu monster.tsx, damit ein starkes Monster für
-  // ALLE Spieler gleich lesbar ist (Gelb = mittel, Rot = stark).
-  const auraTier = type.health >= 200 ? 2 : type.health >= 100 ? 1 : 0;
-  const auraColor = auraTier === 2 ? "#ef4444" : auraTier === 1 ? "#f59e0b" : eyeColor;
-  const auraOuter = 0.55 + auraTier * 0.2;
-  const auraOpacity = 0.16 + auraTier * 0.1;
 
   return (
     <group ref={group} position={[x, y, z]} scale={type.scale}>
-      {!isGhost && (
-        <mesh ref={auraRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
-          <ringGeometry args={[auraOuter - 0.13, auraOuter, 36]} />
-          <meshBasicMaterial color={auraColor} transparent opacity={auraOpacity} toneMapped={false} side={2} />
-        </mesh>
-      )}
-      {isSlime ? (
-        <group position={[0, 0.42, 0]}>
-          <mesh castShadow>
-            <sphereGeometry args={[0.42, 14, 10]} />
-            <meshStandardMaterial
-              ref={torsoMaterial}
-              color={type.colorHex}
-              transparent
-              opacity={REMOTE_OPACITY}
-              roughness={0.2}
-              emissive={type.colorHex}
-              emissiveIntensity={0.1}
-            />
-          </mesh>
-          <mesh position={[-0.13, 0.08, 0.32]}>
-            <sphereGeometry args={[0.05, 8, 8]} />
-            <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
-          </mesh>
-          <mesh position={[0.13, 0.08, 0.32]}>
-            <sphereGeometry args={[0.05, 8, 8]} />
-            <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
-          </mesh>
-        </group>
-      ) : (
-        <>
-          {/* Torso */}
-          <mesh position={[0, 1.5, 0]} castShadow>
-            <boxGeometry args={[0.5, 0.7, 0.3]} />
-            <meshStandardMaterial
-              ref={torsoMaterial}
-              color={type.colorHex}
-              transparent
-              opacity={isGhost ? REMOTE_OPACITY * 0.6 : REMOTE_OPACITY}
-            />
-          </mesh>
-          {/* Head */}
-          <mesh position={[0, 2.05, 0]} castShadow>
-            <boxGeometry args={[0.34, 0.34, 0.34]} />
-            <meshStandardMaterial
-              color={type.colorHex}
-              transparent
-              opacity={isGhost ? REMOTE_OPACITY * 0.6 : REMOTE_OPACITY}
-            />
-          </mesh>
-          {/* Glowing eyes */}
-          <mesh position={[-0.07, 2.07, 0.18]}>
-            <sphereGeometry args={[0.035, 8, 8]} />
-            <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
-          </mesh>
-          <mesh position={[0.07, 2.07, 0.18]}>
-            <sphereGeometry args={[0.035, 8, 8]} />
-            <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={1.4} toneMapped={false} />
-          </mesh>
-          {/* Arms — animated groups */}
-          <group ref={armL} position={[-0.32, 1.72, 0]}>
-            <mesh position={[0, -0.3, 0]} castShadow>
-              <boxGeometry args={[0.2, 0.6, 0.2]} />
-              <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
-            </mesh>
-          </group>
-          <group ref={armR} position={[0.32, 1.72, 0]}>
-            <mesh position={[0, -0.3, 0]} castShadow>
-              <boxGeometry args={[0.2, 0.6, 0.2]} />
-              <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
-            </mesh>
-            {type.hasWeapon && (
-              <MonsterWeapon
-                kind={isDemon ? "demon" : type.visualKind === "skeleton" ? "skeleton" : "club"}
-                color={isOrc ? "#3f4a26" : "#4a3a28"}
-              />
-            )}
-          </group>
-          {/* Legs — animated groups (not for ghost). Pivot at 0.85 (feet on
-              ground), matching monster.tsx — at 1.1 they visibly floated. */}
-          {!isGhost && (
-            <>
-              <group ref={legL} position={[-0.15, 0.85, 0]}>
-                <mesh position={[0, -0.42, 0]} castShadow>
-                  <boxGeometry args={[0.22, 0.85, 0.22]} />
-                  <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
-                </mesh>
-              </group>
-              <group ref={legR} position={[0.15, 0.85, 0]}>
-                <mesh position={[0, -0.42, 0]} castShadow>
-                  <boxGeometry args={[0.22, 0.85, 0.22]} />
-                  <meshStandardMaterial color={type.colorHex} transparent opacity={REMOTE_OPACITY} />
-                </mesh>
-              </group>
-            </>
-          )}
-          {isGhost && (
-            <mesh position={[0, 0.5, 0]}>
-              <coneGeometry args={[0.4, 1.05, 14]} />
-              <meshStandardMaterial
-                color={type.colorHex}
-                transparent
-                opacity={0.25}
-                emissive={type.colorHex}
-                emissiveIntensity={0.2}
-                side={THREE.DoubleSide}
-              />
-            </mesh>
-          )}
-        </>
-      )}
-
-      {/* Health bar + name — purple name tint marks it as a remote monster */}
-      <Billboard ref={healthGroup} position={[0, isSlime ? 1.15 : 2.35, 0]}>
-        <mesh>
-          <planeGeometry args={[1, 0.12]} />
-          <meshBasicMaterial color="#1a1a1a" transparent opacity={0.85} />
-        </mesh>
-        <mesh ref={healthFill} position={[0, 0, 0.001]}>
-          <planeGeometry args={[1, 0.1]} />
-          <meshBasicMaterial color="#4ade80" toneMapped={false} />
-        </mesh>
-        <TextSprite text={type.name} position={[0, 0.22, 0]} height={0.18} color="#c084fc" outline="#000000" />
-      </Billboard>
+      <MonsterBody
+        type={type}
+        nameColor="#c084fc"
+        refs={{ upperBody, legL, legR, armL, armR, torsoMaterial, healthFill, healthGroup, auraRef, spawnRingRef }}
+      />
 
       {popups.map((p) => (
         <FloatingDamageNumber key={p.id} amount={p.amount} />
