@@ -13,7 +13,7 @@ export type FxSound =
   | "questComplete" | "bpTierClaim" | "bpUnlock" | "bpEliteUnlock"
   // World / Combat
   | "monsterKill" | "pvpHit" | "pvpKill"
-  | "playerDeath" | "playerRespawn" | "mineCollect" | "shieldBlock" | "playerHurt" | "itemPickup"
+  | "playerDeath" | "playerRespawn" | "mineCollect" | "shieldBlock" | "playerHurt" | "monsterAttack" | "itemPickup"
   // Shop & Economy
   | "purchaseSuccess" | "purchaseFail" | "shopPurchase" | "upgradeSuccess"
   | "itemEquip" | "itemUnequip" | "auctionBid" | "auctionWin"
@@ -65,6 +65,7 @@ const DEFAULT_FX_SRC: Record<FxSound, string> = {
   mineCollect:      "/sounds/tick.wav",
   shieldBlock:      "/sounds/shield-block.wav",
   playerHurt:       "/sounds/punch.wav",
+  monsterAttack:    "/sounds/swoosh.wav",
   itemPickup:       "/sounds/save.wav",
   // Shop
   purchaseSuccess:  "/sounds/save.wav",
@@ -110,7 +111,7 @@ const DEFAULT_FX_VOL: Record<FxSound, number> = {
   questComplete: 0.38, bpTierClaim: 0.32, bpUnlock: 0.38, bpEliteUnlock: 0.42,
   // World
   monsterKill: 0.22, pvpHit: 0.30, pvpKill: 0.35,
-  playerDeath: 0.35, playerRespawn: 0.22, mineCollect: 0.18, shieldBlock: 0.32, playerHurt: 0.3, itemPickup: 0.20,
+  playerDeath: 0.35, playerRespawn: 0.22, mineCollect: 0.18, shieldBlock: 0.32, playerHurt: 0.3, monsterAttack: 0.2, itemPickup: 0.20,
   // Shop
   purchaseSuccess: 0.28, purchaseFail: 0.30, shopPurchase: 0.28, upgradeSuccess: 0.35,
   itemEquip: 0.25, itemUnequip: 0.15, auctionBid: 0.28, auctionWin: 0.40,
@@ -199,7 +200,7 @@ class SoundManager {
     if (typeof window === "undefined") return;
     const ix = this.getInterruptAudio("hit");
     if (ix) { ix.preload = "auto"; try { ix.load(); } catch { /* ignore */ } }
-    const fx: FxSound[] = ["shieldBlock", "playerHurt", "monsterKill", "win", "ultraWin", "playerDeath", "playerRespawn", "pvpHit", "pvpKill"];
+    const fx: FxSound[] = ["shieldBlock", "playerHurt", "monsterAttack", "monsterKill", "win", "ultraWin", "playerDeath", "playerRespawn", "pvpHit", "pvpKill"];
     for (const k of fx) {
       const a = this.getFxAudio(k);
       if (a) { a.preload = "auto"; try { a.load(); } catch { /* ignore */ } }
@@ -347,6 +348,7 @@ export function useSoundManager() {
     mineCollect:      () => soundManager.play("mineCollect"),
     shieldBlock:      () => soundManager.play("shieldBlock"),
     playerHurt:       () => soundManager.play("playerHurt"),
+    monsterAttack:    () => soundManager.play("monsterAttack"),
     warmupWorld:      () => soundManager.warmupWorld(),
     itemPickup:       () => soundManager.play("itemPickup"),
     // Shop & Economy

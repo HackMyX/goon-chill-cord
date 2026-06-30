@@ -9,6 +9,7 @@ import type { MonsterTypeConfig } from "@/lib/monsters";
 import type { CombatSharedState, MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { applyIncomingDamage } from "@/lib/combat";
+import { useSoundManager } from "@/lib/sound-manager";
 import type { CharacterConfig } from "@/lib/character-config";
 import { WORLD_RADIUS } from "@/lib/world-config";
 
@@ -261,6 +262,7 @@ export function Monster({
   const healthFill = useRef<THREE.Mesh>(null);
   const healthGroup = useRef<THREE.Group>(null);
 
+  const sound = useSoundManager();
   const health = useRef(type.health);
   const alive = useRef(true);
   // Randomized in the mount effect below, not here — `Math.random()` is an
@@ -276,6 +278,7 @@ export function Monster({
   const spawnT = useRef(0);
   const hitGlow = useRef(0);
   const auraRef = useRef<THREE.Mesh>(null);
+  const spawnRingRef = useRef<THREE.Mesh>(null);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
   // Idle-wander state — see WANDER_SPEED_FRACTION's doc comment above.
   const wanderAngle = useRef(0);
@@ -424,6 +427,14 @@ export function Monster({
       spawnT.current = Math.min(1, spawnT.current + delta * 3.2);
       const e = 1 - Math.pow(1 - spawnT.current, 3);
       g.scale.setScalar(type.scale * (0.2 + 0.8 * e));
+      // Spawn-Schockwelle: ein Ring expandiert kurz am Boden + fadet aus.
+      if (spawnRingRef.current) {
+        spawnRingRef.current.visible = true;
+        spawnRingRef.current.scale.setScalar(0.3 + spawnT.current * 2.4);
+        (spawnRingRef.current.material as THREE.MeshBasicMaterial).opacity = (1 - spawnT.current) * 0.65;
+      }
+    } else if (spawnRingRef.current && spawnRingRef.current.visible) {
+      spawnRingRef.current.visible = false;
     }
 
     // Geister schweben sanft auf und ab (Apparition-Feeling).
@@ -509,6 +520,7 @@ export function Monster({
       attackCooldownLeft.current = type.attackCooldown;
       lunge.current = 1;
       onAttack?.();
+      if (!useAggro) sound.monsterAttack(); // hörbarer Angriffs-Swing auf den lokalen Spieler
       if (useAggro) {
         // Cross-player aggro mode: route damage to the remote attacker via a
         // broadcast instead of the local player's combatRef.
@@ -550,13 +562,19 @@ export function Monster({
       torsoMaterial.current.emissiveIntensity = hitGlow.current * 1.4;
     }
 
-    walkClock.current += delta * (moving ? 6.5 : 1.2);
-    const swing = moving ? Math.sin(walkClock.current) * 0.45 : Math.sin(walkClock.current) * 0.06;
+    walkClock.current += delta * (moving ? 7.5 : 1.2);
+    // Kräftigerer Gang: größere Schritt-Amplitude + Arm-Gegenschwung.
+    const swing = moving ? Math.sin(walkClock.current) * 0.62 : Math.sin(walkClock.current) * 0.07;
     if (legL.current) legL.current.rotation.x = swing;
     if (legR.current) legR.current.rotation.x = -swing;
-    if (armL.current) armL.current.rotation.x = -swing * 0.8 - lunge.current * 0.5;
-    if (armR.current) armR.current.rotation.x = swing * 0.8 - lunge.current * 1.7;
-    if (upperBody.current) upperBody.current.rotation.x = slouch + lunge.current * 0.25;
+    if (armL.current) armL.current.rotation.x = -swing * 1.0 - lunge.current * 0.6;
+    if (armR.current) armR.current.rotation.x = swing * 1.0 - lunge.current * 2.1; // Angriff: Arm hoch & runter
+    if (upperBody.current) upperBody.current.rotation.x = slouch + lunge.current * 0.5; // stärkerer Vorlehn-Schlag
+    // Humanoide: Lauf-Wippen (vertikal) + Seitwärts-Schwanken → lebendiger, schwerer Gang.
+    if (!isGhost && !isSlime) {
+      g.position.y = initialPosition[1] + (moving ? Math.abs(Math.sin(walkClock.current)) * 0.09 : 0);
+      if (upperBody.current) upperBody.current.rotation.z = moving ? Math.sin(walkClock.current) * 0.1 : 0;
+    }
 
     // Cosmetic vertical bob — ghosts hover in place, slimes hop while
     // closing distance. Purely visual: every chase/range/hit calculation
@@ -595,6 +613,13 @@ export function Monster({
         <mesh ref={auraRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
           <ringGeometry args={[auraOuter - 0.13, auraOuter, 36]} />
           <meshBasicMaterial color={auraColor} transparent opacity={auraOpacity} toneMapped={false} side={2} />
+        </mesh>
+      )}
+      {/* Spawn-Schockwelle (auch für Geister sichtbar) */}
+      {(
+        <mesh ref={spawnRingRef} visible={false} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+          <ringGeometry args={[0.42, 0.58, 32]} />
+          <meshBasicMaterial color={auraColor} transparent opacity={0} toneMapped={false} side={2} />
         </mesh>
       )}
       {isSlime ? (

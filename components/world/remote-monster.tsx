@@ -232,8 +232,9 @@ export function RemoteMonster({
     );
     // Match the owner-local Monster.tsx walk exactly (6.5 step rate, 0.45 walk
     // amplitude, 0.06 idle sway) so a remote mob's gait is visually identical.
-    walkClock.current += delta * (movingRef.current ? 6.5 : 1.2);
-    const swing = Math.sin(walkClock.current) * (0.06 + walkAmplitude.current * (0.45 - 0.06));
+    walkClock.current += delta * (movingRef.current ? 7.5 : 1.2);
+    // Identisch zum lokalen Monster (kräftigerer Gang, Amplitude 0.62).
+    const swing = Math.sin(walkClock.current) * (0.07 + walkAmplitude.current * (0.62 - 0.07));
 
     // Consume a fresh attack pulse → fire a one-shot lunge, then decay it
     // (same rate/arm bias as the owner's local Monster.tsx lunge).
@@ -253,8 +254,16 @@ export function RemoteMonster({
 
     if (legL.current) legL.current.rotation.x = swing;
     if (legR.current) legR.current.rotation.x = -swing;
-    if (armL.current) armL.current.rotation.x = -swing * 0.8 - lunge.current * 0.5;
-    if (armR.current) armR.current.rotation.x = swing * 0.8 - lunge.current * 1.7;
+    if (armL.current) armL.current.rotation.x = -swing * 1.0 - lunge.current * 0.6;
+    if (armR.current) armR.current.rotation.x = swing * 1.0 - lunge.current * 2.1;
+    // Lauf-Wippen (vertikal) wie lokal — nur für nicht-schwebende, nicht-Slime.
+    if (!isGhost && !isSlime) {
+      group.current.position.y = THREE.MathUtils.lerp(
+        group.current.position.y,
+        targetPos.current.y + (movingRef.current ? Math.abs(Math.sin(walkClock.current)) * 0.09 : 0),
+        Math.min(1, delta * 12),
+      );
+    }
 
     // Hit-flash: quick white-hot emissive pulse decaying with hitGlow (~0.25s).
     hitGlow.current = Math.max(0, hitGlow.current - delta * 4);
