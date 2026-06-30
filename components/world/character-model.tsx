@@ -9,7 +9,7 @@ import { type EquippedItem } from "@/lib/rarity-colors";
 import { debugWarn } from "@/lib/debug";
 import { getPetSpeciesId, DEFAULT_PET_TYPES, resolvePetStatsForRarity, type PetTypeConfig } from "@/lib/pets";
 import type { MonsterRegistry } from "@/components/world/combat-types";
-import { segmentBlockedByObstacle, type Obstacle } from "@/lib/world-obstacles";
+import { segmentBlockedByObstacle, resolveObstacleCollision, type Obstacle } from "@/lib/world-obstacles";
 import {
   PetVariant,
   HatVariant,
@@ -536,6 +536,22 @@ function PetCompanion({
           petIsMoving = true;
         } else {
           paused.current = true;
+        }
+      }
+    }
+
+    // Boden-Haustier kollidiert mit Wänden/Strukturen (kann NICHT durch Wände) —
+    // Flieger fliegen drüber. pos.current ist parent-lokal → Welt↔lokal umrechnen.
+    if (!flying) {
+      const obs = obstaclesRef?.current;
+      if (obs && obs.length) {
+        const world = g.parent ? g.parent.localToWorld(pos.current.clone()) : pos.current.clone();
+        const res = resolveObstacleCollision(obs, world.x, world.z, 0, 0.35);
+        if (res.x !== world.x || res.z !== world.z) {
+          world.set(res.x, world.y, res.z);
+          const back = g.parent ? g.parent.worldToLocal(world) : world;
+          pos.current.x = back.x;
+          pos.current.z = back.z;
         }
       }
     }

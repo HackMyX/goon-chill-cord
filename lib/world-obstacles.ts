@@ -108,13 +108,17 @@ function emitShop(out: Obstacle[], cx: number, cz: number, w: number, d: number,
     if (i === facing) return; // offene Schaufront
     pushWall(out, s.axis, s.x, s.z, s.half, wallH, tone);
   });
-  // Tresen vor der offenen Front (niedrig, kollidierbar)
+  // Tresen ein Stück INNEN (nie im Eingang/Türrahmen — sonst kommt man nicht rein
+  // und Mobs hängen fest). Versetzt vom offenen Frontrand Richtung Hausmitte.
   const front = sides[facing];
   const counterH = 0.95;
+  const inset = 1.4;
   if (front.axis === "x") {
-    out.push({ kind: "crate", x: front.x, z: front.z, scale: 1, shape: "box", hx: front.half * 0.8, hz: 0.28, r: front.half * 0.8, blockH: counterH, rot: 0 });
+    const cz2 = front.z + Math.sign(cz - front.z) * inset;
+    out.push({ kind: "crate", x: cx, z: cz2, scale: 1, shape: "box", hx: front.half * 0.6, hz: 0.28, r: front.half * 0.6, blockH: counterH, rot: 0 });
   } else {
-    out.push({ kind: "crate", x: front.x, z: front.z, scale: 1, shape: "box", hx: 0.28, hz: front.half * 0.8, r: front.half * 0.8, blockH: counterH, rot: 0 });
+    const cx2 = front.x + Math.sign(cx - front.x) * inset;
+    out.push({ kind: "crate", x: cx2, z: cz, scale: 1, shape: "box", hx: 0.28, hz: front.half * 0.6, r: front.half * 0.6, blockH: counterH, rot: 0 });
   }
   // Dach (Beleuchtung kommt von den Straßenlaternen — NICHT im Eingang).
   out.push({ kind: "roof", x: cx, z: cz, scale: 1, shape: "box", hx: hw + 0.3, hz: hd + 0.3, r: 0, blockH: 0, h: wallH, tone });
@@ -320,40 +324,60 @@ function genForest(out: Obstacle[], ox: number, oz: number, rand: () => number) 
   }
 }
 
-/** CAMP: Lagerfeuer + Zelte (gekippte Boxen) + Barrikade + ein paar Kisten. */
+/** CAMP: Überlebenden-Lager — Lagerfeuer-Platz, Zelte im Kreis, eine
+ * Holz-Palisade mit Tor, Wachturm, Kisten & Laternen. */
 function genCamp(out: Obstacle[], ox: number, oz: number, rand: () => number) {
   out.push({ kind: "campfire", x: ox, z: oz, scale: 1, r: 0.6, blockH: 0.5 });
-  // Zelte = niedrige gekippte Kisten rundum
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2 + rand() * 0.5;
-    const r = 3 + rand() * 1.5;
+  // Zelte im Kreis ums Feuer (gekippte Boxen)
+  const tents = 6;
+  for (let i = 0; i < tents; i++) {
+    const a = (i / tents) * Math.PI * 2 + 0.3;
+    const r = 3.5 + rand() * 1.2;
     const s = 0.9 + rand() * 0.4;
-    out.push({ kind: "crate", x: ox + Math.cos(a) * r, z: oz + Math.sin(a) * r, scale: s, shape: "box", hx: s, hz: s * 0.7, r: s, blockH: s * 1.1, rot: a });
+    out.push({ kind: "crate", x: ox + Math.cos(a) * r, z: oz + Math.sin(a) * r, scale: s, shape: "box", hx: s, hz: s * 0.7, r: s, blockH: s * 1.05, rot: a });
   }
-  // Barrikade: ein paar kurze Wandstücke
+  // Holz-Palisade (Achteck) mit Tor im Süden + Laternen an den Ecken.
+  const pr = 9;
+  const seg = 8;
+  for (let i = 0; i < seg; i++) {
+    if (i === Math.floor(seg * 0.75)) continue; // Tor (Süd)
+    const a0 = (i / seg) * Math.PI * 2;
+    const a1 = ((i + 1) / seg) * Math.PI * 2;
+    const x0 = ox + Math.cos(a0) * pr, z0 = oz + Math.sin(a0) * pr;
+    const x1 = ox + Math.cos(a1) * pr, z1 = oz + Math.sin(a1) * pr;
+    // Palisaden-Segment als (achsennah angenähertes) Wandstück
+    const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+    const along: "x" | "z" = Math.abs(x1 - x0) > Math.abs(z1 - z0) ? "x" : "z";
+    pushWall(out, along, mx, mz, Math.hypot(x1 - x0, z1 - z0) / 2, 1.7, 3);
+    if (i % 2 === 0) addLamp(out, mx, mz, rand);
+  }
+  // Wachturm (höhere Struktur) am Rand.
+  out.push({ kind: "ruin", x: ox + pr * 0.7, z: oz - pr * 0.7, scale: 1.4, r: 0.7, blockH: 3.5, rot: 0, h: 3 });
+  // ein paar Vorrats-Kisten am Feuer
   for (let i = 0; i < 3; i++) {
-    const a = rand() * Math.PI * 2;
-    const r = 6 + rand() * 2;
-    pushWall(out, rand() < 0.5 ? "x" : "z", ox + Math.cos(a) * r, oz + Math.sin(a) * r, 1 + rand(), 0.9 + rand() * 0.6, 3);
+    const s = 0.45 + rand() * 0.3;
+    out.push({ kind: "crate", x: ox + (rand() - 0.5) * 3, z: oz + (rand() - 0.5) * 3, scale: s, shape: "box", hx: s, hz: s, r: s, blockH: s * 1.4 + 0.1, rot: rand() * Math.PI * 2 });
   }
-  out.push({ kind: "lamp", x: ox + 2, z: oz + 2, scale: 1, shape: "circle", r: 0.16, blockH: 3, hue: 0 });
 }
 
 /** WILDER GARTEN / HECKEN-LABYRINTH: ein umrandetes Heckengitter mit Pfaden +
  * ein paar Bäumen + Mittelplatz. Hecken = Wände mit grünem Ton (tone 4). */
 function genMaze(out: Obstacle[], ox: number, oz: number, rand: () => number) {
-  const n = 6;
-  const cell = 3.4;
+  const n = 9; // größer & krasser
+  const cell = 3.6;
   const half = (n * cell) / 2;
   const tone = 4; // Hecke (grün)
-  const hedgeH = 1.9;
-  const entranceCol = Math.floor(n / 2);
-  // Waagerechte Heckenstücke (Rand immer; innen ~50% → Pfade); ein Eingang im Süden.
+  const hedgeH = 2.0;
+  const cx0 = Math.floor(n / 2);
+  const entSouth = cx0; // Eingang Süd
+  const entNorth = cx0; // zweiter Eingang Nord → man kann durchqueren
+  // Waagerechte Heckenstücke (Rand immer geschlossen außer 2 Eingänge; innen Pfade).
   for (let gx = 0; gx < n; gx++) {
     for (let gz = 0; gz <= n; gz++) {
       const isBorder = gz === 0 || gz === n;
       if (!isBorder && rand() < 0.5) continue;
-      if (gz === n && gx === entranceCol) continue; // Eingang
+      if (gz === n && gx === entSouth) continue;
+      if (gz === 0 && gx === entNorth) continue;
       pushWall(out, "x", ox - half + gx * cell + cell / 2, oz - half + gz * cell, cell / 2, hedgeH, tone);
     }
   }
@@ -365,17 +389,40 @@ function genMaze(out: Obstacle[], ox: number, oz: number, rand: () => number) {
       pushWall(out, "z", ox - half + gx * cell, oz - half + gz * cell + cell / 2, cell / 2, hedgeH, tone);
     }
   }
-  // Wilde Bäume + Mittelplatz + Laterne am Eingang.
-  for (let i = 0; i < 5; i++) {
+  // Wilde Bäume rundherum + Mittelplatz (Denkmal + Lampen + ein paar Büsche).
+  for (let i = 0; i < 8; i++) {
     const s = 0.7 + rand() * 0.5;
-    out.push({ kind: "tree", x: ox + (rand() - 0.5) * half * 1.6, z: oz + (rand() - 0.5) * half * 1.6, scale: s, r: 0.34 * s, blockH: 3.2, hue: Math.floor(rand() * 3) });
+    const a = rand() * Math.PI * 2;
+    const r = half + 2 + rand() * 6;
+    out.push({ kind: "tree", x: ox + Math.cos(a) * r, z: oz + Math.sin(a) * r, scale: s, r: 0.34 * s, blockH: 3.2, hue: Math.floor(rand() * 3) });
   }
-  out.push({ kind: "ruin", x: ox, z: oz, scale: 0.9, r: 0.5, blockH: 2.2, rot: 0, h: 1.3 }); // Mittelpunkt
+  out.push({ kind: "ruin", x: ox, z: oz, scale: 1.1, r: 0.55, blockH: 2.2, rot: 0, h: 1.6 }); // Mittel-Denkmal
+  addLamp(out, ox - 2, oz, rand);
+  addLamp(out, ox + 2, oz, rand);
   addLamp(out, ox, oz - half - 2, rand);
+  addLamp(out, ox, oz + half + 2, rand);
 }
 
 export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIRONMENT): Obstacle[] {
   const out: Obstacle[] = [];
+
+  // Zentren der BEBAUTEN Orte (Dorf/Markt/Labyrinth) + Ausschlussradien — dort
+  // wird KEIN Wildwuchs (Baum/Fels) gestreut, damit nichts Straßen/Eingänge
+  // blockiert. (Wald/Ruinen/Camp dürfen Streuung haben — die sind wild.)
+  const bq = env.buildingDensity ?? 1;
+  const atc = (af: number, df: number) => {
+    const a = af * Math.PI * 2;
+    const r = df * (WORLD_RADIUS - 12);
+    return { x: Math.cos(a) * r, z: Math.sin(a) * r };
+  };
+  const builtZones = bq > 0
+    ? [
+        { ...atc(0.0, 0.34), r: 28 },
+        { ...atc(0.17, 0.62), r: 18 },
+        { ...atc(0.84, 0.6), r: 24 }, // Labyrinth (größer)
+      ]
+    : [];
+  const inBuilt = (x: number, z: number) => builtZones.some((c) => (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r);
 
   // Bäume — dicht über die GANZE Map gestreut, inkl. Außenring (sqrt-Verteilung
   // → gleichmäßige Flächendichte, keine leeren Ränder). Der dichte Wald kommt
@@ -389,11 +436,14 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
       const angle = rand() * Math.PI * 2;
       // sqrt → flächengleiche Verteilung (sonst klumpt alles in der Mitte).
       const radius = Math.sqrt(inner * inner + rand() * (outer * outer - inner * inner));
+      const tx = Math.cos(angle) * radius;
+      const tz = Math.sin(angle) * radius;
+      if (inBuilt(tx, tz)) continue; // nicht in Dorf/Markt/Labyrinth streuen
       const scale = 0.8 + rand() * 0.7;
       out.push({
         kind: "tree",
-        x: Math.cos(angle) * radius,
-        z: Math.sin(angle) * radius,
+        x: tx,
+        z: tz,
         scale,
         r: 0.34 * scale,
         blockH: 3.2,
@@ -411,11 +461,14 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
     for (let i = 0; i < count; i++) {
       const angle = rand() * Math.PI * 2;
       const radius = Math.sqrt(inner * inner + rand() * (outer * outer - inner * inner));
+      const rx = Math.cos(angle) * radius;
+      const rz = Math.sin(angle) * radius;
+      if (inBuilt(rx, rz)) continue;
       const scale = 0.55 + rand() * 0.9;
       out.push({
         kind: "rock",
-        x: Math.cos(angle) * radius,
-        z: Math.sin(angle) * radius,
+        x: rx,
+        z: rz,
         scale,
         r: 0.48 * scale,
         blockH: 0.5 * scale + 0.22, // niedrig → überspringbar

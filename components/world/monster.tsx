@@ -8,6 +8,7 @@ import { TextSprite } from "@/components/world/text-sprite";
 import { MonsterBody } from "@/components/world/monster-body";
 import { isHoveringKind, defaultSpawnAnim, SPAWN_ANIM_VALUES, type MonsterSpawnAnim, type MonsterTypeConfig } from "@/lib/monsters";
 import { resolveObstacleCollision, shouldJumpObstacle, segmentBlockedByObstacle, type Obstacle } from "@/lib/world-obstacles";
+import { findPath, type NavGrid } from "@/lib/world-nav";
 import type { CombatSharedState, MonsterHandle, MonsterRegistry } from "@/components/world/combat-types";
 import { BloodBurst, BLOOD_BURST_LIFETIME_MS } from "@/components/world/hit-fx";
 import { applyIncomingDamage } from "@/lib/combat";
@@ -61,6 +62,8 @@ interface MonsterProps {
   /** Kollidierbare Hindernisse — Monster laufen nicht durch & springen über
    * niedrige Steine. */
   obstaclesRef?: React.RefObject<Obstacle[]>;
+  /** Navigations-Gitter (A*) für schlaue Wegfindung. */
+  navGridRef?: React.RefObject<NavGrid>;
   /** Called when this monster lands a melee hit on the cross-player aggro
    * target — MonstersField broadcasts it to the attacker's client. */
   onRemoteAttack: (amount: number) => void;
@@ -216,6 +219,7 @@ export function Monster({
   aggroTargetRef,
   forcedAggroRef,
   obstaclesRef,
+  navGridRef,
   onRemoteAttack,
   onAttack,
 }: MonsterProps) {
@@ -250,11 +254,14 @@ export function Monster({
   const spawnAnimRef = useRef<MonsterSpawnAnim | null>(null);
   const jumpY = useRef(0); // Sprunghöhe über Boden (für Stein-Übersprung)
   const jumpVel = useRef(0);
-  const steerMode = useRef(0); // 0=gerade, 1=links, 2=rechts, 3=zurück (Sackgasse)
-  const steerTimer = useRef(0);
   const stuckTimer = useRef(0);
   const stuckPrevX = useRef(0);
   const stuckPrevZ = useRef(0);
+  // A*-Wegfindung: Wegpunkte zum Spieler + Neuberechnungs-Timer (gestaffelt).
+  const pathRef = useRef<{ x: number; z: number }[]>([]);
+  const pathTimer = useRef(Math.random() * 0.5);
+  const pathGoalX = useRef(0);
+  const pathGoalZ = useRef(0);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
   // Idle-wander state — see WANDER_SPEED_FRACTION's doc comment above.
   const wanderAngle = useRef(0);
@@ -472,39 +479,47 @@ export function Monster({
     const moving = hasTarget && dist > type.attackRange * 0.7;
 
     if (moving) {
-      const dirX = dx / dist;
-      const dirZ = dz / dist;
-      // Schlauer + performant: die Ausweich-Entscheidung wird nur ~6×/Sek neu
-      // berechnet (gedrosselt → keine Lags durch LOS-Checks jeden Frame). Liegt
-      // voraus eine HOHE Struktur, geht das Monster links/rechts herum; ist beides
-      // blockiert (Sackgasse), kehrt es kurz um statt sich festzufahren.
-      const obs = obstaclesRef?.current;
-      steerTimer.current -= delta;
-      if (steerTimer.current <= 0 && obs) {
-        steerTimer.current = 0.16;
-        steerMode.current = 0;
-        const blocked = (ax: number, az: number) =>
-          segmentBlockedByObstacle(obs, g.position.x, g.position.z, g.position.x + ax * 2.4, g.position.z + az * 2.4, 1.2);
-        if (blocked(dirX, dirZ)) {
-          if (!blocked(-dirZ, dirX)) steerMode.current = 1;
-          else if (!blocked(dirZ, -dirX)) steerMode.current = 2;
-          else steerMode.current = 3;
+      let mvX = dx / dist;
+      let mvZ = dz / dist;
+      const grid = navGridRef?.current;
+      // Flieger (Geist/Fledermaus/Irrlicht/Schnitter) fliegen DIREKT über alles.
+      // Boden-Monster nutzen echte A*-Wegfindung: bei freier Sicht direkt, sonst
+      // ein Weg um Wände herum bzw. durch den Labyrinth-Eingang zum Spieler.
+      if (!hovering && grid) {
+        const obs = obstaclesRef?.current;
+        const goalMoved = Math.hypot(targetX - pathGoalX.current, targetZ - pathGoalZ.current) > 3;
+        // Festhäng-Erkennung erzwingt eine Neuberechnung.
+        stuckTimer.current += delta;
+        let forceRepath = false;
+        if (stuckTimer.current > 0.6) {
+          const moved = Math.hypot(g.position.x - stuckPrevX.current, g.position.z - stuckPrevZ.current);
+          if (moved < 0.15) forceRepath = true;
+          stuckTimer.current = 0;
+          stuckPrevX.current = g.position.x;
+          stuckPrevZ.current = g.position.z;
+        }
+        pathTimer.current -= delta;
+        if (pathTimer.current <= 0 || goalMoved || forceRepath) {
+          pathTimer.current = 0.55 + Math.random() * 0.3; // gestaffelt → keine Lags
+          pathGoalX.current = targetX;
+          pathGoalZ.current = targetZ;
+          if (segmentBlockedByObstacle(obs, g.position.x, g.position.z, targetX, targetZ, 1.2)) {
+            pathRef.current = findPath(grid, g.position.x, g.position.z, targetX, targetZ) ?? [];
+          } else {
+            pathRef.current = []; // freie Sicht → direkt zum Spieler
+          }
+        }
+        const path = pathRef.current;
+        if (path.length > 0) {
+          while (path.length > 1 && Math.hypot(path[0].x - g.position.x, path[0].z - g.position.z) < 1.0) path.shift();
+          const wp = path[0];
+          const wdx = wp.x - g.position.x;
+          const wdz = wp.z - g.position.z;
+          const wlen = Math.hypot(wdx, wdz) || 1;
+          mvX = wdx / wlen;
+          mvZ = wdz / wlen;
         }
       }
-      // Festhäng-Erkennung: bewegt sich das Monster trotz Ziel kaum, kurz umkehren.
-      stuckTimer.current += delta;
-      if (stuckTimer.current > 0.5) {
-        const moved = Math.hypot(g.position.x - stuckPrevX.current, g.position.z - stuckPrevZ.current);
-        if (moved < 0.12) steerMode.current = 3; // steckt fest → zurück
-        stuckTimer.current = 0;
-        stuckPrevX.current = g.position.x;
-        stuckPrevZ.current = g.position.z;
-      }
-      let mvX = dirX;
-      let mvZ = dirZ;
-      if (steerMode.current === 1) { mvX = -dirZ; mvZ = dirX; }
-      else if (steerMode.current === 2) { mvX = dirZ; mvZ = -dirX; }
-      else if (steerMode.current === 3) { mvX = -dirX; mvZ = -dirZ; }
       g.position.x += mvX * type.moveSpeed * delta;
       g.position.z += mvZ * type.moveSpeed * delta;
       g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, Math.atan2(mvX, mvZ), Math.min(1, delta * 6));

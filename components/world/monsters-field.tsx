@@ -20,6 +20,7 @@ import { streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { resolveObstacleCollision, isSpawnClear, type Obstacle } from "@/lib/world-obstacles";
+import type { NavGrid } from "@/lib/world-nav";
 import {
   subscribeToWorldRoster,
   subscribeToMonsterSync,
@@ -72,6 +73,8 @@ interface MonstersFieldProps {
   /** Kollidierbare Hindernisse — Monster laufen nicht durch & springen über
    * niedrige Steine (lib/world-obstacles.ts). */
   obstaclesRef?: React.RefObject<Obstacle[]>;
+  /** Navigations-Gitter (A*) für schlaue Wegfindung um Wände/in Labyrinth. */
+  navGridRef?: React.RefObject<NavGrid>;
 }
 
 let spawnSeq = 0;
@@ -129,6 +132,7 @@ export function MonstersField({
   spawnConfig,
   active,
   obstaclesRef,
+  navGridRef,
 }: MonstersFieldProps) {
   const [spawns, setSpawns] = useState<MonsterSpawn[]>([]);
   // Owned here, not by each Monster — see monster.tsx's onThrow doc
@@ -642,6 +646,7 @@ export function MonstersField({
           aggroTargetRef={aggroTargetRef}
           forcedAggroRef={forcedAggroRef}
           obstaclesRef={obstaclesRef}
+          navGridRef={navGridRef}
           onRemoteAttack={handleRemoteAttack}
           onAttack={() => pendingAttacksRef.current.add(s.id)}
         />

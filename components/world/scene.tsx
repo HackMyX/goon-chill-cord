@@ -18,6 +18,7 @@ import type { CharacterConfig } from "@/lib/character-config";
 import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import { TIME_OF_DAY_PRESETS, type WorldEnvironmentConfig } from "@/lib/world-environment-config";
 import { buildObstacles, type Obstacle } from "@/lib/world-obstacles";
+import { buildNavGrid, type NavGrid } from "@/lib/world-nav";
 import type { CameraControls } from "@/components/world/use-camera-controls";
 import type { EquippedItem } from "@/lib/rarity-colors";
 
@@ -195,6 +196,10 @@ export function Scene({
   );
   const obstaclesRef = useRef<Obstacle[]>(obstacles);
   obstaclesRef.current = obstacles;
+  // Navigations-Gitter (A*) für schlaue Monster — einmal aus den Hindernissen.
+  const navGrid = useMemo(() => buildNavGrid(obstacles), [obstacles]);
+  const navGridRef = useRef<NavGrid>(navGrid);
+  navGridRef.current = navGrid;
 
   // Admin-konfigurierbare Welt-Optik: Tageszeit-Preset + Feintuning-Multiplikatoren.
   const tp = TIME_OF_DAY_PRESETS[environmentConfig.timeOfDay];
@@ -299,6 +304,7 @@ export function Scene({
         spawnConfig={spawnConfig}
         active={active}
         obstaclesRef={obstaclesRef}
+        navGridRef={navGridRef}
         onMonsterKilled={(typeId) => onMonsterKilled?.(typeId)}
       />
     </>
