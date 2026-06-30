@@ -2722,24 +2722,18 @@ function ShortHair({ color, gender }: { color: string; gender: "m" | "w" }) {
 // Weiche, feminine Basis für ALLE Damenfrisuren: runde Krone (kein flacher
 // Block), weicher Seitenscheitel-Pony und Gesichtssträhnen links/rechts — so
 // wirkt jede Frauenfrisur natürlich & weiblich (nie „Beethoven").
+// Kopf = Box (0.55³) bei y=2.05, Oberkante ~2.325. ALLES boxig & kopf-konform,
+// damit nichts rundet/clippt (kein Ball über dem Kopf mehr).
 function FemCap({ color }: { color: string }) {
   return (
     <group>
-      <mesh position={[0, 2.26, -0.02]} scale={[1.02, 0.66, 1.04]}>
-        <sphereGeometry args={[0.35, 20, 16]} />
-        <meshStandardMaterial color={color} roughness={0.82} />
-      </mesh>
-      {/* weicher, leicht gefegter Pony über der Stirn */}
-      <mesh position={[0.05, 2.18, 0.26]} rotation={[0.4, 0, 0.06]}>
-        <boxGeometry args={[0.5, 0.12, 0.12]} />
-        <meshStandardMaterial color={color} roughness={0.82} />
-      </mesh>
-      {/* Gesichtssträhnen, die das Gesicht weich umrahmen */}
+      {/* boxige Kappe, sitzt sauber auf dem Kopf */}
+      <mesh position={[0, 2.32, -0.02]}><boxGeometry args={[0.6, 0.22, 0.62]} /><meshStandardMaterial color={color} roughness={0.85} /></mesh>
+      {/* Stirn-Pony (über den Augen, vor der Stirn) */}
+      <mesh position={[0, 2.21, 0.29]}><boxGeometry args={[0.58, 0.14, 0.06]} /><meshStandardMaterial color={color} roughness={0.85} /></mesh>
+      {/* Gesichtssträhnen, die seitlich am Kopf herabfallen */}
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.31, 2.05, 0.07]} rotation={[0, 0, s * 0.05]}>
-          <boxGeometry args={[0.09, 0.34, 0.2]} />
-          <meshStandardMaterial color={color} roughness={0.82} />
-        </mesh>
+        <mesh key={s} position={[s * 0.305, 2.02, 0.05]}><boxGeometry args={[0.07, 0.44, 0.5]} /><meshStandardMaterial color={color} roughness={0.85} /></mesh>
       ))}
     </group>
   );
@@ -2780,14 +2774,14 @@ function PonytailHair({ color }: { color: string; gender: "m" | "w" }) {
   return (
     <group>
       <FemCap color={color} />
-      {/* hoher, schwungvoller Pferdeschwanz */}
-      <mesh position={[0, 2.36, -0.2]}>
-        <sphereGeometry args={[0.1, 12, 12]} />
-        <meshStandardMaterial color={color} roughness={0.82} />
+      {/* Zopfgummi (boxig, sitzt auf der Kappe) + langer Schweif nach hinten */}
+      <mesh position={[0, 2.4, -0.16]}>
+        <boxGeometry args={[0.16, 0.14, 0.16]} />
+        <meshStandardMaterial color={color} roughness={0.85} />
       </mesh>
-      <mesh position={[0, 1.92, -0.42]} rotation={[0.35, 0, 0]}>
-        <cylinderGeometry args={[0.08, 0.04, 0.78, 10]} />
-        <meshStandardMaterial color={color} roughness={0.82} />
+      <mesh position={[0, 1.92, -0.44]} rotation={[0.35, 0, 0]}>
+        <boxGeometry args={[0.13, 0.8, 0.13]} />
+        <meshStandardMaterial color={color} roughness={0.85} />
       </mesh>
     </group>
   );
@@ -2813,11 +2807,11 @@ function BuzzcutHair({ color, gender }: { color: string; gender: "m" | "w" }) {
   );
 }
 
-function AfroHair({ color, gender }: { color: string; gender: "m" | "w" }) {
-  const radius = gender === "w" ? 0.42 : 0.36;
+function AfroHair({ color }: { color: string; gender: "m" | "w" }) {
+  // Voluminöser, BOXIGER Afro (kein Ball mehr) — sitzt sauber auf dem Box-Kopf.
   return (
-    <mesh position={[0, 2.34, -0.02]}>
-      <sphereGeometry args={[radius, 14, 12]} />
+    <mesh position={[0, 2.4, -0.01]}>
+      <boxGeometry args={[0.74, 0.46, 0.72]} />
       <meshStandardMaterial color={color} roughness={1} />
     </mesh>
   );
@@ -2827,14 +2821,10 @@ function BunHair({ color }: { color: string; gender: "m" | "w" }) {
   return (
     <group>
       <FemCap color={color} />
-      {/* eleganter, hoher Dutt */}
-      <mesh position={[0, 2.5, -0.14]}>
-        <sphereGeometry args={[0.17, 16, 16]} />
-        <meshStandardMaterial color={color} roughness={0.82} />
-      </mesh>
-      <mesh position={[0, 2.5, -0.14]} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.17, 0.03, 8, 24]} />
-        <meshStandardMaterial color={color} roughness={0.82} />
+      {/* eleganter Dutt (boxig, sitzt direkt auf der Kappe oben-hinten) */}
+      <mesh position={[0, 2.46, -0.08]}>
+        <boxGeometry args={[0.26, 0.24, 0.24]} />
+        <meshStandardMaterial color={color} roughness={0.85} />
       </mesh>
     </group>
   );

@@ -605,8 +605,8 @@ export function WardrobeShell({
             {/* EINE Rubrik „Meine Gutscheine" mit Typ-Chips — genau ein Typ sichtbar */}
             <div>
               <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
-                <span>🎟️</span>
-                Meine Gutscheine
+                <span>{rubric === "items" ? "🎒" : rubric === "abilities" ? "✨" : rubric === "styles" ? "🎨" : rubric === "badges" ? "🏅" : "🎁"}</span>
+                {rubric === "items" ? "Ausrüstung" : rubric === "abilities" ? "Fähigkeits-Gutscheine" : rubric === "styles" ? "Style-Gutscheine" : rubric === "badges" ? "Badges" : "Boni"}
               </h2>
               <div className="flex flex-wrap gap-2">
                 {(

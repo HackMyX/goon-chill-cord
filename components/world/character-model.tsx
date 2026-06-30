@@ -310,10 +310,10 @@ export const CharacterModel = forwardRef<CharacterLimbRefs, CharacterModelProps>
           {face ? <FaceVariant item={face} /> : <DefaultFace skin={SKIN} />}
         </group>
 
-        {/* hair — same catalogue item for every gender; the *shape* adapts
-            to the body wearing it (item-variants.tsx HairVariant), not the
-            item itself */}
-        {hair && <HairVariant item={hair} gender={gender} />}
+        {/* hair — gender-adaptive shape (item-variants.tsx HairVariant). Wird
+            unter einem Helm AUSGEBLENDET, damit Haare nie durch den Helm clippen
+            (Helm bedeckt den Kopf). */}
+        {hair && !hat && <HairVariant item={hair} gender={gender} />}
 
         {/* hat — variant shape picked deterministically from the item name */}
         {hat && (
