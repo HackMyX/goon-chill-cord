@@ -234,7 +234,11 @@ export function Scene({
       {/* Nebel — Farbe vom Preset, Dichte admin-konfigurierbar */}
       <fog attach="fog" args={[tp.fog, fogNear, fogFar]} />
 
-      <ambientLight intensity={0.5 * environmentConfig.ambientIntensity} color={tp.ambient} />
+      <ambientLight intensity={0.78 * environmentConfig.ambientIntensity} color={tp.ambient} />
+      {/* Günstiges Himmel/Boden-Fill — hebt dunkle Flächen gleichmäßig an, ohne
+          teure zusätzliche Punktlichter. Wichtig für Mobile-Lesbarkeit (dort sind
+          Schatten/Bloom schwächer, sonst "man sieht fast nichts"). */}
+      <hemisphereLight args={[tp.ambient, tp.ground, 0.6 * environmentConfig.ambientIntensity]} />
       <directionalLight position={tp.sun} intensity={tp.dirIntensity} color={tp.dir} castShadow />
       {/* Akzent-Punktlichter (admin: accentIntensity) — giftgrüner Fill, kalter Stahl-Rim, Gefahr-Rot */}
       <pointLight position={[-6, 3, -4]} intensity={22 * environmentConfig.accentIntensity} color="#9aa84a" distance={40} decay={2} />

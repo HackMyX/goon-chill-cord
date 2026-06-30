@@ -72,27 +72,27 @@ export interface TimeOfDayPreset {
 export const TIME_OF_DAY_PRESETS: Record<TimeOfDay, TimeOfDayPreset> = {
   abend: {
     label: "Verseuchte Dämmerung",
-    sun: [-40, 5, -65], turbidity: 22, rayleigh: 2.4,
-    fog: "#241a10", ambient: "#b8a06a", dir: "#d8b070", dirIntensity: 1.0,
-    ground: "#2e2a1c", groundInner: "#3a3422",
+    sun: [-40, 5, -65], turbidity: 18, rayleigh: 2.0,
+    fog: "#46402c", ambient: "#d8c590", dir: "#f0d49a", dirIntensity: 1.35,
+    ground: "#46402a", groundInner: "#544c34",
   },
   nacht: {
     label: "Tote Nacht",
-    sun: [-30, -6, -60], turbidity: 9, rayleigh: 0.5,
-    fog: "#0a0c08", ambient: "#5a6450", dir: "#8fa07a", dirIntensity: 0.45,
-    ground: "#181a12", groundInner: "#202417",
+    sun: [-30, -6, -60], turbidity: 8, rayleigh: 0.6,
+    fog: "#1c2016", ambient: "#8a957a", dir: "#b8c498", dirIntensity: 0.85,
+    ground: "#2a2c1e", groundInner: "#363a28",
   },
   morgen: {
     label: "Aschiger Morgen",
-    sun: [45, 7, -38], turbidity: 14, rayleigh: 2.0,
-    fog: "#322c24", ambient: "#cabfa6", dir: "#e0cda0", dirIntensity: 1.15,
-    ground: "#2c2a1e", groundInner: "#383424",
+    sun: [45, 7, -38], turbidity: 12, rayleigh: 1.8,
+    fog: "#564c3a", ambient: "#e6d8b8", dir: "#f4e2b4", dirIntensity: 1.45,
+    ground: "#44402c", groundInner: "#524c34",
   },
   tag: {
     label: "Fahler Smog-Tag",
-    sun: [22, 42, 12], turbidity: 8, rayleigh: 1.3,
-    fog: "#9a9580", ambient: "#cfc8b0", dir: "#efe8d0", dirIntensity: 1.3,
-    ground: "#3a3826", groundInner: "#46422c",
+    sun: [22, 42, 12], turbidity: 7, rayleigh: 1.2,
+    fog: "#bdb798", ambient: "#ece4c8", dir: "#fbf4dc", dirIntensity: 1.55,
+    ground: "#56503a", groundInner: "#625a40",
   },
 };
 

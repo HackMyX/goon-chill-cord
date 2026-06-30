@@ -427,23 +427,32 @@ function genMaze(out: Obstacle[], ox: number, oz: number, rand: () => number) {
   const tone = 4; // Hecke (grün)
   const hedgeH = 2.0;
   const cx0 = Math.floor(n / 2);
-  const entSouth = cx0; // Eingang Süd
-  const entNorth = cx0; // zweiter Eingang Nord → man kann durchqueren
-  // Waagerechte Heckenstücke (Rand immer geschlossen außer 2 Eingänge; innen Pfade).
+  const cz0 = Math.floor(n / 2);
+  // Mehrere Eingänge: je einer pro Himmelsrichtung (N/S/O/W) PLUS ein zweiter,
+  // versetzter Nord-/Süd-Eingang → man kann das Labyrinth von jeder Seite betreten
+  // und mehrfach durchqueren (kein einzelner Flaschenhals mehr).
+  const off = Math.max(1, Math.floor(n / 4));
+  const entNorth = [cx0, Math.max(1, cx0 - off)]; // 2 Nord-Öffnungen
+  const entSouth = [cx0, Math.min(n - 1, cx0 + off)]; // 2 Süd-Öffnungen
+  const entWest = cz0; // West-Eingang
+  const entEast = cz0; // Ost-Eingang
+  // Waagerechte Heckenstücke (Rand geschlossen außer den Nord-/Süd-Eingängen).
   for (let gx = 0; gx < n; gx++) {
     for (let gz = 0; gz <= n; gz++) {
       const isBorder = gz === 0 || gz === n;
       if (!isBorder && rand() < 0.5) continue;
-      if (gz === n && gx === entSouth) continue;
-      if (gz === 0 && gx === entNorth) continue;
+      if (gz === n && entSouth.includes(gx)) continue;
+      if (gz === 0 && entNorth.includes(gx)) continue;
       pushWall(out, "x", ox - half + gx * cell + cell / 2, oz - half + gz * cell, cell / 2, hedgeH, tone);
     }
   }
-  // Senkrechte Heckenstücke.
+  // Senkrechte Heckenstücke (Rand geschlossen außer Ost-/West-Eingang).
   for (let gx = 0; gx <= n; gx++) {
     for (let gz = 0; gz < n; gz++) {
       const isBorder = gx === 0 || gx === n;
       if (!isBorder && rand() < 0.5) continue;
+      if (gx === 0 && gz === entWest) continue;
+      if (gx === n && gz === entEast) continue;
       pushWall(out, "z", ox - half + gx * cell, oz - half + gz * cell + cell / 2, cell / 2, hedgeH, tone);
     }
   }
@@ -475,10 +484,10 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
   };
   const builtZones = bq > 0
     ? [
-        { ...atc(0.0, 0.34), r: 28 },
-        { ...atc(0.17, 0.62), r: 18 },
-        { ...atc(0.26, 0.44), r: 20 }, // Supermarkt-Parkplatz
-        { ...atc(0.84, 0.6), r: 28 }, // Labyrinth (jetzt n=11 → größerer Ausschluss)
+        { ...atc(0.0, 0.4), r: 28 }, // Dorf
+        { ...atc(0.14, 0.62), r: 20 }, // Supermarkt-Parkplatz
+        { ...atc(0.28, 0.44), r: 18 }, // Markt
+        { ...atc(0.86, 0.56), r: 28 }, // Labyrinth (n=11)
       ]
     : [];
   const inBuilt = (x: number, z: number) => builtZones.some((c) => (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r);
@@ -579,24 +588,27 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
     if (dq > 0) {
       // 6 Orte gleichmäßig um die Map verteilt (≈60° auseinander) + verschiedene
       // Radien → klar getrennt, kein Overlap.
-      const village = at(0.00, 0.34);
-      const market = at(0.17, 0.62);
-      const superm = at(0.26, 0.44);
-      const ruinsF = at(0.34, 0.66);
-      const forest = at(0.50, 0.58);
-      const camp = at(0.67, 0.70);
-      const maze = at(0.84, 0.60);
+      // 7 Orte gleichmäßig ums ganze Rund verteilt (≈1/7 Winkel-Abstand) mit
+      // variierenden Radien → füllen die GANZE Map statt im ersten Drittel zu klumpen.
+      const village = at(0.00, 0.40);
+      const superm = at(0.14, 0.62);
+      const market = at(0.28, 0.44);
+      const ruinsF = at(0.43, 0.66);
+      const forest = at(0.57, 0.50);
+      const camp = at(0.71, 0.70);
+      const maze = at(0.86, 0.56);
       genVillage(out, village.x, village.z, rand);
-      genMarket(out, market.x, market.z, rand);
       genSupermarketLot(out, superm.x, superm.z, rand);
+      genMarket(out, market.x, market.z, rand);
       genRuinsField(out, ruinsF.x, ruinsF.z, rand);
       genForest(out, forest.x, forest.z, rand);
       genCamp(out, camp.x, camp.z, rand);
       genMaze(out, maze.x, maze.z, rand);
-      // Ein paar Verbindungswege vom Dorf aus (nicht zu jedem — sonst Wirrwarr).
-      roadBetween(out, village.x, village.z, market.x, market.z, 3);
+      // Verbindungs-Straßenzug entlang des bewohnten Bogens (Dorf↔Supermarkt↔Markt)
+      // + ein Pfad zum nahen Ruinenfeld. Nicht zu jedem Ort — sonst Wirrwarr.
       roadBetween(out, village.x, village.z, superm.x, superm.z, 3);
-      roadBetween(out, village.x, village.z, forest.x, forest.z, 2.6);
+      roadBetween(out, superm.x, superm.z, market.x, market.z, 3);
+      roadBetween(out, market.x, market.z, ruinsF.x, ruinsF.z, 2.6);
     }
   }
 
