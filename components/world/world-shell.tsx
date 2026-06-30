@@ -299,8 +299,11 @@ export function WorldShell({
   // Sicherheits-Abbruch nach 6s. So gibt es keinen zweiten „Font-Flicker".
   const enteredAtRef = useRef(0);
   useEffect(() => {
-    if (hasEnteredWorld && !enteredAtRef.current) enteredAtRef.current = Date.now();
-  }, [hasEnteredWorld]);
+    if (hasEnteredWorld && !enteredAtRef.current) {
+      enteredAtRef.current = Date.now();
+      sound.warmupWorld(); // Kampf-Sounds vorladen → kein erster Decode-Stall
+    }
+  }, [hasEnteredWorld, sound]);
   const handleSceneReady = useCallback(() => {
     const elapsed = Date.now() - (enteredAtRef.current || Date.now());
     const wait = Math.max(0, 700 - elapsed);

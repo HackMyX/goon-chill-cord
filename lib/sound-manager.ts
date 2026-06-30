@@ -192,6 +192,20 @@ class SoundManager {
     }
   }
 
+  /** Lädt die im Kampf genutzten Sounds vorab (fetch + buffer), damit der
+   * erste Treffer/Kill keinen einmaligen Lade-/Decode-Stall verursacht. Nur
+   * nach einer User-Geste aufrufen (z.B. beim Betreten der Welt). */
+  warmupWorld(): void {
+    if (typeof window === "undefined") return;
+    const ix = this.getInterruptAudio("hit");
+    if (ix) { ix.preload = "auto"; try { ix.load(); } catch { /* ignore */ } }
+    const fx: FxSound[] = ["shieldBlock", "playerHurt", "monsterKill", "win", "ultraWin", "playerDeath", "playerRespawn", "pvpHit", "pvpKill"];
+    for (const k of fx) {
+      const a = this.getFxAudio(k);
+      if (a) { a.preload = "auto"; try { a.load(); } catch { /* ignore */ } }
+    }
+  }
+
   private getInterruptAudio(name: InterruptSound): HTMLAudioElement | null {
     if (typeof window === "undefined") return null;
     let audio = this.interruptAudio.get(name);
@@ -333,6 +347,7 @@ export function useSoundManager() {
     mineCollect:      () => soundManager.play("mineCollect"),
     shieldBlock:      () => soundManager.play("shieldBlock"),
     playerHurt:       () => soundManager.play("playerHurt"),
+    warmupWorld:      () => soundManager.warmupWorld(),
     itemPickup:       () => soundManager.play("itemPickup"),
     // Shop & Economy
     purchaseSuccess:  () => soundManager.play("purchaseSuccess"),
