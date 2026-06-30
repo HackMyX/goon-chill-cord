@@ -412,6 +412,11 @@ export function Monster({
     // suppressed (ThrownProjectile checks hit against the local player's pos).
     const aggroT = aggroTargetRef.current;
     const useAggro = aggroT !== null && aggroT !== undefined && aggroT.expiresAt > Date.now();
+    // Spawn-Schutz: solange der lokale Spieler unverwundbar ist (Join/Respawn,
+    // RESPAWN_INVULNERABLE_SEC), SIEHT/verfolgt/attackiert ihn kein Monster —
+    // er ist für sie unsichtbar. Nur eine aktive Cross-Player-Aggro auf einen
+    // ANDEREN Spieler zählt in diesem Fenster noch.
+    const seeLocal = !combatRef.current.invulnerable;
     const targetX = useAggro ? aggroT.x : localPlayerPos.x;
     const targetZ = useAggro ? aggroT.z : localPlayerPos.z;
 
@@ -422,7 +427,8 @@ export function Monster({
     // `moving` (still closing the distance). In cross-player aggro mode
     // the monster always considers itself "on-target" once it has a chase
     // objective — this prevents it falling back into wander mid-chase.
-    const hasTarget = dist < type.aggroRange || useAggro;
+    // Geschützter lokaler Spieler => kein Ziel (nur Cross-Player-Aggro zählt).
+    const hasTarget = useAggro || (seeLocal && dist < type.aggroRange);
     const moving = hasTarget && dist > type.attackRange * 0.7;
 
     if (moving) {
@@ -438,7 +444,9 @@ export function Monster({
       if (wanderTimer.current <= 0) {
         wanderTimer.current =
           WANDER_MIN_INTERVAL_SEC + Math.random() * (WANDER_MAX_INTERVAL_SEC - WANDER_MIN_INTERVAL_SEC);
-        if (Math.random() < 0.65) {
+        if (seeLocal && Math.random() < 0.65) {
+          // Bias nur, wenn der Spieler sichtbar ist — während Spawn-Schutz
+          // driften/sehen die Monster bewusst NICHT zu ihm hin.
           const lpDx = localPlayerPos.x - g.position.x;
           const lpDz = localPlayerPos.z - g.position.z;
           wanderAngle.current = Math.atan2(lpDx, lpDz) + (Math.random() - 0.5) * 1.0;
@@ -459,7 +467,7 @@ export function Monster({
     }
 
     attackCooldownLeft.current -= delta;
-    if (dist < type.attackRange && attackCooldownLeft.current <= 0) {
+    if (hasTarget && dist < type.attackRange && attackCooldownLeft.current <= 0) {
       attackCooldownLeft.current = type.attackCooldown;
       lunge.current = 1;
       onAttack?.();

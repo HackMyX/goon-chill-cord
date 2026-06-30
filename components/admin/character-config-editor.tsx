@@ -29,8 +29,8 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
       },
       {
         key: "respawnInvulnerableSec",
-        label: "Respawn-Unverwundbarkeit (s)",
-        hint: "Schutzdauer direkt nach dem Respawn",
+        label: "Spawn-Schutz (s)",
+        hint: "Schutzdauer nach Join UND Respawn: Monster sehen/greifen dich nicht an und du kannst selbst nicht angreifen (0 = aus)",
         step: 0.5,
       },
     ],

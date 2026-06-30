@@ -88,9 +88,11 @@ export const JUMP_COOLDOWN_SEC = 0.4;
  * trading hits with an enemy would net-heal through the fight itself. */
 export const HP_REGEN_PER_SEC = 3;
 export const HP_REGEN_DELAY_AFTER_HIT_SEC = 2.5;
-/** Grace window after a respawn so a fresh spawn can't be immediately
- * re-hit by whatever was already standing on the spawn point. */
-export const RESPAWN_INVULNERABLE_SEC = 1.8;
+/** Spawn-Schutz nach Join UND Respawn: ein frischer Spawn kann nicht sofort
+ * von umstehenden Monstern getroffen werden — und Monster sehen/verfolgen ihn
+ * in dieser Zeit gar nicht (monster.tsx), der Spieler kann selbst nicht
+ * angreifen (player.tsx). 0 = aus. */
+export const RESPAWN_INVULNERABLE_SEC = 2.0;
 
 /** Melee range — generous enough to not feel finicky, small enough that
  * "am I in range" is an obvious, readable circle around the player (see

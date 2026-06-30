@@ -53,7 +53,10 @@ export interface CharacterConfig {
   hpRegenPerSec: number;
   /** Seconds since the last hit taken before HP regen starts again. */
   hpRegenDelayAfterHitSec: number;
-  /** Grace window after respawning during which the player can't be hit. */
+  /** Spawn-Schutz-Fenster (Sekunden) nach Join UND Respawn: der Spieler kann
+   * nicht getroffen werden, Monster sehen/verfolgen/attackieren ihn nicht, und
+   * der Spieler kann selbst nicht angreifen (0 = aus). Siehe player.tsx /
+   * monster.tsx. */
   respawnInvulnerableSec: number;
   /** Melee range, world units. */
   attackRange: number;

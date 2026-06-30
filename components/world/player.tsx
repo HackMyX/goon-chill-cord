@@ -423,6 +423,18 @@ export function Player({
     respawnRequested.current = true;
   }, [respawnSignal]);
 
+  // Spawn-Schutz auch beim JOIN (Betreten der Welt), nicht nur beim Respawn:
+  // gleiches Fenster (characterConfig.respawnInvulnerableSec). Monster sehen/
+  // greifen den Spieler in dieser Zeit nicht an (monster.tsx) und der Spieler
+  // kann selbst nicht angreifen (Monster nicht angreifbar). Der Timer wird in
+  // useFrame heruntergezählt und löscht invulnerable wieder.
+  useEffect(() => {
+    combatRef.current.invulnerable = true;
+    respawnInvulnTimer.current = characterConfig.respawnInvulnerableSec;
+    // Nur einmal beim Mount/Join.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // PvP damage is never applied locally — it only ever arrives as a
   // server-broadcast event (lib/actions/pvp.ts rolled it, lib/world-
   // realtime.ts delivered it) naming this player as the target, exactly
@@ -865,7 +877,10 @@ export function Player({
     // `keys.consumeJump()` above, so a click made the instant before dying
     // doesn't linger and fire the moment the player respawns.
     const attackPressed = attack.consumeAttack() || consumeMobileAttack();
-    if (locked && alive && attackPressed && attackCooldown.current <= 0) {
+    // Während Spawn-Schutz (Join/Respawn) kann der Spieler NICHT angreifen —
+    // im Gegenzug ist er für die Monster auch unsichtbar/unverwundbar. So ist
+    // das Schutzfenster fair (kein Angreifen aus der Unverwundbarkeit heraus).
+    if (locked && alive && attackPressed && attackCooldown.current <= 0 && !combatRef.current.invulnerable) {
       attackCooldown.current = characterConfig.attackCooldown;
       attackProgress.current = 0.0001; // nudge off exactly 0 so the block below picks it up this frame
       // Slash VFX (hit-fx.tsx) — fired on every swing, hit or miss, exactly
