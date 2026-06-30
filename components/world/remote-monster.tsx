@@ -303,8 +303,21 @@ export function RemoteMonster({
               ? "#dcfce7"
               : "#fca5a5";
 
+  // Tier-Gefahr-Aura — identisch zu monster.tsx, damit ein starkes Monster für
+  // ALLE Spieler gleich lesbar ist (Gelb = mittel, Rot = stark).
+  const auraTier = type.health >= 200 ? 2 : type.health >= 100 ? 1 : 0;
+  const auraColor = auraTier === 2 ? "#ef4444" : auraTier === 1 ? "#f59e0b" : eyeColor;
+  const auraOuter = 0.55 + auraTier * 0.2;
+  const auraOpacity = 0.16 + auraTier * 0.1;
+
   return (
     <group ref={group} position={[x, y, z]} scale={type.scale}>
+      {!isGhost && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+          <ringGeometry args={[auraOuter - 0.13, auraOuter, 36]} />
+          <meshBasicMaterial color={auraColor} transparent opacity={auraOpacity} toneMapped={false} side={2} />
+        </mesh>
+      )}
       {isSlime ? (
         <group position={[0, 0.42, 0]}>
           <mesh castShadow>

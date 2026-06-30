@@ -264,6 +264,7 @@ export function Monster({
   const lunge = useRef(0);
   const walkClock = useRef(0);
   const deathT = useRef(0);
+  const spawnT = useRef(0);
   const hitGlow = useRef(0);
   const torsoMaterial = useRef<THREE.MeshStandardMaterial>(null);
   // Idle-wander state — see WANDER_SPEED_FRACTION's doc comment above.
@@ -388,9 +389,23 @@ export function Monster({
       deathT.current += delta;
       g.position.y = initialPosition[1] - Math.min(0.9, deathT.current * 0.9);
       g.rotation.z = THREE.MathUtils.lerp(g.rotation.z, Math.PI / 2.2, Math.min(1, deathT.current * 2));
-      g.scale.setScalar(Math.max(0.05, 1 - deathT.current / (DEATH_SINK_DURATION * 1.4)));
+      // Auf die echte Monstergröße bezogen (vorher snappte ein großer Boss auf 1).
+      g.scale.setScalar(type.scale * Math.max(0.05, 1 - deathT.current / (DEATH_SINK_DURATION * 1.4)));
       if (healthGroup.current) healthGroup.current.visible = false;
       return;
+    }
+
+    // Spawn-Einflug: kurz aus dem Boden nach oben „poppen" (easeOutBack-artig),
+    // damit ein neues Monster nicht einfach erscheint, sondern dramatisch auftaucht.
+    if (spawnT.current < 1) {
+      spawnT.current = Math.min(1, spawnT.current + delta * 3.2);
+      const e = 1 - Math.pow(1 - spawnT.current, 3);
+      g.scale.setScalar(type.scale * (0.2 + 0.8 * e));
+    }
+
+    // Geister schweben sanft auf und ab (Apparition-Feeling).
+    if (isGhost) {
+      g.position.y = initialPosition[1] + Math.sin(walkClock.current * 1.6) * 0.14 + 0.1;
     }
 
     // The *player's* death, not this monster's own — freeze AI completely
@@ -539,8 +554,22 @@ export function Monster({
     }
   });
 
+  // Tier-Gefahr-Aura: ein glühender Boden-Ring, der stärkere Monster sofort
+  // lesbar macht (Gelb = mittel, Rot = stark). Skaliert mit der Monstergröße.
+  const tier = type.health >= 200 ? 2 : type.health >= 100 ? 1 : 0;
+  const auraColor = tier === 2 ? "#ef4444" : tier === 1 ? "#f59e0b" : eyeColor;
+  const auraOuter = 0.55 + tier * 0.2;
+  const auraOpacity = 0.16 + tier * 0.1;
+
   return (
     <group ref={group} position={initialPosition} scale={type.scale}>
+      {/* Gefahr-Aura am Boden (nicht für Geister, die schweben) */}
+      {!isGhost && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+          <ringGeometry args={[auraOuter - 0.13, auraOuter, 36]} />
+          <meshBasicMaterial color={auraColor} transparent opacity={auraOpacity} toneMapped={false} side={2} />
+        </mesh>
+      )}
       {isSlime ? (
         // Slime: a single squashable blob, no torso/limb rig at all —
         // legL/legR/armL/armR simply never get a ref attached, which the
