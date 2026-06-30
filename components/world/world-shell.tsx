@@ -123,6 +123,14 @@ function StatBar({
   );
 }
 
+// STABILE <Canvas>-Konfiguration (module-level): diese Objekte/Arrays dürfen
+// NICHT inline am Canvas stehen — sonst bekommen sie bei jedem world-shell-
+// Re-Render (z.B. 20Hz Stamina/HP-HUD beim Bewegen) eine neue Identität, R3F
+// rekonfiguriert dann Shadow-Map/DPR/Kamera neu → kurzer schwarzer Frame.
+const WORLD_SHADOWS = { type: THREE.PCFShadowMap } as const;
+const WORLD_DPR: [number, number] = [1, 2];
+const WORLD_CAMERA = { position: [0, 2.6, 6] as [number, number, number], fov: 55 };
+
 /** Feuert genau einmal beim ersten gerenderten Frame INNERHALB der Scene-
  * Suspense. Da troika-Text (z.B. das Spieler-Namensschild) beim ersten Mount
  * seinen Font async lädt und dabei die Suspense neu auslöst, läuft dieses
@@ -394,6 +402,15 @@ export function WorldShell({
       setTimeout(() => setAttackFlash(null), 140);
     },
     [sound]
+  );
+
+  // Stabiler onCreated (siehe WORLD_SHADOWS/DPR/CAMERA oben) — verhindert
+  // Renderer-Rekonfiguration bei jedem Re-Render.
+  const handleCanvasCreated = useCallback(
+    (state: { gl: THREE.WebGLRenderer; size: { width: number; height: number } }) => {
+      debugLog("World", "canvas created", { size: state.size, pixelRatio: state.gl.getPixelRatio() });
+    },
+    []
   );
 
   const handlePlayerHit = useCallback(
@@ -1229,17 +1246,11 @@ export function WorldShell({
           // the type explicitly gets the exact same shadow renderer
           // without ever tripping the deprecation warning in the first
           // place.
-          shadows={{ type: THREE.PCFShadowMap }}
-          dpr={[1, 2]}
-          camera={{ position: [0, 2.6, 6], fov: 55 }}
+          shadows={WORLD_SHADOWS}
+          dpr={WORLD_DPR}
+          camera={WORLD_CAMERA}
           className="absolute inset-0"
-          onCreated={({ gl, size }) => {
-            debugLog("World", "canvas created", { size, pixelRatio: gl.getPixelRatio() });
-            // NOTE: R3F ignores any value returned from onCreated, so a cleanup
-            // closure here would never run. R3F already auto-disposes the renderer
-            // and scene on unmount (forceContextLoss + scene dispose), so no manual
-            // teardown is needed. (Removed dead dispose-return that never executed.)
-          }}
+          onCreated={handleCanvasCreated}
         >
           <Suspense fallback={null}>
             <Scene
