@@ -1,5 +1,16 @@
 import { WORLD_RADIUS } from "@/lib/world-config";
 import { DEFAULT_WORLD_ENVIRONMENT, type WorldEnvironmentConfig } from "@/lib/world-environment-config";
+import { buildCollisionGrid, gatherCandidates, COLLISION_CELL, type CollisionGrid } from "@/lib/world-collision-grid";
+
+// Broadphase-Cache: pro Hindernis-Array (stabile useMemo-Identität in scene.tsx)
+// wird das räumliche Gitter EINMAL gebaut und über alle Frames wiederverwendet.
+// Ändert sich die Map (neues Array), greift automatisch ein neuer Cache-Eintrag.
+const gridCache = new WeakMap<object, CollisionGrid>();
+function gridFor(obstacles: Obstacle[]): CollisionGrid {
+  let g = gridCache.get(obstacles);
+  if (!g) { g = buildCollisionGrid(obstacles); gridCache.set(obstacles, g); }
+  return g;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EINE Quelle für kollidierbare Map-Strukturen: components/world/environment.tsx
@@ -697,8 +708,12 @@ export function isSpawnClear(obstacles: Obstacle[] | null | undefined, x: number
 
 /** Steckt der Punkt (Radius r) noch in einer hohen, blockierenden Struktur? */
 function pointInsideBlocker(obstacles: Obstacle[] | null | undefined, x: number, z: number, r: number): boolean {
-  if (!obstacles) return false;
-  for (const o of obstacles) {
+  if (!obstacles || obstacles.length === 0) return false;
+  const grid = gridFor(obstacles);
+  const pad = r + COLLISION_CELL;
+  const cand = gatherCandidates(grid, x - pad, z - pad, x + pad, z + pad);
+  for (const idx of cand) {
+    const o = obstacles[idx];
     if (o.blockH < 1.0) continue;
     if (o.shape === "box") {
       const hx = (o.hx ?? o.r) + r;
@@ -728,7 +743,14 @@ export function resolveObstacleCollision(
   if (!obstacles || obstacles.length === 0) return { x, z };
   let nx = x;
   let nz = z;
-  for (const o of obstacles) {
+  // Broadphase: nur nahe Hindernisse, in Index-Reihenfolge (= Linear-Scan-Reihenfolge,
+  // Paritäts-Garantie). Pad = entR + 2 Zellen deckt jede kumulative Heraus-Schiebung
+  // ab (die Push-Beträge sind << 1 Zelle), sodass kein relevantes Hindernis fehlt.
+  const grid = gridFor(obstacles);
+  const pad = entR + 2 * COLLISION_CELL;
+  const cand = gatherCandidates(grid, x - pad, z - pad, x + pad, z + pad);
+  for (const idx of cand) {
+    const o = obstacles[idx];
     if (y >= o.blockH) continue; // drüber (gesprungen)
     if (o.shape === "box") {
       const hx = o.hx ?? o.r;
@@ -787,10 +809,14 @@ export function shouldJumpObstacle(
   entR: number,
   y: number,
 ): boolean {
-  if (!obstacles) return false;
+  if (!obstacles || obstacles.length === 0) return false;
   const aheadX = x + dirX * (entR + 0.5);
   const aheadZ = z + dirZ * (entR + 0.5);
-  for (const o of obstacles) {
+  const grid = gridFor(obstacles);
+  const pad = entR + COLLISION_CELL;
+  const cand = gatherCandidates(grid, aheadX - pad, aheadZ - pad, aheadX + pad, aheadZ + pad);
+  for (const idx of cand) {
+    const o = obstacles[idx];
     if (o.blockH <= 0.05) continue;
     if (y >= o.blockH) continue; // schon drüber
     if (o.blockH > 1.4) continue; // zu hoch zum Springen (Baum/Ruine/Wand) → drumrum
@@ -835,7 +861,13 @@ export function segmentBlockedByObstacle(
   // Schrittweite 0.18 < Wanddicke (0.44) → eine dünne Wand wird zuverlässig
   // getroffen und nicht „durchsampelt" (sonst Treffer durch die Wand).
   const steps = Math.max(2, Math.ceil(len / 0.18));
-  for (const o of obstacles) {
+  // Broadphase: nur Hindernisse nahe der Strecke (deren AABB ein Strecken-Zellen-
+  // feld berührt). Any-hit → Reihenfolge egal. Der Grobfilter unten bleibt.
+  const grid = gridFor(obstacles);
+  const pad = COLLISION_CELL;
+  const cand = gatherCandidates(grid, Math.min(ax, bx) - pad, Math.min(az, bz) - pad, Math.max(ax, bx) + pad, Math.max(az, bz) + pad);
+  for (const idx of cand) {
+    const o = obstacles[idx];
     if (o.blockH < minBlockH) continue;
     const half = o.shape === "box" ? Math.max(o.hx ?? o.r, o.hz ?? o.r) : o.r;
     // Grobfilter: Hindernis zu weit von der Strecken-Mitte → kann nicht treffen.

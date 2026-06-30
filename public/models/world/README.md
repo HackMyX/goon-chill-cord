@@ -41,15 +41,15 @@ der Suspense-Fallback laufen automatisch (`components/world/world-model-instance
 
 Alle CC0 von Quaternius (poly.pizza), Maße/Skalierung siehe `lib/world-models.ts`:
 
-| Datei | Kind | Modell | Größe | aktiv? |
-|-------|------|--------|-------|--------|
-| `ruin.glb` | ruin | „Column" | 30 KB | ✅ |
-| `debris.glb` | debris | „Debris Pile" | 26 KB | ✅ |
-| `wreck.glb` | wreck | „Police Car" (yaw 90°) | 176 KB | ✅ |
-| `tree.glb` | tree | „Dead Tree with Snow" | 56 KB | ⏳ Phase 2 |
-| `rock.glb` | rock | „Rock" | 30 KB | ⏳ Phase 2 |
+| Datei | Kind | Modell | Größe | Renderer |
+|-------|------|--------|-------|----------|
+| `tree.glb` | tree | „Dead Tree with Snow" | 56 KB | ✅ GPU-Instancing |
+| `rock.glb` | rock | „Rock" | 30 KB | ✅ GPU-Instancing |
+| `ruin.glb` | ruin | „Column" | 30 KB | ✅ Clone |
+| `debris.glb` | debris | „Debris Pile" | 26 KB | ✅ Clone |
+| `wreck.glb` | wreck | „Police Car" (yaw 90°) | 176 KB | ✅ Clone |
 
-`tree`/`rock` liegen bereit, sind aber **noch nicht in der Registry aktiv**: zu hohe
-Stückzahl für `<Clone>` (1 Draw-Call/Instanz) → erst mit GPU-Instancing in Phase 2.
+Renderer-Wahl automatisch nach Stückzahl (`world-model-instances.tsx`): viele
+(tree/rock) → `InstancedMesh` (wenige Draw-Calls); wenige → `<Clone>`.
 `campfire` + `lamp` bleiben **prozedural** (Licht/Flammen-Animation). `crate` bleibt
 prozedural (dimensionsgetrieben). Lizenz-Nachweis: `ATTRIBUTION.txt`.

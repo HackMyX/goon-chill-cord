@@ -487,7 +487,12 @@ export function Monster({
       // ein Weg um Wände herum bzw. durch den Labyrinth-Eingang zum Spieler.
       if (!hovering && grid) {
         const obs = obstaclesRef?.current;
-        const goalMoved = Math.hypot(targetX - pathGoalX.current, targetZ - pathGoalZ.current) > 3;
+        // Distanz-Drosselung (Phase-2-Perf): ferne Monster brauchen seltener einen
+        // frischen A*-Pfad → höheres Repath-Intervall + größere Ziel-Drift-Schwelle.
+        // Spart findPath-Aufrufe bei vielen Mobs; nah am Spieler unverändert reaktiv.
+        const farMult = dist > 32 ? 2.6 : dist > 18 ? 1.6 : 1;
+        const goalMoveThresh = dist > 32 ? 8 : dist > 18 ? 5 : 3;
+        const goalMoved = Math.hypot(targetX - pathGoalX.current, targetZ - pathGoalZ.current) > goalMoveThresh;
         // Festhäng-Erkennung erzwingt eine Neuberechnung.
         stuckTimer.current += delta;
         let forceRepath = false;
@@ -500,7 +505,7 @@ export function Monster({
         }
         pathTimer.current -= delta;
         if (pathTimer.current <= 0 || goalMoved || forceRepath) {
-          pathTimer.current = 0.55 + Math.random() * 0.3; // gestaffelt → keine Lags
+          pathTimer.current = (0.55 + Math.random() * 0.3) * farMult; // gestaffelt + distanz-gedrosselt
           pathGoalX.current = targetX;
           pathGoalZ.current = targetZ;
           if (segmentBlockedByObstacle(obs, g.position.x, g.position.z, targetX, targetZ, 1.2)) {
