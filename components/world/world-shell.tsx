@@ -305,6 +305,12 @@ export function WorldShell({
       sound.warmupWorld(); // Kampf-Sounds vorladen → kein erster Decode-Stall
     }
   }, [hasEnteredWorld, sound]);
+  // Erst der WELT BEITRETEN (Presence + für andere sichtbar), wenn der Spieler
+  // „Klicken zum Spielen" gedrückt hat — nicht schon beim Laden der Seite.
+  useEffect(() => {
+    if (!hasEnteredWorld || worldUntrackRef.current) return;
+    worldUntrackRef.current = joinWorldRoom(userId);
+  }, [hasEnteredWorld, userId]);
   // Cover kurz halten bis die Scene das erste Frame gerendert hat (Shader sind
   // via <Preload all/> schon im Cover kompiliert), dann sanft aufdecken. Es
   // gibt keinen troika-Glyphen-Build mehr (3D-Text = Canvas-Sprites), also
@@ -695,7 +701,9 @@ export function WorldShell({
       if (sessionTokenRef.current) {
         setSessionInWorld(sessionTokenRef.current, true).catch(() => {});
       }
-      worldUntrackRef.current = joinWorldRoom(userId);
+      // joinWorldRoom NICHT hier — erst nach „Klicken zum Spielen"
+      // (hasEnteredWorld), siehe Effekt unten. So ist man für andere Spieler
+      // erst sichtbar/präsent, wenn man wirklich in der Welt ist.
     };
 
     const enterIfAllowed = async (guardStatus: string) => {
@@ -1275,6 +1283,7 @@ export function WorldShell({
               environmentConfig={environmentConfig}
               streakKillCount={streakKillCount}
               active={hasEnteredWorld}
+              leaving={disconnectCountdown !== null}
               onAttack={handleAttack}
               onPlayerHit={handlePlayerHit}
               onStatsChange={handleStatsChange}

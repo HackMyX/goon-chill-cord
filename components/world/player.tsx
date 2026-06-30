@@ -62,6 +62,13 @@ interface PlayerProps {
   name: string;
   cameraControls: CameraControls;
   canvasRef: React.RefObject<HTMLElement | null>;
+  /** Erst true, wenn der Spieler „Klicken zum Spielen" gedrückt hat — gate für
+   * den Transform-Broadcast, damit man für andere erst dann sichtbar/präsent
+   * ist (kein „Geist am Spawn" vor dem Klick). */
+  active?: boolean;
+  /** Spieler verlässt gerade (Disconnect-Countdown): stoppt Broadcast (despawnt
+   * bei anderen) und macht unverwundbar, damit Monster ihn nicht mehr töten. */
+  leaving?: boolean;
   combatRef: React.RefObject<CombatSharedState>;
   monsterRegistryRef: MonsterRegistry;
   remotePlayerRegistryRef: RemotePlayerRegistry;
@@ -234,6 +241,8 @@ export function Player({
   name,
   cameraControls,
   canvasRef,
+  active = false,
+  leaving = false,
   combatRef,
   monsterRegistryRef,
   remotePlayerRegistryRef,
@@ -517,6 +526,9 @@ export function Player({
       respawnInvulnTimer.current -= delta;
       if (respawnInvulnTimer.current <= 0) combatRef.current.invulnerable = false;
     }
+    // Beim Verlassen (Disconnect-Countdown) unverwundbar — Monster sehen/töten
+    // den abreisenden Spieler nicht mehr (invulnerable gated in monster.tsx).
+    if (leaving) combatRef.current.invulnerable = true;
 
     const locked = cameraControls.locked || mobileMode;
     const alive = !combatRef.current.dead;
@@ -1231,7 +1243,9 @@ export function Player({
       // Same 20Hz cadence as the HUD sync above — a position broadcast
       // doesn't need to be any more frequent than the HUD itself updates,
       // and reusing this timer means no second interval to keep in sync.
-      broadcastTransform({
+      // NUR broadcasten, wenn der Spieler aktiv beigetreten ist (nach „Klicken
+      // zum Spielen") → kein Geist-Avatar am Spawn für andere vor dem Klick.
+      if (active && !leaving) broadcastTransform({
         id: userId,
         x: g.position.x,
         z: g.position.z,
