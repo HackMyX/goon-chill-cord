@@ -302,6 +302,10 @@ const COLUMN_CHECKS: Array<{
   { id: "col_world_bossmin",         category: "World",       table: "world_config",      col: "boss_spawn_interval_min_sec", detail: "node scripts/add-boss-spawn-config.cjs" },
   { id: "col_world_bossmax",         category: "World",       table: "world_config",      col: "boss_spawn_interval_max_sec", detail: "node scripts/add-boss-spawn-config.cjs" },
   { id: "col_world_bosscapfactor",   category: "World",       table: "world_config",      col: "boss_active_alive_cap_factor", detail: "node scripts/add-boss-spawn-config.cjs" },
+  { id: "col_mon_spawnanim",         category: "World",       table: "monster_types",     col: "spawn_anim",             detail: "node scripts/add-monster-spawn-minion-cols.cjs" },
+  { id: "col_mon_miniontype",        category: "World",       table: "monster_types",     col: "minion_type_id",         detail: "node scripts/add-monster-spawn-minion-cols.cjs" },
+  { id: "col_mon_minionmax",         category: "World",       table: "monster_types",     col: "minion_max_alive",       detail: "node scripts/add-monster-spawn-minion-cols.cjs" },
+  { id: "col_mon_minioninterval",    category: "World",       table: "monster_types",     col: "minion_interval_sec",    detail: "node scripts/add-monster-spawn-minion-cols.cjs" },
   // Character config — combat columns (2026-06-25)
   { id: "col_char_attackcooldown",   category: "World",       table: "character_config",  col: "attack_cooldown",        detail: "node scripts/full-db-sync.cjs" },
   { id: "col_char_hpregenpersec",    category: "World",       table: "character_config",  col: "hp_regen_per_sec",       detail: "node scripts/full-db-sync.cjs" },

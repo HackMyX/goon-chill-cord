@@ -6,7 +6,16 @@ import { updateMonsterType } from "@/lib/actions/monsters";
 import { CollapsibleAdminRow } from "@/components/admin/collapsible-admin-row";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useSiteConfig } from "@/components/layout/site-config-provider";
-import type { MonsterTypeConfig } from "@/lib/monsters";
+import { SPAWN_ANIM_VALUES, defaultSpawnAnim, type MonsterSpawnAnim, type MonsterTypeConfig } from "@/lib/monsters";
+
+const SPAWN_ANIM_LABEL: Record<MonsterSpawnAnim, string> = {
+  pop: "Pop (Bounce)",
+  dig: "Graben (aus dem Boden)",
+  rise: "Empor (wächst hoch)",
+  fall: "Fallen (vom Himmel)",
+  fade: "Materialisieren (einblenden)",
+  random: "Zufällig (pro Spawn)",
+};
 
 /**
  * Edits one of the 8 fixed monster variants (lib/monsters.ts) — same
@@ -15,7 +24,7 @@ import type { MonsterTypeConfig } from "@/lib/monsters";
  * lib/actions/monsters.ts' updateMonsterType() only accepts the 8 known
  * ids; this form can only ever change what one of them *does*.
  */
-export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
+export function MonsterTypeEditor({ type, allTypes }: { type: MonsterTypeConfig; allTypes: { id: string; name: string }[] }) {
   const [name, setName] = useState(type.name);
   const [health, setHealth] = useState(type.health);
   const [attackDamage, setAttackDamage] = useState(type.attackDamage);
@@ -33,6 +42,10 @@ export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
   const [throwDamage, setThrowDamage] = useState(type.throwDamage ?? 0);
   const [throwCooldown, setThrowCooldown] = useState(type.throwCooldown ?? 2);
   const [throwRange, setThrowRange] = useState(type.throwRange ?? Math.max(attackRange + 1, 5));
+  const [spawnAnim, setSpawnAnim] = useState<MonsterSpawnAnim>(type.spawnAnim ?? defaultSpawnAnim(type.visualKind));
+  const [minionTypeId, setMinionTypeId] = useState(type.minionTypeId ?? "");
+  const [minionMaxAlive, setMinionMaxAlive] = useState(type.minionMaxAlive ?? 0);
+  const [minionIntervalSec, setMinionIntervalSec] = useState(type.minionIntervalSec ?? 8);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const sound = useSoundManager();
@@ -60,6 +73,10 @@ export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
       throwDamage,
       throwCooldown,
       throwRange,
+      spawnAnim,
+      minionTypeId,
+      minionMaxAlive,
+      minionIntervalSec,
     });
     setSaving(false);
     setStatus(res.success ? "saved" : "error");
@@ -293,6 +310,56 @@ export function MonsterTypeEditor({ type }: { type: MonsterTypeConfig }) {
               </label>
             </>
           )}
+        </div>
+
+        {/* Spawn-Erscheinung + Mini-Monster-Beschwörung */}
+        <div className="mt-3 grid grid-cols-1 gap-3 border-t border-white/10 pt-3 sm:grid-cols-4">
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Spawn-Animation
+            <select
+              value={spawnAnim}
+              onChange={(e) => setSpawnAnim(e.target.value as MonsterSpawnAnim)}
+              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+            >
+              {SPAWN_ANIM_VALUES.map((a) => (
+                <option key={a} value={a} className="bg-zinc-900">{SPAWN_ANIM_LABEL[a]}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Beschwört Minion-Typ
+            <select
+              value={minionTypeId}
+              onChange={(e) => setMinionTypeId(e.target.value)}
+              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+            >
+              <option value="" className="bg-zinc-900">— keine —</option>
+              {allTypes.filter((t) => t.id !== type.id).map((t) => (
+                <option key={t.id} value={t.id} className="bg-zinc-900">{t.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Max. Minions gleichzeitig
+            <input
+              type="number"
+              min={0}
+              value={minionMaxAlive}
+              onChange={(e) => setMinionMaxAlive(Math.max(0, Number(e.target.value) || 0))}
+              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-zinc-400">
+            Beschwör-Intervall (s)
+            <input
+              type="number"
+              step="0.5"
+              min={1}
+              value={minionIntervalSec}
+              onChange={(e) => setMinionIntervalSec(Math.max(1, Number(e.target.value) || 1))}
+              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-purple-400/60"
+            />
+          </label>
         </div>
       </div>
     </CollapsibleAdminRow>

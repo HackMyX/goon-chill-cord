@@ -691,7 +691,7 @@ export function AdminShell({
               Variante komplett deaktivieren. Neue Varianten hinzufügen ist bewusst nicht Teil dieser Ansicht.
             </p>
             {monsterTypes.map((type) => (
-              <MonsterTypeEditor key={type.id} type={type} />
+              <MonsterTypeEditor key={type.id} type={type} allTypes={monsterTypes.map((t) => ({ id: t.id, name: t.name }))} />
             ))}
           </div>
         )}

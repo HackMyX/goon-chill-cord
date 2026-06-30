@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdmin } from "@/lib/admin";
-import { DEFAULT_MONSTER_TYPES, MONSTER_TYPE_IDS, type MonsterTypeConfig } from "@/lib/monsters";
+import { DEFAULT_MONSTER_TYPES, MONSTER_TYPE_IDS, SPAWN_ANIM_VALUES, type MonsterSpawnAnim, type MonsterTypeConfig } from "@/lib/monsters";
 import { logActivity, logDebugEvent } from "@/lib/debug-log-server";
 
 interface MonsterTypeRow {
@@ -31,6 +31,10 @@ interface MonsterTypeRow {
   throw_damage?: number;
   throw_cooldown?: number;
   throw_range?: number;
+  spawn_anim?: string | null;
+  minion_type_id?: string | null;
+  minion_max_alive?: number | null;
+  minion_interval_sec?: number | null;
 }
 
 function rowToConfig(row: MonsterTypeRow, fallback: MonsterTypeConfig): MonsterTypeConfig {
@@ -53,6 +57,10 @@ function rowToConfig(row: MonsterTypeRow, fallback: MonsterTypeConfig): MonsterT
     throwDamage: row.throw_damage ?? fallback.throwDamage,
     throwCooldown: row.throw_cooldown ?? fallback.throwCooldown,
     throwRange: row.throw_range ?? fallback.throwRange,
+    spawnAnim: (row.spawn_anim as MonsterSpawnAnim | null) ?? fallback.spawnAnim,
+    minionTypeId: row.minion_type_id ?? fallback.minionTypeId,
+    minionMaxAlive: row.minion_max_alive ?? fallback.minionMaxAlive,
+    minionIntervalSec: row.minion_interval_sec ?? fallback.minionIntervalSec,
   };
 }
 
@@ -77,7 +85,7 @@ export async function getMonsterTypes(): Promise<MonsterTypeConfig[]> {
   const withWeaponThrow = await admin
     .from("monster_types")
     .select(
-      "id, name, health, attack_damage, move_speed, aggro_range, attack_range, attack_cooldown, reward_min, reward_max, spawn_weight, color_hex, enabled, has_weapon, can_throw, throw_damage, throw_cooldown, throw_range"
+      "id, name, health, attack_damage, move_speed, aggro_range, attack_range, attack_cooldown, reward_min, reward_max, spawn_weight, color_hex, enabled, has_weapon, can_throw, throw_damage, throw_cooldown, throw_range, spawn_anim, minion_type_id, minion_max_alive, minion_interval_sec"
     );
   let data: MonsterTypeRow[] | null = withWeaponThrow.data;
   if (withWeaponThrow.error) {
@@ -117,6 +125,10 @@ export interface UpdateMonsterTypeInput {
   throwDamage: number;
   throwCooldown: number;
   throwRange: number;
+  spawnAnim: MonsterSpawnAnim;
+  minionTypeId: string;
+  minionMaxAlive: number;
+  minionIntervalSec: number;
 }
 
 export interface MonsterActionResult {
@@ -217,6 +229,10 @@ export async function updateMonsterType(input: UpdateMonsterTypeInput): Promise<
     throw_damage: Math.floor(input.throwDamage),
     throw_cooldown: input.throwCooldown,
     throw_range: input.throwRange,
+    spawn_anim: SPAWN_ANIM_VALUES.includes(input.spawnAnim) ? input.spawnAnim : "pop",
+    minion_type_id: input.minionTypeId.trim() || null,
+    minion_max_alive: Math.max(0, Math.floor(input.minionMaxAlive)),
+    minion_interval_sec: Math.max(1, input.minionIntervalSec),
     updated_at: new Date().toISOString(),
   });
 
