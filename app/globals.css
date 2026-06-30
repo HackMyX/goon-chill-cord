@@ -1131,6 +1131,16 @@
   animation: chat-msg-in 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
+/* Welt: kurzer Treffer-Screen-Flash (rot=HP, cyan=Schild) — schnell rein, sanft raus */
+@keyframes world-hit-flash-kf {
+  0%   { opacity: 0; }
+  18%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.world-hit-flash {
+  animation: world-hit-flash-kf 0.26s ease-out forwards;
+}
+
 /* System message pill — slim, centered, non-intrusive */
 .chat-sys-msg {
   display: block;

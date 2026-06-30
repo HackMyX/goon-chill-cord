@@ -195,6 +195,11 @@ export function WorldShell({
   // the untrack fn → ghost presence avatar leaked for everyone else).
   const worldUntrackRef = useRef<(() => void) | null>(null);
   const [deathStats, setDeathStats] = useState<{ forfeitedCr: number; forfeitedKillCount: number } | null>(null);
+  // Treffer-Feedback (Screen-Flash): "hp" = rot, "shield" = cyan. Auto-clear.
+  const [hitFlash, setHitFlash] = useState<"hp" | "shield" | null>(null);
+  const hitFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Kurzer schwarzer Intro-Cover beim Betreten der Welt (Premium-„Reinfade").
+  const [introCover, setIntroCover] = useState(true);
   // Seconds left in the "leaving the World" countdown, or null while no
   // disconnect is pending (this alone is the single source of truth for
   // "is a disconnect in progress" — no separate boolean to keep in sync).
@@ -256,6 +261,12 @@ export function WorldShell({
   useEffect(() => {
     if (cameraControls.locked) setHasEnteredWorld(true);
   }, [cameraControls.locked]);
+  // Black-Intro: kurz schwarz halten beim ersten Betreten, dann sanft aufdecken.
+  useEffect(() => {
+    if (!hasEnteredWorld) return;
+    const t = setTimeout(() => setIntroCover(false), 1000);
+    return () => clearTimeout(t);
+  }, [hasEnteredWorld]);
   useEffect(() => {
     if (isMobile && (isFullscreen || iosDismissed)) setHasEnteredWorld(true);
   }, [isMobile, isFullscreen, iosDismissed]);
@@ -345,6 +356,17 @@ export function WorldShell({
       setAttackFlash(hit ? "hit" : "miss");
       if (hit) sound.hit();
       setTimeout(() => setAttackFlash(null), 140);
+    },
+    [sound]
+  );
+
+  const handlePlayerHit = useCallback(
+    (kind: "hp" | "shield", _amount: number) => {
+      if (kind === "shield") sound.shieldBlock();
+      else sound.playerHurt();
+      setHitFlash(kind);
+      if (hitFlashTimer.current) clearTimeout(hitFlashTimer.current);
+      hitFlashTimer.current = setTimeout(() => setHitFlash(null), 260);
     },
     [sound]
   );
@@ -1100,6 +1122,28 @@ export function WorldShell({
           />
         )}
 
+        {/* Treffer-Screen-Flash: rot bei HP-Schaden, cyan bei Schild-Block */}
+        {hitFlash && (
+          <div
+            className="world-hit-flash pointer-events-none absolute inset-0 z-[40]"
+            style={{
+              boxShadow:
+                hitFlash === "shield"
+                  ? "inset 0 0 110px 26px rgba(34,211,238,0.5)"
+                  : "inset 0 0 120px 36px rgba(239,68,68,0.55)",
+            }}
+          />
+        )}
+
+        {/* Premium Black-Intro beim Betreten der Welt — kurz schwarz, dann sanft auf */}
+        {hasEnteredWorld && (
+          <div
+            className={`pointer-events-none absolute inset-0 z-[55] bg-black transition-opacity duration-700 ${
+              introCover ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        )}
+
         {settingsOpen && (
           <WorldSettingsPanel
             settings={worldSettings}
@@ -1150,6 +1194,7 @@ export function WorldShell({
               streakKillCount={streakKillCount}
               active={hasEnteredWorld}
               onAttack={handleAttack}
+              onPlayerHit={handlePlayerHit}
               onStatsChange={handleStatsChange}
               onMonsterKilled={handleMonsterKilled}
               onDeath={handleDeath}

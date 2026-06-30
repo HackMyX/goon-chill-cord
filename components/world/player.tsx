@@ -80,6 +80,10 @@ interface PlayerProps {
    * dead) — world-shell.tsx's cue to forfeit the streak and show the
    * death-screen overlay. */
   onDeath?: () => void;
+  /** Fired the frame the player takes damage (HP or Schild getrennt) — world-
+   * shell.tsx spielt den passenden Sound + zeigt einen Screen-Flash (rot=HP,
+   * cyan=Schild). `amount` = abgezogener Betrag dieses Frames. */
+  onPlayerHit?: (kind: "hp" | "shield", amount: number) => void;
   /** Bumped (any change, value itself is meaningless) by world-shell.tsx's
    * Respawn button to actually perform the reset — see the death-screen
    * doc comment below for why this isn't automatic anymore. */
@@ -235,6 +239,7 @@ export function Player({
   remotePlayerRegistryRef,
   petTypes,
   onAttack,
+  onPlayerHit,
   onStatsChange,
   onDeath,
   respawnSignal,
@@ -382,6 +387,7 @@ export function Player({
   // rule, and combatRef's initial value (combat-types.ts) is this same
   // number anyway.
   const prevHp = useRef(characterConfig.playerMaxHp);
+  const prevShield = useRef(0);
   const hpRegenTimer = useRef(0);
   const respawnInvulnTimer = useRef(0);
   const statsSyncTimer = useRef(0);
@@ -750,6 +756,18 @@ export function Player({
     // seconds (HP_REGEN_DELAY_AFTER_HIT_SEC) — detected by comparing
     // against last frame's hp, since monsters mutate combatRef.current.hp
     // directly rather than calling back through Player.
+    // Treffer-Feedback: Schild-Abzug → cyan Block-Feedback, HP-Abzug → rotes
+    // Treffer-Feedback. Erkannt über den Vergleich mit dem letzten Frame
+    // (Monster mutieren combatRef direkt). world-shell.tsx spielt Sound + Flash.
+    {
+      const shieldNow = combatRef.current.shieldHpRemaining;
+      const shieldLost = prevShield.current - shieldNow;
+      if (shieldLost > 0.01 && !combatRef.current.dead) onPlayerHit?.("shield", shieldLost);
+      prevShield.current = shieldNow;
+      const hpLost = prevHp.current - combatRef.current.hp;
+      if (hpLost > 0.01 && !combatRef.current.dead && combatRef.current.hp > 0) onPlayerHit?.("hp", hpLost);
+    }
+
     if (combatRef.current.hp < prevHp.current) hpRegenTimer.current = 0;
     else hpRegenTimer.current += delta;
     prevHp.current = combatRef.current.hp;

@@ -45,6 +45,7 @@ interface SceneProps {
    * nothing appears behind the "Click to play" overlay. Latched upstream. */
   active?: boolean;
   onAttack?: (damage: number, hit: boolean) => void;
+  onPlayerHit?: (kind: "hp" | "shield", amount: number) => void;
   onStatsChange?: (stats: PlayerStatsSnapshot) => void;
   onMonsterKilled?: (typeId: string) => void;
   onDeath?: () => void;
@@ -143,6 +144,7 @@ export function Scene({
   streakKillCount,
   active = false,
   onAttack,
+  onPlayerHit,
   onStatsChange,
   onMonsterKilled,
   onDeath,
@@ -237,6 +239,7 @@ export function Scene({
         onAttack={onAttack}
         onStatsChange={onStatsChange}
         onDeath={onDeath}
+        onPlayerHit={onPlayerHit}
         respawnSignal={respawnSignal}
         characterConfig={characterConfig}
         mobileMode={mobileMode}

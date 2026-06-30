@@ -13,7 +13,7 @@ export type FxSound =
   | "questComplete" | "bpTierClaim" | "bpUnlock" | "bpEliteUnlock"
   // World / Combat
   | "monsterKill" | "pvpHit" | "pvpKill"
-  | "playerDeath" | "playerRespawn" | "mineCollect" | "shieldBlock" | "itemPickup"
+  | "playerDeath" | "playerRespawn" | "mineCollect" | "shieldBlock" | "playerHurt" | "itemPickup"
   // Shop & Economy
   | "purchaseSuccess" | "purchaseFail" | "shopPurchase" | "upgradeSuccess"
   | "itemEquip" | "itemUnequip" | "auctionBid" | "auctionWin"
@@ -63,7 +63,8 @@ const DEFAULT_FX_SRC: Record<FxSound, string> = {
   playerDeath:      "/sounds/error.wav",
   playerRespawn:    "/sounds/save.wav",
   mineCollect:      "/sounds/tick.wav",
-  shieldBlock:      "/sounds/hit.wav",
+  shieldBlock:      "/sounds/shield-block.wav",
+  playerHurt:       "/sounds/punch.wav",
   itemPickup:       "/sounds/save.wav",
   // Shop
   purchaseSuccess:  "/sounds/save.wav",
@@ -109,7 +110,7 @@ const DEFAULT_FX_VOL: Record<FxSound, number> = {
   questComplete: 0.38, bpTierClaim: 0.32, bpUnlock: 0.38, bpEliteUnlock: 0.42,
   // World
   monsterKill: 0.22, pvpHit: 0.30, pvpKill: 0.35,
-  playerDeath: 0.35, playerRespawn: 0.22, mineCollect: 0.18, shieldBlock: 0.25, itemPickup: 0.20,
+  playerDeath: 0.35, playerRespawn: 0.22, mineCollect: 0.18, shieldBlock: 0.32, playerHurt: 0.3, itemPickup: 0.20,
   // Shop
   purchaseSuccess: 0.28, purchaseFail: 0.30, shopPurchase: 0.28, upgradeSuccess: 0.35,
   itemEquip: 0.25, itemUnequip: 0.15, auctionBid: 0.28, auctionWin: 0.40,
@@ -331,6 +332,7 @@ export function useSoundManager() {
     playerRespawn:    () => soundManager.play("playerRespawn"),
     mineCollect:      () => soundManager.play("mineCollect"),
     shieldBlock:      () => soundManager.play("shieldBlock"),
+    playerHurt:       () => soundManager.play("playerHurt"),
     itemPickup:       () => soundManager.play("itemPickup"),
     // Shop & Economy
     purchaseSuccess:  () => soundManager.play("purchaseSuccess"),

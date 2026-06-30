@@ -21,7 +21,7 @@ export type SoundEventKey =
   | "shopOpen" | "itemDrop"
   // ── World / Combat ──
   | "monsterKill" | "pvpHit" | "pvpKill"
-  | "playerDeath" | "playerRespawn" | "mineCollect" | "shieldBlock" | "itemPickup"
+  | "playerDeath" | "playerRespawn" | "mineCollect" | "shieldBlock" | "playerHurt" | "itemPickup"
   | "critHit" | "healReceived" | "battleStart"
   // ── Chat ──
   | "messageReceive" | "messageSend" | "mentionReceive" | "chatPing"
@@ -102,7 +102,8 @@ export const SOUND_EVENT_META: SoundEventMeta[] = [
   { key: "playerDeath",     label: "Spieler gestorben",            group: "Welt",        defaultFile: "/sounds/error.wav",     defaultVolume: 0.35 },
   { key: "playerRespawn",   label: "Spieler respawnt",             group: "Welt",        defaultFile: "/sounds/save.wav",      defaultVolume: 0.22 },
   { key: "mineCollect",     label: "Mine einsammeln",              group: "Welt",        defaultFile: "/sounds/tick.wav",      defaultVolume: 0.18 },
-  { key: "shieldBlock",     label: "Schild blockiert",             group: "Welt",        defaultFile: "/sounds/hit.wav",       defaultVolume: 0.25 },
+  { key: "shieldBlock",     label: "Schild getroffen / blockiert", group: "Welt",        defaultFile: "/sounds/shield-block.wav", defaultVolume: 0.32 },
+  { key: "playerHurt",      label: "Spieler getroffen (HP)",       group: "Welt",        defaultFile: "/sounds/punch.wav",     defaultVolume: 0.3 },
   { key: "itemPickup",      label: "Item aufgehoben",              group: "Welt",        defaultFile: "/sounds/save.wav",      defaultVolume: 0.20 },
 
   // ── Chat ─────────────────────────────────────────────────────────────────
