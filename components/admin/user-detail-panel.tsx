@@ -21,9 +21,11 @@ import { ItemStatBadges } from "@/components/items/item-stat-badges";
 import { AuditTimeline } from "@/components/admin/audit-timeline";
 import { useSoundManager } from "@/lib/sound-manager";
 import { useConfirm } from "@/components/layout/confirm-dialog-provider";
+import { useItemHoverPreview } from "@/components/ui/item-hover-preview";
 import type { Rarity } from "@/lib/cases";
 
 export function UserDetailPanel({ userId }: { userId: string }) {
+  const { bindItem, overlay } = useItemHoverPreview("m");
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -223,6 +225,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
 
   return (
     <div className="border-t border-white/10 pt-4">
+      {overlay}
       {/* Moderation actions */}
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.03] p-3">
         <span className="mr-1 text-xs font-semibold tracking-wide text-red-300">MODERATION</span>
@@ -384,10 +387,14 @@ export function UserDetailPanel({ userId }: { userId: string }) {
             />
             {results.length > 0 && (
               <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-white/10 bg-[#0f0e18] shadow-lg">
-                {results.map((item) => (
+                {results.map((item) => {
+                  const hb = bindItem(item);
+                  return (
                   <button
                     key={item.id}
-                    onMouseEnter={sound.hover}
+                    onMouseEnter={(e) => { sound.hover(); hb.onMouseEnter(e); }}
+                    onMouseMove={hb.onMouseMove}
+                    onMouseLeave={hb.onMouseLeave}
                     onClick={() => {
                       sound.click();
                       handleGrant(item.id);
@@ -402,7 +409,8 @@ export function UserDetailPanel({ userId }: { userId: string }) {
                     </span>
                     <Plus className="h-4 w-4 text-purple-300" />
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -416,7 +424,11 @@ export function UserDetailPanel({ userId }: { userId: string }) {
                 key={row.id}
                 className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-3 py-2"
               >
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span
+                  className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 rounded-md transition-colors hover:bg-white/[0.04]"
+                  title="Hover = Vorschau, Klick = groß ansehen"
+                  {...bindItem({ id: row.item.id ?? row.id, name: row.item.name, rarity: row.item.rarity, type: row.item.type, damage: row.item.damage, armor: row.item.armor, perk_type: row.item.perk_type, perk_magnitude: row.item.perk_magnitude, shield_hp: row.item.shield_hp })}
+                >
                   <span className="flex items-center gap-2 text-sm text-zinc-200">
                     <ItemRenderer type={row.item.type} rarity={row.item.rarity} size="sm" />
                     {row.item.name}

@@ -22,15 +22,19 @@ interface ItemRowProps {
   equipped: boolean;
   onToggle: (id: string) => void;
   onPreview: (id: string) => void;
+  /** Hover-3D-Vorschau am Cursor (vom übergeordneten useItemHoverPreview). */
+  hoverBind?: { onMouseEnter: (e: React.MouseEvent) => void; onMouseMove: (e: React.MouseEvent) => void; onMouseLeave: () => void };
 }
 
-function ItemRowComponent({ id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec, equipped, onToggle, onPreview }: ItemRowProps) {
+function ItemRowComponent({ id, name, rarity, type, damage, armor, perk_type, perk_magnitude, shield_hp, shield_regen_cooldown_sec, equipped, onToggle, onPreview, hoverBind }: ItemRowProps) {
   const style = RARITY_STYLES[rarity];
   const sound = useSoundManager();
 
   return (
     <div
-      onMouseEnter={sound.hover}
+      onMouseEnter={(e) => { sound.hover(); hoverBind?.onMouseEnter(e); }}
+      onMouseMove={hoverBind?.onMouseMove}
+      onMouseLeave={hoverBind?.onMouseLeave}
       className={`flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0f0e18] px-4 py-3 transition-all duration-200 ${style.hoverRing} ${style.hoverGlow}`}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">

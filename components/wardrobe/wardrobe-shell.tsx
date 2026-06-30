@@ -10,6 +10,7 @@ import { CategoryFilters } from "@/components/wardrobe/category-filters";
 import { WardrobeFilters, type SortKey } from "@/components/wardrobe/wardrobe-filters";
 import { ItemRow } from "@/components/wardrobe/item-row";
 import { UniversalPreviewModal } from "@/components/ui/universal-preview-modal";
+import { useItemHoverPreview } from "@/components/ui/item-hover-preview";
 import { toggleEquip, updateGender } from "@/lib/actions/wardrobe";
 import { getCategoryByDbType, getCategories, ALL_CATEGORY } from "@/lib/wardrobe";
 import { getTotalArmor, getPerkMultiplier, getEquippedDamage, FIST_DAMAGE } from "@/lib/combat";
@@ -366,6 +367,7 @@ export function WardrobeShell({
   const [equippedOnly, setEquippedOnly] = useState(false);
   const [sort, setSort] = useState<SortKey>("rarity-desc");
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const { bindItem: bindHoverItem, overlay: hoverOverlay } = useItemHoverPreview(gender);
   const [rubric, setRubric] = useState<"items" | "abilities" | "styles" | "boni" | "badges">("items");
   const [nameStyleData, setNameStyleData] = useState<{
     owned: UserNameStyleRow[];
@@ -712,6 +714,7 @@ export function WardrobeShell({
                               equipped={row.equipped}
                               onToggle={handleToggle}
                               onPreview={setPreviewId}
+                              hoverBind={bindHoverItem({ id: row.id, name: row.item.name, rarity: row.item.rarity, type: row.item.type, damage: row.item.damage, armor: row.item.armor, perk_type: row.item.perk_type, perk_magnitude: row.item.perk_magnitude, shield_hp: row.item.shield_hp })}
                             />
                           </div>
                         );
@@ -773,6 +776,7 @@ export function WardrobeShell({
           onClose={() => setPreviewId(null)}
         />
       )}
+      {hoverOverlay}
     </div>
   );
 }
