@@ -17,7 +17,7 @@ import { useAttackInput } from "@/components/world/use-attack-input";
 import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
 import type { CombatSharedState, MonsterRegistry, RemotePlayerRegistry } from "@/components/world/combat-types";
 import { WORLD_RADIUS } from "@/lib/world-config";
-import { resolveObstacleCollision, type Obstacle } from "@/lib/world-obstacles";
+import { resolveObstacleCollision, randomSpawnPoint, type Obstacle } from "@/lib/world-obstacles";
 import { debugLog } from "@/lib/debug";
 import { mobileInput, consumeMobileAttack, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
 import {
@@ -446,6 +446,7 @@ export function Player({
   // In dieser Zeit sehen/greifen Monster den Spieler nicht an (monster.tsx) und
   // er kann selbst nicht angreifen; der Timer läuft in useFrame ab.
   const spawnProtectStartedRef = useRef(false);
+  const initialSpawnRef = useRef(false);
   useEffect(() => {
     if (!active || spawnProtectStartedRef.current) return;
     spawnProtectStartedRef.current = true;
@@ -489,6 +490,15 @@ export function Player({
     const g = group.current;
     if (!g) return;
 
+    // Zufalls-Spawn beim ersten Betreten (nicht fester Mittelpunkt) — sobald
+    // aktiv + Hindernisse bekannt, einmal an einen gültigen Zufallsort setzen.
+    if (!initialSpawnRef.current && active) {
+      initialSpawnRef.current = true;
+      const sp = randomSpawnPoint(obstaclesRef?.current);
+      g.position.set(sp.x, 0, sp.z);
+      baseY.current = 0;
+    }
+
     // --- Death/respawn: checked first so the rest of this frame already
     // sees the dead state instead of one stray frame at hp<=0 with input
     // still active. Unlike the old behavior, hp<=0 no longer
@@ -508,7 +518,10 @@ export function Player({
     if (respawnRequested.current) {
       respawnRequested.current = false;
       deathNotified.current = false;
-      g.position.set(0, 0, 0);
+      {
+        const sp = randomSpawnPoint(obstaclesRef?.current); // zufälliger Respawn-Ort
+        g.position.set(sp.x, 0, sp.z);
+      }
       baseY.current = 0;
       verticalVelocity.current = 0;
       grounded.current = true;

@@ -145,6 +145,63 @@ function GlowMushroom({ x, z, scale, color }: { x: number; z: number; scale: num
   );
 }
 
+/** Ruinen-Wand eines Hauses (verfallener Stein mit glühenden Rissen). */
+function RuinWall({ o }: { o: Obstacle }) {
+  const hx = o.hx ?? 0.22;
+  const hz = o.hz ?? 0.22;
+  const h = o.h ?? 2;
+  return (
+    <group position={[o.x, 0, o.z]}>
+      <mesh position={[0, h / 2, 0]} castShadow>
+        <boxGeometry args={[hx * 2, h, hz * 2]} />
+        <meshStandardMaterial color="#4b4842" emissive="#1c1418" emissiveIntensity={0.25} roughness={0.95} />
+      </mesh>
+      {/* zerbröckelte Oberkante */}
+      <mesh position={[0, h, 0]} castShadow>
+        <boxGeometry args={[hx * 2 * 0.7, 0.14, hz * 2 * 0.7]} />
+        <meshStandardMaterial color="#3c3a35" roughness={1} flatShading />
+      </mesh>
+    </group>
+  );
+}
+
+/** Verlassene Straßenlaterne — Pfosten + flackernd-glühendes Licht oben. */
+function LampPost({ o }: { o: Obstacle }) {
+  const tint = ["#fbbf24", "#a855f7", "#38bdf8"][o.hue ?? 0];
+  return (
+    <group position={[o.x, 0, o.z]}>
+      <mesh position={[0, 1.3, 0]} castShadow>
+        <cylinderGeometry args={[0.07, 0.1, 2.6, 6]} />
+        <meshStandardMaterial color="#2a2a30" roughness={0.7} metalness={0.3} />
+      </mesh>
+      <mesh position={[0.18, 2.5, 0]}>
+        <boxGeometry args={[0.4, 0.08, 0.08]} />
+        <meshStandardMaterial color="#2a2a30" />
+      </mesh>
+      <mesh position={[0.34, 2.4, 0]}>
+        <sphereGeometry args={[0.13, 10, 10]} />
+        <meshBasicMaterial color={tint} toneMapped={false} />
+      </mesh>
+      {/* weicher Boden-Lichtschein (statt teurem PointLight pro Laterne) */}
+      <mesh position={[0.34, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[1.6, 16]} />
+        <meshBasicMaterial color={tint} transparent opacity={0.1} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Holzkiste / Trümmerstück (überspringbar). */
+function Crate({ o }: { o: Obstacle }) {
+  const s = (o.hx ?? 0.4) * 2;
+  return (
+    <mesh position={[o.x, s * 0.5, o.z]} rotation={[0, o.rot ?? 0, 0]} castShadow>
+      <boxGeometry args={[s, s, s]} />
+      <meshStandardMaterial color="#6b4f2a" emissive="#160d05" emissiveIntensity={0.2} roughness={0.9} flatShading />
+    </mesh>
+  );
+}
+
 const MUSHROOM_COLORS = ["#22d3ee", "#a855f7", "#34d399", "#f472b6"];
 const FIREFLY_COLORS = ["#fde68a", "#a855f7", "#22d3ee", "#86efac"];
 
@@ -284,6 +341,9 @@ export function Environment({
   const trees = useMemo(() => obstacles.filter((o) => o.kind === "tree"), [obstacles]);
   const rocks = useMemo(() => obstacles.filter((o) => o.kind === "rock"), [obstacles]);
   const ruins = useMemo(() => obstacles.filter((o) => o.kind === "ruin"), [obstacles]);
+  const walls = useMemo(() => obstacles.filter((o) => o.kind === "wall"), [obstacles]);
+  const lamps = useMemo(() => obstacles.filter((o) => o.kind === "lamp"), [obstacles]);
+  const crates = useMemo(() => obstacles.filter((o) => o.kind === "crate"), [obstacles]);
 
   const grassTufts = useMemo(() => {
     const rand = mulberry32(4242);
@@ -336,6 +396,15 @@ export function Environment({
       ))}
       {ruins.map((r, i) => (
         <RuinPillar key={i} x={r.x} z={r.z} scale={r.scale} rot={r.rot ?? 0} h={r.h ?? 1.5} />
+      ))}
+      {walls.map((o, i) => (
+        <RuinWall key={`w${i}`} o={o} />
+      ))}
+      {lamps.map((o, i) => (
+        <LampPost key={`l${i}`} o={o} />
+      ))}
+      {crates.map((o, i) => (
+        <Crate key={`c${i}`} o={o} />
       ))}
       {mushrooms.map((m, i) => (
         <GlowMushroom key={i} x={m.x} z={m.z} scale={m.scale} color={m.color} />

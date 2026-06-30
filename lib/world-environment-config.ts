@@ -24,6 +24,8 @@ export interface WorldEnvironmentConfig {
   rockDensity: number;
   ruinDensity: number;
   mushroomDensity: number;
+  /** Dichte der verlassenen Stadt (Ruinen-Häuser + Laternen + Kisten). */
+  buildingDensity: number;
   /** Schwebende Glühpartikel (Fireflies) in der Luft. 0 = aus. */
   fireflyDensity: number;
   /** Leuchtendes Monument + Runen-Kreis nahe Spawn. */
@@ -41,6 +43,7 @@ export const DEFAULT_WORLD_ENVIRONMENT: WorldEnvironmentConfig = {
   rockDensity: 1,
   ruinDensity: 1,
   mushroomDensity: 1,
+  buildingDensity: 1,
   fireflyDensity: 1,
   monument: true,
 };
@@ -108,6 +111,7 @@ export function normalizeEnvironmentConfig(
     rockDensity: num(raw?.rockDensity, d.rockDensity),
     ruinDensity: num(raw?.ruinDensity, d.ruinDensity),
     mushroomDensity: num(raw?.mushroomDensity, d.mushroomDensity),
+    buildingDensity: num(raw?.buildingDensity, d.buildingDensity),
     fireflyDensity: num(raw?.fireflyDensity, d.fireflyDensity),
     monument: typeof raw?.monument === "boolean" ? raw.monument : d.monument,
   };

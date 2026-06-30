@@ -108,6 +108,7 @@ export function WorldEnvironmentConfigEditor({ config }: { config: WorldEnvironm
         <NumField label="Felsen" hint="Dichte der Felsbrocken." value={form.rockDensity} min={0} max={3} step={0.1} onChange={(v) => set("rockDensity", v)} />
         <NumField label="Ruinen" hint="Dichte der verfallenen Steinsäulen (in Clustern)." value={form.ruinDensity} min={0} max={3} step={0.1} onChange={(v) => set("ruinDensity", v)} />
         <NumField label="Leuchtpilze" hint="Dichte der leuchtenden Pilze." value={form.mushroomDensity} min={0} max={3} step={0.1} onChange={(v) => set("mushroomDensity", v)} />
+        <NumField label="Gebäude (tote Stadt)" hint="Dichte der verlassenen Stadt: Ruinen-Häuser (begehbar, kollidierbar), Laternen, Kisten. 0 = keine." value={form.buildingDensity} min={0} max={3} step={0.5} onChange={(v) => set("buildingDensity", v)} />
       </div>
 
       {/* Highlights */}
