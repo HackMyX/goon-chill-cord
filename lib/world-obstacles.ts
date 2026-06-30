@@ -31,6 +31,8 @@ export interface Obstacle {
   h?: number; // ruin column / wall height
   /** Wand-Länge (Render). */
   len?: number;
+  /** Zonen-Farbton (Wände/Dächer) — macht Orte optisch unterscheidbar. */
+  tone?: number;
 }
 
 function mulberry32(seed: number) {
@@ -47,17 +49,17 @@ function mulberry32(seed: number) {
 const dens = (base: number, mul: number) => Math.max(0, Math.round(base * mul));
 
 /** Eine Wand-Segment (Box) als Hindernis. axis="x" → entlang X, sonst entlang Z. */
-function pushWall(out: Obstacle[], axis: "x" | "z", x: number, z: number, half: number, h: number) {
+function pushWall(out: Obstacle[], axis: "x" | "z", x: number, z: number, half: number, h: number, tone = 0) {
   const t = 0.22; // halbe Wanddicke
   const hx = axis === "x" ? half : t;
   const hz = axis === "x" ? t : half;
-  out.push({ kind: "wall", x, z, scale: 1, shape: "box", hx, hz, r: Math.max(hx, hz), blockH: h, h, len: half * 2 });
+  out.push({ kind: "wall", x, z, scale: 1, shape: "box", hx, hz, r: Math.max(hx, hz), blockH: h, h, len: half * 2, tone });
 }
 
 /** Haus: 4 Wände mit Türöffnungen auf MEHREREN Seiten (mehrere Ausgänge → man
  * sitzt nicht in der Falle). `intact` = höhere, gleichmäßige Wände + Dach;
  * sonst verfallene, ungleiche Ruinen-Wände. */
-function emitHouse(out: Obstacle[], cx: number, cz: number, w: number, d: number, wallH: number, doorSides: number[], intact: boolean, rand: () => number) {
+function emitHouse(out: Obstacle[], cx: number, cz: number, w: number, d: number, wallH: number, doorSides: number[], intact: boolean, rand: () => number, tone = 0) {
   const hw = w / 2;
   const hd = d / 2;
   const doorHalf = 0.75;
@@ -71,28 +73,28 @@ function emitHouse(out: Obstacle[], cx: number, cz: number, w: number, d: number
   sides.forEach((s, i) => {
     const h = intact ? wallH : wallH * (0.5 + rand() * 0.65); // heil = voll, Ruine = uneben/gebrochen
     if (!doorSides.includes(i)) {
-      pushWall(out, s.axis, s.x, s.z, s.half, h);
+      pushWall(out, s.axis, s.x, s.z, s.half, h, tone);
       return;
     }
     const segHalf = (s.half - doorHalf) / 2;
     if (segHalf <= 0.2) return; // Türöffnung füllt die ganze Seite
     const off = doorHalf + segHalf;
     if (s.axis === "x") {
-      pushWall(out, "x", s.x - off, s.z, segHalf, h);
-      pushWall(out, "x", s.x + off, s.z, segHalf, h);
+      pushWall(out, "x", s.x - off, s.z, segHalf, h, tone);
+      pushWall(out, "x", s.x + off, s.z, segHalf, h, tone);
     } else {
-      pushWall(out, "z", s.x, s.z - off, segHalf, h);
-      pushWall(out, "z", s.x, s.z + off, segHalf, h);
+      pushWall(out, "z", s.x, s.z - off, segHalf, h, tone);
+      pushWall(out, "z", s.x, s.z + off, segHalf, h, tone);
     }
   });
   // Fast heile Häuser bekommen ein Dach (render-only, blockH 0 → keine Kollision).
   if (intact) {
-    out.push({ kind: "roof", x: cx, z: cz, scale: 1, shape: "box", hx: hw + 0.25, hz: hd + 0.25, r: 0, blockH: 0, h: wallH, len: w });
+    out.push({ kind: "roof", x: cx, z: cz, scale: 1, shape: "box", hx: hw + 0.25, hz: hd + 0.25, r: 0, blockH: 0, h: wallH, len: w, tone });
   }
 }
 
 /** Leerer Laden: 3 Wände (Front offen) + Verkaufstresen + Dach + Schild. */
-function emitShop(out: Obstacle[], cx: number, cz: number, w: number, d: number, wallH: number, facing: number, rand: () => number) {
+function emitShop(out: Obstacle[], cx: number, cz: number, w: number, d: number, wallH: number, facing: number, rand: () => number, tone = 1) {
   const hw = w / 2;
   const hd = d / 2;
   type Side = { axis: "x" | "z"; x: number; z: number; half: number };
@@ -104,7 +106,7 @@ function emitShop(out: Obstacle[], cx: number, cz: number, w: number, d: number,
   ];
   sides.forEach((s, i) => {
     if (i === facing) return; // offene Schaufront
-    pushWall(out, s.axis, s.x, s.z, s.half, wallH);
+    pushWall(out, s.axis, s.x, s.z, s.half, wallH, tone);
   });
   // Tresen vor der offenen Front (niedrig, kollidierbar)
   const front = sides[facing];
@@ -115,7 +117,7 @@ function emitShop(out: Obstacle[], cx: number, cz: number, w: number, d: number,
     out.push({ kind: "crate", x: front.x, z: front.z, scale: 1, shape: "box", hx: 0.28, hz: front.half * 0.8, r: front.half * 0.8, blockH: counterH, rot: 0 });
   }
   // Dach + leuchtendes Ladenschild (als Laterne mit Glow)
-  out.push({ kind: "roof", x: cx, z: cz, scale: 1, shape: "box", hx: hw + 0.3, hz: hd + 0.3, r: 0, blockH: 0, h: wallH });
+  out.push({ kind: "roof", x: cx, z: cz, scale: 1, shape: "box", hx: hw + 0.3, hz: hd + 0.3, r: 0, blockH: 0, h: wallH, tone });
   out.push({ kind: "lamp", x: front.x, z: front.z, scale: 1, shape: "circle", r: 0.16, blockH: 3, hue: Math.floor(rand() * 3) });
 }
 
@@ -168,13 +170,15 @@ function genVillage(out: Obstacle[], ox: number, oz: number, rand: () => number)
       const hz0 = oz - halfD + gz * cell + (rand() - 0.5) * 2;
       if (rand() < 0.22) {
         // Laden mit offener Front (zur nächsten Straße gewandt)
-        emitShop(out, hx0, hz0, 4.5 + rand() * 1.5, 4.5 + rand() * 1.5, 2.6 + rand() * 0.6, Math.floor(rand() * 4), rand);
+        emitShop(out, hx0, hz0, 4.5 + rand() * 1.5, 4.5 + rand() * 1.5, 2.6 + rand() * 0.6, Math.floor(rand() * 4), rand, 0);
       } else {
         const intact = rand() < 0.5;
         const w = (intact ? 4.5 : 3.8) + rand() * 2.5;
         const d = (intact ? 4.5 : 3.8) + rand() * 2.5;
-        const wallH = intact ? 2.7 + rand() * 1.0 : 1.5 + rand() * 1.2;
-        emitHouse(out, hx0, hz0, w, d, wallH, pickDoors(rand), intact, rand);
+        // gelegentlich „zweistöckig" wirkende, höhere Häuser → weniger Einerlei
+        const tall = rand() < 0.25;
+        const wallH = (intact ? 2.7 + rand() * 1.0 : 1.5 + rand() * 1.2) + (tall ? 1.6 : 0);
+        emitHouse(out, hx0, hz0, w, d, wallH, pickDoors(rand), intact, rand, 0);
       }
     }
   }
@@ -195,8 +199,8 @@ function genMarket(out: Obstacle[], ox: number, oz: number, rand: () => number) 
   roadBetween(out, ox - (n * gap) / 2 - 3, oz, ox + (n * gap) / 2 + 3, oz, 5); // Mittel-Gasse
   for (let i = 0; i < n; i++) {
     const sx = ox - ((n - 1) * gap) / 2 + i * gap;
-    emitShop(out, sx, oz - 4.2, 4.2, 3.6, 2.5 + rand() * 0.5, 1, rand); // Front zur Gasse (−z Seite open → facing 1)
-    emitShop(out, sx, oz + 4.2, 4.2, 3.6, 2.5 + rand() * 0.5, 0, rand); // gegenüber (facing 0)
+    emitShop(out, sx, oz - 4.2, 4.2, 3.6, 2.5 + rand() * 0.5, 0, rand, 1); // Front zur Gasse (+z Seite open → facing 0)
+    emitShop(out, sx, oz + 4.2, 4.2, 3.6, 2.5 + rand() * 0.5, 1, rand, 1); // gegenüber (facing 1)
   }
   for (let c = 0; c < 8; c++) {
     const s = 0.4 + rand() * 0.4;
@@ -210,14 +214,14 @@ function genMarket(out: Obstacle[], ox: number, oz: number, rand: () => number) 
 /** RUINENFELD: zerfallene Wände, Säulen, Schutt — eingestürztes Viertel. */
 function genRuinsField(out: Obstacle[], ox: number, oz: number, rand: () => number) {
   for (let i = 0; i < 5; i++) {
-    emitHouse(out, ox + (rand() - 0.5) * 26, oz + (rand() - 0.5) * 26, 4 + rand() * 3, 4 + rand() * 3, 0.8 + rand() * 0.9, pickDoors(rand), false, rand);
+    emitHouse(out, ox + (rand() - 0.5) * 26, oz + (rand() - 0.5) * 26, 4 + rand() * 3, 4 + rand() * 3, 0.8 + rand() * 0.9, pickDoors(rand), false, rand, 2);
   }
   // einzelne stehengebliebene Wandstücke
   for (let i = 0; i < 8; i++) {
     const x = ox + (rand() - 0.5) * 30;
     const z = oz + (rand() - 0.5) * 30;
     const along = rand() < 0.5 ? "x" : "z";
-    pushWall(out, along, x, z, 0.8 + rand() * 1.4, 1.0 + rand() * 1.4);
+    pushWall(out, along, x, z, 0.8 + rand() * 1.4, 1.0 + rand() * 1.4, 2);
   }
   // Säulen + Schutt (Felsen)
   for (let i = 0; i < 6; i++) {
@@ -263,7 +267,7 @@ function genCamp(out: Obstacle[], ox: number, oz: number, rand: () => number) {
   for (let i = 0; i < 3; i++) {
     const a = rand() * Math.PI * 2;
     const r = 6 + rand() * 2;
-    pushWall(out, rand() < 0.5 ? "x" : "z", ox + Math.cos(a) * r, oz + Math.sin(a) * r, 1 + rand(), 0.9 + rand() * 0.6);
+    pushWall(out, rand() < 0.5 ? "x" : "z", ox + Math.cos(a) * r, oz + Math.sin(a) * r, 1 + rand(), 0.9 + rand() * 0.6, 3);
   }
   out.push({ kind: "lamp", x: ox + 2, z: oz + 2, scale: 1, shape: "circle", r: 0.16, blockH: 3, hue: 0 });
 }
@@ -384,18 +388,39 @@ export function buildObstacles(env: WorldEnvironmentConfig = DEFAULT_WORLD_ENVIR
 /** Zufälliger, gültiger Spawn-Punkt: irgendwo in der Welt, nicht in einem
  * Hindernis (rausgeschoben), mit Mindestabstand zum Rand. */
 export function randomSpawnPoint(obstacles: Obstacle[] | null | undefined): { x: number; z: number } {
-  for (let attempt = 0; attempt < 30; attempt++) {
+  for (let attempt = 0; attempt < 40; attempt++) {
     const ang = Math.random() * Math.PI * 2;
-    const rad = Math.random() * (WORLD_RADIUS - 8);
+    const rad = 4 + Math.random() * (WORLD_RADIUS - 12);
     let x = Math.cos(ang) * rad;
     let z = Math.sin(ang) * rad;
-    const res = resolveObstacleCollision(obstacles, x, z, 0, 0.6);
-    x = res.x;
-    z = res.z;
-    // gültig, wenn nach dem Rausschieben noch im Spielfeld
-    if (Math.hypot(x, z) < WORLD_RADIUS - 4) return { x, z };
+    // mehrfach rausschieben (mehrere überlappende Hindernisse auflösen)
+    for (let k = 0; k < 4; k++) {
+      const res = resolveObstacleCollision(obstacles, x, z, 0, 0.7);
+      x = res.x;
+      z = res.z;
+    }
+    if (Math.hypot(x, z) < WORLD_RADIUS - 4 && !pointInsideBlocker(obstacles, x, z, 0.55)) {
+      return { x, z };
+    }
   }
   return { x: 0, z: 8 }; // Fallback (nahe, aber nicht im Monument bei z=-9)
+}
+
+/** Steckt der Punkt (Radius r) noch in einer hohen, blockierenden Struktur? */
+function pointInsideBlocker(obstacles: Obstacle[] | null | undefined, x: number, z: number, r: number): boolean {
+  if (!obstacles) return false;
+  for (const o of obstacles) {
+    if (o.blockH < 1.0) continue;
+    if (o.shape === "box") {
+      const hx = (o.hx ?? o.r) + r;
+      const hz = (o.hz ?? o.r) + r;
+      if (x > o.x - hx && x < o.x + hx && z > o.z - hz && z < o.z + hz) return true;
+    } else {
+      const d = o.r + r;
+      if ((x - o.x) ** 2 + (z - o.z) ** 2 < d * d) return true;
+    }
+  }
+  return false;
 }
 
 /**

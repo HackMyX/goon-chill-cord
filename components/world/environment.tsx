@@ -193,7 +193,16 @@ function InstancedCrates({ crates }: { crates: Obstacle[] }) {
   );
 }
 
-const STONE_TONES = ["#4b4842", "#524d44", "#45433d", "#565049", "#403e38"];
+// Zonen-Paletten — machen die Orte optisch klar unterscheidbar:
+// 0 Dorf (warmes Holz/Lehm), 1 Markt (grauer Stein), 2 Ruinenfeld (dunkel/moosig),
+// 3 Camp (sandiges Braun).
+const WALL_PALETTES = [
+  ["#6b5a44", "#5f4f3c", "#73604a", "#544738"],
+  ["#5a5750", "#4f4d47", "#625f58", "#48463f"],
+  ["#3e443a", "#454b3e", "#363b32", "#4a4a40"],
+  ["#5c4a36", "#4e3f2e", "#665440", "#473a2b"],
+];
+const ROOF_COLORS = ["#7a3b2a", "#4a4a52", "#3b2a22", "#6b4a2a"];
 
 /** Hauswand: verwitterter Stein (Farbe variiert je Position) + zerbröckelte
  * Oberkante; hohe (heile) Wände bekommen ein warm glühendes Fenster. */
@@ -201,7 +210,8 @@ function RuinWall({ o }: { o: Obstacle }) {
   const hx = o.hx ?? 0.22;
   const hz = o.hz ?? 0.22;
   const h = o.h ?? 2;
-  const tone = STONE_TONES[Math.abs(Math.round(o.x * 7 + o.z * 13)) % STONE_TONES.length];
+  const palette = WALL_PALETTES[o.tone ?? 0] ?? WALL_PALETTES[0];
+  const tone = palette[Math.abs(Math.round(o.x * 7 + o.z * 13)) % palette.length];
   const alongX = hx > hz;
   const tall = h > 2.3;
   const long = (o.len ?? 0) > 1.7;
@@ -242,7 +252,7 @@ function Roof({ o }: { o: Obstacle }) {
       {/* Spitzdach (4-seitige Pyramide, achsen-ausgerichtet) */}
       <mesh position={[0, 0.62, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>
         <coneGeometry args={[radius, 1.15, 4]} />
-        <meshStandardMaterial color="#3b2a22" roughness={0.95} flatShading />
+        <meshStandardMaterial color={ROOF_COLORS[o.tone ?? 0] ?? ROOF_COLORS[0]} roughness={0.95} flatShading />
       </mesh>
     </group>
   );

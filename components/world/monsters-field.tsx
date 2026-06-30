@@ -19,7 +19,7 @@ import type { WorldSpawnConfig } from "@/lib/world-spawn-config";
 import { streakMobScale, type KillStreakConfig } from "@/lib/kill-streak";
 import type { CharacterConfig } from "@/lib/character-config";
 import { WORLD_RADIUS } from "@/lib/world-config";
-import type { Obstacle } from "@/lib/world-obstacles";
+import { resolveObstacleCollision, type Obstacle } from "@/lib/world-obstacles";
 import {
   subscribeToWorldRoster,
   subscribeToMonsterSync,
@@ -85,10 +85,18 @@ let spawnSeq = 0;
  * earlier exchange. */
 const REMOTE_KILL_CREDIT_WINDOW_MS = 600;
 
-function randomSpawnPosition(spawnSafeRadius: number): [number, number, number] {
+function randomSpawnPosition(spawnSafeRadius: number, obstacles?: Obstacle[] | null): [number, number, number] {
   const angle = Math.random() * Math.PI * 2;
   const radius = spawnSafeRadius + Math.random() * (WORLD_RADIUS - spawnSafeRadius - 6);
-  return [Math.cos(angle) * radius, 0, Math.sin(angle) * radius];
+  let x = Math.cos(angle) * radius;
+  let z = Math.sin(angle) * radius;
+  // nicht in Wänden/Häusern spawnen → aus Hindernissen rausschieben
+  for (let k = 0; k < 3; k++) {
+    const r = resolveObstacleCollision(obstacles, x, z, 0, 0.6);
+    x = r.x;
+    z = r.z;
+  }
+  return [x, 0, z];
 }
 
 /**
@@ -459,7 +467,7 @@ export function MonstersField({
             scale === 1
               ? bossType
               : { ...bossType, health: Math.round(bossType.health * scale), attackDamage: Math.round(bossType.attackDamage * scale) };
-          return [...curr, { id: `${userId.slice(0, 8)}_b${++spawnSeq}`, type: scaledBoss, position: randomSpawnPosition(spawnConfig.spawnSafeRadius) }];
+          return [...curr, { id: `${userId.slice(0, 8)}_b${++spawnSeq}`, type: scaledBoss, position: randomSpawnPosition(spawnConfig.spawnSafeRadius, obstaclesRef?.current) }];
         });
       }
     }
@@ -561,7 +569,7 @@ export function MonstersField({
             };
       // Namespace the spawn id with the first 8 chars of userId to avoid id
       // collisions with remote monsters that also use sequential counters.
-      return [...curr, { id: `${userId.slice(0, 8)}_m${++spawnSeq}`, type: scaledType, position: randomSpawnPosition(spawnConfig.spawnSafeRadius) }];
+      return [...curr, { id: `${userId.slice(0, 8)}_m${++spawnSeq}`, type: scaledType, position: randomSpawnPosition(spawnConfig.spawnSafeRadius, obstaclesRef?.current) }];
     });
   });
 

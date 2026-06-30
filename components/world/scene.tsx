@@ -185,8 +185,11 @@ export function Scene({
   // Admin-konfigurierbare Welt-Optik: Tageszeit-Preset + Feintuning-Multiplikatoren.
   const tp = TIME_OF_DAY_PRESETS[environmentConfig.timeOfDay];
   const fogMul = Math.max(0.4, environmentConfig.fogDensity);
-  const fogNear = 14 / fogMul;
-  const fogFar = (WORLD_RADIUS + 10) / fogMul;
+  // Sichtweite an die große Map angepasst: vorher (WORLD_RADIUS+10) ≈ 88 →
+  // die ferne Map-Hälfte verschwand komplett in der Nebelwand ("hinten lädt
+  // nicht"). Jetzt deutlich weiter, damit man die entfernten Orte sieht.
+  const fogNear = 22 / fogMul;
+  const fogFar = (WORLD_RADIUS * 1.85 + 12) / fogMul;
   const starCount = Math.round(3200 * Math.max(0, environmentConfig.starIntensity));
 
   return (
