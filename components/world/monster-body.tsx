@@ -1,9 +1,107 @@
 "use client";
 
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Billboard } from "@react-three/drei";
 import { TextSprite } from "@/components/world/text-sprite";
 import type { MonsterTypeConfig } from "@/lib/monsters";
+
+// ── Selbst-animierende Signatur-Bewegungen der neuen Arten ───────────────────
+// (eigene useFrame, laufen lokal UND remote gleich, ohne Parent-Refs)
+
+/** Fledermaus-Flügel: schneller Flügelschlag (an der Körperkante drehend). */
+function BatWings({ color }: { color: string }) {
+  const l = useRef<THREE.Group>(null);
+  const r = useRef<THREE.Group>(null);
+  useFrame((s) => {
+    const f = Math.sin(s.clock.elapsedTime * 13) * 0.75;
+    if (l.current) l.current.rotation.z = 0.35 + f;
+    if (r.current) r.current.rotation.z = -0.35 - f;
+  });
+  return (
+    <>
+      <group ref={l} position={[-0.08, 0.02, -0.02]}>
+        <mesh position={[-0.27, 0, 0]} rotation={[0, 0.25, 0]}>
+          <boxGeometry args={[0.52, 0.34, 0.02]} />
+          <meshStandardMaterial color={color} side={THREE.DoubleSide} roughness={0.7} />
+        </mesh>
+      </group>
+      <group ref={r} position={[0.08, 0.02, -0.02]}>
+        <mesh position={[0.27, 0, 0]} rotation={[0, -0.25, 0]}>
+          <boxGeometry args={[0.52, 0.34, 0.02]} />
+          <meshStandardMaterial color={color} side={THREE.DoubleSide} roughness={0.7} />
+        </mesh>
+      </group>
+    </>
+  );
+}
+
+/** Irrlicht: pulsierender Kern + umkreisende, taumelnde Funken. */
+function WispOrbit({ color }: { color: string }) {
+  const orbit = useRef<THREE.Group>(null);
+  const core = useRef<THREE.Mesh>(null);
+  useFrame((s) => {
+    const t = s.clock.elapsedTime;
+    if (orbit.current) { orbit.current.rotation.y = t * 1.7; orbit.current.rotation.x = Math.sin(t) * 0.35; }
+    if (core.current) core.current.scale.setScalar(1 + Math.sin(t * 4) * 0.18);
+  });
+  return (
+    <>
+      <mesh ref={core}>
+        <sphereGeometry args={[0.13, 12, 12]} />
+        <meshBasicMaterial color="#ffffff" toneMapped={false} />
+      </mesh>
+      <group ref={orbit}>
+        {[0, 1, 2, 3, 4].map((i) => {
+          const a = (i / 5) * Math.PI * 2;
+          return (
+            <mesh key={i} position={[Math.cos(a) * 0.34, Math.sin(a) * 0.18, Math.sin(a) * 0.34]}>
+              <sphereGeometry args={[0.04, 8, 8]} />
+              <meshBasicMaterial color={color} toneMapped={false} />
+            </mesh>
+          );
+        })}
+      </group>
+    </>
+  );
+}
+
+/** Spinnen-Beine: 8 Beine, die beim „Scuttle" leicht zucken. */
+function SpiderLegs({ color }: { color: string }) {
+  const refs = useRef<(THREE.Group | null)[]>([]);
+  useFrame((s) => {
+    const t = s.clock.elapsedTime;
+    for (let i = 0; i < refs.current.length; i++) {
+      const g = refs.current[i];
+      if (!g) continue;
+      g.rotation.x = Math.sin(t * 9 + i * 1.3) * 0.18; // schnelles Zucken
+    }
+  });
+  let idx = 0;
+  return (
+    <>
+      {[-1, 1].map((side) =>
+        [0, 1, 2, 3].map((i) => {
+          const k = idx++;
+          return (
+            <group
+              key={`${side}-${i}`}
+              ref={(el) => { refs.current[k] = el; }}
+              position={[side * 0.18, 0.02, 0.2 - i * 0.16]}
+              rotation={[0, 0, side * (0.9 - i * 0.08)]}
+            >
+              <mesh position={[side * 0.28, -0.02, 0]} castShadow>
+                <cylinderGeometry args={[0.02, 0.015, 0.58, 6]} />
+                <meshStandardMaterial color={color} roughness={0.7} />
+              </mesh>
+            </group>
+          );
+        }),
+      )}
+    </>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GETEILTES Monster-Modell — eine einzige Quelle für lokale (monster.tsx) und
@@ -194,17 +292,8 @@ export function MonsterBody({
               <meshStandardMaterial color="#e5e7eb" />
             </mesh>
           ))}
-          {/* 8 Beine — 4 je Seite, gestaffelt, abgewinkelt nach außen/unten */}
-          {[-1, 1].map((side) =>
-            [0, 1, 2, 3].map((i) => (
-              <group key={`${side}-${i}`} position={[side * 0.18, 0.02, 0.2 - i * 0.16]} rotation={[0, 0, side * (0.9 - i * 0.08)]}>
-                <mesh position={[side * 0.28, -0.02, 0]} castShadow>
-                  <cylinderGeometry args={[0.02, 0.015, 0.58, 6]} />
-                  <meshStandardMaterial color={type.colorHex} roughness={0.7} />
-                </mesh>
-              </group>
-            )),
-          )}
+          {/* 8 zuckende Beine (Scuttle-Animation) */}
+          <SpiderLegs color={type.colorHex} />
         </group>
       ) : isBat ? (
         // Fledermaus: kleiner Körper + 2 große Flügel + Ohren + Augen. Schwebt
@@ -214,12 +303,7 @@ export function MonsterBody({
             <sphereGeometry args={[0.22, 14, 12]} />
             <meshStandardMaterial ref={refs.torsoMaterial} color={type.colorHex} roughness={0.6} />
           </mesh>
-          {[-1, 1].map((s) => (
-            <mesh key={s} position={[s * 0.34, 0.02, -0.04]} rotation={[0, s * 0.3, s * 0.5]}>
-              <boxGeometry args={[0.5, 0.34, 0.02]} />
-              <meshStandardMaterial color={type.colorHex} side={THREE.DoubleSide} roughness={0.7} />
-            </mesh>
-          ))}
+          <BatWings color={type.colorHex} />
           {[-1, 1].map((s) => (
             <mesh key={s} position={[s * 0.08, 0.2, 0.02]} rotation={[0, 0, s * 0.2]} castShadow>
               <coneGeometry args={[0.05, 0.16, 5]} />
@@ -235,19 +319,7 @@ export function MonsterBody({
             <sphereGeometry args={[0.26, 16, 14]} />
             <meshStandardMaterial ref={refs.torsoMaterial} color={type.colorHex} emissive={type.colorHex} emissiveIntensity={0.9} transparent opacity={0.5} roughness={0.1} />
           </mesh>
-          <mesh>
-            <sphereGeometry args={[0.13, 12, 12]} />
-            <meshBasicMaterial color="#ffffff" toneMapped={false} />
-          </mesh>
-          {[0, 1, 2, 3, 4].map((i) => {
-            const a = (i / 5) * Math.PI * 2;
-            return (
-              <mesh key={i} position={[Math.cos(a) * 0.34, Math.sin(a) * 0.18, Math.sin(a) * 0.34]}>
-                <sphereGeometry args={[0.04, 8, 8]} />
-                <meshBasicMaterial color={eyeColor} toneMapped={false} />
-              </mesh>
-            );
-          })}
+          <WispOrbit color={eyeColor} />
         </group>
       ) : isReaper ? (
         // Seelenschnitter (Boss): hohe Kapuzen-Robe (Kegel) + dunkle Kapuze +
