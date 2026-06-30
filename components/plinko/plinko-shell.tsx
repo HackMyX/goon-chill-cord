@@ -416,7 +416,7 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
             label="Bälle/h"
             icon={<Clock className="h-3.5 w-3.5" />}
             size="sm"
-            className="hidden w-[148px] sm:flex"
+            className="hidden w-[148px] lg:flex"
           />
           <ActiveAbilityBadge refreshKey={resultsVersion} />
           <ActiveBonusDock game="plinko" suffix="Bälle" refreshKey={resultsVersion} />
@@ -429,6 +429,21 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
 
           {/* ── LEFT: Board + controls ─────────────────────────────────── */}
           <div className="flex flex-col gap-2.5 mb-3 lg:mb-0 lg:overflow-hidden lg:min-h-0 lg:h-full">
+
+          {/* Limit-Anzeige (Mobile/Tablet — prominent; Desktop zeigt sie im Header) */}
+          <div className="flex-none lg:hidden">
+            <LimitMeter
+              remaining={remaining}
+              total={config.hourlyBallLimit}
+              label="Bälle diese Stunde"
+              icon={<Clock className="h-3.5 w-3.5" />}
+            />
+            {config.dailyBallLimit > 0 && (
+              <p className="mt-1 text-center text-[10px] font-semibold text-zinc-500">
+                Tageslimit: <span className="text-zinc-300">{config.dailyBallLimit}/Tag</span>
+              </p>
+            )}
+          </div>
 
           {/* Risk selector */}
           <div className="flex-none grid gap-1.5" style={{ gridTemplateColumns: `repeat(${config.riskLevels.length}, 1fr)` }}>
