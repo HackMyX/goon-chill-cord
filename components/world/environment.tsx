@@ -245,6 +245,9 @@ function Roof({ o }: { o: Obstacle }) {
   const hx = o.hx ?? 2;
   const hz = o.hz ?? 2;
   const base = o.h ?? 2.5;
+  const color = ROOF_COLORS[o.tone ?? 0] ?? ROOF_COLORS[0];
+  // Breite Gebäude (z. B. Supermarkt) = Flachdach; normale Häuser = Spitzdach.
+  const flat = hx > 5 || hz > 5;
   const radius = Math.hypot(hx, hz) * 1.02;
   return (
     <group position={[o.x, base, o.z]}>
@@ -253,11 +256,17 @@ function Roof({ o }: { o: Obstacle }) {
         <boxGeometry args={[hx * 2 + 0.3, 0.16, hz * 2 + 0.3]} />
         <meshStandardMaterial color="#2a1d16" roughness={1} />
       </mesh>
-      {/* Spitzdach (4-seitige Pyramide, achsen-ausgerichtet) */}
-      <mesh position={[0, 0.62, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>
-        <coneGeometry args={[radius, 1.15, 4]} />
-        <meshStandardMaterial color={ROOF_COLORS[o.tone ?? 0] ?? ROOF_COLORS[0]} roughness={0.95} flatShading />
-      </mesh>
+      {flat ? (
+        <mesh position={[0, 0.24, 0]} castShadow>
+          <boxGeometry args={[hx * 2, 0.3, hz * 2]} />
+          <meshStandardMaterial color={color} roughness={0.95} flatShading />
+        </mesh>
+      ) : (
+        <mesh position={[0, 0.62, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>
+          <coneGeometry args={[radius, 1.15, 4]} />
+          <meshStandardMaterial color={color} roughness={0.95} flatShading />
+        </mesh>
+      )}
     </group>
   );
 }

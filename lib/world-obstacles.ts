@@ -218,11 +218,14 @@ function emitSupermarket(out: Obstacle[], cx: number, cz: number, facing: number
       pushWall(out, "z", s.x, s.z + off, seg, wallH, tone);
     }
   });
-  // Zwei Regalreihen (lange niedrige Tische) mit Gang dazwischen — „alte Sachen".
+  // Zwei Regalreihen aus je zwei kürzeren Segmenten (mit Gang dazwischen) —
+  // „alte Sachen". Niedrig (1.2) und schlank, kein Riesenblock.
   const front = sides[facing];
   for (let row = 0; row < 2; row++) {
     const rz = cz + (row === 0 ? -1.9 : 1.9);
-    out.push({ kind: "crate", x: cx, z: rz, scale: 1, shape: "box", hx: hw - 1.2, hz: 0.5, r: hw - 1.2, blockH: 1.2, rot: 0 });
+    for (const seg of [-1, 1]) {
+      out.push({ kind: "crate", x: cx + seg * (hw * 0.5), z: rz, scale: 1, shape: "box", hx: hw * 0.4, hz: 0.5, r: hw * 0.4, blockH: 1.2, rot: 0 });
+    }
   }
   // Flachdach + Laterne NEBEN dem Eingang (nicht drin).
   out.push({ kind: "roof", x: cx, z: cz, scale: 1, shape: "box", hx: hw + 0.3, hz: hd + 0.3, r: 0, blockH: 0, h: wallH, tone });
