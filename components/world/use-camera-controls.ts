@@ -139,7 +139,7 @@ export function useCameraControls(
     sensitivityXMult: 1,
     sensitivityYMult: 1,
     moveSpeedMult: 1,
-    crosshairHeight: 0.5,
+    crosshairHeight: 0.4,
     shoulderOffset: 0.18,
   });
   const [locked, setLocked] = useState(false);

@@ -47,7 +47,7 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   sensitivityX: 1,
   sensitivityY: 1,
   volume: 1,
-  crosshairHeight: 0.5,
+  crosshairHeight: 0.4,
   shoulderOffset: 0.18,
   keybinds: { ...DEFAULT_KEYBINDINGS },
 };
