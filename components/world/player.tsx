@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
@@ -141,6 +141,21 @@ const SLIDE_PARTICLE_INTERVAL  = 0.033; // seconds between spawns
  * zero". See the camera block's doc comment below for the exact bug this
  * prevents. */
 const MIN_CAMERA_WORLD_Y = 0.35;
+// --- Aim reticle (world-space, billboarded) --------------------------------
+// A glowing crosshair that floats IN THE WORLD in front of the character (not
+// a fixed 2D screen dot) — it shows where a swing lands and snaps onto the
+// auto-aimed target. `FORWARD` = how far ahead of the player it sits when no
+// target is in range; `FLOAT_HEIGHT` = how high above the feet it hovers (sits
+// around head height so it reads clearly above the body); `TARGET_HEIGHT` =
+// height offset when it snaps onto a target (roughly chest). Eased so it glides
+// rather than teleports.
+const RETICLE_FORWARD = 2.15;
+const RETICLE_FLOAT_HEIGHT = 1.5;
+const RETICLE_TARGET_HEIGHT = 1.1;
+const RETICLE_FOLLOW_RATE = 18;
+const RETICLE_SCALE_RATE = 16;
+const RETICLE_COLOR_IDLE = new THREE.Color("#67e8f9"); // cyan — free aim
+const RETICLE_COLOR_LOCKED = new THREE.Color("#ff5238"); // red — target in range
 const GRAVITY = -18;
 const JUMP_VELOCITY = 6.2;
 const STATS_SYNC_INTERVAL = 0.05; // 20 Hz — halved from 0.1 to halve animation-state lag
@@ -352,6 +367,30 @@ export function Player({
   // back. Ref, not state — read/written inside useFrame only.
   const faceTargetHeading = useRef<number | null>(null);
   const faceTargetTimer = useRef(0);
+  // Aim reticle: the group is positioned/scaled/billboarded imperatively every
+  // frame (no re-renders); `reticleAim` is the eased target position. One
+  // shared additive material across all its meshes — colour is set per frame
+  // (idle cyan / locked red); disposed on unmount since we created it by hand.
+  const reticleGroup = useRef<THREE.Group>(null);
+  const reticleAim = useRef(new THREE.Vector3());
+  // False until the reticle has been shown at least once since last hidden —
+  // lets the first visible frame snap to its spot instead of streaking there
+  // from the world origin.
+  const reticlePlaced = useRef(false);
+  const reticleMat = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: RETICLE_COLOR_IDLE.clone(),
+        transparent: true,
+        opacity: 0.92,
+        depthTest: false,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
+    []
+  );
+  useEffect(() => () => reticleMat.dispose(), [reticleMat]);
   const walkClock = useRef(0);
   const walkAmplitude = useRef(0);
   const fallWobble = useRef(0);
@@ -1251,6 +1290,46 @@ export function Player({
       }
     }
 
+    // --- Aim reticle: floats in the world in front of the character where a
+    // swing would land, and snaps onto the auto-aimed target (turns red) when
+    // one is in range. Billboarded to the camera and drawn on top (depthTest
+    // off) so it's always readable. Position is eased so it glides. Shown only
+    // while actually playing (entered + look/touch active + alive).
+    if (reticleGroup.current) {
+      const show = active && locked && alive;
+      reticleGroup.current.visible = show;
+      if (show) {
+        const onTarget = sel.pos !== null;
+        if (onTarget && sel.pos) {
+          reticleAim.current.set(sel.pos.x, sel.pos.y + RETICLE_TARGET_HEIGHT, sel.pos.z);
+        } else {
+          const h = g.rotation.y;
+          reticleAim.current.set(
+            g.position.x + Math.sin(h) * RETICLE_FORWARD,
+            g.position.y + RETICLE_FLOAT_HEIGHT,
+            g.position.z + Math.cos(h) * RETICLE_FORWARD
+          );
+        }
+        if (!reticlePlaced.current) {
+          reticleGroup.current.position.copy(reticleAim.current);
+          reticlePlaced.current = true;
+        } else {
+          reticleGroup.current.position.lerp(reticleAim.current, 1 - Math.exp(-delta * RETICLE_FOLLOW_RATE));
+        }
+        reticleGroup.current.quaternion.copy(camera.quaternion);
+        const s = THREE.MathUtils.lerp(
+          reticleGroup.current.scale.x,
+          onTarget ? 1.3 : 1,
+          1 - Math.exp(-delta * RETICLE_SCALE_RATE)
+        );
+        reticleGroup.current.scale.setScalar(s);
+        reticleMat.color.copy(onTarget ? RETICLE_COLOR_LOCKED : RETICLE_COLOR_IDLE);
+      } else {
+        // Hidden (menu / death / left) — re-snap to its spot next time it shows.
+        reticlePlaced.current = false;
+      }
+    }
+
     combatRef.current.playerPos.copy(g.position);
     combatRef.current.playerHeading = g.rotation.y;
 
@@ -1561,6 +1640,33 @@ export function Player({
           <SlashEffect color={s.color} hit={s.hit} />
         </group>
       ))}
+
+      {/* Aim reticle — a world-space, camera-billboarded crosshair that hovers
+          in front of the character (never a fixed screen dot). Positioned /
+          scaled / coloured entirely from useFrame above; all meshes share one
+          additive material and draw on top (renderOrder + depthTest:false) so
+          it's always visible. Local geometry lives in the XY plane; copying the
+          camera quaternion each frame turns that into a flat on-screen reticle. */}
+      <group ref={reticleGroup} visible={false} scale={1}>
+        <mesh material={reticleMat} renderOrder={9999}>
+          <ringGeometry args={[0.132, 0.18, 44]} />
+        </mesh>
+        <mesh material={reticleMat} renderOrder={9999}>
+          <circleGeometry args={[0.026, 18]} />
+        </mesh>
+        <mesh material={reticleMat} renderOrder={9999} position={[0, 0.265, 0]}>
+          <planeGeometry args={[0.026, 0.1]} />
+        </mesh>
+        <mesh material={reticleMat} renderOrder={9999} position={[0, -0.265, 0]}>
+          <planeGeometry args={[0.026, 0.1]} />
+        </mesh>
+        <mesh material={reticleMat} renderOrder={9999} position={[0.265, 0, 0]}>
+          <planeGeometry args={[0.1, 0.026]} />
+        </mesh>
+        <mesh material={reticleMat} renderOrder={9999} position={[-0.265, 0, 0]}>
+          <planeGeometry args={[0.1, 0.026]} />
+        </mesh>
+      </group>
 
       {/* Slide trail — elongated glow ribbon behind the player.
           Siblings of `group`, positioned in world space from useFrame. */}
