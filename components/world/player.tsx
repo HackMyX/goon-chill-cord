@@ -8,7 +8,7 @@ import { StyledUsername } from "@/components/ui/styled-username";
 import { rarityColorFor, type EquippedItem } from "@/lib/rarity-colors";
 import { getBadgeStyle } from "@/lib/badges";
 import { SlashEffect, SLASH_EFFECT_LIFETIME_MS } from "@/components/world/hit-fx";
-import { getEquippedDamage, capsuleHitTest, momentumMultiplier, getPerkMultiplier, applyIncomingDamage, MAX_PVP_DAMAGE } from "@/lib/combat";
+import { getEquippedDamage, momentumMultiplier, getPerkMultiplier, applyIncomingDamage, MAX_PVP_DAMAGE } from "@/lib/combat";
 import { attemptPvpHit } from "@/lib/actions/pvp";
 import type { CharacterConfig } from "@/lib/character-config";
 import { CharacterModel, type CharacterLimbRefs } from "@/components/world/character-model";
@@ -20,7 +20,6 @@ import { WORLD_RADIUS } from "@/lib/world-config";
 import { resolveObstacleCollision, randomSpawnPoint, segmentBlockedByObstacle, type Obstacle } from "@/lib/world-obstacles";
 import { debugLog } from "@/lib/debug";
 import { mobileInput, consumeMobileAttack, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
-import { aimState } from "@/lib/world-aim";
 import {
   broadcastTransform,
   subscribeToWorldPvpDamage,
@@ -142,28 +141,6 @@ const SLIDE_PARTICLE_INTERVAL  = 0.033; // seconds between spawns
  * zero". See the camera block's doc comment below for the exact bug this
  * prevents. */
 const MIN_CAMERA_WORLD_Y = 0.35;
-// --- Over-the-shoulder camera offset (real third-person targeting) ---------
-// Both the camera position AND its look-target are shifted right+up by these
-// amounts, so the *view direction* is unchanged (a clean lateral pan) but the
-// character now sits in the left third of the screen and dead-center is over
-// clear world instead of the player's own back. That is what makes a
-// screen-center crosshair actually point *into the world* — the old
-// screen-space dot read as "aiming at your own chest" precisely because the
-// camera sat dead behind the player with no offset. `RIGHT` is along the
-// camera's screen-right axis (-cos(yaw), sin(yaw) — same axis player strafing
-// derives, see the movement block); `UP` lifts the framing a touch so the
-// reticle rides above the horizon line rather than into the dirt.
-const SHOULDER_RIGHT = 0.7;
-const SHOULDER_UP = 0.22;
-// Screen-space acquisition radius, in NDC (viewport is [-1,1] per axis, corner
-// ≈1.41). A monster/player whose projected chest sits within this of the
-// reticle center is treated as "under the crosshair" and wins target
-// selection over the plain forward-cone fallback. Generous on purpose — the
-// candidate is already gated by melee `attackRange` and a wall check, so you
-// can only ever lock something you could already reach; this just makes the
-// swing land on exactly the one the reticle is on rather than merely "nearest
-// in front". */
-const ACQUIRE_NDC = 0.2;
 const GRAVITY = -18;
 const JUMP_VELOCITY = 6.2;
 const STATS_SYNC_INTERVAL = 0.05; // 20 Hz — halved from 0.1 to halve animation-state lag
@@ -300,10 +277,6 @@ export function Player({
   const keys = useKeyboardControls();
   const attack = useAttackInput(canvasRef);
   const { camera } = useThree();
-  // Hide the screen-space crosshair the instant this player unmounts (leaving
-  // the world) so a stale reticle never lingers on the next screen — the
-  // per-frame `aimState.active` write above stops the moment useFrame does.
-  useEffect(() => () => { aimState.active = false; }, []);
   // One-shot slash VFX per swing — the only React state in this otherwise
   // fully-imperative-refs component, same "spawn into a short-lived list,
   // setTimeout removes it" idiom monster.tsx already uses for its own
@@ -374,9 +347,11 @@ export function Player({
   const moveDir = useRef(new THREE.Vector3());
   const cameraTarget = useRef(new THREE.Vector3());
   const lookTarget = useRef(new THREE.Vector3());
-  // Reused scratch vector for per-frame world→NDC projection during crosshair
-  // target acquisition — never allocate inside useFrame.
-  const ndcScratch = useRef(new THREE.Vector3());
+  // How long (seconds) the body keeps auto-facing the last struck target after
+  // a swing, so the character visibly pivots to hit rather than swinging at its
+  // back. Ref, not state — read/written inside useFrame only.
+  const faceTargetHeading = useRef<number | null>(null);
+  const faceTargetTimer = useRef(0);
   const walkClock = useRef(0);
   const walkAmplitude = useRef(0);
   const fallWobble = useRef(0);
@@ -650,12 +625,15 @@ export function Player({
     const viewYaw = cc.yaw + cc.freeLookYaw;
     const viewPitch = THREE.MathUtils.clamp(cc.pitch + cc.freeLookPitch, PITCH_MIN, PITCH_MAX);
 
-    // --- Body heading: eases toward the camera's look yaw every frame —
-    // the one and only place the character's rotation.y is ever set. When
-    // the pointer isn't locked (menus, "click to play" overlay) input is
-    // simply not read below, so the character just stands still facing
-    // wherever it last faced.
-    g.rotation.y += angleDelta(g.rotation.y, cc.yaw) * (1 - Math.exp(-delta * CHARACTER_TURN_RATE));
+    // NOTE (Roblox-Standard control model): the body no longer follows the
+    // camera yaw. WASD is still camera-relative (movement basis = `cc.yaw`
+    // below), but the character now turns to face its *movement direction*
+    // (and, briefly, whatever target a swing just struck) — the actual body-
+    // heading ease happens AFTER movement + the melee scan are known, just
+    // before the camera block. The camera trails behind on `cc.yaw`/`cc.pitch`
+    // (mouse-look), so you look around freely without the body spinning to the
+    // mouse. There is no crosshair; attacks auto-aim to the nearest target in
+    // range.
 
     const moveForward =
       locked && alive ? (keys.state.current.forward ? 1 : 0) - (keys.state.current.backward ? 1 : 0) : 0;
@@ -882,51 +860,28 @@ export function Player({
       }
     }
 
-    // --- Melee: scan the monster registry *and* the remote-player registry
-    // (components/world/remote-players.tsx) for the single nearest *alive*
-    // target standing inside the forward hit capsule (lib/combat.ts
-    // `capsuleHitTest` — a fixed-radius cylinder extending ATTACK_RANGE in
-    // front of the player, not an angle-cone, see that function's doc
-    // comment for why). `anyInRange` (plain radial distance, ignoring
-    // facing entirely) separately drives the ground ring's color every
-    // frame, attack or not, so the radius is always honestly shown
-    // regardless of which way the player is facing. Whichever kind (monster
-    // or player) ends up nearest wins outright — a swing only ever lands on
-    // one target, never both.
+    // --- Melee (Roblox-Standard auto-aim): no crosshair. A swing simply lands
+    // on the single NEAREST alive target within `attackRange` — monster or
+    // remote player, whichever is closer — regardless of which way the body is
+    // currently facing, and the body then pivots to face it (see the body-
+    // heading block just before the camera). This is the "attacks auto-hit
+    // whatever is in range" model the player asked for: you never have to line
+    // up a reticle, you run up to something and hit it. `anyInRange` drives the
+    // ground ring's colour exactly as before. Monster hits are wall-checked (no
+    // hitting through a ruin); remote players are not (PvP validity is decided
+    // server-side, unchanged). `m.hitRadius` isn't needed here anymore — pure
+    // radial range is the rule — but is still passed to the server for PvP.
     let anyInRange = false;
-    // Two target-selection tracks, evaluated together per candidate:
-    //  • AIM (crosshair) — the candidate whose projected chest sits nearest
-    //    the screen-center reticle within ACQUIRE_NDC. This is the "real"
-    //    third-person targeting: with the over-the-shoulder camera the reticle
-    //    points into the world, and this makes the swing land on exactly what
-    //    it's over, screen-space, not merely "nearest thing in front".
-    //  • CONE (fallback) — the plain forward `capsuleHitTest` along `cc.yaw`,
-    //    unchanged from before. Kept as a strict fallback so nothing that used
-    //    to be hittable ever stops being hittable (e.g. a mob dead-ahead but
-    //    just outside the reticle radius). Whichever track resolves, the AIM
-    //    track wins when it found anything.
-    // Both still pick a single winner — a swing only ever lands on one target.
-    // State lives on ONE typed object rather than a spray of `let`s so the
-    // fields keep their declared `… | null` type at the read sites below: TS
-    // flow-narrows a closure-mutated `let` to `null` (it can't see `consider`
-    // assign it), which would make `x !== null` collapse to `never`. Object
-    // properties aren't narrowed that way, so `sel.aimMonster !== null` reads
-    // as the real union.
     type MH = import("@/components/world/combat-types").MonsterHandle;
     const sel = {
-      coneDist: Infinity,
-      coneMonster: null as MH | null,
-      conePlayerId: null as string | null,
-      conePos: null as THREE.Vector3 | null,
-      aimNdc: Infinity,
-      aimMonster: null as MH | null,
-      aimPlayerId: null as string | null,
-      aimPos: null as THREE.Vector3 | null,
+      dist: Infinity,
+      monster: null as MH | null,
+      playerId: null as string | null,
+      pos: null as THREE.Vector3 | null,
     };
 
     const consider = (
       pos: THREE.Vector3,
-      hitRadius: number,
       monster: MH | null,
       playerId: string | null,
       checkWall: boolean
@@ -936,84 +891,36 @@ export function Player({
       const dist = Math.hypot(dx, dz);
       if (dist > characterConfig.attackRange) return;
       anyInRange = true;
-      // Kein Treffer DURCH Wände: blockierende Struktur zwischen Spieler und
-      // Ziel? (Nur für Monster — PvP-Trefferprüfung ist serverseitig und war
-      // hier noch nie wandgeprüft; das bleibt unverändert.)
+      // Kein Treffer DURCH Wände (nur Monster; PvP serverseitig geprüft).
       if (checkWall && segmentBlockedByObstacle(obstaclesRef?.current, g.position.x, g.position.z, pos.x, pos.z)) return;
-      // AIM: Weltposition (Brusthöhe) → NDC, Abstand zur Bildschirmmitte
-      // (dem Fadenkreuz). `project` nutzt die Kamera-Matrizen vom *letzten*
-      // Frame (die Kamera wird erst unten neu positioniert) — 1 Frame Versatz,
-      // für ein Fadenkreuz nicht wahrnehmbar. `z < 1` schließt alles hinter
-      // der Kamera aus (dort kippt die Projektion).
-      ndcScratch.current.set(pos.x, pos.y + 1.1, pos.z).project(camera);
-      if (ndcScratch.current.z < 1) {
-        const ndcDist = Math.hypot(ndcScratch.current.x, ndcScratch.current.y);
-        if (ndcDist < ACQUIRE_NDC && ndcDist < sel.aimNdc) {
-          sel.aimNdc = ndcDist;
-          sel.aimMonster = monster;
-          sel.aimPlayerId = playerId;
-          sel.aimPos = pos;
-        }
-      }
-      // CONE fallback — identisch zur bisherigen Vorwärts-Kegel-Auswahl:
-      // `cc.yaw` (die verbindliche Ziel-/Lauf-/Körperrichtung), NICHT
-      // `viewYaw` (der aktuelle Kamera-Blick inkl. Free-Look). Ein früherer
-      // Versuch mit `viewYaw` führte zu „ich treffe nicht, was direkt vor mir
-      // steht", weil beim Free-Look die Kamera — nicht die Waffe — woanders
-      // hinzeigte. `m.hitRadius` (variantenskalierter Trefferradius) statt des
-      // Flach-Defaults, damit große Varianten nicht wie punktgroße whiffen.
-      if (
-        capsuleHitTest(
-          g.position.x,
-          g.position.z,
-          cc.yaw,
-          pos.x,
-          pos.z,
-          characterConfig.attackRange,
-          hitRadius,
-          characterConfig.attackConeHalfAngle
-        )
-      ) {
-        if (dist < sel.coneDist) {
-          sel.coneDist = dist;
-          sel.coneMonster = monster;
-          sel.conePlayerId = playerId;
-          sel.conePos = pos; // selected target's position, monster or player
-        }
+      if (dist < sel.dist) {
+        sel.dist = dist;
+        sel.monster = monster;
+        sel.playerId = playerId;
+        sel.pos = pos;
       }
     };
 
     for (const m of monsterRegistryRef.current) {
       if (!m.isAlive()) continue;
-      consider(m.getPosition(), m.hitRadius, m, null, true);
+      consider(m.getPosition(), m, null, true);
     }
     for (const p of remotePlayerRegistryRef.current) {
-      consider(p.getPosition(), characterConfig.attackHitRadius, null, p.id, false);
+      consider(p.getPosition(), null, p.id, false);
     }
 
-    // AIM wins whenever the crosshair was over something; otherwise the
-    // forward cone decides (unchanged behaviour). Downstream attack code reads
-    // only these three, exactly as before. `selectedPos` is the winner's world
-    // position (monster or player) — both pos trackers store `pos` regardless
-    // of kind — used just below for the aim heading.
-    const aimHit = sel.aimMonster !== null || sel.aimPlayerId !== null;
-    const nearestMonster: MH | null = aimHit ? sel.aimMonster : sel.coneMonster;
-    const nearestPlayerId: string | null = aimHit ? sel.aimPlayerId : sel.conePlayerId;
-    const selectedPos: THREE.Vector3 | null = aimHit ? sel.aimPos : sel.conePos;
-    const nearestPlayerPos: THREE.Vector3 | null = nearestPlayerId ? selectedPos : null;
-    // Aim heading = straight at the selected target when there is one (so the
-    // swing VFX + server PvP heading point exactly where the hit lands), else
-    // the committed look yaw. atan2(dx, dz) matches this app's sin/cos-forward
-    // convention everywhere else.
+    const nearestMonster: MH | null = sel.monster;
+    const nearestPlayerId: string | null = sel.playerId;
+    const nearestPlayerPos: THREE.Vector3 | null = nearestPlayerId ? sel.pos : null;
+    // Heading straight at the target being struck (so the swing VFX + server
+    // PvP heading point exactly where the hit lands, and the body pivots to
+    // it). No target → face the current movement direction (or keep the last
+    // heading when idle). atan2(dx, dz) = this app's sin/cos-forward convention.
+    const moveHeading = moving ? Math.atan2(moveDir.current.x, moveDir.current.z) : null;
     const aimHeading =
-      selectedPos !== null
-        ? Math.atan2(selectedPos.x - g.position.x, selectedPos.z - g.position.z)
-        : cc.yaw;
-    // Reticle state for the screen-space crosshair overlay: shown only while
-    // actually in-game (entered + look active + alive), red when a swing right
-    // now would connect.
-    aimState.active = active && locked && alive;
-    aimState.targetAcquired = nearestMonster !== null || nearestPlayerId !== null;
+      sel.pos !== null
+        ? Math.atan2(sel.pos.x - g.position.x, sel.pos.z - g.position.z)
+        : moveHeading ?? g.rotation.y;
 
     cameraShake.current = Math.max(0, cameraShake.current - delta * 6);
     attackCooldown.current = Math.max(0, attackCooldown.current - delta);
@@ -1028,34 +935,22 @@ export function Player({
     if (locked && alive && attackPressed && attackCooldown.current <= 0 && !combatRef.current.invulnerable) {
       attackCooldown.current = characterConfig.attackCooldown;
       attackProgress.current = 0.0001; // nudge off exactly 0 so the block below picks it up this frame
+      // Auto-aim pivot: if this swing has a target in range, turn the body to
+      // face it for the duration of the swing (eased in the body-heading block
+      // before the camera) so the character visibly strikes toward the enemy
+      // instead of swinging at its own side.
+      if (sel.pos !== null) {
+        faceTargetHeading.current = aimHeading;
+        faceTargetTimer.current = ATTACK_SWING_DURATION;
+      }
       // Slash VFX (hit-fx.tsx) — fired on every swing, hit or miss, exactly
-      // like the arm animation itself; only the floating damage number
-      // popups (monster.tsx) are conditional on actually landing.
-      //
-      // Position/rotation computed here in *world space* from `cc.yaw`
-      // (the body/weapon's actual facing — same direction the hit-test
-      // above uses, and the same one `group`'s own rotation eases toward),
-      // not rendered as a child of `group` directly only because that
-      // would double up the existing easing instead of snapping to the
-      // exact direction the swing just used. An earlier version used
-      // `viewYaw` (the camera's current look, free-look offset included)
-      // instead — which seemed necessary at the time to make the slash
-      // visible on screen during free-look, but the *actual* fix for that
-      // turned out to be unrelated (use-attack-input.ts's mousedown-vs-
-      // pointerdown bug). Using `viewYaw` here just relocated the slash
-      // (and the hit-test) to wherever the camera glanced instead of
-      // where the weapon really swings, which is exactly the "can't hit
-      // what's right in front of my character" report. `cc.yaw` matches
-      // the weapon. Local offset (lx, ly, lz) rotated into world space by
-      // `cc.yaw` using this app's standard forward/right convention
-      // (forward=(sinθ,cosθ), right=(-cosθ,sinθ) — see player.tsx's rx/rz
-      // derivation earlier in this file for the full reasoning).
-      // `aimHeading` (computed above): when a target is locked it points
-      // straight at that target — so the slash arcs toward exactly what the
-      // crosshair acquired and what actually takes the hit. With NO target it
-      // is identical to `cc.yaw`, so a swing into empty air is unchanged from
-      // before. (Still never `viewYaw` — free-look must not relocate the
-      // weapon; see the hit-test reasoning above.)
+      // like the arm animation itself; only the floating damage number popups
+      // (monster.tsx) are conditional on actually landing. Position/rotation in
+      // world space from `aimHeading` (straight at the struck target, or the
+      // movement direction on a whiff) using this app's forward/right
+      // convention (forward=(sinθ,cosθ), right=(-cosθ,sinθ)); rendered off
+      // `group` so it snaps to the exact swing direction rather than doubling
+      // the body's own ease.
       const slashId = ++slashEffectSeq;
       const slashColor = rarityColorFor(equippedByCategory.weapon_cosmetic, "#e5e7eb");
       const slashLocal = { x: 0.32, y: 1.3, z: 0.55 };
@@ -1331,6 +1226,31 @@ export function Player({
       }
     }
 
+    // --- Body heading (Roblox-Standard): the character turns to face where it
+    // is going, not where the camera looks. Priority:
+    //   1) a just-struck target — pivot to it for the swing (fast), so attacks
+    //      read as "turn and hit";
+    //   2) otherwise the current movement direction (`moveHeading`) while
+    //      moving;
+    //   3) otherwise keep the last heading (stand still facing where you were).
+    // Only steered while locked+alive; on menus/"click to play"/death the body
+    // just holds its pose. `angleDelta` takes the shortest way around the
+    // circle; the exponential factor is frame-rate-independent.
+    faceTargetTimer.current = Math.max(0, faceTargetTimer.current - delta);
+    if (locked && alive) {
+      let targetHeading: number | null = null;
+      let rate = CHARACTER_TURN_RATE;
+      if (faceTargetTimer.current > 0 && faceTargetHeading.current !== null) {
+        targetHeading = faceTargetHeading.current;
+        rate = CHARACTER_TURN_RATE * 1.8; // snappier pivot onto a target
+      } else if (moveHeading !== null) {
+        targetHeading = moveHeading;
+      }
+      if (targetHeading !== null) {
+        g.rotation.y += angleDelta(g.rotation.y, targetHeading) * (1 - Math.exp(-delta * rate));
+      }
+    }
+
     combatRef.current.playerPos.copy(g.position);
     combatRef.current.playerHeading = g.rotation.y;
 
@@ -1419,20 +1339,10 @@ export function Player({
     // one — a far smaller, rarer, and less jarring artifact than
     // continuous zoom breathing across most of the map.
     const smoothedDistance = cc.distance;
-    // Over-the-shoulder offset: shift the camera AND (below) its look-target by
-    // the SAME right+up vector, so the view *direction* is untouched — it's a
-    // pure lateral/vertical pan that slides the character into the left third
-    // and leaves screen-center over open world for the crosshair. `right` is
-    // the camera's screen-right axis (-cos, sin of the *view* yaw so it tracks
-    // free-look too), matching the strafe-right derivation earlier in this file.
-    const shoulderRightX = -Math.cos(viewYaw);
-    const shoulderRightZ = Math.sin(viewYaw);
-    const shoulderOffX = shoulderRightX * SHOULDER_RIGHT;
-    const shoulderOffZ = shoulderRightZ * SHOULDER_RIGHT;
     cameraTarget.current.set(
-      g.position.x + dirX * smoothedDistance + shoulderOffX,
-      g.position.y + dirY * smoothedDistance + SHOULDER_UP,
-      g.position.z + dirZ * smoothedDistance + shoulderOffZ
+      g.position.x + dirX * smoothedDistance,
+      g.position.y + dirY * smoothedDistance,
+      g.position.z + dirZ * smoothedDistance
     );
     // Hard floor on the camera's actual world Y position — PITCH_MIN alone
     // (a fixed *angle*) doesn't prevent this: at a low pitch and scrolled
@@ -1459,16 +1369,7 @@ export function Player({
     // smooth without needing its own independent lag on top. Zero position
     // lag at any speed, full stop.
     camera.position.copy(cameraTarget.current);
-    // Same shoulder offset as the camera position above — shifting both by the
-    // identical vector is what keeps the view direction unchanged (see the OTS
-    // note above). Reticle center therefore ends up over the point just off the
-    // player's shoulder, which is exactly where the screen-space acquisition
-    // above projects candidates against.
-    lookTarget.current.set(
-      g.position.x + shoulderOffX,
-      g.position.y + 1 + SHOULDER_UP,
-      g.position.z + shoulderOffZ
-    );
+    lookTarget.current.set(g.position.x, g.position.y + 1, g.position.z);
     camera.lookAt(lookTarget.current);
 
     // Small post-lookAt position jitter, scaled by the decaying shake

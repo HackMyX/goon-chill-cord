@@ -45,7 +45,6 @@ import { WorldSettingsPanel } from "@/components/world/world-settings-panel";
 import { loadWorldSettings, saveWorldSettings, type WorldSettings } from "@/lib/world-settings";
 import { setActiveKeybinds } from "@/components/world/use-keyboard-controls";
 import { MobileControls } from "@/components/world/mobile-controls";
-import { Crosshair } from "@/components/world/crosshair";
 import { WorldChatBubble } from "@/components/world/world-chat-bubble";
 
 interface WorldShellProps {
@@ -1185,11 +1184,6 @@ export function WorldShell({
             <span className="text-xs text-zinc-400">Maus steuert die Blickrichtung · Esc zum Pausieren</span>
           </button>
         )}
-
-        {/* Third-person crosshair — self-hides via aimState.active (set by
-            player.tsx only while entered + look-active + alive), so it's safe
-            to mount on both desktop and mobile whenever the world is up. */}
-        {!deathStats && !disconnectSummary && <Crosshair />}
 
         {/* Mobile on-screen controls — only rendered on touch devices when actively playing */}
         {isMobile && !deathStats && !disconnectSummary && (
