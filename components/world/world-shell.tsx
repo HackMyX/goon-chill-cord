@@ -627,6 +627,8 @@ export function WorldShell({
     setWorldSettings(s);
     cameraControls.state.current.sensitivityXMult = s.sensitivityX;
     cameraControls.state.current.sensitivityYMult = s.sensitivityY;
+    cameraControls.state.current.crosshairHeight = s.crosshairHeight;
+    cameraControls.state.current.shoulderOffset = s.shoulderOffset;
     sound.setVolume(s.volume);
     setActiveKeybinds(s.keybinds);
     saveWorldSettings(s);
@@ -636,6 +638,8 @@ export function WorldShell({
   useEffect(() => {
     cameraControls.state.current.sensitivityXMult = worldSettings.sensitivityX;
     cameraControls.state.current.sensitivityYMult = worldSettings.sensitivityY;
+    cameraControls.state.current.crosshairHeight = worldSettings.crosshairHeight;
+    cameraControls.state.current.shoulderOffset = worldSettings.shoulderOffset;
     sound.setVolume(worldSettings.volume);
     setActiveKeybinds(worldSettings.keybinds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1187,8 +1191,11 @@ export function WorldShell({
         )}
 
         {/* Mouse-aim crosshair — self-hides via aimState.active (set by
-            player.tsx). Fixed on screen; mouse-look sweeps the world under it. */}
-        {!deathStats && !disconnectSummary && <Crosshair />}
+            player.tsx). Fixed on screen; mouse-look sweeps the world under it.
+            Vertical position is user-adjustable (world settings). */}
+        {!deathStats && !disconnectSummary && (
+          <Crosshair topFraction={worldSettings.crosshairHeight} />
+        )}
 
         {/* Mobile on-screen controls — only rendered on touch devices when actively playing */}
         {isMobile && !deathStats && !disconnectSummary && (

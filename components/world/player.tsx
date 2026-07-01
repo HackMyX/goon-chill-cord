@@ -152,17 +152,16 @@ const MIN_CAMERA_WORLD_Y = 0.35;
 // character when zoomed out (a fixed world shift maps to fewer screen pixels the
 // farther the camera sits), so the reticle still sat on the body. A fraction of
 // the distance keeps the on-screen offset roughly constant at any zoom.
-const SHOULDER_FRACTION = 0.2;
+// Vertical camera lift for the over-the-shoulder framing. The *side* offset is
+// user-adjustable (cc.shoulderOffset, fraction of camera distance).
 const SHOULDER_UP = 0.3;
-// Crosshair target acquisition. The reticle lives at a fixed SCREEN spot
-// (crosshair.tsx: left 50%, top 44%); in normalized device coords that is
-// x=0, y = 1 − 2·0.44 = +0.12 (NDC y is +up). Keep these two in sync. A target
-// whose projected upper body sits within `ACQUIRE_NDC` of that point counts as
-// "under the crosshair" and gets hit — this projection is what makes the
-// crosshair actually match what a swing lands on despite the over-the-shoulder
-// parallax (a plain forward cone along cc.yaw would be offset from the reticle).
+// Crosshair target acquisition. The reticle sits at screen x=0 (horizontal
+// centre) and a user-set vertical position (cc.crosshairHeight → xhairNdcY,
+// computed per frame). A target whose projected upper body lands within
+// `ACQUIRE_NDC` of that point counts as "under the crosshair" and gets hit —
+// screen-space projection is what keeps the hit matching the reticle despite
+// the over-the-shoulder parallax (a cc.yaw cone would be offset from it).
 const XHAIR_NDC_X = 0;
-const XHAIR_NDC_Y = 0.12;
 const ACQUIRE_NDC = 0.22;
 const AIM_TARGET_HEIGHT = 1.2; // project this far up a target's body (chest/head)
 const GRAVITY = -18;
@@ -897,6 +896,8 @@ export function Player({
     // the ground ring. `project` uses last frame's camera matrices (the camera
     // is repositioned later this frame) — 1 frame of lag, imperceptible.
     let anyInRange = false;
+    // Crosshair NDC y from the user-set vertical position (0.5 = center → 0).
+    const xhairNdcY = 1 - 2 * cc.crosshairHeight;
     type MH = import("@/components/world/combat-types").MonsterHandle;
     const sel = {
       ndc: Infinity,
@@ -920,7 +921,7 @@ export function Player({
       ndcScratch.current.set(pos.x, pos.y + AIM_TARGET_HEIGHT, pos.z).project(camera);
       if (ndcScratch.current.z >= 1) return; // behind the camera
       const ndx = ndcScratch.current.x - XHAIR_NDC_X;
-      const ndy = ndcScratch.current.y - XHAIR_NDC_Y;
+      const ndy = ndcScratch.current.y - xhairNdcY;
       const nd = Math.hypot(ndx, ndy);
       if (nd > ACQUIRE_NDC) return;
       if (nd < sel.ndc) {
@@ -1372,7 +1373,7 @@ export function Player({
     // so the on-screen offset stays constant at any zoom.
     const shoulderRightX = -Math.cos(viewYaw);
     const shoulderRightZ = Math.sin(viewYaw);
-    const shoulderMag = SHOULDER_FRACTION * smoothedDistance;
+    const shoulderMag = cc.shoulderOffset * smoothedDistance;
     const shoulderOffX = shoulderRightX * shoulderMag;
     const shoulderOffZ = shoulderRightZ * shoulderMag;
     cameraTarget.current.set(

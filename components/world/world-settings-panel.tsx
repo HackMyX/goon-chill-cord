@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, X, MousePointer2, Volume2, RotateCcw, ArrowLeftRight, ArrowUpDown, Keyboard, Pencil, Crown } from "lucide-react";
+import { Settings, X, MousePointer2, Volume2, RotateCcw, ArrowLeftRight, ArrowUpDown, Keyboard, Pencil, Crown, Crosshair, MoveHorizontal } from "lucide-react";
 import { WorldLeaderboard } from "@/components/world/world-leaderboard";
 import {
   type WorldSettings,
@@ -25,9 +25,11 @@ interface SliderProps {
   step: number;
   onChange: (v: number) => void;
   sublabel?: string;
+  /** Percent shown as the "Standard: …%" hint (defaults to 100). */
+  standardPct?: number;
 }
 
-function Slider({ label, icon, value, min, max, step, onChange, sublabel }: SliderProps) {
+function Slider({ label, icon, value, min, max, step, onChange, sublabel, standardPct = 100 }: SliderProps) {
   const pct = Math.round(((value - min) / (max - min)) * 100);
   const display = `${Math.round(value * 100)}%`;
   return (
@@ -59,7 +61,7 @@ function Slider({ label, icon, value, min, max, step, onChange, sublabel }: Slid
       </div>
       <div className="flex justify-between text-[10px] text-zinc-600">
         <span>{Math.round(min * 100)}%</span>
-        <span className="text-zinc-700">Standard: 100%</span>
+        <span className="text-zinc-700">Standard: {standardPct}%</span>
         <span>{Math.round(max * 100)}%</span>
       </div>
     </div>
@@ -235,6 +237,39 @@ export function WorldSettingsPanel({ settings, onChange, onClose, userId, userna
             max={SETTINGS_BOUNDS.volume.max}
             step={SETTINGS_BOUNDS.volume.step}
             onChange={(v) => update("volume", v)}
+          />
+
+          <div className="h-px bg-white/[0.06]" />
+
+          {/* === Crosshair / camera section === */}
+          <div className="flex items-center gap-2">
+            <Crosshair className="h-4 w-4 text-purple-400" />
+            <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Fadenkreuz &amp; Kamera</span>
+            <div className="h-px flex-1 bg-white/[0.06]" />
+          </div>
+
+          <Slider
+            label="Fadenkreuz-Höhe"
+            icon={<Crosshair className="h-4 w-4 text-purple-400" />}
+            sublabel="Oben ↔ Unten"
+            value={settings.crosshairHeight}
+            min={SETTINGS_BOUNDS.crosshairHeight.min}
+            max={SETTINGS_BOUNDS.crosshairHeight.max}
+            step={SETTINGS_BOUNDS.crosshairHeight.step}
+            standardPct={Math.round(DEFAULT_WORLD_SETTINGS.crosshairHeight * 100)}
+            onChange={(v) => update("crosshairHeight", v)}
+          />
+
+          <Slider
+            label="Schulter-Versatz"
+            icon={<MoveHorizontal className="h-4 w-4 text-purple-400" />}
+            sublabel="Kamera zur Seite"
+            value={settings.shoulderOffset}
+            min={SETTINGS_BOUNDS.shoulderOffset.min}
+            max={SETTINGS_BOUNDS.shoulderOffset.max}
+            step={SETTINGS_BOUNDS.shoulderOffset.step}
+            standardPct={Math.round(DEFAULT_WORLD_SETTINGS.shoulderOffset * 100)}
+            onChange={(v) => update("shoulderOffset", v)}
           />
 
           <div className="h-px bg-white/[0.06]" />

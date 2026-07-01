@@ -17,7 +17,7 @@ import { aimState } from "@/lib/world-aim";
  * it on our own rAF loop and only write the DOM when it changes — no per-frame
  * React re-render. Purely presentational + `pointer-events: none`.
  */
-export function Crosshair() {
+export function Crosshair({ topFraction = 0.5 }: { topFraction?: number }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const markRef = useRef<HTMLDivElement>(null);
 
@@ -50,7 +50,7 @@ export function Crosshair() {
       aria-hidden
       style={{
         position: "absolute",
-        top: "44%", // slightly above center so it rides above the character
+        top: `${topFraction * 100}%`, // user-adjustable (world settings)
         left: "50%",
         transform: "translate(-50%, -50%)",
         zIndex: 12,
