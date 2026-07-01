@@ -272,7 +272,11 @@ export function Scene({
 
       <Environment env={environmentConfig} obstacles={obstacles} combatRef={combatRef} />
 
-      <ContactShadows position={[0, 0, 0]} opacity={0.6} scale={12} blur={2.2} far={4} />
+      {/* ContactShadows re-renders the scene into a shadow texture every frame —
+          a full extra pass. Cheap enough on desktop, but on mobile it's a real
+          cost on top of the directional shadow, so we drop it there (the
+          directional light still grounds everything with a cast shadow). */}
+      {!mobileMode && <ContactShadows position={[0, 0, 0]} opacity={0.6} scale={12} blur={2.2} far={4} />}
 
       <Player
         userId={userId}

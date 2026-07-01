@@ -162,7 +162,7 @@ const SHOULDER_UP = 0.3;
 // screen-space projection is what keeps the hit matching the reticle despite
 // the over-the-shoulder parallax (a cc.yaw cone would be offset from it).
 const XHAIR_NDC_X = 0;
-const ACQUIRE_NDC = 0.22;
+const ACQUIRE_NDC = 0.19;
 const AIM_TARGET_HEIGHT = 1.2; // project this far up a target's body (chest/head)
 const GRAVITY = -18;
 const JUMP_VELOCITY = 6.2;
@@ -899,56 +899,52 @@ export function Player({
     // Crosshair NDC y from the user-set vertical position (0.5 = center → 0).
     const xhairNdcY = 1 - 2 * cc.crosshairHeight;
     type MH = import("@/components/world/combat-types").MonsterHandle;
-    const sel = {
-      ndc: Infinity,
-      monster: null as MH | null,
-      playerId: null as string | null,
-      pos: null as THREE.Vector3 | null,
-    };
-
-    const consider = (
-      pos: THREE.Vector3,
-      monster: MH | null,
-      playerId: string | null,
-      checkWall: boolean
-    ) => {
-      const dx = pos.x - g.position.x;
-      const dz = pos.z - g.position.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist > characterConfig.attackRange) return;
-      anyInRange = true;
-      if (checkWall && segmentBlockedByObstacle(obstaclesRef?.current, g.position.x, g.position.z, pos.x, pos.z)) return;
-      ndcScratch.current.set(pos.x, pos.y + AIM_TARGET_HEIGHT, pos.z).project(camera);
-      if (ndcScratch.current.z >= 1) return; // behind the camera
-      const ndx = ndcScratch.current.x - XHAIR_NDC_X;
-      const ndy = ndcScratch.current.y - xhairNdcY;
-      const nd = Math.hypot(ndx, ndy);
-      if (nd > ACQUIRE_NDC) return;
-      if (nd < sel.ndc) {
-        sel.ndc = nd;
-        sel.monster = monster;
-        sel.playerId = playerId;
-        sel.pos = pos;
-      }
-    };
-
+    // Inline selection (no per-frame closure/object allocation — this runs 60×/s
+    // and the old closure form churned the GC, which showed as micro-stutter on
+    // mobile). Plain locals only.
+    let bestNdc = Infinity;
+    let nearestMonster: MH | null = null;
+    let nearestPlayerId: string | null = null;
+    let nearestPos: THREE.Vector3 | null = null;
     for (const m of monsterRegistryRef.current) {
       if (!m.isAlive()) continue;
-      consider(m.getPosition(), m, null, true);
+      const pos = m.getPosition();
+      const dist = Math.hypot(pos.x - g.position.x, pos.z - g.position.z);
+      if (dist > characterConfig.attackRange) continue;
+      anyInRange = true;
+      if (segmentBlockedByObstacle(obstaclesRef?.current, g.position.x, g.position.z, pos.x, pos.z)) continue;
+      ndcScratch.current.set(pos.x, pos.y + AIM_TARGET_HEIGHT, pos.z).project(camera);
+      if (ndcScratch.current.z >= 1) continue; // behind the camera
+      const nd = Math.hypot(ndcScratch.current.x - XHAIR_NDC_X, ndcScratch.current.y - xhairNdcY);
+      if (nd > ACQUIRE_NDC || nd >= bestNdc) continue;
+      bestNdc = nd;
+      nearestMonster = m;
+      nearestPlayerId = null;
+      nearestPos = pos;
     }
     for (const p of remotePlayerRegistryRef.current) {
-      consider(p.getPosition(), null, p.id, false);
+      const pos = p.getPosition();
+      const dist = Math.hypot(pos.x - g.position.x, pos.z - g.position.z);
+      if (dist > characterConfig.attackRange) continue;
+      anyInRange = true;
+      // Remote players aren't wall-checked (PvP validity is server-side).
+      ndcScratch.current.set(pos.x, pos.y + AIM_TARGET_HEIGHT, pos.z).project(camera);
+      if (ndcScratch.current.z >= 1) continue;
+      const nd = Math.hypot(ndcScratch.current.x - XHAIR_NDC_X, ndcScratch.current.y - xhairNdcY);
+      if (nd > ACQUIRE_NDC || nd >= bestNdc) continue;
+      bestNdc = nd;
+      nearestMonster = null;
+      nearestPlayerId = p.id;
+      nearestPos = pos;
     }
 
-    const nearestMonster: MH | null = sel.monster;
-    const nearestPlayerId: string | null = sel.playerId;
-    const nearestPlayerPos: THREE.Vector3 | null = nearestPlayerId ? sel.pos : null;
+    const nearestPlayerPos: THREE.Vector3 | null = nearestPlayerId ? nearestPos : null;
     // Heading straight at the struck target (so the swing VFX + server PvP
     // heading point exactly where the hit lands); no target → the aim/look yaw
     // `cc.yaw`, which is where the crosshair points and the body already faces.
     const aimHeading =
-      sel.pos !== null
-        ? Math.atan2(sel.pos.x - g.position.x, sel.pos.z - g.position.z)
+      nearestPos !== null
+        ? Math.atan2(nearestPos.x - g.position.x, nearestPos.z - g.position.z)
         : cc.yaw;
     // Crosshair overlay: shown while playing, red when a swing would connect.
     aimState.active = active && locked && alive;
@@ -971,7 +967,7 @@ export function Player({
       // face it for the duration of the swing (eased in the body-heading block
       // before the camera) so the character visibly strikes toward the enemy
       // instead of swinging at its own side.
-      if (sel.pos !== null) {
+      if (nearestPos !== null) {
         faceTargetHeading.current = aimHeading;
         faceTargetTimer.current = ATTACK_SWING_DURATION;
       }

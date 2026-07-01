@@ -131,6 +131,12 @@ function StatBar({
 // rekonfiguriert dann Shadow-Map/DPR/Kamera neu → kurzer schwarzer Frame.
 const WORLD_SHADOWS = { type: THREE.PCFShadowMap } as const;
 const WORLD_DPR: [number, number] = [1, 2];
+// Mobile caps the device-pixel-ratio lower: phones commonly report DPR 3, so
+// rendering at up to 2× still means a huge pixel count for a mobile GPU — the
+// single biggest, safest mobile perf lever. Slightly softer, far smoother.
+// Module-level constant (stable identity) so the Canvas never reconfigures on a
+// re-render — same reasoning as WORLD_DPR above.
+const WORLD_DPR_MOBILE: [number, number] = [1, 1.5];
 const WORLD_CAMERA = { position: [0, 2.6, 6] as [number, number, number], fov: 55 };
 
 /** Feuert genau einmal beim ersten gerenderten Frame INNERHALB der Scene-
@@ -1274,7 +1280,7 @@ export function WorldShell({
           // without ever tripping the deprecation warning in the first
           // place.
           shadows={WORLD_SHADOWS}
-          dpr={WORLD_DPR}
+          dpr={isMobile ? WORLD_DPR_MOBILE : WORLD_DPR}
           camera={WORLD_CAMERA}
           className="absolute inset-0"
           onCreated={handleCanvasCreated}
