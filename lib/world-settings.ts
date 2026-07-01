@@ -32,14 +32,6 @@ export interface WorldSettings {
   sensitivityX: number;
   sensitivityY: number;
   volume: number;
-  /** Vertical screen position of the aim crosshair, as a fraction from the top
-   * (0 = top edge, 0.5 = center, 1 = bottom). The target-acquisition also reads
-   * this so "hit what's under the crosshair" stays exact wherever it's placed. */
-  crosshairHeight: number;
-  /** Over-the-shoulder camera side offset, as a fraction of the camera distance
-   * (0 = straight behind / no offset, higher = character pushed further to the
-   * side so the crosshair sits over open world). */
-  shoulderOffset: number;
   keybinds: KeyBindings;
 }
 
@@ -47,8 +39,6 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   sensitivityX: 1,
   sensitivityY: 1,
   volume: 1,
-  crosshairHeight: 0.4,
-  shoulderOffset: 0.18,
   keybinds: { ...DEFAULT_KEYBINDINGS },
 };
 
@@ -56,8 +46,6 @@ export const SETTINGS_BOUNDS = {
   sensitivityX: { min: 0.25, max: 4, step: 0.05 },
   sensitivityY: { min: 0.25, max: 4, step: 0.05 },
   volume:       { min: 0,    max: 1, step: 0.01  },
-  crosshairHeight: { min: 0.3, max: 0.72, step: 0.01 },
-  shoulderOffset:  { min: 0,   max: 0.45, step: 0.01 },
 } as const;
 
 const KEY = "goon-world-v3";
@@ -106,12 +94,6 @@ export function loadWorldSettings(): WorldSettings {
       sensitivityX: clamp(p.sensitivityX ?? legacySens, SETTINGS_BOUNDS.sensitivityX.min, SETTINGS_BOUNDS.sensitivityX.max),
       sensitivityY: clamp(p.sensitivityY ?? legacySens, SETTINGS_BOUNDS.sensitivityY.min, SETTINGS_BOUNDS.sensitivityY.max),
       volume:       clamp(p.volume, SETTINGS_BOUNDS.volume.min, SETTINGS_BOUNDS.volume.max),
-      crosshairHeight: p.crosshairHeight != null
-        ? clamp(p.crosshairHeight, SETTINGS_BOUNDS.crosshairHeight.min, SETTINGS_BOUNDS.crosshairHeight.max)
-        : DEFAULT_WORLD_SETTINGS.crosshairHeight,
-      shoulderOffset: p.shoulderOffset != null
-        ? clamp(p.shoulderOffset, SETTINGS_BOUNDS.shoulderOffset.min, SETTINGS_BOUNDS.shoulderOffset.max)
-        : DEFAULT_WORLD_SETTINGS.shoulderOffset,
       keybinds: { ...DEFAULT_KEYBINDINGS, ...savedBinds },
     };
   } catch {

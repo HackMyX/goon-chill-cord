@@ -35,14 +35,6 @@ export interface CameraControlState {
    * Written by world-shell.tsx when settings change; read by player.tsx
    * every frame to scale horizontal velocity. */
   moveSpeedMult: number;
-  /** Aim-crosshair vertical screen position, fraction from top (0.5 = center).
-   * Written by world-shell.tsx from WorldSettings; player.tsx derives the
-   * acquisition NDC from it so the hit-test tracks wherever the reticle sits. */
-  crosshairHeight: number;
-  /** Over-the-shoulder camera side offset, fraction of camera distance.
-   * Written by world-shell.tsx from WorldSettings; read by player.tsx's camera
-   * block every frame. */
-  shoulderOffset: number;
 }
 
 export const DEFAULT_YAW = 0;
@@ -139,8 +131,6 @@ export function useCameraControls(
     sensitivityXMult: 1,
     sensitivityYMult: 1,
     moveSpeedMult: 1,
-    crosshairHeight: 0.4,
-    shoulderOffset: 0.18,
   });
   const [locked, setLocked] = useState(false);
   // How many mousemove events to discard immediately after pointer lock

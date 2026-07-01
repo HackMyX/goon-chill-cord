@@ -20,7 +20,6 @@ import { WORLD_RADIUS } from "@/lib/world-config";
 import { resolveObstacleCollision, randomSpawnPoint, segmentBlockedByObstacle, type Obstacle } from "@/lib/world-obstacles";
 import { debugLog } from "@/lib/debug";
 import { mobileInput, consumeMobileAttack, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
-import { aimState } from "@/lib/world-aim";
 import {
   broadcastTransform,
   subscribeToWorldPvpDamage,
@@ -152,18 +151,6 @@ const MIN_CAMERA_WORLD_Y = 0.35;
 // character when zoomed out (a fixed world shift maps to fewer screen pixels the
 // farther the camera sits), so the reticle still sat on the body. A fraction of
 // the distance keeps the on-screen offset roughly constant at any zoom.
-// Vertical camera lift for the over-the-shoulder framing. The *side* offset is
-// user-adjustable (cc.shoulderOffset, fraction of camera distance).
-const SHOULDER_UP = 0.3;
-// Crosshair target acquisition. The reticle sits at screen x=0 (horizontal
-// centre) and a user-set vertical position (cc.crosshairHeight → xhairNdcY,
-// computed per frame). A target whose projected upper body lands within
-// `ACQUIRE_NDC` of that point counts as "under the crosshair" and gets hit —
-// screen-space projection is what keeps the hit matching the reticle despite
-// the over-the-shoulder parallax (a cc.yaw cone would be offset from it).
-const XHAIR_NDC_X = 0;
-const ACQUIRE_NDC = 0.19;
-const AIM_TARGET_HEIGHT = 1.2; // project this far up a target's body (chest/head)
 const GRAVITY = -18;
 const JUMP_VELOCITY = 6.2;
 const STATS_SYNC_INTERVAL = 0.05; // 20 Hz — halved from 0.1 to halve animation-state lag
@@ -375,9 +362,6 @@ export function Player({
   // back. Ref, not state — read/written inside useFrame only.
   const faceTargetHeading = useRef<number | null>(null);
   const faceTargetTimer = useRef(0);
-  // Reused scratch vector for per-frame world→NDC projection during crosshair
-  // target acquisition — never allocate inside useFrame.
-  const ndcScratch = useRef(new THREE.Vector3());
   const walkClock = useRef(0);
   const walkAmplitude = useRef(0);
   const fallWobble = useRef(0);
@@ -886,23 +870,17 @@ export function Player({
       }
     }
 
-    // --- Melee (mouse-aim): a swing lands on the target UNDER THE CROSSHAIR —
-    // i.e. whichever alive target within `attackRange` projects nearest the
-    // fixed screen reticle (XHAIR_NDC, within ACQUIRE_NDC). Screen-space
-    // projection (not a cc.yaw cone) is what makes the hit match the reticle
-    // exactly despite the over-the-shoulder camera offset. Monster hits are
-    // wall-checked; remote players aren't (PvP validity is server-side).
-    // `anyInRange` (pure radial distance, ignoring the crosshair) still drives
-    // the ground ring. `project` uses last frame's camera matrices (the camera
-    // is repositioned later this frame) — 1 frame of lag, imperceptible.
+    // --- Melee (Roblox-Standard auto-aim): no crosshair. A swing lands on the
+    // single NEAREST alive target within `attackRange` — monster or remote
+    // player, whichever is closer — regardless of facing, and the body then
+    // pivots to face it (see the body-heading block before the camera). Run up
+    // to something and hit it, no aiming. `anyInRange` drives the ground ring.
+    // Monster hits are wall-checked; remote players aren't (PvP is server-side).
+    // Inline (no per-frame closure/object allocation — this runs 60×/s and a
+    // closure form churns the GC → micro-stutter on mobile). Plain locals only.
     let anyInRange = false;
-    // Crosshair NDC y from the user-set vertical position (0.5 = center → 0).
-    const xhairNdcY = 1 - 2 * cc.crosshairHeight;
     type MH = import("@/components/world/combat-types").MonsterHandle;
-    // Inline selection (no per-frame closure/object allocation — this runs 60×/s
-    // and the old closure form churned the GC, which showed as micro-stutter on
-    // mobile). Plain locals only.
-    let bestNdc = Infinity;
+    let bestDist = Infinity;
     let nearestMonster: MH | null = null;
     let nearestPlayerId: string | null = null;
     let nearestPos: THREE.Vector3 | null = null;
@@ -913,11 +891,8 @@ export function Player({
       if (dist > characterConfig.attackRange) continue;
       anyInRange = true;
       if (segmentBlockedByObstacle(obstaclesRef?.current, g.position.x, g.position.z, pos.x, pos.z)) continue;
-      ndcScratch.current.set(pos.x, pos.y + AIM_TARGET_HEIGHT, pos.z).project(camera);
-      if (ndcScratch.current.z >= 1) continue; // behind the camera
-      const nd = Math.hypot(ndcScratch.current.x - XHAIR_NDC_X, ndcScratch.current.y - xhairNdcY);
-      if (nd > ACQUIRE_NDC || nd >= bestNdc) continue;
-      bestNdc = nd;
+      if (dist >= bestDist) continue;
+      bestDist = dist;
       nearestMonster = m;
       nearestPlayerId = null;
       nearestPos = pos;
@@ -927,28 +902,22 @@ export function Player({
       const dist = Math.hypot(pos.x - g.position.x, pos.z - g.position.z);
       if (dist > characterConfig.attackRange) continue;
       anyInRange = true;
-      // Remote players aren't wall-checked (PvP validity is server-side).
-      ndcScratch.current.set(pos.x, pos.y + AIM_TARGET_HEIGHT, pos.z).project(camera);
-      if (ndcScratch.current.z >= 1) continue;
-      const nd = Math.hypot(ndcScratch.current.x - XHAIR_NDC_X, ndcScratch.current.y - xhairNdcY);
-      if (nd > ACQUIRE_NDC || nd >= bestNdc) continue;
-      bestNdc = nd;
+      if (dist >= bestDist) continue;
+      bestDist = dist;
       nearestMonster = null;
       nearestPlayerId = p.id;
       nearestPos = pos;
     }
 
     const nearestPlayerPos: THREE.Vector3 | null = nearestPlayerId ? nearestPos : null;
-    // Heading straight at the struck target (so the swing VFX + server PvP
-    // heading point exactly where the hit lands); no target → the aim/look yaw
-    // `cc.yaw`, which is where the crosshair points and the body already faces.
+    // Heading straight at the struck target (swing VFX + server PvP heading land
+    // exactly there, body pivots to it); no target → the current movement
+    // direction, or the last heading when idle.
+    const moveHeading = moving ? Math.atan2(moveDir.current.x, moveDir.current.z) : null;
     const aimHeading =
       nearestPos !== null
         ? Math.atan2(nearestPos.x - g.position.x, nearestPos.z - g.position.z)
-        : cc.yaw;
-    // Crosshair overlay: shown while playing, red when a swing would connect.
-    aimState.active = active && locked && alive;
-    aimState.targetAcquired = nearestMonster !== null || nearestPlayerId !== null;
+        : moveHeading ?? g.rotation.y;
 
     cameraShake.current = Math.max(0, cameraShake.current - delta * 6);
     attackCooldown.current = Math.max(0, attackCooldown.current - delta);
@@ -1254,23 +1223,25 @@ export function Player({
       }
     }
 
-    // --- Body heading (mouse-aim / shift-lock): the character faces where you
-    // AIM — i.e. `cc.yaw`, the mouse-look direction the crosshair points along —
-    // so "where the crosshair is = where the character faces = where you hit"
-    // all agree. A just-struck slightly-off-axis target briefly overrides it
-    // (faster pivot) so the swing reads as landing exactly on that target.
-    // Only steered while locked+alive; on menus/"click to play"/death the body
-    // just holds its pose. `angleDelta` takes the shortest way; the exponential
-    // factor is frame-rate-independent.
+    // --- Body heading (Roblox-Standard): the character turns to face where it
+    // is GOING, not where the camera looks. Priority: (1) a just-struck target
+    // — pivot to it for the swing (fast) so attacks read as "turn and hit";
+    // (2) otherwise the current movement direction; (3) otherwise hold the last
+    // heading. Only steered while locked+alive. `angleDelta` takes the shortest
+    // way; the exponential factor is frame-rate-independent.
     faceTargetTimer.current = Math.max(0, faceTargetTimer.current - delta);
     if (locked && alive) {
-      let targetHeading = cc.yaw;
+      let targetHeading: number | null = null;
       let rate = CHARACTER_TURN_RATE;
       if (faceTargetTimer.current > 0 && faceTargetHeading.current !== null) {
         targetHeading = faceTargetHeading.current;
         rate = CHARACTER_TURN_RATE * 1.8; // snappier pivot onto a target
+      } else if (moveHeading !== null) {
+        targetHeading = moveHeading;
       }
-      g.rotation.y += angleDelta(g.rotation.y, targetHeading) * (1 - Math.exp(-delta * rate));
+      if (targetHeading !== null) {
+        g.rotation.y += angleDelta(g.rotation.y, targetHeading) * (1 - Math.exp(-delta * rate));
+      }
     }
 
     combatRef.current.playerPos.copy(g.position);
@@ -1361,21 +1332,10 @@ export function Player({
     // one — a far smaller, rarer, and less jarring artifact than
     // continuous zoom breathing across most of the map.
     const smoothedDistance = cc.distance;
-    // Over-the-shoulder offset (see SHOULDER_* consts): shift camera AND look-
-    // target by the SAME right+up vector so the view direction is unchanged (a
-    // pure pan) — the character slides off-centre and the fixed crosshair sits
-    // over open world. `right` = the camera's screen-right axis (-cos, sin of
-    // viewYaw, so it tracks free-look); the lateral amount scales with distance
-    // so the on-screen offset stays constant at any zoom.
-    const shoulderRightX = -Math.cos(viewYaw);
-    const shoulderRightZ = Math.sin(viewYaw);
-    const shoulderMag = cc.shoulderOffset * smoothedDistance;
-    const shoulderOffX = shoulderRightX * shoulderMag;
-    const shoulderOffZ = shoulderRightZ * shoulderMag;
     cameraTarget.current.set(
-      g.position.x + dirX * smoothedDistance + shoulderOffX,
-      g.position.y + dirY * smoothedDistance + SHOULDER_UP,
-      g.position.z + dirZ * smoothedDistance + shoulderOffZ
+      g.position.x + dirX * smoothedDistance,
+      g.position.y + dirY * smoothedDistance,
+      g.position.z + dirZ * smoothedDistance
     );
     // Hard floor on the camera's actual world Y position — PITCH_MIN alone
     // (a fixed *angle*) doesn't prevent this: at a low pitch and scrolled
@@ -1402,14 +1362,7 @@ export function Player({
     // smooth without needing its own independent lag on top. Zero position
     // lag at any speed, full stop.
     camera.position.copy(cameraTarget.current);
-    // Same shoulder offset on the look-target — shifting both by the identical
-    // vector is what keeps the view direction unchanged, so screen-center lands
-    // just off the player's shoulder, over open world where the crosshair sits.
-    lookTarget.current.set(
-      g.position.x + shoulderOffX,
-      g.position.y + 1 + SHOULDER_UP,
-      g.position.z + shoulderOffZ
-    );
+    lookTarget.current.set(g.position.x, g.position.y + 1, g.position.z);
     camera.lookAt(lookTarget.current);
 
     // Small post-lookAt position jitter, scaled by the decaying shake

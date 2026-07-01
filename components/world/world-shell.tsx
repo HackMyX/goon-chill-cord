@@ -45,7 +45,6 @@ import { WorldSettingsPanel } from "@/components/world/world-settings-panel";
 import { loadWorldSettings, saveWorldSettings, type WorldSettings } from "@/lib/world-settings";
 import { setActiveKeybinds } from "@/components/world/use-keyboard-controls";
 import { MobileControls } from "@/components/world/mobile-controls";
-import { Crosshair } from "@/components/world/crosshair";
 import { WorldChatBubble } from "@/components/world/world-chat-bubble";
 
 interface WorldShellProps {
@@ -633,8 +632,6 @@ export function WorldShell({
     setWorldSettings(s);
     cameraControls.state.current.sensitivityXMult = s.sensitivityX;
     cameraControls.state.current.sensitivityYMult = s.sensitivityY;
-    cameraControls.state.current.crosshairHeight = s.crosshairHeight;
-    cameraControls.state.current.shoulderOffset = s.shoulderOffset;
     sound.setVolume(s.volume);
     setActiveKeybinds(s.keybinds);
     saveWorldSettings(s);
@@ -644,8 +641,6 @@ export function WorldShell({
   useEffect(() => {
     cameraControls.state.current.sensitivityXMult = worldSettings.sensitivityX;
     cameraControls.state.current.sensitivityYMult = worldSettings.sensitivityY;
-    cameraControls.state.current.crosshairHeight = worldSettings.crosshairHeight;
-    cameraControls.state.current.shoulderOffset = worldSettings.shoulderOffset;
     sound.setVolume(worldSettings.volume);
     setActiveKeybinds(worldSettings.keybinds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1194,13 +1189,6 @@ export function WorldShell({
             </span>
             <span className="text-xs text-zinc-400">Maus steuert die Blickrichtung · Esc zum Pausieren</span>
           </button>
-        )}
-
-        {/* Mouse-aim crosshair — self-hides via aimState.active (set by
-            player.tsx). Fixed on screen; mouse-look sweeps the world under it.
-            Vertical position is user-adjustable (world settings). */}
-        {!deathStats && !disconnectSummary && (
-          <Crosshair topFraction={worldSettings.crosshairHeight} />
         )}
 
         {/* Mobile on-screen controls — only rendered on touch devices when actively playing */}
