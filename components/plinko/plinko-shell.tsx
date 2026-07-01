@@ -423,8 +423,16 @@ export function PlinkoShell({ config: initialConfig, initialCredits, initialUsed
         </div>
       </header>
 
-      {/* ── Main content ── */}
-      <div className="flex-1 overflow-y-auto lg:overflow-hidden">
+      {/* ── Main content ──
+          Zero-Cutoff: the outer shell is h-dvh (dynamic viewport, shrinks with
+          the mobile browser toolbar) and this region scrolls on mobile/tablet.
+          The safe-area bottom padding keeps the drop button clear of the iOS
+          home indicator / Android nav bar / retracting toolbar instead of
+          sitting flush against the edge (or hidden behind it). */}
+      <div
+        className="flex-1 overflow-y-auto lg:overflow-hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         <div className="h-full lg:grid lg:grid-cols-[1fr_320px] gap-3 p-3">
 
           {/* ── LEFT: Board + controls ─────────────────────────────────── */}
