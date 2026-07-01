@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Gamepad2, ChevronDown, Globe, Pickaxe, Joystick, Coins, Package, Disc3 } from "lucide-react";
+import { Gamepad2, ChevronDown, Globe, Pickaxe, Joystick, Coins, Package, Disc3, Zap } from "lucide-react";
 import { useSoundManager } from "@/lib/sound-manager";
 
 const GAMES_ENTRIES = [
   { icon: Package, label: "Cases", href: "/cases", accent: "text-purple-400" },
   { icon: Globe, label: "Farmwelt", href: "/world", accent: "text-emerald-400" },
+  { icon: Zap,      label: "Parkour", href: "/parkour", accent: "text-fuchsia-400" },
   { icon: Joystick, label: "Snake",  href: "/snake",  accent: "text-lime-400" },
   { icon: Disc3,    label: "Plinko", href: "/plinko", accent: "text-violet-400" },
   { icon: Pickaxe, label: "Mine", href: "/mine", accent: "text-orange-400" },

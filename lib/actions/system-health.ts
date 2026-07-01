@@ -48,6 +48,8 @@ const REQUIRED_TABLES = [
   "auctions", "trades", "auction_bids", "trade_items",
   // Snake game
   "snake_best_scores", "snake_config",
+  // Parkour (3D Jump & Run)
+  "parkour_best_times", "parkour_lobbies", "parkour_lobby_members",
   // Community features
   "patch_notes", "debug_logs",
   // Chat
@@ -128,6 +130,7 @@ const SINGLETON_CONFIGS: Array<{ id: string; table: string; name: string; catego
   { id: "cfg_don",         table: "don_config",         name: "don_config (default)",       category: "DON-System" },
   { id: "cfg_ai",          table: "ai_config",          name: "ai_config (default)",        category: "KI / Chat" },
   { id: "cfg_snake",       table: "snake_config",       name: "snake_config (default)",     category: "Snake-Spiel" },
+  { id: "cfg_parkour",     table: "parkour_config",     name: "parkour_config (default)",   category: "Parkour" },
   { id: "cfg_plinko",      table: "plinko_config",      name: "plinko_config (default)",    category: "Plinko" },
   { id: "cfg_killstreak",  table: "kill_streak_config", name: "kill_streak_config (default)",category: "World" },
   { id: "cfg_xp",          table: "xp_config",          name: "xp_config (default)",         category: "Level & XP" },
@@ -1257,6 +1260,27 @@ export async function runSystemHealthChecks(): Promise<HealthCheck[]> {
           "Atomare Bonus-Verbuchung verfügbar."));
   } catch (e) {
     results.push(err("reward_vouchers", "Reward-Gutscheine", "Gutschein-Tabellen", String(e)));
+  }
+
+  // ── Parkour (3D Jump & Run) ───────────────────────────────────────────────
+  try {
+    const { data: pkCfg, error: pkErr } = await admin
+      .from("parkour_config")
+      .select("enabled, max_lobby_size, daily_rewarded_finishes")
+      .eq("id", "default")
+      .maybeSingle();
+    if (pkErr) {
+      results.push(err("parkour_cfg", "Parkour", "parkour_config", `${pkErr.message} — node scripts/add-parkour.cjs`));
+    } else if (!pkCfg) {
+      results.push(warn("parkour_cfg", "Parkour", "parkour_config", "Kein Konfig-Eintrag — node scripts/add-parkour.cjs ausführen."));
+    } else {
+      results.push(ok("parkour_cfg", "Parkour", "parkour_config",
+        `Parkour ${pkCfg.enabled ? "aktiv" : "inaktiv"} · Lobby bis ${pkCfg.max_lobby_size} · ${pkCfg.daily_rewarded_finishes} belohnte Ziele/Tag`));
+    }
+    const { count: pkTimes } = await admin.from("parkour_best_times").select("user_id", { count: "exact", head: true });
+    results.push(ok("parkour_times", "Parkour", "parkour_best_times", `${pkTimes ?? 0} gespeicherte Bestzeiten`));
+  } catch (e) {
+    results.push(err("parkour_cfg", "Parkour", "parkour_config", String(e)));
   }
 
   return results;

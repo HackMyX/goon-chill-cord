@@ -361,6 +361,24 @@ const ACTION_META: Record<string, ActionMeta> = {
     format: (p, c) =>
       `Snake: Score ${str(p.score)} · +${cr(p.credits_earned, c)} (${str(p.speed_mode)})${p.is_new_record ? " 🏆 Neuer Rekord!" : ""}`,
   },
+  parkour_finish: {
+    icon: Gamepad2,
+    color: "text-fuchsia-300",
+    bg: "bg-fuchsia-500/10",
+    border: "border-fuchsia-500/30",
+    groupNoun: "Parkour geschafft",
+    sumKey: "credits_awarded",
+    sumLabel: "verdient",
+    format: (p, c) =>
+      `Parkour: ${str(p.map_name)} in ${((Number(p.time_ms) || 0) / 1000).toFixed(2)}s${p.is_new_record ? " 🏆 Bestzeit!" : ""}${Number(p.credits_awarded) > 0 ? ` · +${cr(p.credits_awarded, c)}` : ""}`,
+  },
+  admin_parkour_reset: {
+    icon: Gamepad2,
+    color: "text-red-300",
+    bg: "bg-red-500/10",
+    border: "border-red-500/30",
+    format: (p) => `Parkour-Bestenliste zurückgesetzt: ${str(p.map_id)} (${str(p.removed)} Einträge)`,
+  },
   ticket_reward_granted: {
     icon: Trophy,
     color: "text-amber-300",

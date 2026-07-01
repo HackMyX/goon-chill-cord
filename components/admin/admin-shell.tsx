@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Volume2, Eye, Settings2, Music, ListChecks, SwatchBook, Gift, Link2, LayoutGrid } from "lucide-react";
+import { ArrowLeft, ScrollText, Coins, Users, Package, Flame, Store, Skull, PawPrint, Gamepad2, Palette, MessageCircle, MessageSquare, Bug, Database, ShieldAlert, Shield, Search, FileText, BarChart3, Sparkles, Trash2, Crown, Wand2, SlidersHorizontal, TrendingUp, Volume2, Eye, Settings2, Music, ListChecks, SwatchBook, Gift, Link2, LayoutGrid, Zap } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { CasesAdminTab } from "@/components/admin/case-group-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
@@ -43,6 +43,8 @@ import { DailyQuestsTab } from "@/components/admin/daily-quests-tab";
 import HomepageChatConfigEditor from "@/components/admin/homepage-chat-config-editor";
 import { FineConfigEditor } from "@/components/admin/fine-config-editor";
 import { FriendsLogsTab } from "@/components/admin/friends-logs-tab";
+import { ParkourConfigEditor } from "@/components/admin/parkour-config-editor";
+import type { ParkourConfig } from "@/lib/parkour-config";
 import { AdminGuide } from "@/components/admin/admin-guide";
 import { TAB_GUIDES, guideSearchText } from "@/lib/admin-guides";
 import type { FineConfig } from "@/lib/fine-config-types";
@@ -174,9 +176,10 @@ interface AdminShellProps {
   xpConfig: XpConfig;
   soundConfig: SoundConfig;
   fineConfig: FineConfig;
+  parkourConfig: ParkourConfig;
 }
 
-type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "givables" | "sounds" | "music" | "feedback" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy" | "friends" | "showcase";
+type Tab = "balance" | "economy" | "streak" | "shop" | "users" | "items" | "monsters" | "pets" | "games" | "branding" | "audit" | "chat" | "homepage_chat" | "debug" | "backup" | "security" | "patchnotes" | "surveys" | "ki" | "cleanup" | "battlepass" | "badges" | "namestyles" | "level_xp" | "givables" | "sounds" | "music" | "feedback" | "theme" | "preview_config" | "fine_config" | "daily_quests" | "synergy" | "friends" | "showcase" | "parkour";
 
 const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: string; anchor?: string }[] = [
   { label: "Täglicher Bonus", tab: "streak", keywords: ["streak", "daily", "reward", "login", "bonus", "tage", "ablauf"], description: "Streak-Belohnungen, Meilensteine, Wochenenbonus" },
@@ -185,6 +188,7 @@ const SEARCH_INDEX: { label: string; tab: Tab; keywords: string[]; description: 
   { label: "Monster-Konfiguration", tab: "monsters", keywords: ["monster", "zombie", "hp", "schaden", "spawn", "belohnung"], description: "Monster-HP, Schaden, Belohnungen" },
   { label: "Kill-Streak", tab: "monsters", keywords: ["killstreak", "streak", "kills", "multiplikator", "welt"], description: "Kill-Streak Multiplikator und Cap" },
   { label: "Startseiten-Bestenlisten", tab: "games", keywords: ["bestenliste", "bestenlisten", "leaderboard", "startseite", "homepage", "profilbild", "profilbilder", "avatar", "top 3", "top3", "spielelisten", "rangliste", "platzierung"], description: "Spielelisten auf der Startseite: Reihenfolge, Limit, Profilbilder (nur Top 3 oder alle Plätze)" },
+  { label: "Parkour Physik & Belohnungen", tab: "parkour", keywords: ["parkour", "jump", "run", "3d", "map", "maps", "gravitation", "gravity", "sprung", "sprungkraft", "doppelsprung", "luftsprung", "tempo", "geschwindigkeit", "lobby", "randomizer", "bestzeit", "leaderboard", "credits", "xp", "medaille"], description: "Parkour: pro Map Gravitation, Sprungkraft, Luftsprünge, Tempo und Credits/XP/Bestzeit-Bonus; Lobby-Größe, Belohnungs-Limit, Bestenlisten-Reset" },
   { label: "Snake Speed & Credits", tab: "games", keywords: ["snake", "geschwindigkeit", "credits", "mode", "apfel"], description: "Snake-Spielmodi und Credit-Limits" },
   { label: "Snake Musik-Dynamik (gestuftes Tempo)", tab: "games", keywords: ["snake", "musik", "music", "tempo", "dynamik", "beschleunigen", "pro apfel", "stufe", "gestuft", "halten", "max tempo", "audio"], description: "Pro Snake-Modus: Tempo-Erhöhung pro Apfel + Max. Tempo-Faktor (gestuft & gehalten)" },
   { label: "Plinko Einsatz & Limits", tab: "games", keywords: ["plinko", "einsatz", "kugel", "risk", "multiplier", "limit"], description: "Plinko-Konfiguration und Multiplikatoren" },
@@ -254,6 +258,7 @@ const TABS = ([
   { id: "givables",       label: "Givables",             icon: Gift },
   { id: "fine_config",    label: "Feintuning",           icon: Settings2 },
   { id: "games",          label: "Games",                icon: Gamepad2 },
+  { id: "parkour",        label: "Parkour",              icon: Zap },
   { id: "items",          label: "Items",                icon: Package },
   { id: "ki",             label: "KI-Assistent",         icon: Sparkles },
   { id: "level_xp",       label: "Level & XP",           icon: TrendingUp },
@@ -291,6 +296,7 @@ const TAB_DESC: Record<Tab, string> = {
   monsters: "Monster-Werte (HP, Schaden, Tempo, Spawn, Belohnung) + Kill-Streak-Multiplikator.",
   pets: "Pet-Spezies, Stats und Aggro-Verhalten.",
   games: "Alle Spiele einzeln: Snake, Plinko, DON, Mine, Welt/PvP, Charakter, Startseiten-Bestenlisten.",
+  parkour: "3D Jump & Run: pro Map Gravitation/Sprungkraft/Luftsprünge/Tempo + Credits/XP/Bestzeit-Bonus, Lobby-Größe, Belohnungs-Limit, Bestenlisten-Reset.",
   branding: "Seitenname, Logo, Topbar-Slots, Startseiten-Karten, Ankündigungen.",
   audit: "Verlauf aller Admin-Aktionen (live).",
   chat: "Globaler Chat: Filter, Rate-Limits, Moderation, Prio-Badges.",
@@ -322,7 +328,7 @@ const TAB_DESC: Record<Tab, string> = {
 // Logische Gruppierung der Tabs für eine aufgeräumte Übersicht.
 // NEUE TABS: in TABS oben einfügen UND hier in eine Gruppe aufnehmen (+ TAB_DESC).
 const TAB_GROUPS: { title: string; icon: typeof Coins; tabs: Tab[] }[] = [
-  { title: "Spiele & Welt", icon: Gamepad2, tabs: ["games", "monsters", "pets", "balance"] },
+  { title: "Spiele & Welt", icon: Gamepad2, tabs: ["games", "parkour", "monsters", "pets", "balance"] },
   { title: "Wirtschaft", icon: Coins, tabs: ["economy", "shop", "items"] },
   { title: "Belohnungen & Fortschritt", icon: Sparkles, tabs: ["battlepass", "daily_quests", "streak", "level_xp", "synergy", "givables", "feedback", "showcase"] },
   { title: "Kosmetik", icon: SwatchBook, tabs: ["badges", "namestyles", "preview_config"] },
@@ -380,6 +386,7 @@ export function AdminShell({
   xpConfig,
   soundConfig,
   fineConfig,
+  parkourConfig,
 }: AdminShellProps) {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>(() => {
@@ -639,6 +646,7 @@ export function AdminShell({
               xpConfig={xpConfig}
               battlePasses={battlePasses}
               monsterTypes={monsterTypes}
+              parkourConfig={parkourConfig}
             />
             <BalanceStudioTab />
           </>
@@ -781,6 +789,8 @@ export function AdminShell({
         {tab === "preview_config" && <PreviewConfigTab />}
 
         {tab === "fine_config" && <FineConfigEditor initial={fineConfig} />}
+
+        {tab === "parkour" && <ParkourConfigEditor config={parkourConfig} />}
 
         {tab === "daily_quests" && <DailyQuestsTab currencyName={siteConfig.currencyName} />}
         {tab === "synergy" && <EconomySynergyEditor />}

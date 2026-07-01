@@ -13,6 +13,7 @@ import type { ShopSettings } from "@/lib/shop";
 import type { XpConfig } from "@/lib/level-system";
 import type { BattlePass } from "@/lib/battle-pass";
 import type { MonsterTypeConfig } from "@/lib/monsters";
+import { PARKOUR_MAPS, resolveMap, type ParkourConfig } from "@/lib/parkour-config";
 import { useSoundManager } from "@/lib/sound-manager";
 
 type Tab = string;
@@ -85,6 +86,7 @@ export function BalanceCockpit({
   xpConfig,
   battlePasses,
   monsterTypes,
+  parkourConfig,
 }: {
   onJump: (tab: Tab, anchor?: string) => void;
   items: ItemRow[];
@@ -98,6 +100,7 @@ export function BalanceCockpit({
   xpConfig: XpConfig;
   battlePasses: BattlePass[];
   monsterTypes: MonsterTypeConfig[];
+  parkourConfig: ParkourConfig;
 }) {
   const sound = useSoundManager();
   const [snap, setSnap] = useState<{ abilities: BalancePriceRow[]; nameStyles: BalancePriceRow[]; badges: BalancePriceRow[]; vouchers: BalancePriceRow[] } | null>(null);
@@ -248,8 +251,21 @@ export function BalanceCockpit({
       { id: "streak-milestone", name: "Streak · Meilenstein-Bonus", value: `${fmtCr(streakConfig.milestoneBonus)} CR`, detail: streakConfig.milestoneInterval > 0 ? `alle ${streakConfig.milestoneInterval} Tage` : "deaktiviert", jumpTab: "streak" },
     ];
 
+    // Parkour · pro Map: Credits/XP am Ziel + Bestzeit-Bonus (Einnahme-Quelle).
+    for (const baseMap of PARKOUR_MAPS) {
+      const m = resolveMap(baseMap, parkourConfig);
+      gameRows.push({
+        id: `parkour-${m.id}`,
+        name: `Parkour · ${m.name}`,
+        value: `${fmtCr(m.rewardCredits)} CR / Ziel`,
+        detail: `+${fmtCr(m.rewardXp)} XP · Bestzeit-Bonus +${fmtCr(m.bestBonusCredits)} CR · ${m.difficulty}`,
+        jumpTab: "parkour",
+        jumpAnchor: `parkour-map-${m.id}`,
+      });
+    }
+
     return { gameRows, xpRows, monsterRows, streakRows };
-  }, [snakeConfig, plinkoConfig, plinkoMaxMult, donConfig, mineConfig, xpConfig, monsterTypes, streakConfig]);
+  }, [snakeConfig, plinkoConfig, plinkoMaxMult, donConfig, mineConfig, xpConfig, monsterTypes, streakConfig, parkourConfig]);
 
   const PriceSection = ({ title, rows, emptyHint }: { title: string; rows: PriceEntry[]; emptyHint?: string }) => (
     <div className="rounded-2xl border border-white/[0.07] bg-white/[0.015]">

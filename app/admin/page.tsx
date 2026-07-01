@@ -25,6 +25,7 @@ import { getPlinkoConfig } from "@/lib/actions/plinko";
 import { getXpConfig } from "@/lib/actions/level-system";
 import { getSoundConfig } from "@/lib/actions/sound-config";
 import { getFineConfig } from "@/lib/actions/fine-config";
+import { getParkourConfig } from "@/lib/actions/parkour";
 import { CASE_GROUPS } from "@/lib/cases";
 import { getCaseGroups } from "@/lib/actions/cases-admin";
 import {
@@ -204,10 +205,11 @@ export default async function AdminPage() {
     getPlinkoConfig(),
   ]);
 
-  const [xpConfig, soundConfig, fineConfig] = await Promise.all([
+  const [xpConfig, soundConfig, fineConfig, parkourConfig] = await Promise.all([
     getXpConfig(),
     getSoundConfig(),
     getFineConfig(),
+    getParkourConfig(),
   ]);
 
   // Load case groups (new dynamic system — graceful if table not yet migrated)
@@ -261,6 +263,7 @@ export default async function AdminPage() {
       xpConfig={xpConfig}
       soundConfig={soundConfig}
       fineConfig={fineConfig}
+      parkourConfig={parkourConfig}
     />
     </Suspense>
   );

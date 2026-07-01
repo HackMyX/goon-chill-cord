@@ -290,6 +290,34 @@ export const TAB_GUIDES: Record<string, AdminGuideContent> = {
     tip: "Nach Balance-Änderungen real gegentesten — gerade Plinko-Multiplikatoren wirken anders als die nackten Zahlen vermuten lassen.",
   },
 
+  parkour: {
+    title: "So funktioniert das Parkour-System",
+    subtitle: "4 Maps, ms-genaue Bestenlisten, Solo & Multiplayer-Lobbys.",
+    hierarchy: [
+      { label: "Global", text: "Master-Schalter, Nur-Admins, Lobby-Größe, tägliches Belohnungs-Limit." },
+      { label: "Pro Map", text: "Gravitation, Sprungkraft, Luftsprünge, Tempo, Sprint + Credits/XP/Bestzeit-Bonus." },
+      { label: "Bestenliste", text: "Pro Map ms-genau — hier ansehen & zurücksetzen." },
+    ],
+    steps: [
+      { title: "Global einstellen", text: "Parkour aktivieren, ggf. Nur-Admins (Soft-Launch). Max. Lobby-Größe (1–6) und wie viele Ziel-Ankünfte pro Tag Credits/XP geben (Anti-Farm)." },
+      { title: "Map balancen", text: "Jede der 4 Maps hat eigene Physik. Leeres Feld = Code-Standard (in Klammern). Gravitation ist negativ (stärker = schnellerer Fall), 1 Luftsprung = Doppelsprung." },
+      { title: "Belohnungen setzen", text: "Credits + XP am Ziel laufen über den zentralen Reward-Dispatcher; Bestzeit-Bonus gibt es zusätzlich bei einer neuen persönlichen Bestzeit." },
+      { title: "Bestenliste pflegen", text: "Pro Map die Top-Zeiten laden und bei Bedarf komplett zurücksetzen (wird im Audit-Log protokolliert)." },
+    ],
+    howItWorks: { heading: "Wichtig", lines: [
+      "Geometrie/Level-Design der Maps ist im Code (deterministisch, versioniert) — hier tunst du nur Physik + Wirtschaft, keine Plattformen.",
+      "Bewegliche Plattformen sind eine deterministische Funktion der Zeit; in einer Lobby teilen alle einen Renn-Start, damit alle dasselbe sehen.",
+      "Belohnungen sind über das tägliche Limit gedeckelt — die Zeit zählt aber IMMER für die Bestenliste, auch wenn das Limit erreicht ist.",
+    ] },
+    glossary: [
+      { term: "Luftsprung", def: "Zusätzlicher Sprung in der Luft (1 = Doppelsprung)." },
+      { term: "Randomizer", def: "Würfelt beim Start eine zufällige (aktivierte) Map." },
+      { term: "Bestzeit-Bonus", def: "Extra-Credits, wenn eine neue persönliche Bestzeit gesetzt wird." },
+      { term: "Medaille", def: "Diamant/Gold/Silber/Bronze — reine Kosmetik anhand fixer Zielzeiten." },
+    ],
+    tip: "Nach Physik-Änderungen die Map wirklich durchspielen — Sprungkraft × Gravitation × Tempo entscheiden zusammen, ob eine Lücke schaffbar ist.",
+  },
+
   branding: {
     title: "So funktioniert das Branding",
     subtitle: "Seitenname, Logo, Währung, Topbar, Startseite.",
