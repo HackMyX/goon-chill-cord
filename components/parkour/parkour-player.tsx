@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { CharacterModel, type CharacterLimbRefs } from "@/components/world/character-model";
 import { useKeyboardControls } from "@/components/world/use-keyboard-controls";
 import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
-import { mobileInput, consumeMobileJump } from "@/lib/mobile-input";
+import { mobileInput, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
 import { angleDelta } from "@/components/world/player";
 import { moverCenterAt, type ParkourMap } from "@/lib/parkour-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
@@ -35,6 +35,13 @@ const ACCEL_AIR = 7;
 const ACCEL_ICE = 3.5;
 const MIN_CAMERA_WORLD_Y = 0.6;
 const GHOST_INTERVAL = 0.05; // 20 Hz
+// Dash (C / slide) — mirrors the farm world's slide feel.
+const DASH_DURATION = 0.55;
+const DASH_COOLDOWN = 1.1;
+const DASH_SPEED_FACTOR = 2.2;
+// Ledge-grab forgiveness: how far past a platform edge the footprint may be and
+// still catch the top on a descending landing (a barely-made jump snaps on).
+const LAND_MARGIN = 0.16;
 
 export interface ParkourPlayerProps {
   userId: string;
@@ -102,6 +109,11 @@ export function ParkourPlayer({
   const cameraTarget = useRef(new THREE.Vector3());
   const lookTarget = useRef(new THREE.Vector3());
   const landSquash = useRef(0);
+  const dashCooldown = useRef(0);
+  const dashTimer = useRef(0);
+  const dashDirX = useRef(0);
+  const dashDirZ = useRef(0);
+  const dashPose = useRef(0);
 
   // Reset to start (retry / new run)
   const lastReset = useRef(resetSignal);
@@ -234,24 +246,52 @@ export function ParkourPlayer({
       onFirstMove?.();
     }
     const sprint = canMove && moving && (mobileMode ? mobileInput.sprint : keys.state.current.sprint);
-    const speed = map.moveSpeed * (sprint ? map.sprintMultiplier : 1) * cc.moveSpeedMult;
+    const baseSpeed = map.moveSpeed * (sprint ? map.sprintMultiplier : 1) * cc.moveSpeedMult;
 
-    if (moving) {
-      const fx = Math.sin(cc.yaw), fz = Math.cos(cc.yaw);
-      const rx = -Math.cos(cc.yaw), rz = Math.sin(cc.yaw);
-      moveDir.current.set(fx * mf + rx * mr, 0, fz * mf + rz * mr).normalize();
-      targetVel.current.copy(moveDir.current).multiplyScalar(speed);
-    } else {
-      targetVel.current.set(0, 0, 0);
+    // ── Dash (C / slide) — same tech as the farm world's slide: a ground-started
+    // forward burst that ends on timeout OR the instant you leave the ground.
+    // The boosted velocity persists into a jump (slide-jump), so it doubles as a
+    // long-jump for big gaps. Optional — only fires if you press C while moving. ──
+    dashCooldown.current = Math.max(0, dashCooldown.current - delta);
+    const dashPressed = canMove && (keys.consumeSlide() || consumeMobileSlide());
+    if (dashPressed && grounded.current && dashTimer.current <= 0 && dashCooldown.current <= 0 && moving) {
+      dashTimer.current = DASH_DURATION;
+      dashDirX.current = Math.sin(cc.yaw);
+      dashDirZ.current = Math.cos(cc.yaw);
     }
-    const accel = !grounded.current ? ACCEL_AIR : onIce.current ? ACCEL_ICE : ACCEL_GROUND;
+    let dashing = false;
+    if (dashTimer.current > 0) {
+      dashTimer.current -= delta;
+      if (dashTimer.current <= 0 || !grounded.current) {
+        if (grounded.current) dashCooldown.current = DASH_COOLDOWN;
+        dashTimer.current = 0;
+      } else {
+        dashing = true;
+        const prog = 1 - dashTimer.current / DASH_DURATION;
+        const boost = (1 - prog * 0.7) * DASH_SPEED_FACTOR;
+        moveDir.current.set(dashDirX.current, 0, dashDirZ.current);
+        targetVel.current.set(dashDirX.current * baseSpeed * boost, 0, dashDirZ.current * baseSpeed * boost);
+      }
+    }
+    if (!dashing) {
+      if (moving) {
+        const fx = Math.sin(cc.yaw), fz = Math.cos(cc.yaw);
+        const rx = -Math.cos(cc.yaw), rz = Math.sin(cc.yaw);
+        moveDir.current.set(fx * mf + rx * mr, 0, fz * mf + rz * mr).normalize();
+        targetVel.current.copy(moveDir.current).multiplyScalar(baseSpeed);
+      } else {
+        targetVel.current.set(0, 0, 0);
+      }
+    }
+    dashPose.current = THREE.MathUtils.lerp(dashPose.current, dashing ? 1 : 0, Math.min(1, delta * 12));
+    const accel = dashing ? 40 : !grounded.current ? ACCEL_AIR : onIce.current ? ACCEL_ICE : ACCEL_GROUND;
     vel.current.lerp(targetVel.current, 1 - Math.exp(-delta * accel));
 
-    // ── Horizontal move + per-axis AABB resolution ──
+    // ── Horizontal move (side-resolution deliberately runs AFTER the vertical
+    // step below, so landing on a ledge always wins over being shoved off its
+    // side edge — this is the fix for "made the jump but bugged off the corner"). ──
     g.position.x += vel.current.x * delta;
-    resolveAxis(g, cols, "x", feetY.current);
     g.position.z += vel.current.z * delta;
-    resolveAxis(g, cols, "z", feetY.current);
 
     // ── Jump input (buffered) ──
     coyote.current = Math.max(0, coyote.current - delta);
@@ -272,7 +312,7 @@ export function ParkourPlayer({
       }
     }
 
-    // ── Vertical integrate + resolve (land on tops / bonk on bottoms) ──
+    // ── Vertical integrate ──
     const prevFeet = feetY.current;
     vv.current += map.gravity * delta;
     feetY.current += vv.current * delta;
@@ -282,34 +322,83 @@ export function ParkourPlayer({
     onIce.current = false;
     supportMoverIdx.current = -1;
     let landedKill = false;
+    let landedBounce = 0;
 
     const px = g.position.x, pz = g.position.z;
-    for (const c of cols) {
-      // horizontal overlap of the player footprint with this collider?
-      if (px + R <= c.minX || px - R >= c.maxX || pz + R <= c.minZ || pz - R >= c.maxZ) continue;
-      const newMaxY = feetY.current + H;
-      // Landing on top: downward crossing of the top face.
-      if (vv.current <= 0 && prevFeet + 0.001 >= c.topY && feetY.current <= c.topY) {
-        feetY.current = c.topY;
+
+    // (A) LANDING — while descending, snap onto the HIGHEST top face the player
+    // is crossing this frame. Ledge-forgiving: the footprint may reach up to
+    // LAND_MARGIN past the platform edge and still catch (a barely-made jump is
+    // pulled up onto the ledge instead of clipping the corner and dropping).
+    // The face-crossing test (prevFeet above top, new feet at/below top) is
+    // thickness-independent → a fast fall can never tunnel through a thin mover.
+    if (vv.current <= 0) {
+      let bestTop = -Infinity;
+      let best: Collider | null = null;
+      // Ledge-grab: only the frame you actually land from the air gets the
+      // generous reach (a barely-made jump snaps onto the lip). While already
+      // grounded, reach is just the body radius, so you can freely walk off an
+      // edge instead of being magnetised back onto it ("sticky edge" bug).
+      const reach = wasGrounded ? R : R + LAND_MARGIN;
+      for (const c of cols) {
+        const nx = Math.max(c.minX, Math.min(px, c.maxX));
+        const nz = Math.max(c.minZ, Math.min(pz, c.maxZ));
+        const ddx = px - nx, ddz = pz - nz;
+        if (ddx * ddx + ddz * ddz > reach * reach) continue;
+        if (prevFeet + 0.02 >= c.topY && feetY.current <= c.topY + 0.02 && c.topY > bestTop) {
+          bestTop = c.topY;
+          best = c;
+        }
+      }
+      if (best) {
+        feetY.current = best.topY;
         vv.current = 0;
         grounded.current = true;
-        if (c.bounce > 0) { vv.current = c.bounce; grounded.current = false; }
-        else if (c.ice) onIce.current = true;
-        if (c.moverIdx >= 0) supportMoverIdx.current = c.moverIdx;
-        if (c.kill) landedKill = true;
-        continue;
-      }
-      // Head bonk: upward crossing of the bottom face.
-      const prevHead = prevFeet + H;
-      if (vv.current > 0 && prevHead - 0.001 <= c.minY && newMaxY >= c.minY) {
-        feetY.current = c.minY - H;
-        vv.current = 0;
+        // Pull-in ONLY on a fresh landing (not while walking) so a jump that
+        // caught the lip is tugged fully onto the platform.
+        if (!wasGrounded) {
+          const inset = R * 0.55;
+          if (px < best.minX + inset) g.position.x = best.minX + inset;
+          else if (px > best.maxX - inset) g.position.x = best.maxX - inset;
+          if (pz < best.minZ + inset) g.position.z = best.minZ + inset;
+          else if (pz > best.maxZ - inset) g.position.z = best.maxZ - inset;
+        }
+        if (best.bounce > 0) landedBounce = best.bounce;
+        else if (best.ice) onIce.current = true;
+        if (best.moverIdx >= 0) supportMoverIdx.current = best.moverIdx;
+        if (best.kill) landedKill = true;
       }
     }
+
+    // (B) HEAD BONK — rising into a ceiling. Only when the centre is clearly
+    // INSIDE the box (footprint shrunk by R*0.5), so jumping up alongside a ledge
+    // grazes past its side without being knocked back down.
+    if (!grounded.current && vv.current > 0) {
+      const prevHead = prevFeet + H;
+      for (const c of cols) {
+        if (px <= c.minX + R * 0.5 || px >= c.maxX - R * 0.5) continue;
+        if (pz <= c.minZ + R * 0.5 || pz >= c.maxZ - R * 0.5) continue;
+        if (prevHead - 0.02 <= c.minY && feetY.current + H >= c.minY) {
+          feetY.current = c.minY - H;
+          vv.current = 0;
+          break;
+        }
+      }
+    }
+
+    // Bounce pad launches AFTER landing decisions (overrides the grounded snap).
+    if (landedBounce > 0) { vv.current = landedBounce; grounded.current = false; }
+
     if (grounded.current && !wasGrounded) landSquash.current = 1;
     if (grounded.current) { coyote.current = COYOTE; airJumpsUsed.current = 0; }
 
     g.position.y = feetY.current;
+
+    // (C) HORIZONTAL side-resolution — runs LAST so the platform you're standing
+    // on (feet == top, excluded by the STEP_TOL Y-gate) can never push you off,
+    // while genuine walls beside you still block.
+    resolveAxis(g, cols, "x", feetY.current);
+    resolveAxis(g, cols, "z", feetY.current);
 
     // ── Hazard tile / void → respawn at checkpoint ──
     if (landedKill || feetY.current < map.voidY) {
@@ -343,15 +432,15 @@ export function ParkourPlayer({
       }
     }
 
-    // ── Body heading eases toward movement direction ──
-    if (moving) {
+    // ── Body heading eases toward movement (or dash) direction ──
+    if (moving || dashing) {
       const heading = Math.atan2(moveDir.current.x, moveDir.current.z);
-      g.rotation.y += angleDelta(g.rotation.y, heading) * (1 - Math.exp(-delta * 15));
+      g.rotation.y += angleDelta(g.rotation.y, heading) * (1 - Math.exp(-delta * (dashing ? 22 : 15)));
     }
 
-    // ── Squash on landing ──
+    // ── Squash on landing + crouch during a dash ──
     landSquash.current = Math.max(0, landSquash.current - delta * 9);
-    g.scale.y = 1 - landSquash.current * 0.18;
+    g.scale.y = (1 - landSquash.current * 0.18) * (1 - dashPose.current * 0.2);
 
     // ── Limb animation (walk cycle + airborne splay) ──
     jumpPose.current = THREE.MathUtils.lerp(jumpPose.current, grounded.current ? 0 : 1, Math.min(1, delta * 10));

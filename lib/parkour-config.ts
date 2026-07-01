@@ -157,6 +157,11 @@ const p = (
 // a couple of moving lifts. Teaches jump/double-jump/checkpoints.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Every jump below is proven makeable (with margin, at a player-controllable
+// speed) by scripts/validate-parkour-maps.mjs, which simulates the real engine
+// trajectory. No two platforms overlap into a "double floor"/head-trap. Movers
+// are placed OFF the critical path (bonus flair), so the static route always
+// works on its own.
 const MAP_NEON: ParkourMap = {
   id: "neon_ascent",
   name: "Neon Ascent",
@@ -164,83 +169,79 @@ const MAP_NEON: ParkourMap = {
   difficulty: "Leicht",
   theme: THEME_NEON_NIGHT,
   gravity: -20, jumpVelocity: 8.2, airJumps: 1, moveSpeed: 6.5, sprintMultiplier: 1.5,
-  voidY: -18,
+  voidY: -14,
   start: [0, 1, 0],
-  finish: [0, 40, -66],
+  finish: [0, 13.5, -48],
   finishSize: [6, 1, 6],
   platforms: [
-    p(0, 0.5, 0, 8, 1, 8),                         // spawn pad
-    p(0, 2, -8),
-    p(4, 4, -14),
-    p(-3, 6.5, -20),
-    p(2, 9, -27, 3, 1, 3),
-    p(6, 12, -33, 3, 1, 3),
-    p(1, 15, -39, 3, 1, 3),                        // checkpoint 1 pad
-    p(-5, 18, -45, 3, 1, 3),
-    p(0, 21, -51, 2.5, 1, 2.5),
-    p(5, 24, -55, 2.5, 1, 2.5),
-    p(-4, 27, -58, 2.5, 1, 2.5),                   // checkpoint 2 pad
-    p(2, 30, -60, 2.5, 1, 2.5),
-    p(-2, 33, -62, 2.5, 1, 2.5),
-    p(3, 36, -64, 2.5, 1, 2.5),
-    p(0, 38.5, -66, 4, 1, 4),                      // pre-finish
+    p(0, 0.5, 0, 6, 1, 6),                         // spawn top 1.0
+    p(2.2, 1.7, -5.2, 3.5, 1, 3.5),                // top 2.2
+    p(-2.2, 2.9, -9.4, 3.5, 1, 3.5),               // top 3.4
+    p(2.2, 4.1, -13.6, 3.5, 1, 3.5),               // top 4.6
+    p(-2.2, 5.3, -17.8, 3.5, 1, 3.5),              // top 5.8  · CP0
+    p(2.2, 6.5, -22, 3.2, 1, 3.2),                 // top 7.0
+    p(-2.2, 7.7, -26.2, 3.2, 1, 3.2),              // top 8.2
+    p(2.2, 8.9, -30.4, 3.2, 1, 3.2),               // top 9.4  · CP1
+    p(-2.2, 10.1, -34.6, 3.2, 1, 3.2),             // top 10.6
+    p(2.2, 11.3, -38.8, 3.2, 1, 3.2),              // top 11.8
+    p(0, 12.3, -43, 4, 1, 4),                      // top 12.8 · pre-finish
   ],
-  movers: [
-    { mode: "path", pos: [-6, 10.5, -30], to: [8, 10.5, -30], size: [3, 0.6, 3], period: 5, color: "#22d3ee", glow: "#22d3ee" },
-    { mode: "path", pos: [4, 22.5, -53], to: [-6, 26, -53], size: [3, 0.6, 3], period: 6, color: "#22d3ee", glow: "#22d3ee" },
+  movers: [ // side flair, off the route (route lives in x∈[-4,4])
+    { mode: "orbit", pos: [8, 6.0, -18], radius: 3, size: [3, 0.6, 3], period: 6, color: "#22d3ee", glow: "#22d3ee" },
+    { mode: "path", pos: [-8, 9.5, -30], to: [-8, 9.5, -36], size: [3, 0.6, 3], period: 5, color: "#22d3ee", glow: "#22d3ee" },
   ],
   checkpoints: [
-    { index: 0, pos: [1, 15.6, -39], radius: 3 },
-    { index: 1, pos: [-4, 27.6, -58], radius: 3 },
+    { index: 0, pos: [-2.2, 5.9, -17.8], radius: 2.6 },
+    { index: 1, pos: [2.2, 9.5, -30.4], radius: 2.6 },
   ],
   rewardCredits: 120, rewardXp: 60, bestBonusCredits: 80,
-  medals: { diamond: 28000, gold: 38000, silver: 52000, bronze: 75000 },
+  medals: { diamond: 22000, gold: 30000, silver: 42000, bronze: 62000 },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAP 2 — "Sky Gardens" (Mittel): long floating leaps, orbiting discs,
-// bounce pads. Horizontal + a little vertical.
+// MAP 2 — "Sky Gardens" (Mittel): long horizontal leaps between floating
+// gardens with gentle height changes and orbiting discs alongside.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MAP_SKY: ParkourMap = {
   id: "sky_gardens",
   name: "Sky Gardens",
-  tagline: "Weite Sprünge über schwebende Gärten, Sprungpilze und kreisende Scheiben.",
+  tagline: "Weite Sprünge über schwebende Gärten und kreisende Scheiben.",
   difficulty: "Mittel",
   theme: THEME_SKY_DAWN,
   gravity: -18, jumpVelocity: 8.6, airJumps: 1, moveSpeed: 7, sprintMultiplier: 1.6,
-  voidY: -24,
+  voidY: -20,
   start: [0, 1, 0],
-  finish: [58, 6, 4],
+  finish: [60, 6.6, 3],
   finishSize: [6, 1, 6],
   platforms: [
-    p(0, 0.5, 0, 7, 1, 7),
-    p(9, 1, 2, 3.5, 1, 3.5),
-    p(17, 1, -3, 3, 1, 3),
-    p(24, 3, 2, 3, 1, 3, { bounce: 13, color: "#34d399", glow: "#34d399" }), // bounce pad
-    p(24, 11, 8, 3, 1, 3),                         // launched target (checkpoint 1)
-    p(31, 11, 2, 3, 1, 3),
-    p(38, 9, -4, 3, 1, 3),
-    p(44, 7, 2, 3, 1, 3),                          // checkpoint 2
-    p(50, 6, 6, 3, 1, 3),
-    p(55, 5.5, 4, 4, 1, 4),
+    p(0, 0.5, 0, 7, 1, 7),                         // spawn top 1.0
+    p(7, 1.0, 1, 3.4, 1, 3.4),                     // top 1.5
+    p(13, 1.6, -3, 3.2, 1, 3.2),                   // top 2.1
+    p(19, 2.4, 2, 3.4, 1, 3.4),                    // top 2.9 · CP0
+    p(25, 2.0, 6, 3.2, 1, 3.2),                    // top 2.5
+    p(31, 3.0, 2, 3.2, 1, 3.2),                    // top 3.5
+    p(37, 4.0, -3, 3.4, 1, 3.4),                   // top 4.5 · CP1
+    p(43, 4.6, 2, 3.2, 1, 3.2),                    // top 5.1
+    p(49, 5.4, 5, 3.2, 1, 3.2),                    // top 5.9
+    p(54, 6.0, 3, 4, 1, 4),                        // top 6.5 · pre-finish
   ],
-  movers: [
-    { mode: "orbit", pos: [17, 1, -3], radius: 5, size: [3, 0.5, 3], period: 6, color: "#f0abfc", glow: "#f0abfc" },
-    { mode: "orbit", pos: [38, 9, -4], radius: 4.5, size: [3, 0.5, 3], period: 5, phase: 0.5, color: "#f0abfc", glow: "#f0abfc" },
-    { mode: "path", pos: [44, 7, 10], to: [50, 6, 12], size: [3, 0.5, 3], period: 4, color: "#f0abfc", glow: "#f0abfc" },
+  movers: [ // side flair, off the route (route lives in z∈[-3,6])
+    { mode: "orbit", pos: [13, 1.6, -12], radius: 3.5, size: [3, 0.6, 3], period: 6, color: "#f0abfc", glow: "#f0abfc" },
+    { mode: "path", pos: [31, 3.0, -12], to: [37, 4.0, -12], size: [3, 0.6, 3], period: 5, color: "#f0abfc", glow: "#f0abfc" },
+    { mode: "orbit", pos: [46, 5.2, 12], radius: 3.5, size: [3, 0.6, 3], period: 5.5, phase: 0.4, color: "#f0abfc", glow: "#f0abfc" },
   ],
   checkpoints: [
-    { index: 0, pos: [24, 11.6, 8], radius: 3 },
-    { index: 1, pos: [44, 7.6, 2], radius: 3 },
+    { index: 0, pos: [19, 3.0, 2], radius: 2.6 },
+    { index: 1, pos: [37, 4.6, -3], radius: 2.6 },
   ],
   rewardCredits: 200, rewardXp: 110, bestBonusCredits: 130,
-  medals: { diamond: 34000, gold: 46000, silver: 64000, bronze: 92000 },
+  medals: { diamond: 26000, gold: 36000, silver: 50000, bronze: 74000 },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAP 3 — "Magma Rush" (Schwer): tight timing over lava kill-tiles, fast
-// movers, narrow beams. Heavier gravity, no double jump.
+// MAP 3 — "Magma Rush" (Schwer): narrow beams + tiny pads over the lava abyss
+// (fall = death). No double jump — every landing must be precise.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MAP_MAGMA: ParkourMap = {
@@ -250,87 +251,82 @@ const MAP_MAGMA: ParkourMap = {
   difficulty: "Schwer",
   theme: THEME_MAGMA,
   gravity: -24, jumpVelocity: 8.8, airJumps: 0, moveSpeed: 7, sprintMultiplier: 1.7,
-  voidY: -10,
+  voidY: -6,
   start: [0, 1, 0],
-  finish: [0, 3, -74],
-  finishSize: [6, 1, 6],
+  finish: [0, 2.0, -50],
+  finishSize: [5, 1, 5],
   platforms: [
-    p(0, 0.5, 0, 7, 1, 7),
-    p(0, 1, -7, 6, 1, 1.4),                        // narrow beam
-    p(0, 1, -14, 3, 1, 3),
-    p(-5, 1, -19, 2.2, 1, 2.2),
-    p(0, 1, -19, 2, 1, 2, { kill: true, color: "#ef4444", glow: "#ef4444" }), // hazard tile between routes
-    p(5, 1, -19, 2.2, 1, 2.2),
-    p(5, 1, -26, 2.4, 1, 2.4),                     // checkpoint 1
-    p(0, 1, -31, 5, 1, 1.2),                       // beam
-    p(-5, 1, -36, 2.4, 1, 2.4),
-    p(-5, 1, -44, 2.2, 1, 2.2),
-    p(0, 1, -49, 2.4, 1, 2.4),                     // checkpoint 2
-    p(0, 1, -56, 1.4, 1, 6),                       // beam (long axis Z)
-    p(0, 1, -63, 2.4, 1, 2.4),
-    p(0, 1.5, -70, 4, 1, 4),
+    p(0, 0.5, 0, 6, 1, 6),                         // spawn top 1.0
+    p(0, 0.7, -5, 2.8, 1, 2.8),                    // top 1.2
+    p(0, 0.9, -9.5, 5, 1, 1.4),                    // top 1.4 · beam (long X)
+    p(-3.2, 1.1, -14, 2.4, 1, 2.4),               // top 1.6
+    p(0, 1.3, -18.5, 2.8, 1, 2.8),                 // top 1.8 · CP0
+    p(3.2, 1.1, -23, 2.4, 1, 2.4),                 // top 1.6
+    p(0, 0.9, -27.5, 1.4, 1, 5),                   // top 1.4 · beam (long Z)
+    p(-3.2, 1.1, -32, 2.4, 1, 2.4),               // top 1.6
+    p(0, 1.3, -36.5, 2.8, 1, 2.8),                 // top 1.8 · CP1
+    p(3.2, 1.5, -41, 2.4, 1, 2.4),                 // top 2.0
+    p(0, 1.7, -45.5, 3, 1, 3),                     // top 2.2 · pre-finish
   ],
-  movers: [
-    { mode: "path", pos: [-4, 1, -26], to: [4, 1, -26], size: [2.4, 0.6, 2.4], period: 3, color: "#f97316", glow: "#f97316" },
-    { mode: "path", pos: [-6, 1, -44], to: [6, 1, -44], size: [2.4, 0.6, 2.4], period: 2.6, phase: 0.5, color: "#f97316", glow: "#f97316" },
-    { mode: "orbit", pos: [0, 1, -56], radius: 4, size: [2.2, 0.6, 2.2], period: 4, color: "#f97316", glow: "#f97316" },
+  movers: [ // cross-movers in the gaps between pads (never overlap a static pad)
+    { mode: "path", pos: [-4, 1.1, -20.75], to: [4, 1.1, -20.75], size: [2.4, 0.6, 2.4], period: 3, color: "#f97316", glow: "#f97316" },
+    { mode: "path", pos: [-4, 1.1, -29.75], to: [4, 1.1, -29.75], size: [2.4, 0.6, 2.4], period: 2.8, phase: 0.5, color: "#f97316", glow: "#f97316" },
   ],
   checkpoints: [
-    { index: 0, pos: [5, 1.6, -26], radius: 2.6 },
-    { index: 1, pos: [0, 1.6, -49], radius: 2.6 },
+    { index: 0, pos: [0, 1.9, -18.5], radius: 2.6 },
+    { index: 1, pos: [0, 1.9, -36.5], radius: 2.6 },
   ],
   rewardCredits: 320, rewardXp: 180, bestBonusCredits: 220,
-  medals: { diamond: 40000, gold: 55000, silver: 78000, bronze: 115000 },
+  medals: { diamond: 30000, gold: 42000, silver: 60000, bronze: 90000 },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAP 4 — "Void Spire" (Extrem): a brutal ascent into the void — ice tiles,
-// long airborne double-jumps, fast orbiting rings, tiny landings.
+// MAP 4 — "Void Spire" (Extrem): a spiral tower into the void — small landings,
+// ice tiles, orbiting rings inside the spiral. Double jump available.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MAP_VOID: ParkourMap = {
   id: "void_spire",
   name: "Void Spire",
-  tagline: "Der Turm ins Nichts — Eis, Fernsprünge, kreisende Ringe. Nur für Wahnsinnige.",
+  tagline: "Der Spiralturm ins Nichts — Eis, kleine Landungen, kreisende Ringe.",
   difficulty: "Extrem",
   theme: THEME_VOID,
   gravity: -21, jumpVelocity: 8.9, airJumps: 1, moveSpeed: 7.2, sprintMultiplier: 1.6,
-  voidY: -30,
+  voidY: -6,
   start: [0, 1, 0],
-  finish: [0, 62, 0],
+  finish: [0, 30.2, 0],
   finishSize: [5, 1, 5],
   platforms: [
-    p(0, 0.5, 0, 7, 1, 7),
-    p(0, 3, -7, 3, 1, 3, { ice: true, color: "#38bdf8", glow: "#38bdf8" }),
-    p(-6, 6, -10, 2.2, 1, 2.2),
-    p(-10, 9, -4, 2, 1, 2),
-    p(-8, 12, 4, 2, 1, 2),                         // checkpoint 1
-    p(0, 15, 8, 2, 1, 2, { ice: true, color: "#38bdf8", glow: "#38bdf8" }),
-    p(8, 18, 4, 2, 1, 2),
-    p(10, 21, -4, 2, 1, 2),
-    p(6, 24, -10, 2, 1, 2),                        // checkpoint 2
-    p(-2, 28, -10, 1.8, 1, 1.8),
-    p(-8, 32, -6, 1.8, 1, 1.8),
-    p(-9, 36, 2, 1.8, 1, 1.8, { ice: true, color: "#38bdf8", glow: "#38bdf8" }),
-    p(-4, 40, 8, 1.8, 1, 1.8),                     // checkpoint 3
-    p(4, 44, 8, 1.8, 1, 1.8),
-    p(9, 48, 2, 1.8, 1, 1.8),
-    p(6, 52, -6, 1.8, 1, 1.8),
-    p(-2, 56, -6, 2, 1, 2),
-    p(0, 60, 0, 4, 1, 4),
+    p(0, 0.5, 0, 6, 1, 6),                         // spawn top 1.0
+    p(7, 1.7, 0, 2.2, 1, 2.2),                     // top 2.2
+    p(4.35, 3.5, 5.48, 2.2, 1, 2.2),               // top 4.0
+    p(-1.59, 5.3, 6.82, 2.2, 1, 2.2, { ice: true, color: "#38bdf8", glow: "#38bdf8" }), // top 5.8
+    p(-6.33, 7.1, 2.99, 2.2, 1, 2.2),              // top 7.6
+    p(-6.28, 8.9, -3.1, 2.4, 1, 2.4),              // top 9.4 · CP0
+    p(-1.48, 10.7, -6.84, 2.2, 1, 2.2),            // top 11.2
+    p(4.44, 12.5, -5.41, 2.2, 1, 2.2),             // top 13.0
+    p(7.0, 14.3, 0.12, 2.4, 1, 2.4),               // top 14.8 · CP1
+    p(4.26, 16.1, 5.55, 2.2, 1, 2.2, { ice: true, color: "#38bdf8", glow: "#38bdf8" }), // top 16.6
+    p(-1.7, 17.9, 6.79, 2.2, 1, 2.2),              // top 18.4
+    p(-6.38, 19.7, 2.88, 2.2, 1, 2.2),             // top 20.2
+    p(-6.24, 21.5, -3.18, 2.4, 1, 2.4),            // top 22.0 · CP2
+    p(-1.37, 23.3, -6.87, 2.2, 1, 2.2),            // top 23.8
+    p(4.54, 25.1, -5.33, 2.2, 1, 2.2, { ice: true, color: "#38bdf8", glow: "#38bdf8" }), // top 25.6
+    p(7.0, 26.9, 0.235, 2.2, 1, 2.2),              // top 27.4
+    p(4.16, 28.7, 5.63, 2.4, 1, 2.4),              // top 29.2 · pre-finish
   ],
-  movers: [
-    { mode: "orbit", pos: [-8, 12, 4], radius: 5, size: [2, 0.5, 2], period: 4.5, color: "#a855f7", glow: "#a855f7" },
-    { mode: "orbit", pos: [6, 24, -10], radius: 5, size: [2, 0.5, 2], period: 4, phase: 0.3, color: "#a855f7", glow: "#a855f7" },
-    { mode: "orbit", pos: [-4, 40, 8], radius: 4.5, size: [2, 0.5, 2], period: 3.6, phase: 0.6, color: "#a855f7", glow: "#a855f7" },
+  movers: [ // orbiting rings INSIDE the spiral (radius 3 vs platforms at radius 7)
+    { mode: "orbit", pos: [0, 7, 0], radius: 3, size: [2, 0.5, 2], period: 4, color: "#a855f7", glow: "#a855f7" },
+    { mode: "orbit", pos: [0, 16, 0], radius: 3, size: [2, 0.5, 2], period: 3.6, phase: 0.4, color: "#a855f7", glow: "#a855f7" },
+    { mode: "orbit", pos: [0, 25, 0], radius: 3, size: [2, 0.5, 2], period: 3.2, phase: 0.7, color: "#a855f7", glow: "#a855f7" },
   ],
   checkpoints: [
-    { index: 0, pos: [-8, 12.6, 4], radius: 2.4 },
-    { index: 1, pos: [6, 24.6, -10], radius: 2.4 },
-    { index: 2, pos: [-4, 40.6, 8], radius: 2.4 },
+    { index: 0, pos: [-6.28, 9.5, -3.1], radius: 2.6 },
+    { index: 1, pos: [7.0, 14.9, 0.12], radius: 2.6 },
+    { index: 2, pos: [-6.24, 22.1, -3.18], radius: 2.6 },
   ],
   rewardCredits: 500, rewardXp: 300, bestBonusCredits: 400,
-  medals: { diamond: 55000, gold: 78000, silver: 110000, bronze: 160000 },
+  medals: { diamond: 40000, gold: 58000, silver: 82000, bronze: 120000 },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
