@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
@@ -20,6 +20,7 @@ import { WORLD_RADIUS } from "@/lib/world-config";
 import { resolveObstacleCollision, randomSpawnPoint, segmentBlockedByObstacle, type Obstacle } from "@/lib/world-obstacles";
 import { debugLog } from "@/lib/debug";
 import { mobileInput, consumeMobileAttack, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
+import { aimState } from "@/lib/world-aim";
 import {
   broadcastTransform,
   subscribeToWorldPvpDamage,
@@ -141,21 +142,29 @@ const SLIDE_PARTICLE_INTERVAL  = 0.033; // seconds between spawns
  * zero". See the camera block's doc comment below for the exact bug this
  * prevents. */
 const MIN_CAMERA_WORLD_Y = 0.35;
-// --- Aim reticle (world-space, billboarded) --------------------------------
-// A glowing crosshair that floats IN THE WORLD in front of the character (not
-// a fixed 2D screen dot) — it shows where a swing lands and snaps onto the
-// auto-aimed target. `FORWARD` = how far ahead of the player it sits when no
-// target is in range; `FLOAT_HEIGHT` = how high above the feet it hovers (sits
-// around head height so it reads clearly above the body); `TARGET_HEIGHT` =
-// height offset when it snaps onto a target (roughly chest). Eased so it glides
-// rather than teleports.
-const RETICLE_FORWARD = 2.15;
-const RETICLE_FLOAT_HEIGHT = 1.5;
-const RETICLE_TARGET_HEIGHT = 1.1;
-const RETICLE_FOLLOW_RATE = 18;
-const RETICLE_SCALE_RATE = 16;
-const RETICLE_COLOR_IDLE = new THREE.Color("#67e8f9"); // cyan — free aim
-const RETICLE_COLOR_LOCKED = new THREE.Color("#ff5238"); // red — target in range
+// --- Over-the-shoulder camera offset (mouse-aim / Roblox shift-lock feel) ---
+// Both the camera position AND its look-target are shifted by the SAME right+up
+// vector, so the view *direction* is untouched (a clean lateral pan) but the
+// character slides off to the side and the fixed screen-center crosshair ends
+// up over open world instead of the player's own back. Crucially the lateral
+// amount is PROPORTIONAL TO CAMERA DISTANCE (`* cc.distance`), not a fixed world
+// offset — the first attempt used a fixed 0.7 units, which barely nudged the
+// character when zoomed out (a fixed world shift maps to fewer screen pixels the
+// farther the camera sits), so the reticle still sat on the body. A fraction of
+// the distance keeps the on-screen offset roughly constant at any zoom.
+const SHOULDER_FRACTION = 0.2;
+const SHOULDER_UP = 0.3;
+// Crosshair target acquisition. The reticle lives at a fixed SCREEN spot
+// (crosshair.tsx: left 50%, top 44%); in normalized device coords that is
+// x=0, y = 1 − 2·0.44 = +0.12 (NDC y is +up). Keep these two in sync. A target
+// whose projected upper body sits within `ACQUIRE_NDC` of that point counts as
+// "under the crosshair" and gets hit — this projection is what makes the
+// crosshair actually match what a swing lands on despite the over-the-shoulder
+// parallax (a plain forward cone along cc.yaw would be offset from the reticle).
+const XHAIR_NDC_X = 0;
+const XHAIR_NDC_Y = 0.12;
+const ACQUIRE_NDC = 0.22;
+const AIM_TARGET_HEIGHT = 1.2; // project this far up a target's body (chest/head)
 const GRAVITY = -18;
 const JUMP_VELOCITY = 6.2;
 const STATS_SYNC_INTERVAL = 0.05; // 20 Hz — halved from 0.1 to halve animation-state lag
@@ -367,30 +376,9 @@ export function Player({
   // back. Ref, not state — read/written inside useFrame only.
   const faceTargetHeading = useRef<number | null>(null);
   const faceTargetTimer = useRef(0);
-  // Aim reticle: the group is positioned/scaled/billboarded imperatively every
-  // frame (no re-renders); `reticleAim` is the eased target position. One
-  // shared additive material across all its meshes — colour is set per frame
-  // (idle cyan / locked red); disposed on unmount since we created it by hand.
-  const reticleGroup = useRef<THREE.Group>(null);
-  const reticleAim = useRef(new THREE.Vector3());
-  // False until the reticle has been shown at least once since last hidden —
-  // lets the first visible frame snap to its spot instead of streaking there
-  // from the world origin.
-  const reticlePlaced = useRef(false);
-  const reticleMat = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: RETICLE_COLOR_IDLE.clone(),
-        transparent: true,
-        opacity: 0.92,
-        depthTest: false,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        toneMapped: false,
-      }),
-    []
-  );
-  useEffect(() => () => reticleMat.dispose(), [reticleMat]);
+  // Reused scratch vector for per-frame world→NDC projection during crosshair
+  // target acquisition — never allocate inside useFrame.
+  const ndcScratch = useRef(new THREE.Vector3());
   const walkClock = useRef(0);
   const walkAmplitude = useRef(0);
   const fallWobble = useRef(0);
@@ -899,21 +887,19 @@ export function Player({
       }
     }
 
-    // --- Melee (Roblox-Standard auto-aim): no crosshair. A swing simply lands
-    // on the single NEAREST alive target within `attackRange` — monster or
-    // remote player, whichever is closer — regardless of which way the body is
-    // currently facing, and the body then pivots to face it (see the body-
-    // heading block just before the camera). This is the "attacks auto-hit
-    // whatever is in range" model the player asked for: you never have to line
-    // up a reticle, you run up to something and hit it. `anyInRange` drives the
-    // ground ring's colour exactly as before. Monster hits are wall-checked (no
-    // hitting through a ruin); remote players are not (PvP validity is decided
-    // server-side, unchanged). `m.hitRadius` isn't needed here anymore — pure
-    // radial range is the rule — but is still passed to the server for PvP.
+    // --- Melee (mouse-aim): a swing lands on the target UNDER THE CROSSHAIR —
+    // i.e. whichever alive target within `attackRange` projects nearest the
+    // fixed screen reticle (XHAIR_NDC, within ACQUIRE_NDC). Screen-space
+    // projection (not a cc.yaw cone) is what makes the hit match the reticle
+    // exactly despite the over-the-shoulder camera offset. Monster hits are
+    // wall-checked; remote players aren't (PvP validity is server-side).
+    // `anyInRange` (pure radial distance, ignoring the crosshair) still drives
+    // the ground ring. `project` uses last frame's camera matrices (the camera
+    // is repositioned later this frame) — 1 frame of lag, imperceptible.
     let anyInRange = false;
     type MH = import("@/components/world/combat-types").MonsterHandle;
     const sel = {
-      dist: Infinity,
+      ndc: Infinity,
       monster: null as MH | null,
       playerId: null as string | null,
       pos: null as THREE.Vector3 | null,
@@ -930,10 +916,15 @@ export function Player({
       const dist = Math.hypot(dx, dz);
       if (dist > characterConfig.attackRange) return;
       anyInRange = true;
-      // Kein Treffer DURCH Wände (nur Monster; PvP serverseitig geprüft).
       if (checkWall && segmentBlockedByObstacle(obstaclesRef?.current, g.position.x, g.position.z, pos.x, pos.z)) return;
-      if (dist < sel.dist) {
-        sel.dist = dist;
+      ndcScratch.current.set(pos.x, pos.y + AIM_TARGET_HEIGHT, pos.z).project(camera);
+      if (ndcScratch.current.z >= 1) return; // behind the camera
+      const ndx = ndcScratch.current.x - XHAIR_NDC_X;
+      const ndy = ndcScratch.current.y - XHAIR_NDC_Y;
+      const nd = Math.hypot(ndx, ndy);
+      if (nd > ACQUIRE_NDC) return;
+      if (nd < sel.ndc) {
+        sel.ndc = nd;
         sel.monster = monster;
         sel.playerId = playerId;
         sel.pos = pos;
@@ -951,15 +942,16 @@ export function Player({
     const nearestMonster: MH | null = sel.monster;
     const nearestPlayerId: string | null = sel.playerId;
     const nearestPlayerPos: THREE.Vector3 | null = nearestPlayerId ? sel.pos : null;
-    // Heading straight at the target being struck (so the swing VFX + server
-    // PvP heading point exactly where the hit lands, and the body pivots to
-    // it). No target → face the current movement direction (or keep the last
-    // heading when idle). atan2(dx, dz) = this app's sin/cos-forward convention.
-    const moveHeading = moving ? Math.atan2(moveDir.current.x, moveDir.current.z) : null;
+    // Heading straight at the struck target (so the swing VFX + server PvP
+    // heading point exactly where the hit lands); no target → the aim/look yaw
+    // `cc.yaw`, which is where the crosshair points and the body already faces.
     const aimHeading =
       sel.pos !== null
         ? Math.atan2(sel.pos.x - g.position.x, sel.pos.z - g.position.z)
-        : moveHeading ?? g.rotation.y;
+        : cc.yaw;
+    // Crosshair overlay: shown while playing, red when a swing would connect.
+    aimState.active = active && locked && alive;
+    aimState.targetAcquired = nearestMonster !== null || nearestPlayerId !== null;
 
     cameraShake.current = Math.max(0, cameraShake.current - delta * 6);
     attackCooldown.current = Math.max(0, attackCooldown.current - delta);
@@ -1265,69 +1257,23 @@ export function Player({
       }
     }
 
-    // --- Body heading (Roblox-Standard): the character turns to face where it
-    // is going, not where the camera looks. Priority:
-    //   1) a just-struck target — pivot to it for the swing (fast), so attacks
-    //      read as "turn and hit";
-    //   2) otherwise the current movement direction (`moveHeading`) while
-    //      moving;
-    //   3) otherwise keep the last heading (stand still facing where you were).
+    // --- Body heading (mouse-aim / shift-lock): the character faces where you
+    // AIM — i.e. `cc.yaw`, the mouse-look direction the crosshair points along —
+    // so "where the crosshair is = where the character faces = where you hit"
+    // all agree. A just-struck slightly-off-axis target briefly overrides it
+    // (faster pivot) so the swing reads as landing exactly on that target.
     // Only steered while locked+alive; on menus/"click to play"/death the body
-    // just holds its pose. `angleDelta` takes the shortest way around the
-    // circle; the exponential factor is frame-rate-independent.
+    // just holds its pose. `angleDelta` takes the shortest way; the exponential
+    // factor is frame-rate-independent.
     faceTargetTimer.current = Math.max(0, faceTargetTimer.current - delta);
     if (locked && alive) {
-      let targetHeading: number | null = null;
+      let targetHeading = cc.yaw;
       let rate = CHARACTER_TURN_RATE;
       if (faceTargetTimer.current > 0 && faceTargetHeading.current !== null) {
         targetHeading = faceTargetHeading.current;
         rate = CHARACTER_TURN_RATE * 1.8; // snappier pivot onto a target
-      } else if (moveHeading !== null) {
-        targetHeading = moveHeading;
       }
-      if (targetHeading !== null) {
-        g.rotation.y += angleDelta(g.rotation.y, targetHeading) * (1 - Math.exp(-delta * rate));
-      }
-    }
-
-    // --- Aim reticle: floats in the world in front of the character where a
-    // swing would land, and snaps onto the auto-aimed target (turns red) when
-    // one is in range. Billboarded to the camera and drawn on top (depthTest
-    // off) so it's always readable. Position is eased so it glides. Shown only
-    // while actually playing (entered + look/touch active + alive).
-    if (reticleGroup.current) {
-      const show = active && locked && alive;
-      reticleGroup.current.visible = show;
-      if (show) {
-        const onTarget = sel.pos !== null;
-        if (onTarget && sel.pos) {
-          reticleAim.current.set(sel.pos.x, sel.pos.y + RETICLE_TARGET_HEIGHT, sel.pos.z);
-        } else {
-          const h = g.rotation.y;
-          reticleAim.current.set(
-            g.position.x + Math.sin(h) * RETICLE_FORWARD,
-            g.position.y + RETICLE_FLOAT_HEIGHT,
-            g.position.z + Math.cos(h) * RETICLE_FORWARD
-          );
-        }
-        if (!reticlePlaced.current) {
-          reticleGroup.current.position.copy(reticleAim.current);
-          reticlePlaced.current = true;
-        } else {
-          reticleGroup.current.position.lerp(reticleAim.current, 1 - Math.exp(-delta * RETICLE_FOLLOW_RATE));
-        }
-        reticleGroup.current.quaternion.copy(camera.quaternion);
-        const s = THREE.MathUtils.lerp(
-          reticleGroup.current.scale.x,
-          onTarget ? 1.3 : 1,
-          1 - Math.exp(-delta * RETICLE_SCALE_RATE)
-        );
-        reticleGroup.current.scale.setScalar(s);
-        reticleMat.color.copy(onTarget ? RETICLE_COLOR_LOCKED : RETICLE_COLOR_IDLE);
-      } else {
-        // Hidden (menu / death / left) — re-snap to its spot next time it shows.
-        reticlePlaced.current = false;
-      }
+      g.rotation.y += angleDelta(g.rotation.y, targetHeading) * (1 - Math.exp(-delta * rate));
     }
 
     combatRef.current.playerPos.copy(g.position);
@@ -1418,10 +1364,21 @@ export function Player({
     // one — a far smaller, rarer, and less jarring artifact than
     // continuous zoom breathing across most of the map.
     const smoothedDistance = cc.distance;
+    // Over-the-shoulder offset (see SHOULDER_* consts): shift camera AND look-
+    // target by the SAME right+up vector so the view direction is unchanged (a
+    // pure pan) — the character slides off-centre and the fixed crosshair sits
+    // over open world. `right` = the camera's screen-right axis (-cos, sin of
+    // viewYaw, so it tracks free-look); the lateral amount scales with distance
+    // so the on-screen offset stays constant at any zoom.
+    const shoulderRightX = -Math.cos(viewYaw);
+    const shoulderRightZ = Math.sin(viewYaw);
+    const shoulderMag = SHOULDER_FRACTION * smoothedDistance;
+    const shoulderOffX = shoulderRightX * shoulderMag;
+    const shoulderOffZ = shoulderRightZ * shoulderMag;
     cameraTarget.current.set(
-      g.position.x + dirX * smoothedDistance,
-      g.position.y + dirY * smoothedDistance,
-      g.position.z + dirZ * smoothedDistance
+      g.position.x + dirX * smoothedDistance + shoulderOffX,
+      g.position.y + dirY * smoothedDistance + SHOULDER_UP,
+      g.position.z + dirZ * smoothedDistance + shoulderOffZ
     );
     // Hard floor on the camera's actual world Y position — PITCH_MIN alone
     // (a fixed *angle*) doesn't prevent this: at a low pitch and scrolled
@@ -1448,7 +1405,14 @@ export function Player({
     // smooth without needing its own independent lag on top. Zero position
     // lag at any speed, full stop.
     camera.position.copy(cameraTarget.current);
-    lookTarget.current.set(g.position.x, g.position.y + 1, g.position.z);
+    // Same shoulder offset on the look-target — shifting both by the identical
+    // vector is what keeps the view direction unchanged, so screen-center lands
+    // just off the player's shoulder, over open world where the crosshair sits.
+    lookTarget.current.set(
+      g.position.x + shoulderOffX,
+      g.position.y + 1 + SHOULDER_UP,
+      g.position.z + shoulderOffZ
+    );
     camera.lookAt(lookTarget.current);
 
     // Small post-lookAt position jitter, scaled by the decaying shake
@@ -1641,32 +1605,6 @@ export function Player({
         </group>
       ))}
 
-      {/* Aim reticle — a world-space, camera-billboarded crosshair that hovers
-          in front of the character (never a fixed screen dot). Positioned /
-          scaled / coloured entirely from useFrame above; all meshes share one
-          additive material and draw on top (renderOrder + depthTest:false) so
-          it's always visible. Local geometry lives in the XY plane; copying the
-          camera quaternion each frame turns that into a flat on-screen reticle. */}
-      <group ref={reticleGroup} visible={false} scale={1}>
-        <mesh material={reticleMat} renderOrder={9999}>
-          <ringGeometry args={[0.132, 0.18, 44]} />
-        </mesh>
-        <mesh material={reticleMat} renderOrder={9999}>
-          <circleGeometry args={[0.026, 18]} />
-        </mesh>
-        <mesh material={reticleMat} renderOrder={9999} position={[0, 0.265, 0]}>
-          <planeGeometry args={[0.026, 0.1]} />
-        </mesh>
-        <mesh material={reticleMat} renderOrder={9999} position={[0, -0.265, 0]}>
-          <planeGeometry args={[0.026, 0.1]} />
-        </mesh>
-        <mesh material={reticleMat} renderOrder={9999} position={[0.265, 0, 0]}>
-          <planeGeometry args={[0.1, 0.026]} />
-        </mesh>
-        <mesh material={reticleMat} renderOrder={9999} position={[-0.265, 0, 0]}>
-          <planeGeometry args={[0.1, 0.026]} />
-        </mesh>
-      </group>
 
       {/* Slide trail — elongated glow ribbon behind the player.
           Siblings of `group`, positioned in world space from useFrame. */}
