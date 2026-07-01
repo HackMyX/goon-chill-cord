@@ -196,7 +196,8 @@ export function ParkourShell(props: ParkourShellProps) {
     sound.ultraWin();
     cameraControls.releaseLock();
     setSubmitting(true);
-    const res = await submitParkourRun(activeMap.id, Math.max(1, Math.round(finalMs)));
+    const checkpointsReached = Math.max(0, (progressRef.current.current ?? -1) + 1);
+    const res = await submitParkourRun(activeMap.id, Math.max(1, Math.round(finalMs)), checkpointsReached);
     setFinishResult(res);
     setSubmitting(false);
     if (res.success && res.timeMs) {

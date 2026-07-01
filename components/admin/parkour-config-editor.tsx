@@ -160,10 +160,11 @@ export function ParkourConfigEditor({ config }: { config: ParkourConfig }) {
               <NumField label="Luftsprünge" tip="Zusätzliche Sprünge in der Luft (0 = nur Bodensprung, 1 = Doppelsprung)." value={o.airJumps} def={map.airJumps} onChange={(v) => setMapOverride(map.id, { airJumps: v })} />
               <NumField label="Lauftempo" tip="Grundgeschwindigkeit (Welt-Einheiten/Sek)." step={0.1} value={o.moveSpeed} def={map.moveSpeed} onChange={(v) => setMapOverride(map.id, { moveSpeed: v })} />
               <NumField label="Sprint-Faktor" tip="Multiplikator auf das Lauftempo beim Sprinten (Shift)." step={0.05} value={o.sprintMultiplier} def={map.sprintMultiplier} onChange={(v) => setMapOverride(map.id, { sprintMultiplier: v })} />
-              <div />
+              <NumField label="Void-Höhe (Y)" tip="Fällt der Spieler unter diesen Y-Wert, respawnt er am letzten Checkpoint (der Abgrund bzw. die Lava). Negativ." value={o.voidY} def={map.voidY} onChange={(v) => setMapOverride(map.id, { voidY: v })} />
               <NumField label="Credits / Ziel" tip="Credits beim Erreichen des Ziels (über den zentralen Reward-Dispatcher)." value={o.rewardCredits} def={map.rewardCredits} onChange={(v) => setMapOverride(map.id, { rewardCredits: v })} />
               <NumField label="XP / Ziel" tip="XP beim Erreichen des Ziels." value={o.rewardXp} def={map.rewardXp} onChange={(v) => setMapOverride(map.id, { rewardXp: v })} />
               <NumField label="Bestzeit-Bonus" tip="Extra-Credits, wenn eine neue persönliche Bestzeit gesetzt wird." value={o.bestBonusCredits} def={map.bestBonusCredits} onChange={(v) => setMapOverride(map.id, { bestBonusCredits: v })} />
+              <NumField label="Credits / Checkpoint" tip="Credits pro tatsächlich erreichtem Checkpoint (beim Ziel gutgeschrieben, innerhalb des Tageslimits)." value={o.checkpointCredits} def={map.checkpointCredits} onChange={(v) => setMapOverride(map.id, { checkpointCredits: v })} />
             </div>
             <p className="mt-2 text-[11px] text-zinc-600">
               Medaillen-Ziele: 💎 {formatParkourTime(map.medals.diamond)} · 🥇 {formatParkourTime(map.medals.gold)} · 🥈 {formatParkourTime(map.medals.silver)} · 🥉 {formatParkourTime(map.medals.bronze)}

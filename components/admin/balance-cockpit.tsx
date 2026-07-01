@@ -254,11 +254,12 @@ export function BalanceCockpit({
     // Parkour · pro Map: Credits/XP am Ziel + Bestzeit-Bonus (Einnahme-Quelle).
     for (const baseMap of PARKOUR_MAPS) {
       const m = resolveMap(baseMap, parkourConfig);
+      const cpTotal = m.checkpoints.length * m.checkpointCredits;
       gameRows.push({
         id: `parkour-${m.id}`,
         name: `Parkour · ${m.name}`,
-        value: `${fmtCr(m.rewardCredits)} CR / Ziel`,
-        detail: `+${fmtCr(m.rewardXp)} XP · Bestzeit-Bonus +${fmtCr(m.bestBonusCredits)} CR · ${m.difficulty}`,
+        value: `${fmtCr(m.rewardCredits + cpTotal)} CR / Ziel`,
+        detail: `Ziel ${fmtCr(m.rewardCredits)} + ${m.checkpoints.length} CP × ${fmtCr(m.checkpointCredits)} = ${fmtCr(cpTotal)} · +${fmtCr(m.rewardXp)} XP · Bestzeit +${fmtCr(m.bestBonusCredits)} CR · ${m.difficulty}`,
         jumpTab: "parkour",
         jumpAnchor: `parkour-map-${m.id}`,
       });

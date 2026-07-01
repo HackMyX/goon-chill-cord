@@ -21,6 +21,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 export interface ParkourGhostPayload {
   id: string;          // user id
   name: string;
+  gender: "m" | "w";
   x: number;
   y: number;
   z: number;

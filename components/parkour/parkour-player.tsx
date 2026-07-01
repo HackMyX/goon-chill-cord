@@ -407,15 +407,19 @@ export function ParkourPlayer({
 
     // ── Checkpoints (arm the next one you touch) ──
     if (!finishedRef.current) {
-      for (const cp of map.checkpoints) {
-        if ((progressRef.current?.current ?? -1) >= cp.index) continue;
-        const dx = g.position.x - cp.pos[0];
-        const dz = g.position.z - cp.pos[2];
-        if (dx * dx + dz * dz <= (cp.radius + R) ** 2 && Math.abs(feetY.current - cp.pos[1]) < 3.5) {
-          if (progressRef.current) progressRef.current.current = cp.index;
-          // Respawn a touch above the pad so you don't clip into it.
-          respawnPoint.current = [cp.pos[0], cp.pos[1] + 0.1, cp.pos[2]];
-          onCheckpoint?.(cp.index);
+      // A checkpoint counts ONLY when you actually STAND on its pad: grounded,
+      // inside its radius AND at its height. Brushing the ring or jumping up at
+      // it from below does nothing (that would be pointless/cheesy).
+      if (grounded.current) {
+        for (const cp of map.checkpoints) {
+          if ((progressRef.current?.current ?? -1) >= cp.index) continue;
+          const dx = g.position.x - cp.pos[0];
+          const dz = g.position.z - cp.pos[2];
+          if (dx * dx + dz * dz <= cp.radius * cp.radius && Math.abs(feetY.current - cp.pos[1]) < 0.5) {
+            if (progressRef.current) progressRef.current.current = cp.index;
+            respawnPoint.current = [cp.pos[0], cp.pos[1] + 0.05, cp.pos[2]];
+            onCheckpoint?.(cp.index);
+          }
         }
       }
       // ── Finish ──
@@ -482,6 +486,7 @@ export function ParkourPlayer({
         broadcastParkourGhost({
           id: userId,
           name,
+          gender,
           x: g.position.x,
           y: g.position.y,
           z: g.position.z,

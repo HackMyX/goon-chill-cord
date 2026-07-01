@@ -7,7 +7,7 @@
 // Run: node scripts/validate-parkour-maps.mjs
 // (Node 24 strippt die TS-Typen von lib/parkour-config.ts automatisch.)
 
-import { PARKOUR_MAPS } from "../lib/parkour-config.ts";
+import { PARKOUR_MAPS, moverCenterAt } from "../lib/parkour-config.ts";
 
 // ── Engine-Konstanten (müssen mit parkour-player.tsx übereinstimmen) ──
 const R = 0.42;
@@ -81,10 +81,22 @@ for (const map of PARKOUR_MAPS) {
   const boxes = map.platforms.map((p) => ({ ...aabb(p.pos, p.size), kill: !!p.kill, raw: p }));
   const finishBox = aabb(map.finish, map.finishSize);
 
-  // Route = Plattformen in Array-Reihenfolge (der geplante Kletterpfad) + Finish.
-  // Kill-Kacheln werden übersprungen (keine Landeziele).
-  const route = boxes.filter((b) => !b.kill);
-  const nodes = [...route, finishBox];
+  // Route: routeHint (Plattform ODER beweglicher Node) + Finish. Ein beweglicher
+  // Node liefert mehrere Kandidaten-Boxen (Phasen) — der Spieler kann timen, also
+  // gilt eine Transition als schaffbar, wenn IRGENDEIN Phasen-Paar reicht.
+  const moverBox = (m, t) => aabb(moverCenterAt(m, t), m.size);
+  const nodeCandidates = (n) => {
+    if (n.kind === "mover") {
+      const m = map.movers[n.index];
+      const K = 6;
+      return Array.from({ length: K }, (_, k) => moverBox(m, (m.period * k) / K));
+    }
+    return [boxes[n.index]];
+  };
+  const routeNodes = (map.routeHint && map.routeHint.length
+    ? map.routeHint.map(nodeCandidates)
+    : boxes.filter((b) => !b.kill).map((b) => [b]));
+  const nodes = [...routeNodes, [finishBox]]; // each node = array of candidate boxes
 
   // Start-Pad: enthält es die Start-XZ und passt die Höhe?
   const startBox = boxes.find((b) =>
@@ -92,13 +104,15 @@ for (const map of PARKOUR_MAPS) {
   if (!startBox) problems.push(`Start (${map.start}) liegt auf keiner Plattform.`);
   else if (Math.abs(startBox.top - map.start[1]) > 0.4) problems.push(`Start-Höhe ${map.start[1]} passt nicht zur Pad-Oberkante ${startBox.top.toFixed(2)}.`);
 
-  // Erreichbarkeit jeder Transition
+  // Erreichbarkeit jeder Transition (bestes Kandidaten-Paar zählt)
   for (let i = 0; i < nodes.length - 1; i++) {
     const A = nodes[i], B = nodes[i + 1];
-    const rise = B.top - A.top;
-    const res = jumpReaches(map, A, B);
-    if (!res.reachable) {
-      const dist = Math.hypot(B.cx - A.cx, B.cz - A.cz);
+    let reachable = false;
+    for (const a of A) { for (const b of B) { if (jumpReaches(map, a, b).reachable) { reachable = true; break; } } if (reachable) break; }
+    if (!reachable) {
+      const a0 = A[0], b0 = B[0];
+      const rise = b0.top - a0.top;
+      const dist = Math.hypot(b0.cx - a0.cx, b0.cz - a0.cz);
       const label = i === nodes.length - 2 ? "→ FINISH" : `#${i} → #${i + 1}`;
       problems.push(`UNERREICHBAR ${label}: Anstieg ${rise.toFixed(2)} (SingleJump ${singleH.toFixed(2)}, airJumps ${map.airJumps}), Distanz ${dist.toFixed(2)}.`);
     }

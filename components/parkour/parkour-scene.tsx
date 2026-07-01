@@ -86,7 +86,7 @@ export function ParkourScene({
         onFirstMove={onFirstMove}
       />
 
-      {multiplayer && <ParkourGhosts selfId={userId} colorHex={t.accent} />}
+      {multiplayer && <ParkourGhosts selfId={userId} />}
     </>
   );
 }

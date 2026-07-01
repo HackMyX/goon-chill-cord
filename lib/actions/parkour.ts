@@ -75,9 +75,11 @@ export async function updateParkourConfig(input: ParkourConfig): Promise<Parkour
     if (o.airJumps !== undefined) c.airJumps = num(o.airJumps, map.airJumps, 0, 3);
     if (o.moveSpeed !== undefined) c.moveSpeed = Math.max(2, Math.min(18, Number(o.moveSpeed)));
     if (o.sprintMultiplier !== undefined) c.sprintMultiplier = Math.max(1, Math.min(3, Number(o.sprintMultiplier)));
+    if (o.voidY !== undefined) c.voidY = Math.max(-300, Math.min(-2, Number(o.voidY)));
     if (o.rewardCredits !== undefined) c.rewardCredits = num(o.rewardCredits, map.rewardCredits, 0, 100000);
     if (o.rewardXp !== undefined) c.rewardXp = num(o.rewardXp, map.rewardXp, 0, 50000);
     if (o.bestBonusCredits !== undefined) c.bestBonusCredits = num(o.bestBonusCredits, map.bestBonusCredits, 0, 100000);
+    if (o.checkpointCredits !== undefined) c.checkpointCredits = num(o.checkpointCredits, map.checkpointCredits, 0, 50000);
     cleanMaps[map.id] = c;
   }
 
@@ -123,7 +125,7 @@ function minPlausibleMs(diamondMs: number): number {
   return Math.round(diamondMs * 0.45);
 }
 
-export async function submitParkourRun(mapId: string, timeMs: number): Promise<ParkourSubmitResult> {
+export async function submitParkourRun(mapId: string, timeMs: number, checkpointsReached = 0): Promise<ParkourSubmitResult> {
   if (!Number.isFinite(timeMs) || timeMs <= 0) return { success: false, error: "Ungültige Zeit." };
 
   const map = getParkourMap(mapId);
@@ -187,7 +189,9 @@ export async function submitParkourRun(mapId: string, timeMs: number): Promise<P
   let creditsAwarded = 0;
   let xpAwarded = 0;
   if (withinCap) {
-    const creditReward = eff.rewardCredits + (isNewRecord ? eff.bestBonusCredits : 0);
+    // Finish reward + best-time bonus + a bonus per checkpoint actually reached.
+    const cpReached = Math.max(0, Math.min(Math.round(checkpointsReached), map.checkpoints.length));
+    const creditReward = eff.rewardCredits + (isNewRecord ? eff.bestBonusCredits : 0) + cpReached * eff.checkpointCredits;
     if (creditReward > 0) {
       const r = await grantReward(admin, user.id, { type: "credits", amount: creditReward }, "parkour");
       if (r.ok) creditsAwarded = creditReward;
