@@ -242,6 +242,18 @@ Karten), Welt-Modelle. Animationen: framer-motion + globals.css keyframes (`bonu
 | Mine | mine.ts | mine_config | Lager-Stunden/Level | ❌ | mine_collect/upgrade |
 | Cases | cases.ts | case_tiers | Credits-Kosten | ❌ | case_open |
 | Kill-Streak | kill-streak.ts | — | Multiplier-Progression | ❌ | streak_* |
+| Parkour | parkour.ts | parkour_config | daily_rewarded_finishes (Belohnungs-Cap) | ❌ | parkour_finish |
+
+**Parkour (3D Jump & Run, `/parkour`)** — eigenes AAA-Standalone-Spiel, das die Farmwelt-Engine
+(`use-camera-controls`/`use-keyboard-controls`/`CharacterModel`) wiederverwendet, aber eine eigene
+**AABB-Plattform-Physik** hat (`components/parkour/parkour-player.tsx`: Gravitation/Doppelsprung/
+Coyote-Time, Landen auf Plattform-Oberseiten, bewegliche Plattformen mitfahren, Checkpoints,
+Void-Respawn, Eis/Sprungpad/Hazard). **4 Maps** sind Code-Daten in `lib/parkour-config.ts`
+(client-safe; Physik/Rewards per Admin-Override, Geometrie NIE in der DB). Bestenliste ms-genau
+(`parkour_best_times`), Solo + Randomizer + **Multiplayer-Lobbys** (`parkour_lobbies`/
+`_lobby_members` + `lib/parkour-realtime.ts` Ghost-Sync, Freunde-Einladung via `notifyUser`).
+Rewards über `grantReward` (credits/xp), gedeckelt per Tages-Cap. Admin-Tab „Parkour", Cockpit-
+Einnahmequelle, System-Health-Block, Audit `parkour_finish`.
 
 ---
 
