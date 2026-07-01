@@ -57,7 +57,6 @@ export function TopBar({
   level,
   avatarUrl,
 }: TopBarProps) {
-  const creditsLabel = new Intl.NumberFormat("de-DE").format(credits);
   const sound = useSoundManager();
   const {
     siteName,
@@ -93,9 +92,21 @@ export function TopBar({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [liveLevel, setLiveLevel] = useState(level ?? 0);
   const [liveAvatarUrl, setLiveAvatarUrl] = useState<string | null>(avatarUrl ?? null);
+  // Live-Credits + Live-Rolle: der TopBar-eigene profiles-UPDATE-Listener (unten)
+  // aktualisiert diese sofort — so wirken Admin-Grants / Rollenänderungen LIVE auf
+  // JEDER Seite UND in JEDEM Game (die Games rendern dieselbe TopBar), ohne Reload.
+  // Fallback auf die Server-Props, bis das erste Live-Event kommt.
+  const [liveCredits, setLiveCredits] = useState(credits);
+  const [liveRole, setLiveRole] = useState<string | null>(null);
   useEffect(() => { setLiveInventoryCount(inventoryCount); }, [inventoryCount]);
   useEffect(() => { if (level !== undefined) setLiveLevel(level); }, [level]);
   useEffect(() => { if (avatarUrl !== undefined) setLiveAvatarUrl(avatarUrl); }, [avatarUrl]);
+  useEffect(() => { setLiveCredits(credits); }, [credits]);
+  const creditsLabel = new Intl.NumberFormat("de-DE").format(liveCredits);
+  // Rollen-Ableitung: sobald eine Live-Rolle vorliegt, gilt sie (admin ⇒ auch Mod);
+  // sonst die Server-Props (unverändertes Verhalten bis zur ersten Änderung).
+  const effIsAdmin = liveRole !== null ? liveRole === "admin" : isAdmin;
+  const effIsModerator = liveRole !== null ? liveRole === "admin" || liveRole === "moderator" : isModerator;
 
   useEffect(() => {
     if (userId) { setResolvedUserId(userId); return; }
@@ -134,6 +145,9 @@ export function TopBar({
           const row = payload.new as Record<string, unknown>;
           if (typeof row.level === "number") setLiveLevel(row.level);
           if ("avatar_url" in row) setLiveAvatarUrl((row.avatar_url as string | null) ?? null);
+          // Credits + Rolle live — greift auf jeder Seite und in jedem Game.
+          if (typeof row.credits === "number") setLiveCredits(row.credits);
+          if (typeof row.role === "string") setLiveRole(row.role);
         }
       )
       .subscribe();
@@ -324,7 +338,7 @@ export function TopBar({
       <div className="flex items-center gap-2.5 justify-self-start">
         {/* Mod / Admin panels — pinned to the FAR LEFT edge, before the version,
             ICON-ONLY (no text) with a soft tinted pill. */}
-        {isAdmin && (
+        {effIsAdmin && (
           <IconButton
             icon={ShieldAlert}
             label="Admin-Panel"
@@ -333,7 +347,7 @@ export function TopBar({
             className="hidden h-8 w-8 xl:flex [@media(max-height:600px)]:hidden rounded-lg bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30 hover:bg-amber-500/25 hover:text-amber-200 hover:ring-amber-300/60 border-0 shadow-[0_0_12px_-4px_rgba(245,158,11,0.6)]"
           />
         )}
-        {(isAdmin || isModerator) && (
+        {(effIsAdmin || effIsModerator) && (
           <IconButton
             icon={Shield}
             label="Mod-Panel"
@@ -377,7 +391,7 @@ export function TopBar({
 
         {/* Credits pill — animates on change */}
         <motion.div
-          key={credits}
+          key={liveCredits}
           initial={{ scale: 1.1 }}
           animate={{ scale: 1 }}
           transition={{ type: "spring", stiffness: 400, damping: 20 }}
@@ -425,9 +439,9 @@ export function TopBar({
     <MobileNavDrawer
       open={mobileMenuOpen}
       onClose={() => setMobileMenuOpen(false)}
-      isAdmin={isAdmin}
-      isModerator={isModerator}
-      credits={credits}
+      isAdmin={effIsAdmin}
+      isModerator={effIsModerator}
+      credits={liveCredits}
       currencyName={currencyName ?? "CR"}
       slots={slots}
       pendingTradesCount={pendingTradesCount}
