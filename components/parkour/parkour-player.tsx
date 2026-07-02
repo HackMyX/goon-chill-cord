@@ -28,8 +28,8 @@ interface Collider {
 
 const R = 0.42;            // player collision half-width (XZ)
 const H = 1.7;             // player collision height
-const COYOTE = 0.12;       // seconds after leaving ground you can still jump
-const JUMP_BUFFER = 0.14;  // seconds a jump press is remembered before landing
+const COYOTE = 0.16;       // seconds after leaving ground you can still ground-jump
+const JUMP_BUFFER = 0.16;  // seconds a jump press is remembered before landing
 const ACCEL_GROUND = 16;
 const ACCEL_AIR = 7;
 const ACCEL_ICE = 3.5;
@@ -72,6 +72,32 @@ function boxCollider(
     minZ: cz - sz / 2, maxZ: cz + sz / 2,
     topY: cy + sy / 2, kill, ice, bounce, moverIdx, crumbleIndex,
   };
+}
+
+/** SOLID side collision: clamp the player out of any block it enters from the
+ * SIDE on one axis. Gated so it NEVER fires while landing on / standing on a top
+ * (feet at/above the top) or when the centre is over/under the block — only a
+ * genuine side approach pushes. Clamps to the exact edge each frame → no jitter. */
+function resolveSideAxis(
+  g: THREE.Group, cols: Collider[], axis: "x" | "z", feetY: number,
+  crumbleStates: Float32Array | null,
+): void {
+  const bodyTop = feetY + H;
+  for (const c of cols) {
+    if (c.crumbleIndex >= 0 && crumbleStates && crumbleStates[c.crumbleIndex] >= CRUMBLE_DELAY) continue;
+    if (feetY >= c.topY - 0.06) continue;     // at/above the top → landing handles it, no side push
+    if (bodyTop <= c.minY + 0.05) continue;   // body entirely below the block
+    const px = g.position.x, pz = g.position.z;
+    if (px + R <= c.minX || px - R >= c.maxX) continue; // no X footprint overlap
+    if (pz + R <= c.minZ || pz - R >= c.maxZ) continue; // no Z footprint overlap
+    if (axis === "x") {
+      if (px >= c.minX && px <= c.maxX) continue; // centre over/under the block, not an X-side hit
+      g.position.x = px > c.maxX ? c.maxX + R : c.minX - R;
+    } else {
+      if (pz >= c.minZ && pz <= c.maxZ) continue;
+      g.position.z = pz > c.maxZ ? c.maxZ + R : c.minZ - R;
+    }
+  }
 }
 
 export interface ParkourPlayerProps {
@@ -373,11 +399,14 @@ export function ParkourPlayer({
     const accel = stunTimer.current > 0 ? 2.5 : dashing ? 40 : !grounded.current ? ACCEL_AIR : onIce.current ? ACCEL_ICE : ACCEL_GROUND;
     vel.current.lerp(targetVel.current, 1 - Math.exp(-delta * accel));
 
-    // ── Horizontal move (side-resolution deliberately runs AFTER the vertical
-    // step below, so landing on a ledge always wins over being shoved off its
-    // side edge — this is the fix for "made the jump but bugged off the corner"). ──
+    // ── Horizontal move + SOLID side collision. Platforms are full blocks: you
+    // bounce off their sides (can't clip through the side/head). The gate
+    // (feet clearly below the top AND centre outside the box) means landing on a
+    // top or standing never triggers a side push → zero sticking / jitter. ──
     g.position.x += vel.current.x * delta;
+    resolveSideAxis(g, cols, "x", feetY.current, crumbleStates);
     g.position.z += vel.current.z * delta;
+    resolveSideAxis(g, cols, "z", feetY.current, crumbleStates);
 
     // ── Jump input (buffered) ──
     coyote.current = Math.max(0, coyote.current - delta);
@@ -468,10 +497,21 @@ export function ParkourPlayer({
       }
     }
 
-    // ONE-WAY PLATFORMS: no head-bonk, no side collision. The player always
-    // passes the sides/bottom freely and can ONLY land on a top face. This is the
-    // clean parkour model — you can never be shoved off, stuck against an edge, or
-    // blocked from jumping up onto the next platform (the "kleben/festbuggen" bug).
+    // (B) HEAD-BONK — rising with your centre directly UNDER a platform → stop
+    // upward motion. Together with the solid sides above, you can never pass
+    // THROUGH a block from the side or below; every block is fully collidable.
+    if (!grounded.current && vv.current > 0) {
+      const prevHead = prevFeet + H;
+      for (const c of cols) {
+        if (c.crumbleIndex >= 0 && crumbleStates && crumbleStates[c.crumbleIndex] >= CRUMBLE_DELAY) continue;
+        if (px <= c.minX || px >= c.maxX || pz <= c.minZ || pz >= c.maxZ) continue; // centre must be under it
+        if (prevHead - 0.02 <= c.minY && feetY.current + H >= c.minY) {
+          feetY.current = c.minY - H;
+          vv.current = 0;
+          break;
+        }
+      }
+    }
 
     // Bounce pad launches AFTER landing decisions (overrides the grounded snap).
     if (landedBounce > 0) { vv.current = landedBounce; grounded.current = false; }

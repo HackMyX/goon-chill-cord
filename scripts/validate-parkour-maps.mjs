@@ -56,9 +56,16 @@ function jumpReaches(map, A, B) {
         prevY = y;
         vv += g * dt; y += vv * dt;
         x += ux * vX * dt; z += uz * vX * dt;
+        // Landing on top (descending through the top face, within ledge reach).
         if (vv <= 0 && prevY > B.top - 0.001 && y <= B.top + 0.03 &&
             x > B.minX - REACH && x < B.maxX + REACH && z > B.minZ - REACH && z < B.maxZ + REACH) {
           ok = true; break;
+        }
+        // SOLID SIDE: if the footprint enters the target's side while still BELOW
+        // its top, the real player is blocked by the side — this trajectory fails.
+        if (y < B.top - 0.06 &&
+            x > B.minX - R && x < B.maxX + R && z > B.minZ - R && z < B.maxZ + R) {
+          break;
         }
         if (y < B.top - 10) break;
         t += dt;
