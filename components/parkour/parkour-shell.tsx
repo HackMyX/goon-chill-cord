@@ -15,6 +15,8 @@ import type { CheckpointProgressRef } from "@/components/parkour/parkour-geometr
 import type { GhostRuntime, GhostView } from "@/components/parkour/parkour-ghosts";
 import { MobileControls } from "@/components/world/mobile-controls";
 import { useCameraControls } from "@/components/world/use-camera-controls";
+import { setActiveKeybinds } from "@/components/world/use-keyboard-controls";
+import { loadWorldSettings } from "@/lib/world-settings";
 import { useSoundManager } from "@/lib/sound-manager";
 import { setMusicMode } from "@/lib/music-dynamics";
 import { useLiveConfig } from "@/lib/use-live-config";
@@ -62,7 +64,11 @@ export interface ParkourShellProps {
 
 const CANVAS_DPR: [number, number] = [1, 2];
 const CANVAS_DPR_MOBILE: [number, number] = [1, 1.5];
-const CANVAS_CAMERA = { position: [0, 4, 8] as [number, number, number], fov: 60 };
+// Exactly the farm world's camera framing (WORLD_CAMERA in world-shell.tsx) so the
+// view feels identical: fov 55 (not 60 — a wider fov reads as a different, more
+// "arcade"/zoomed-out camera) and the same initial pose. The per-frame chase math
+// (ParkourPlayer) is already the farm world's, so this closes the last gap.
+const CANVAS_CAMERA = { position: [0, 2.6, 6] as [number, number, number], fov: 55 };
 
 const DIFF_COLOR: Record<ParkourMap["difficulty"], string> = {
   Leicht: "text-emerald-400", Mittel: "text-amber-400", Schwer: "text-orange-400", Extrem: "text-red-400",
@@ -176,6 +182,25 @@ export function ParkourShell(props: ParkourShellProps) {
     setLbLoading(false);
   }, []);
   useEffect(() => { if (view === "menu") void loadLeaderboard(selectedId); }, [selectedId, view, loadLeaderboard]);
+
+  // Adopt the player's saved world settings (localStorage, shared with the farm
+  // world): mouse sensitivity X/Y AND custom key bindings — so the parkour
+  // controls feel EXACTLY like the farm world the user already tuned. Applied on
+  // mount, before pointer-lock can engage. Re-read on focus so a change made in a
+  // farm-world tab is picked up without a reload.
+  useEffect(() => {
+    const apply = () => {
+      const s = loadWorldSettings();
+      const st = cameraControls.state.current;
+      st.sensitivityXMult = s.sensitivityX;
+      st.sensitivityYMult = s.sensitivityY;
+      setActiveKeybinds(s.keybinds);
+    };
+    apply();
+    window.addEventListener("focus", apply);
+    return () => window.removeEventListener("focus", apply);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Presence roster: everyone currently connected to this lobby's realtime room.
   useEffect(() => {

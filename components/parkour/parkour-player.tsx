@@ -31,12 +31,13 @@ const R = 0.42;            // player collision half-width (XZ)
 const H = 1.7;             // player collision height
 const COYOTE = 0.16;       // seconds after leaving ground you can still ground-jump
 const JUMP_BUFFER = 0.16;  // seconds a jump press is remembered before landing
-const ACCEL_GROUND = 16;
-// Air control matches the farm world's single ACCEL_RATE (14) — a jump-and-run
-// wants the SAME crisp, responsive steering in the air as on the ground (the old
-// 7 read as floaty/sluggish mid-jump and made precise landings feel unfair). Max
-// speed + jump height are unchanged, so every map stays solvable (only landings
-// get more forgiving, never harder). This is the "Steuerung von der Farmwelt".
+// Ground AND air acceleration both match the farm world's single ACCEL_RATE (14)
+// so the movement feel is identical on the ground and in the air — the same crisp,
+// responsive Roblox-style steering (the old ground 16 / air 7 split made air feel
+// floaty/sluggish and the ground a touch snappier than the farm). Max speed + jump
+// height are unchanged, so every map stays solvable (landings only get more
+// forgiving, never harder). This IS "die Steuerung von der Farmwelt".
+const ACCEL_GROUND = 14;
 const ACCEL_AIR = 14;
 const ACCEL_ICE = 3.5;
 const MIN_CAMERA_WORLD_Y = 0.6;
