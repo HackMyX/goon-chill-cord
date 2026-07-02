@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Box, Joystick, Pickaxe, Trophy, Coins, Dices, CircleDot,
   Loader2, Save, Check, LayoutList, ChevronUp, ChevronDown, Eye, EyeOff,
-  ShieldOff, CheckCircle2, AlertTriangle, ImageIcon, Users,
+  ShieldOff, CheckCircle2, AlertTriangle, ImageIcon, Users, Footprints,
 } from "lucide-react";
 import { adminResetAllWorldSessions } from "@/lib/actions/session";
 import {
@@ -27,6 +27,7 @@ import { MineLeaderboardEditor } from "@/components/admin/mine-leaderboard-edito
 import { PlinkoConfigEditor } from "@/components/admin/plinko-config-editor";
 import { PlinkoLeaderboardEditor } from "@/components/admin/plinko-leaderboard-editor";
 import { DonLeaderboardEditor } from "@/components/admin/don-leaderboard-editor";
+import { ParkourConfigEditor } from "@/components/admin/parkour-config-editor";
 import { UserRowEditor } from "@/components/admin/user-row-editor";
 import type { ProfileRow } from "@/components/admin/admin-shell";
 import type { WorldSessionConfig } from "@/lib/world-session-config";
@@ -37,6 +38,7 @@ import type { DonConfig } from "@/lib/don-config";
 import type { SnakeConfig } from "@/lib/snake-config";
 import type { MineConfig } from "@/lib/mine-config";
 import type { PlinkoConfig } from "@/lib/actions/plinko";
+import type { ParkourConfig } from "@/lib/parkour-config";
 
 interface GameDef {
   id: string;
@@ -46,11 +48,12 @@ interface GameDef {
 }
 
 const GAMES: GameDef[] = [
-  { id: "world",  name: "3D World",          icon: Box,       status: "live" },
-  { id: "don",    name: "Double or Nothing",  icon: Dices,     status: "live" },
-  { id: "snake",  name: "Snake",              icon: Joystick,  status: "live" },
-  { id: "mine",   name: "Mine",               icon: Pickaxe,   status: "live" },
-  { id: "plinko", name: "Plinko",             icon: CircleDot, status: "live" },
+  { id: "world",   name: "3D World",           icon: Box,        status: "live" },
+  { id: "parkour", name: "Parkour",            icon: Footprints, status: "live" },
+  { id: "don",     name: "Double or Nothing",  icon: Dices,      status: "live" },
+  { id: "snake",   name: "Snake",              icon: Joystick,   status: "live" },
+  { id: "mine",    name: "Mine",               icon: Pickaxe,    status: "live" },
+  { id: "plinko",  name: "Plinko",             icon: CircleDot,  status: "live" },
 ];
 
 interface GamesTabProps {
@@ -63,6 +66,7 @@ interface GamesTabProps {
   snakeConfig: SnakeConfig;
   mineConfig: MineConfig;
   plinkoConfig: PlinkoConfig;
+  parkourConfig: ParkourConfig;
 }
 
 // ── Emergency: reset all in-world sessions ────────────────────────────────────
@@ -321,6 +325,7 @@ export function GamesTab({
   snakeConfig,
   mineConfig,
   plinkoConfig,
+  parkourConfig,
 }: GamesTabProps) {
   const [openGame, setOpenGame] = useState<string>("");
 
@@ -405,6 +410,14 @@ export function GamesTab({
                 <div className="border-t border-white/8 pt-4">
                   <PlinkoLeaderboardEditor />
                 </div>
+              </div>
+            )}
+
+            {isOpen && game.id === "parkour" && (
+              <div className="flex flex-col gap-6 border-t border-white/10 px-5 py-5">
+                {/* Voller Parkour-Editor: pro Map Physik/Belohnungen, Lobby, Belohnungs-Limit
+                    UND der Bestenlisten-Reset pro Map — alles an einem Ort wie bei den anderen Spielen. */}
+                <ParkourConfigEditor config={parkourConfig} />
               </div>
             )}
 

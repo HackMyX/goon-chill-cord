@@ -728,6 +728,7 @@ export function AdminShell({
             snakeConfig={snakeConfig}
             mineConfig={mineConfig}
             plinkoConfig={plinkoConfig}
+            parkourConfig={parkourConfig}
           />
         )}
 
