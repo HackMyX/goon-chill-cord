@@ -27,6 +27,7 @@ export interface ParkourSceneProps {
   onFall?: () => void;
   onFirstMove?: () => void;
   onHazardHit?: () => void;
+  onFreeCamChange?: (active: boolean) => void;
 }
 
 export function ParkourScene({
@@ -46,6 +47,7 @@ export function ParkourScene({
   onFall,
   onFirstMove,
   onHazardHit,
+  onFreeCamChange,
 }: ParkourSceneProps) {
   const t = map.theme;
   // Shared crumble-platform state — one stable ref object per map, written by the
@@ -95,6 +97,7 @@ export function ParkourScene({
         onFall={onFall}
         onFirstMove={onFirstMove}
         onHazardHit={onHazardHit}
+        onFreeCamChange={onFreeCamChange}
       />
 
       {multiplayer && <ParkourGhosts selfId={userId} />}

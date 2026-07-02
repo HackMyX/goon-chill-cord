@@ -46,10 +46,12 @@ const GHOST_INTERVAL = 0.05; // 20 Hz
 const DASH_DURATION = 0.55;
 const DASH_COOLDOWN = 1.1;
 const DASH_SPEED_FACTOR = 2.2;
-// Keyboard turn speed (rad/s) — A/D rotate the aim yaw IN ADDITION to the mouse,
-// so you can steer with either and they compose on the same yaw. ~183°/s: quick
-// enough to reorient mid-course, calm enough to stay precise.
-const KEY_TURN_RATE = 3.2;
+// ── Free camera (V) — fly a LEASHED camera around the frozen player. ──
+// Max distance the free camera may drift from the player; fly past it and the
+// camera snaps back onto this sphere so you can never lose the player.
+const FREECAM_MAX_DIST = 22;
+// Free-cam fly speed (world units/sec); ×2.4 while sprint (Shift) is held.
+const FREECAM_SPEED = 13;
 // Landing catch reach = the body radius R exactly (see the landing block): a
 // descending player catches the top only while its FOOTPRINT still overlaps the
 // platform. That removes the old ledge "pull-in" teleport — which yanked the
@@ -92,17 +94,6 @@ function boxCollider(
     minZ: cz - sz / 2, maxZ: cz + sz / 2,
     topY: cy + sy / 2, kill, ice, bounce, moverIdx, crumbleIndex,
   };
-}
-
-/** Apply an A/D keyboard turn to the shared aim yaw and wrap it to (−π, π].
- * Lives at module scope (same reason as easeFreeLookToZero) so mutating the
- * hook-owned `cc` ref stays out of the React-Compiler-flagged component scope.
- * The mouse writes the SAME `cc.yaw`, so keyboard-turn and mouse-look compose. */
-function applyKeyboardTurn(cc: { yaw: number }, deltaYaw: number): void {
-  let y = cc.yaw + deltaYaw;
-  if (y > Math.PI) y -= Math.PI * 2;
-  else if (y < -Math.PI) y += Math.PI * 2;
-  cc.yaw = y;
 }
 
 /** SOLID side collision: clamp the player out of any block it enters from the
@@ -174,6 +165,9 @@ export interface ParkourPlayerProps {
   onFirstMove?: () => void;
   /** Fired when a hazard shoves the player — for a screen flash + sound. */
   onHazardHit?: () => void;
+  /** Fired when the free camera mode toggles (V / HUD button) — lets the shell
+   * show the "free camera" hint + highlight its button. */
+  onFreeCamChange?: (active: boolean) => void;
 }
 
 export function ParkourPlayer({
@@ -194,12 +188,40 @@ export function ParkourPlayer({
   onFall,
   onFirstMove,
   onHazardHit,
+  onFreeCamChange,
 }: ParkourPlayerProps) {
   const group = useRef<THREE.Group>(null);
   const limbs = useRef<CharacterLimbRefs>(null);
   const keys = useKeyboardControls();
   const { camera } = useThree();
   const sound = useSoundManager();
+
+  // ── Free camera (V) — a leashed fly-cam around the frozen player ──
+  const freeCam = useRef(false);
+  const freeCamPos = useRef(new THREE.Vector3());
+  const freeCamInit = useRef(false);
+  const wasFreeCam = useRef(false);   // detects the free-cam→normal transition (mover-ride resync)
+  const onFreeCamChangeRef = useRef(onFreeCamChange);
+  onFreeCamChangeRef.current = onFreeCamChange;
+  useEffect(() => {
+    const toggle = () => {
+      freeCam.current = !freeCam.current;
+      if (freeCam.current) freeCamInit.current = false;   // re-anchor to current cam pos on enter
+      onFreeCamChangeRef.current?.(freeCam.current);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      // Ignore when typing in an input; toggle on V.
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.code === "KeyV") { e.preventDefault(); toggle(); }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("gnc:parkour-freecam", toggle as EventListener);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("gnc:parkour-freecam", toggle as EventListener);
+    };
+  }, []);
 
   // Physics state (refs — mutated in useFrame, no re-renders)
   const vel = useRef(new THREE.Vector3());       // horizontal velocity
@@ -322,6 +344,51 @@ export function ParkourPlayer({
     if (!cc.freeLookActive) easeFreeLookToZero(cc, Math.min(1, delta * FREE_LOOK_RESET_RATE));
     const elapsed = state.clock.elapsedTime;
     const locked = cameraControls.locked || mobileMode;
+
+    // ── FREE CAMERA (V) — freeze the player, fly a LEASHED camera around it. ──
+    // WASD flies relative to the mouse look (W/S along the look direction so you
+    // rise/dive by looking up/down, A/D strafe), Shift = faster. The camera is
+    // hard-leashed to FREECAM_MAX_DIST from the player: fly past it and the
+    // position snaps back onto that sphere, so you can never lose the player. The
+    // player's physics are paused this frame (early return) — a clean look-around.
+    if (freeCam.current) {
+      if (!freeCamInit.current) { freeCamInit.current = true; freeCamPos.current.copy(camera.position); }
+      keys.consumeJump(); keys.consumeSlide(); // drain one-shots so nothing fires on exit
+      const yaw = cc.yaw + cc.freeLookYaw;
+      const pitch = THREE.MathUtils.clamp(cc.pitch + cc.freeLookPitch, PITCH_MIN, PITCH_MAX);
+      const cp = Math.cos(pitch);
+      const lookX = Math.sin(yaw) * cp, lookY = Math.sin(pitch), lookZ = Math.cos(yaw) * cp;
+      const rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
+      const k = keys.state.current;
+      const f = mobileMode ? 0 : (k.forward ? 1 : 0) - (k.backward ? 1 : 0);
+      const r = mobileMode ? 0 : (k.strafeRight ? 1 : 0) - (k.strafeLeft ? 1 : 0);
+      const spd = FREECAM_SPEED * (!mobileMode && k.sprint ? 2.4 : 1) * delta;
+      freeCamPos.current.x += (lookX * f + rightX * r) * spd;
+      freeCamPos.current.y += lookY * f * spd;
+      freeCamPos.current.z += (lookZ * f + rightZ * r) * spd;
+      // Leash to the player: snap back onto the max-distance sphere.
+      const dx = freeCamPos.current.x - g.position.x;
+      const dy = freeCamPos.current.y - g.position.y;
+      const dz = freeCamPos.current.z - g.position.z;
+      const dist = Math.hypot(dx, dy, dz);
+      if (dist > FREECAM_MAX_DIST) {
+        const s = FREECAM_MAX_DIST / dist;
+        freeCamPos.current.set(g.position.x + dx * s, g.position.y + dy * s, g.position.z + dz * s);
+      }
+      if (freeCamPos.current.y < MIN_CAMERA_WORLD_Y) freeCamPos.current.y = MIN_CAMERA_WORLD_Y;
+      camera.position.copy(freeCamPos.current);
+      camera.lookAt(freeCamPos.current.x + lookX, freeCamPos.current.y + lookY, freeCamPos.current.z + lookZ);
+      wasFreeCam.current = true;
+      return; // player frozen — skip all gameplay physics this frame
+    }
+    // Just left free-cam: drop the mover we were riding. During free-cam the clock
+    // kept advancing but the mover prev-roll was skipped, so without this the first
+    // resumed frame would apply the WHOLE accumulated mover displacement in one step
+    // (flinging the player off a moving platform). supportMoverIdx re-acquires next
+    // frame once rig.prev has self-healed via this frame's roll; the jump-momentum
+    // inheritance is gated on supportMoverIdx>=0, so no stale velocity spike applies.
+    if (wasFreeCam.current) { wasFreeCam.current = false; supportMoverIdx.current = -1; }
+
     const canMove = running && locked && !finishedRef.current;
 
     // Crumble platforms count down once triggered; post-respawn hazard grace ticks down.
@@ -402,25 +469,21 @@ export function ParkourPlayer({
     }
     const cols = rig.all;
 
-    // ── Input → movement + KEYBOARD TURN (premium hybrid) ──────────────────────
-    // The mouse steers the aim yaw (shift-lock: the body faces cc.yaw) AND A/D
-    // ADDITIONALLY rotate that same yaw — turn with the mouse, the keys, or both
-    // at once; they compose on one value so they harmonise perfectly. W/S drive
-    // forward/backward along the aim. On touch there are no A/D keys, so the
-    // joystick keeps classic 2D strafing (mr) instead of turning.
-    let mf = 0, mr = 0, turn = 0;
+    // ── Input → target horizontal velocity (camera-relative — EXACTLY the farm
+    // world's Player: W walks where the camera looks, A/D STRAFE perpendicular,
+    // S walks back. The mouse steers the look/movement basis; the body turns to
+    // face the MOVEMENT direction (below), never the mouse — the Roblox-standard
+    // model the farm world uses. Nothing here rotates the camera from the keys. ──
+    let mf = 0, mr = 0;
     if (canMove) {
       if (mobileMode) {
         mf = (mobileInput.forward ? 1 : 0) - (mobileInput.backward ? 1 : 0);
         mr = (mobileInput.strafeRight ? 1 : 0) - (mobileInput.strafeLeft ? 1 : 0);
       } else {
         mf = (keys.state.current.forward ? 1 : 0) - (keys.state.current.backward ? 1 : 0);
-        // A/D rotate the aim (not strafe). D (strafeRight) turns RIGHT → yaw−,
-        // exactly the sense of a mouse-right flick, so the two never fight.
-        turn = (keys.state.current.strafeRight ? 1 : 0) - (keys.state.current.strafeLeft ? 1 : 0);
+        mr = (keys.state.current.strafeRight ? 1 : 0) - (keys.state.current.strafeLeft ? 1 : 0);
       }
     }
-    if (turn !== 0) applyKeyboardTurn(cc, -turn * KEY_TURN_RATE * delta);
     const moving = mf !== 0 || mr !== 0;
     if (moving && !startedMoving.current) {
       startedMoving.current = true;
@@ -706,21 +769,14 @@ export function ParkourPlayer({
       }
     }
 
-    // ── Body faces where the MOUSE aims (camera yaw) — Roblox shift-lock. The
-    // mouse directly steers the character's facing = the direction you run: W
-    // runs forward into that aim, A/D strafe around it, the camera stays behind.
-    // Standing still and moving the mouse pivots the character too, so the mouse
-    // always controls "wo man hinläuft". Eased (not instant) → a smooth pivot,
-    // never a snap. Uses cc.yaw (the committed aim), NOT the RMB free-look offset,
-    // so glancing around with right-mouse never spins the body. Before pointer-
-    // lock (the intro), fall back to movement-direction facing so the avatar
-    // still looks alive. This is ADDITIVE — camera + camera-relative movement are
-    // unchanged; only the facing now follows the mouse. ──
-    if (locked) {
-      g.rotation.y += angleDelta(g.rotation.y, cc.yaw) * (1 - Math.exp(-delta * (dashing ? 22 : 16)));
-    } else if (moving || dashing) {
+    // ── Body heading eases toward the MOVEMENT (or dash) direction — EXACTLY the
+    // farm world's Roblox-standard model: the character turns to face where it is
+    // GOING, not where the mouse looks. WASD is camera-relative, so the body still
+    // follows the mouse whenever you move, but standing still + mousing around only
+    // pans the camera (no shift-lock body spin). ──
+    if (moving || dashing) {
       const heading = Math.atan2(moveDir.current.x, moveDir.current.z);
-      g.rotation.y += angleDelta(g.rotation.y, heading) * (1 - Math.exp(-delta * 15));
+      g.rotation.y += angleDelta(g.rotation.y, heading) * (1 - Math.exp(-delta * (dashing ? 22 : 15)));
     }
 
     // ── Squash on landing + crouch during a dash (subtle + fast recovery so

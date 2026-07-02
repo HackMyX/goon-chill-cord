@@ -6,7 +6,7 @@ import { Canvas } from "@react-three/fiber";
 import { Preload } from "@react-three/drei";
 import {
   ArrowLeft, MousePointerClick, Timer, Flag, RotateCcw, Trophy, Crown, Medal,
-  Users, Shuffle, Play, Loader2, LogOut, UserPlus, Home, Zap, Eye,
+  Users, Shuffle, Play, Loader2, LogOut, UserPlus, Home, Zap, Eye, Camera,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { ParkourScene } from "@/components/parkour/parkour-scene";
@@ -168,6 +168,7 @@ export function ParkourShell(props: ParkourShellProps) {
   const startMsRef = useRef<number | null>(null);
   const [finalMs, setFinalMs] = useState(0);
   const [running, setRunning] = useState(false);
+  const [freeCamActive, setFreeCamActive] = useState(false);
   const [checkpointToast, setCheckpointToast] = useState<number | null>(null);
   const [finishResult, setFinishResult] = useState<ParkourSubmitResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -435,6 +436,7 @@ export function ParkourShell(props: ParkourShellProps) {
   const handleExitRun = useCallback(() => {
     const wasHostMp = multiplayer && lobby?.hostId === userId && !!lobby;
     setRunning(false);
+    setFreeCamActive(false);
     setView("menu");
     setActiveMap(null);
     setMusicMode(null); // zurück zum Parkour-/Lobby-Track
@@ -638,7 +640,27 @@ export function ParkourShell(props: ParkourShellProps) {
             <span className="rounded-lg border border-white/10 bg-black/50 px-3 py-1.5 text-sm font-bold text-zinc-100 backdrop-blur">
               {map.name}
             </span>
+            {/* Freie Kamera (Desktop) — friert den Spieler ein, fliegt geleint um ihn herum */}
+            {view === "playing" && !isMobile && (
+              <button
+                onClick={() => { sound.click(); window.dispatchEvent(new Event("gnc:parkour-freecam")); }}
+                onMouseEnter={sound.hover}
+                title="Freie Kamera (Taste V) — um den Spieler herumfliegen"
+                className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm backdrop-blur transition-colors ${
+                  freeCamActive ? "border-cyan-400/60 bg-cyan-500/20 text-cyan-100" : "border-white/10 bg-black/50 text-zinc-200 hover:border-white/30"
+                }`}
+              >
+                <Camera className="h-4 w-4" /> {freeCamActive ? "Kamera aktiv" : "Freie Kamera"} <span className="text-[10px] text-zinc-400">V</span>
+              </button>
+            )}
           </div>
+
+          {/* Freie-Kamera-Hinweis (aktiv) */}
+          {view === "playing" && freeCamActive && (
+            <div className="pointer-events-none absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-xl border border-cyan-400/40 bg-black/70 px-4 py-2 text-center text-xs text-cyan-100 backdrop-blur">
+              <span className="font-bold">Freie Kamera</span> — WASD fliegen · Maus schauen · Shift schneller · <span className="font-bold">V</span> beenden
+            </div>
+          )}
 
           {/* Top-center: timer + checkpoints */}
           <div className="pointer-events-none absolute top-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1.5">
@@ -753,6 +775,7 @@ export function ParkourShell(props: ParkourShellProps) {
                 mobileMode={isMobile} resetSignal={resetSignal} multiplayer={multiplayer}
                 progressRef={progressRef}
                 onFinish={handleFinish} onCheckpoint={handleCheckpoint} onFall={handleFall} onFirstMove={handleFirstMove} onHazardHit={handleHazardHit}
+                onFreeCamChange={setFreeCamActive}
               />
               <Preload all />
             </Suspense>
