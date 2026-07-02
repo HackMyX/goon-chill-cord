@@ -132,6 +132,7 @@ export function ParkourConfigEditor({ config }: { config: ParkourConfig }) {
           </label>
           <NumField label="Max. Lobby-Größe" tip="Wie viele Spieler passen in eine Multiplayer-Lobby (1–6)." value={form.maxLobbySize} def={6} onChange={(v) => setForm((f) => ({ ...f, maxLobbySize: v ?? 6 }))} />
           <NumField label="Belohnte Ziele / Tag" tip="Wie viele Ziel-Ankünfte pro Tag Credits/XP geben (Anti-Farm). 0 = unbegrenzt." value={form.dailyRewardedFinishes} def={3} onChange={(v) => setForm((f) => ({ ...f, dailyRewardedFinishes: v ?? 3 }))} />
+          <NumField label="Todes-Strafe (ms)" tip="Millisekunden, die jeder Tod zum kombinierten T/D-Score addiert. ALLE Parkour-Bestenlisten ranken standardmäßig nach T/D (Zeit + Todes-Strafe) — weniger Zeit UND weniger Tode = besser." step={100} value={form.deathPenaltyMs} def={2500} onChange={(v) => setForm((f) => ({ ...f, deathPenaltyMs: v ?? 2500 }))} />
         </div>
       </CollapsibleAdminRow>
 

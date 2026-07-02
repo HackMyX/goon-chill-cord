@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import {
@@ -157,7 +157,9 @@ function StartMarker({ pos, accent }: { pos: [number, number, number]; accent: s
   );
 }
 
-export function ParkourGeometry({
+/** Memoized: `map` + `progressRef` are stable for a whole run, so the 100+
+ * platform meshes are reconciled ONCE, never again on a shell re-render. */
+export const ParkourGeometry = memo(function ParkourGeometry({
   map,
   progressRef,
 }: {
@@ -186,4 +188,4 @@ export function ParkourGeometry({
       <FinishPad pos={map.finish} size={map.finishSize} accent={map.theme.accent} />
     </group>
   );
-}
+});

@@ -434,9 +434,10 @@ export function ParkourPlayer({
       g.rotation.y += angleDelta(g.rotation.y, heading) * (1 - Math.exp(-delta * (dashing ? 22 : 15)));
     }
 
-    // ── Squash on landing + crouch during a dash ──
-    landSquash.current = Math.max(0, landSquash.current - delta * 9);
-    g.scale.y = (1 - landSquash.current * 0.18) * (1 - dashPose.current * 0.2);
+    // ── Squash on landing + crouch during a dash (subtle + fast recovery so
+    // chaining land→jump stays snappy, never reads as "sticking") ──
+    landSquash.current = Math.max(0, landSquash.current - delta * 14);
+    g.scale.y = (1 - landSquash.current * 0.11) * (1 - dashPose.current * 0.2);
 
     // ── Limb animation (walk cycle + airborne splay) ──
     jumpPose.current = THREE.MathUtils.lerp(jumpPose.current, grounded.current ? 0 : 1, Math.min(1, delta * 10));

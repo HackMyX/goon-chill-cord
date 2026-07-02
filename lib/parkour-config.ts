@@ -410,6 +410,9 @@ export interface ParkourConfig {
   adminOnly: boolean;
   maxLobbySize: number;
   dailyRewardedFinishes: number;
+  /** Milliseconds each death adds to the combined T/D score (rankings are by T/D
+   * by default: less time AND fewer deaths = better). Admin-tunable. */
+  deathPenaltyMs: number;
   maps: Record<string, ParkourMapOverride>;
 }
 
@@ -418,8 +421,16 @@ export const DEFAULT_PARKOUR_CONFIG: ParkourConfig = {
   adminOnly: false,
   maxLobbySize: 6,
   dailyRewardedFinishes: 3,
+  deathPenaltyMs: 2500,
   maps: {},
 };
+
+/** Combined T/D score: an "effective time" = run time + a fixed penalty per death.
+ * Lower is better. This is what every parkour leaderboard ranks by (with Zeit /
+ * Tode as alternative sorts). */
+export function parkourTd(timeMs: number, deaths: number, penaltyMs: number): number {
+  return timeMs + Math.max(0, deaths) * Math.max(0, penaltyMs);
+}
 
 export function resolveMap(map: ParkourMap, cfg: ParkourConfig): ParkourMap {
   const o = cfg.maps[map.id];

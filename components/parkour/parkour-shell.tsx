@@ -104,17 +104,18 @@ export function ParkourShell(props: ParkourShellProps) {
 
   // In-run side leaderboard (time / deaths)
   const [sideLb, setSideLb] = useState<ParkourLeaderboardEntry[]>([]);
-  const [sideLbSort, setSideLbSort] = useState<"time" | "deaths">("time");
+  const [sideLbSort, setSideLbSort] = useState<"td" | "time" | "deaths">("td");
   const [sideLbOpen, setSideLbOpen] = useState(true);
-  const loadSideLb = useCallback(async (mapId: string, sort: "time" | "deaths") => {
+  const loadSideLb = useCallback(async (mapId: string, sort: "td" | "time" | "deaths") => {
     setSideLb(await getParkourLeaderboard(mapId, 10, sort));
   }, []);
 
-  // Timer
+  // Timer — the live value is rendered by the self-contained <RunTimer> below so
+  // it NEVER re-renders this shell (and thus never reconciles the 100+ platform
+  // meshes) each tick. `finalMs` is only set once, at the finish.
   const startMsRef = useRef<number | null>(null);
-  const [displayMs, setDisplayMs] = useState(0);
+  const [finalMs, setFinalMs] = useState(0);
   const [running, setRunning] = useState(false);
-  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [checkpointToast, setCheckpointToast] = useState<number | null>(null);
   const [finishResult, setFinishResult] = useState<ParkourSubmitResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -168,7 +169,6 @@ export function ParkourShell(props: ParkourShellProps) {
     progressRef.current.current = -1;
     deathsRef.current = 0;
     startMsRef.current = null;
-    setDisplayMs(0);
     setRunning(true);
     setActiveMap(map);
     setMultiplayer(mp);
@@ -180,13 +180,7 @@ export function ParkourShell(props: ParkourShellProps) {
   }, [sound, loadSideLb, sideLbSort]);
 
   const handleFirstMove = useCallback(() => {
-    if (startMsRef.current === null) {
-      startMsRef.current = performance.now();
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = setInterval(() => {
-        if (startMsRef.current !== null) setDisplayMs(performance.now() - startMsRef.current);
-      }, 47);
-    }
+    if (startMsRef.current === null) startMsRef.current = performance.now();
   }, []);
 
   const handleCheckpoint = useCallback((index: number) => {
@@ -199,9 +193,8 @@ export function ParkourShell(props: ParkourShellProps) {
 
   const handleFinish = useCallback(async () => {
     if (!activeMap) return;
-    if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
     const finalMs = startMsRef.current !== null ? performance.now() - startMsRef.current : 0;
-    setDisplayMs(finalMs);
+    setFinalMs(finalMs);
     setRunning(false);
     setView("finished");
     sound.ultraWin();
@@ -223,7 +216,6 @@ export function ParkourShell(props: ParkourShellProps) {
     progressRef.current.current = -1;
     deathsRef.current = 0;
     startMsRef.current = null;
-    setDisplayMs(0);
     setFinishResult(null);
     setRunning(true);
     setResetSignal((s) => s + 1);
@@ -238,7 +230,6 @@ export function ParkourShell(props: ParkourShellProps) {
   }, [sideLbSort]);
 
   const handleExitRun = useCallback(() => {
-    if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
     setRunning(false);
     setView("menu");
     setActiveMap(null);
@@ -247,7 +238,6 @@ export function ParkourShell(props: ParkourShellProps) {
     sound.click();
   }, [cameraControls, loadLeaderboard, selectedId, sound]);
 
-  useEffect(() => () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); }, []);
 
   // ── Singleplayer / randomizer launch ──
   const launchSingle = useCallback(() => {
@@ -336,7 +326,7 @@ export function ParkourShell(props: ParkourShellProps) {
           <div className="pointer-events-none absolute top-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1.5">
             <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-black/60 px-4 py-2 backdrop-blur">
               <Timer className="h-5 w-5 text-cyan-300" />
-              <span className="font-mono text-2xl font-black tabular-nums text-white">{formatParkourTime(displayMs)}</span>
+              <span className="font-mono text-2xl font-black tabular-nums text-white"><RunTimer startMsRef={startMsRef} /></span>
             </div>
             {totalCp > 0 && (
               <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-3 py-1 backdrop-blur">
@@ -376,10 +366,10 @@ export function ParkourShell(props: ParkourShellProps) {
                 {sideLbOpen && (
                   <div className="px-2 pb-2">
                     <div className="mb-1.5 flex gap-1">
-                      {(["time", "deaths"] as const).map((s) => (
+                      {(["td", "time", "deaths"] as const).map((s) => (
                         <button key={s} onClick={() => setSideLbSort(s)}
                           className={`flex-1 rounded-md px-2 py-0.5 text-[10px] font-bold transition-colors ${sideLbSort === s ? "bg-amber-500/20 text-amber-200" : "text-zinc-500 hover:text-zinc-300"}`}>
-                          {s === "time" ? "Zeit" : "Tode"}
+                          {s === "td" ? "T/D" : s === "time" ? "Zeit" : "Tode"}
                         </button>
                       ))}
                     </div>
@@ -393,8 +383,10 @@ export function ParkourShell(props: ParkourShellProps) {
                             <div key={e.userId} className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] ${self ? "bg-amber-500/15 ring-1 ring-inset ring-amber-500/25" : ""}`}>
                               <span className="w-4 text-zinc-600">{e.rank}</span>
                               <span className="flex-1 truncate text-zinc-300">{e.username}</span>
-                              <span className="font-mono text-emerald-300">{formatParkourTime(e.bestTimeMs)}</span>
-                              <span className="w-7 text-right text-red-300/80" title="Tode">☠{e.deaths}</span>
+                              <div className="flex flex-col items-end leading-tight">
+                                <span className="font-mono font-bold text-amber-300" title="T/D-Score (Zeit + Todes-Strafe)">{formatParkourTime(e.tdMs)}</span>
+                                <span className="font-mono text-[9px] text-zinc-500">{formatParkourTime(e.bestTimeMs)} · ☠{e.deaths}</span>
+                              </div>
                             </div>
                           );
                         })}
@@ -423,7 +415,7 @@ export function ParkourShell(props: ParkourShellProps) {
           {/* Finish screen */}
           {view === "finished" && (
             <FinishScreen
-              map={map} timeMs={displayMs} deaths={deathsRef.current} result={finishResult} submitting={submitting}
+              map={map} timeMs={finalMs} deaths={deathsRef.current} result={finishResult} submitting={submitting}
               onRetry={handleRetry} onExit={handleExitRun}
             />
           )}
@@ -560,7 +552,10 @@ export function ParkourShell(props: ParkourShellProps) {
                           <StyledUsername name={e.username} styleKey={e.nameStyleKey} userId={e.userId} size="sm" />
                           {self && <span className="ml-1 text-purple-400">(Du)</span>}
                         </span>
-                        <span className="font-mono text-sm font-bold tabular-nums text-emerald-300">{formatParkourTime(e.bestTimeMs)}</span>
+                        <div className="flex flex-col items-end leading-tight">
+                          <span className="font-mono text-sm font-bold tabular-nums text-amber-300" title="T/D-Score: Zeit + Todes-Strafe">{formatParkourTime(e.tdMs)}</span>
+                          <span className="font-mono text-[10px] text-zinc-500">{formatParkourTime(e.bestTimeMs)} · ☠{e.deaths}</span>
+                        </div>
                       </div>
                     );
                   })}
@@ -590,6 +585,24 @@ export function ParkourShell(props: ParkourShellProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** The live run clock. Self-contained: it re-renders ONLY itself (a single text
+ * node) via requestAnimationFrame, reading the shared start-time ref — so the run
+ * timer never re-renders the shell or reconciles the 3D scene. This is what keeps
+ * jumping/landing perfectly smooth (no per-tick stutter). */
+function RunTimer({ startMsRef }: { startMsRef: React.RefObject<number | null> }) {
+  const [ms, setMs] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      setMs(startMsRef.current !== null ? performance.now() - startMsRef.current : 0);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [startMsRef]);
+  return <>{formatParkourTime(ms)}</>;
+}
 
 function GateScreen({ message }: { message: string }) {
   return (

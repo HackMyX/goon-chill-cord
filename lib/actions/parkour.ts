@@ -14,6 +14,7 @@ import {
   getParkourMap,
   resolveMap,
   isMapEnabled,
+  parkourTd,
   type ParkourConfig,
   type ParkourMapOverride,
 } from "@/lib/parkour-config";
@@ -26,7 +27,7 @@ export async function getParkourConfig(): Promise<ParkourConfig> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("parkour_config")
-    .select("enabled, admin_only, max_lobby_size, daily_rewarded_finishes, maps_config")
+    .select("enabled, admin_only, max_lobby_size, daily_rewarded_finishes, death_penalty_ms, maps_config")
     .eq("id", "default")
     .maybeSingle();
 
@@ -44,6 +45,7 @@ export async function getParkourConfig(): Promise<ParkourConfig> {
     adminOnly: data.admin_only ?? DEFAULT_PARKOUR_CONFIG.adminOnly,
     maxLobbySize: data.max_lobby_size ?? DEFAULT_PARKOUR_CONFIG.maxLobbySize,
     dailyRewardedFinishes: data.daily_rewarded_finishes ?? DEFAULT_PARKOUR_CONFIG.dailyRewardedFinishes,
+    deathPenaltyMs: data.death_penalty_ms ?? DEFAULT_PARKOUR_CONFIG.deathPenaltyMs,
     maps,
   };
 }
@@ -90,6 +92,7 @@ export async function updateParkourConfig(input: ParkourConfig): Promise<Parkour
     admin_only: !!input.adminOnly,
     max_lobby_size: num(input.maxLobbySize, DEFAULT_PARKOUR_CONFIG.maxLobbySize, 1, 6),
     daily_rewarded_finishes: num(input.dailyRewardedFinishes, DEFAULT_PARKOUR_CONFIG.dailyRewardedFinishes, 0, 100),
+    death_penalty_ms: num(input.deathPenaltyMs, DEFAULT_PARKOUR_CONFIG.deathPenaltyMs, 0, 60000),
     maps_config: cleanMaps,
     updated_at: new Date().toISOString(),
   });
@@ -270,13 +273,17 @@ export interface ParkourLeaderboardEntry {
   nameStyleKey?: string | null;
   bestTimeMs: number;
   deaths: number;
+  /** Combined T/D score (effective time incl. death penalty). Rank basis by default. */
+  tdMs: number;
   finishes: number;
 }
 
-/** In-game/side leaderboard for a single map. `sortBy` = "time" (fastest) or
- * "deaths" (fewest, tiebreak by time). */
-export async function getParkourLeaderboard(mapId: string, limit = 20, sortBy: "time" | "deaths" = "time"): Promise<ParkourLeaderboardEntry[]> {
+/** Single-map leaderboard. Default ranks by the combined T/D score (time + death
+ * penalty); `sortBy` "time"/"deaths" offer the pure alternatives. */
+export async function getParkourLeaderboard(mapId: string, limit = 20, sortBy: "td" | "time" | "deaths" = "td"): Promise<ParkourLeaderboardEntry[]> {
   const admin = createAdminClient();
+  const cfg = await getParkourConfig();
+  const penalty = cfg.deathPenaltyMs;
   const { data, error } = await admin
     .from("parkour_best_times")
     .select("user_id, best_time_ms, deaths, finishes, profiles(username, active_name_style_key)")
@@ -287,18 +294,19 @@ export async function getParkourLeaderboard(mapId: string, limit = 20, sortBy: "
   const rows = (data as unknown as {
     user_id: string; best_time_ms: number; deaths: number; finishes: number;
     profiles: { username: string | null; active_name_style_key: string | null } | null;
-  }[]);
+  }[]).map((r) => ({ ...r, deaths: r.deaths ?? 0, td: parkourTd(r.best_time_ms, r.deaths ?? 0, penalty) }));
   rows.sort((a, b) =>
-    sortBy === "deaths"
-      ? (a.deaths - b.deaths) || (a.best_time_ms - b.best_time_ms)
-      : (a.best_time_ms - b.best_time_ms) || (a.deaths - b.deaths));
+    sortBy === "deaths" ? (a.deaths - b.deaths) || (a.td - b.td)
+      : sortBy === "time" ? (a.best_time_ms - b.best_time_ms) || (a.deaths - b.deaths)
+        : (a.td - b.td) || (a.best_time_ms - b.best_time_ms));
   return rows.slice(0, Math.max(1, Math.min(100, limit))).map((row, i) => ({
     rank: i + 1,
     userId: row.user_id,
     username: row.profiles?.username ?? "Unbekannt",
     nameStyleKey: row.profiles?.active_name_style_key ?? null,
     bestTimeMs: row.best_time_ms,
-    deaths: row.deaths ?? 0,
+    deaths: row.deaths,
+    tdMs: row.td,
     finishes: row.finishes,
   }));
 }
@@ -315,6 +323,8 @@ export interface ParkourHomeEntry {
   /** Map: Bestzeit in ms · Gesamt: Summe der Bestzeiten aller absolvierten Maps. */
   timeMs: number;
   deaths: number;
+  /** Combined T/D score (rank basis). */
+  tdMs: number;
   /** Nur „Gesamt": Anzahl absolvierter Maps. */
   mapsDone?: number;
 }
@@ -324,6 +334,7 @@ export interface ParkourHomeEntry {
 export async function getParkourHomeLeaderboard(scope: string, limit = 10): Promise<ParkourHomeEntry[]> {
   const admin = createAdminClient();
   const lim = Math.max(1, Math.min(50, limit));
+  const penalty = (await getParkourConfig()).deathPenaltyMs;
 
   if (scope !== "overall") {
     const { data } = await admin
@@ -331,11 +342,13 @@ export async function getParkourHomeLeaderboard(scope: string, limit = 10): Prom
       .select("user_id, best_time_ms, deaths, profiles(username, active_name_style_key, avatar_url, prio_badges)")
       .eq("map_id", scope)
       .order("best_time_ms", { ascending: true })
-      .limit(lim);
-    return (data as unknown as {
+      .limit(lim * 3);
+    const rows = (data as unknown as {
       user_id: string; best_time_ms: number; deaths: number;
       profiles: { username: string | null; active_name_style_key: string | null; avatar_url: string | null; prio_badges: string[] | null } | null;
-    }[] ?? []).map((row, i) => ({
+    }[] ?? []).map((r) => ({ ...r, deaths: r.deaths ?? 0, td: parkourTd(r.best_time_ms, r.deaths ?? 0, penalty) }));
+    rows.sort((a, b) => (a.td - b.td) || (a.best_time_ms - b.best_time_ms));
+    return rows.slice(0, lim).map((row, i) => ({
       rank: i + 1,
       userId: row.user_id,
       username: row.profiles?.username ?? "Unbekannt",
@@ -343,7 +356,8 @@ export async function getParkourHomeLeaderboard(scope: string, limit = 10): Prom
       avatarUrl: row.profiles?.avatar_url ?? null,
       prioBadges: row.profiles?.prio_badges ?? [],
       timeMs: row.best_time_ms,
-      deaths: row.deaths ?? 0,
+      deaths: row.deaths,
+      tdMs: row.td,
     }));
   }
 
@@ -365,7 +379,8 @@ export async function getParkourHomeLeaderboard(scope: string, limit = 10): Prom
     byUser.set(row.user_id, e);
   }
   return Array.from(byUser.entries())
-    .sort((a, b) => (b[1].maps - a[1].maps) || (a[1].total - b[1].total))
+    // Allround-King: most maps completed, then best combined T/D score.
+    .sort((a, b) => (b[1].maps - a[1].maps) || (parkourTd(a[1].total, a[1].deaths, penalty) - parkourTd(b[1].total, b[1].deaths, penalty)))
     .slice(0, lim)
     .map(([userId, e], i) => ({
       rank: i + 1,
@@ -374,6 +389,7 @@ export async function getParkourHomeLeaderboard(scope: string, limit = 10): Prom
       nameStyleKey: e.p?.active_name_style_key ?? null,
       avatarUrl: e.p?.avatar_url ?? null,
       prioBadges: e.p?.prio_badges ?? [],
+      tdMs: parkourTd(e.total, e.deaths, penalty),
       timeMs: e.total,
       deaths: e.deaths,
       mapsDone: e.maps,

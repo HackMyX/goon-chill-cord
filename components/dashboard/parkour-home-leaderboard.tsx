@@ -64,7 +64,7 @@ export function ParkourHomeLeaderboard({ label, limit }: { label: string; limit:
           <div>
             <span className="text-sm font-black text-fuchsia-400">{label}</span>
             <p className="mt-0.5 text-[10px] text-zinc-600">
-              {isOverall ? "Gesamt — schnellste Allrounder" : "Bestzeit pro Map"}
+              {isOverall ? "Gesamt — Allrounder nach T/D" : "Rangliste nach T/D (Zeit + Tode)"}
             </p>
           </div>
         </div>
@@ -126,14 +126,20 @@ export function ParkourHomeLeaderboard({ label, limit }: { label: string; limit:
                   <StyledUsername name={e.username} styleKey={e.nameStyleKey} userId={e.userId} size="sm" />
                   {e.prioBadges && e.prioBadges.length > 0 && <PrioBadgeRow badgeKeys={e.prioBadges} size="xs" max={2} />}
                 </div>
-                {/* Deaths + (overall) maps done */}
-                <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-zinc-600">
-                  {isOverall && <span className="text-fuchsia-400/70">{e.mapsDone}/{PARKOUR_MAPS.length} Maps</span>}
-                  <Skull className="h-3 w-3 text-red-400/70" />{e.deaths}
-                </span>
-                <span className={`shrink-0 font-mono text-sm font-black tabular-nums ${e.rank === 1 ? "text-fuchsia-300" : "text-fuchsia-400/80"}`}>
-                  {formatParkourTime(e.timeMs)}
-                </span>
+                {isOverall && (
+                  <span className="shrink-0 rounded bg-fuchsia-500/15 px-1.5 py-0.5 text-[10px] font-bold text-fuchsia-300/80">
+                    {e.mapsDone}/{PARKOUR_MAPS.length}
+                  </span>
+                )}
+                {/* T/D headline + raw Zeit·Tode below */}
+                <div className="flex shrink-0 flex-col items-end leading-tight">
+                  <span className={`font-mono text-sm font-black tabular-nums ${e.rank === 1 ? "text-fuchsia-300" : "text-fuchsia-400/80"}`} title="T/D-Score: Zeit + Todes-Strafe">
+                    {formatParkourTime(e.tdMs)}
+                  </span>
+                  <span className="flex items-center gap-1 font-mono text-[10px] text-zinc-500">
+                    {formatParkourTime(e.timeMs)} · <Skull className="h-2.5 w-2.5 text-red-400/70" />{e.deaths}
+                  </span>
+                </div>
               </div>
             );
           })}
