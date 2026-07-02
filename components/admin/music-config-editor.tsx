@@ -6,7 +6,7 @@ import {
   Volume2, VolumeX, AlertTriangle, Play, Square, Eye, EyeOff,
   Home, Gamepad2, Disc3, Globe, Package, Store, Users, LayoutDashboard,
   CircleDot, Award, ShoppingBag, Gavel, ArrowLeftRight, ClipboardList,
-  UserCog, Pickaxe, Shield, Settings, Cpu, Info,
+  UserCog, Pickaxe, Shield, Settings, Cpu, Info, Footprints,
 } from "lucide-react";
 import { getMusicConfig, saveMusicConfig } from "@/lib/actions/music";
 import {
@@ -34,6 +34,7 @@ const VIBE_COLORS: Record<MusicVibe, string> = {
 const PAGE_ICONS: Record<MusicPageKey, React.FC<{ className?: string }>> = {
   homepage:   Home,
   snake:      Gamepad2,
+  parkour:    Footprints,
   don:        Disc3,
   world:      Globe,
   cases:      Package,

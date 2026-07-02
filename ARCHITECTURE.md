@@ -254,6 +254,17 @@ Void-Respawn, Eis/Sprungpad/Hazard). **4 Maps** sind Code-Daten in `lib/parkour-
 `_lobby_members` + `lib/parkour-realtime.ts` Ghost-Sync, Freunde-Einladung via `notifyUser`).
 Rewards über `grantReward` (credits/xp), gedeckelt per Tages-Cap. Admin-Tab „Parkour", Cockpit-
 Einnahmequelle, System-Health-Block, Audit `parkour_finish`.
+**Solide Blöcke:** Plattformen sind volle AABB-Körper — Seiten-Kollision (`resolveSideAxis`) +
+Head-Bonk, kein Durchspringen; der Validator (`scripts/validate-parkour-maps.mjs`) modelliert das
+mit und beweist alle 4 Maps schaffbar. **Umgebung:** `components/parkour/parkour-environment.tsx`
+liefert pro Map eine kinofertige Kulisse (Neon-Skyline / Dawn-Inseln / Lava-Welt / Kosmos) —
+rein dekorativ, geteilte Materialien, EIN allokationsfreies Partikelfeld pro Theme, keine Schatten.
+**Audio:** SFX über den zentralen SoundManager (Events `pkJump/pkDouble/pkLand/pkDash` als
+Interrupt-Kanäle, `pkCheckpoint/pkFinish/pkFall/pkHazard` als Fx; in `sound-config.ts` registriert,
+Admin-konfigurierbar). BGM über das Musiksystem: neue `MusicPageKey "parkour"` + Per-Map-Modi
+(`MUSIC_PAGE_MODES.parkour`, gesetzt via `setMusicMode(map.id.split("_")[0])`), sodass jede Map
+ihren eigenen Track hat. `resolveTrackId` fällt für neue Seiten/Modi auf die Defaults zurück (kein
+DB-Migrationszwang).
 
 ---
 

@@ -13,6 +13,7 @@ export interface MusicTrack {
 export type MusicPageKey =
   | "homepage"
   | "snake"
+  | "parkour"
   | "don"
   | "world"
   | "cases"
@@ -96,6 +97,13 @@ export const MUSIC_PAGE_MODES: Partial<Record<MusicPageKey, { key: string; label
     { key: "grind", label: "Grind" },
     { key: "farm", label: "Endless" },
   ],
+  // Per-Map-Musik: jede Parkour-Map kann ihren eigenen Track bekommen.
+  parkour: [
+    { key: "neon", label: "Neon Ascent" },
+    { key: "sky", label: "Sky Gardens" },
+    { key: "magma", label: "Magma Rush" },
+    { key: "void", label: "Void Spire" },
+  ],
 };
 
 /** Build the modeAssignments key for a page+mode. */
@@ -109,15 +117,28 @@ export function modeAssignKey(page: MusicPageKey, mode: string): string {
  */
 export function resolveTrackId(config: MusicConfig, page: MusicPageKey, mode?: string | null): string | null {
   if (mode) {
-    const override = config.modeAssignments?.[modeAssignKey(page, mode)];
+    const key = modeAssignKey(page, mode);
+    const override = config.modeAssignments?.[key];
     if (override) return override;
+    // Key not configured in the (possibly older) saved config → use the built-in
+    // per-mode default so freshly-added modes play their intended track.
+    if (override === undefined) {
+      const def = DEFAULT_MUSIC_CONFIG.modeAssignments?.[key];
+      if (def) return def;
+    }
   }
-  return config.pageAssignments[page] ?? null;
+  const assigned = config.pageAssignments[page];
+  // `undefined` = page missing from an older saved config → fall back to the
+  // built-in default (so new pages like parkour always have music). An explicit
+  // `null` = admin deliberately muted the page → respected.
+  if (assigned !== undefined) return assigned;
+  return DEFAULT_MUSIC_CONFIG.pageAssignments[page] ?? null;
 }
 
 export const PAGE_LABELS: Record<MusicPageKey, string> = {
   homepage:   "Startseite",
   snake:      "Snake",
+  parkour:    "Parkour",
   don:        "Double or Nothing",
   world:      "3D Farmwelt",
   cases:      "Cases",
@@ -137,7 +158,7 @@ export const PAGE_LABELS: Record<MusicPageKey, string> = {
 };
 
 export const PAGE_ROUTES: MusicPageKey[] = [
-  "homepage", "snake", "don", "world", "cases", "shop", "community", "dashboard",
+  "homepage", "snake", "parkour", "don", "world", "cases", "shop", "community", "dashboard",
   "plinko", "battlepass", "garderobe", "auctions", "trading", "surveys", "account",
   "mine", "mod", "admin",
 ];
@@ -213,9 +234,17 @@ export const DEFAULT_MUSIC_CONFIG: MusicConfig = {
   maxUserVolume:       1.0,
   tracks:              BUILT_IN_TRACKS,
   pageVolumes:         {},
+  modeAssignments: {
+    // Per-Map-Parkour-Musik (jede Map ihr eigener Vibe).
+    "parkour:neon":  "ele_neon_pulse",   // Neon Ascent — treibender Synthwave
+    "parkour:sky":   "adv_highland",     // Sky Gardens — luftig, abenteuerlich
+    "parkour:magma": "epc_storm",        // Magma Rush — episch, druckvoll
+    "parkour:void":  "amb_void_walker",  // Void Spire — kosmisch, weit
+  },
   pageAssignments: {
     homepage:   "chl_midnight",
     snake:      "arc_neon_rush",
+    parkour:    "ele_neon_pulse",
     don:        "arc_8bit_fever",
     world:      "adv_into_wild",
     cases:      "chl_purple_rain",

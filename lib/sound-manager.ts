@@ -21,6 +21,8 @@ export type FxSound =
   | "streakClaim" | "notificationPing"
   | "caseOpen" | "caseReveal"
   | "plinkoLand" | "snakeEat" | "snakeDie" | "donFlip"
+  // Parkour (one-shots — checkpoint/finish/fall/hazard)
+  | "pkCheckpoint" | "pkFinish" | "pkFall" | "pkHazard"
   // Chat
   | "messageReceive" | "messageSend" | "mentionReceive" | "chatPing"
   // System
@@ -31,7 +33,9 @@ export type FxSound =
 // to play immediately, the same way tick/hover never queue. Routing it
 // through the FIFO `fx` queue instead would make hit sounds visibly lag
 // behind the swings during any fight longer than one punch.
-export type InterruptSound = "tick" | "hover" | "hit";
+// Parkour movement sounds route through interrupt channels (like hit) so a jump
+// immediately followed by a land never queues/lags behind the action.
+export type InterruptSound = "tick" | "hover" | "hit" | "pkJump" | "pkDouble" | "pkLand" | "pkDash";
 
 const DEFAULT_FX_SRC: Record<FxSound, string> = {
   // UI
@@ -85,6 +89,11 @@ const DEFAULT_FX_SRC: Record<FxSound, string> = {
   snakeEat:         "/sounds/tick.wav",
   snakeDie:         "/sounds/error.wav",
   donFlip:          "/sounds/flip.wav",
+  // Parkour
+  pkCheckpoint:     "/sounds/chime.wav",
+  pkFinish:         "/sounds/fanfare.wav",
+  pkFall:           "/sounds/error.wav",
+  pkHazard:         "/sounds/boom.wav",
   // Chat
   messageReceive:   "/sounds/hover.wav",
   messageSend:      "/sounds/click.wav",
@@ -99,6 +108,10 @@ const DEFAULT_INTERRUPT_SRC: Record<InterruptSound, string> = {
   tick: "/sounds/tick.wav",
   hover: "/sounds/hover.wav",
   hit: "/sounds/hit.wav",
+  pkJump: "/sounds/whoosh.wav",
+  pkDouble: "/sounds/powerup.wav",
+  pkLand: "/sounds/place.wav",
+  pkDash: "/sounds/swoosh.wav",
 };
 
 const DEFAULT_FX_VOL: Record<FxSound, number> = {
@@ -119,6 +132,8 @@ const DEFAULT_FX_VOL: Record<FxSound, number> = {
   streakClaim: 0.38, notificationPing: 0.18,
   caseOpen: 0.25, caseReveal: 0.40,
   plinkoLand: 0.22, snakeEat: 0.20, snakeDie: 0.28, donFlip: 0.32,
+  // Parkour
+  pkCheckpoint: 0.32, pkFinish: 0.42, pkFall: 0.30, pkHazard: 0.34,
   // Chat
   messageReceive: 0.12, messageSend: 0.15, mentionReceive: 0.30, chatPing: 0.20,
   // System
@@ -127,6 +142,7 @@ const DEFAULT_FX_VOL: Record<FxSound, number> = {
 
 const DEFAULT_INTERRUPT_VOL: Record<InterruptSound, number> = {
   tick: 0.18, hover: 0.10, hit: 0.28,
+  pkJump: 0.20, pkDouble: 0.22, pkLand: 0.16, pkDash: 0.22,
 };
 
 const HOVER_THROTTLE_MS = 70;
@@ -207,6 +223,22 @@ class SoundManager {
     }
   }
 
+  /** Preload the parkour sounds so the first jump/land/checkpoint has no stall.
+   * Call after a user gesture (e.g. when a run starts). */
+  warmupParkour(): void {
+    if (typeof window === "undefined") return;
+    const ix: InterruptSound[] = ["pkJump", "pkDouble", "pkLand", "pkDash"];
+    for (const k of ix) {
+      const a = this.getInterruptAudio(k);
+      if (a) { a.preload = "auto"; try { a.load(); } catch { /* ignore */ } }
+    }
+    const fx: FxSound[] = ["pkCheckpoint", "pkFinish", "pkFall", "pkHazard"];
+    for (const k of fx) {
+      const a = this.getFxAudio(k);
+      if (a) { a.preload = "auto"; try { a.load(); } catch { /* ignore */ } }
+    }
+  }
+
   private getInterruptAudio(name: InterruptSound): HTMLAudioElement | null {
     if (typeof window === "undefined") return null;
     let audio = this.interruptAudio.get(name);
@@ -243,6 +275,8 @@ class SoundManager {
     this.playInterrupt("hover");
   }
   hit(): void { this.playInterrupt("hit"); }
+  /** Public entry for the extra interrupt channels (parkour jump/land/dash/double). */
+  playInterruptPublic(name: InterruptSound): void { this.playInterrupt(name); }
 
   private playInterrupt(name: InterruptSound): void {
     if (this._disabledEvents.has(name)) return;
@@ -369,6 +403,16 @@ export function useSoundManager() {
     snakeEat:         () => soundManager.play("snakeEat"),
     snakeDie:         () => soundManager.play("snakeDie"),
     donFlip:          () => soundManager.play("donFlip"),
+    // Parkour — movement sounds are interrupt channels (never queue); the rest are fx
+    pkJump:           () => soundManager.playInterruptPublic("pkJump"),
+    pkDouble:         () => soundManager.playInterruptPublic("pkDouble"),
+    pkLand:           () => soundManager.playInterruptPublic("pkLand"),
+    pkDash:           () => soundManager.playInterruptPublic("pkDash"),
+    pkCheckpoint:     () => soundManager.play("pkCheckpoint"),
+    pkFinish:         () => soundManager.play("pkFinish"),
+    pkFall:           () => soundManager.play("pkFall"),
+    pkHazard:         () => soundManager.play("pkHazard"),
+    warmupParkour:    () => soundManager.warmupParkour(),
     // Chat
     messageReceive:   () => soundManager.play("messageReceive"),
     messageSend:      () => soundManager.play("messageSend"),

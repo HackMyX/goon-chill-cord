@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import { Sky, Stars } from "@react-three/drei";
-import * as THREE from "three";
 import { ParkourGeometry, type CheckpointProgressRef, type CrumbleStateRef } from "@/components/parkour/parkour-geometry";
+import { ParkourEnvironment } from "@/components/parkour/parkour-environment";
 import { ParkourPlayer } from "@/components/parkour/parkour-player";
 import { ParkourGhosts } from "@/components/parkour/parkour-ghosts";
 import type { ParkourMap } from "@/lib/parkour-config";
@@ -57,7 +57,7 @@ export function ParkourScene({
   return (
     <>
       <color attach="background" args={[t.fog]} />
-      <fog attach="fog" args={[t.fog, 40, 200]} />
+      <fog attach="fog" args={[t.fog, 55, 300]} />
       <Sky distance={450000} sunPosition={t.sunPosition} turbidity={t.stars > 0 ? 4 : 6} rayleigh={t.stars > 0 ? 0.4 : 2.2} mieCoefficient={0.02} mieDirectionalG={0.9} />
       {t.stars > 0 && <Stars radius={160} depth={60} count={Math.min(t.stars, 1600)} factor={3} fade speed={0.4} />}
 
@@ -70,12 +70,10 @@ export function ParkourScene({
       <directionalLight position={t.sunPosition} intensity={1.7} color="#ffffff" />
       <pointLight position={[map.start[0], map.start[1] + 6, map.start[2]]} intensity={8} color={t.accent} distance={30} decay={2} />
 
-      {/* Abyss floor far below — a dark disc so the void reads as a drop, not
-          the white browser background, if the render ever stutters one frame. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, map.voidY - 4, 0]}>
-        <circleGeometry args={[400, 48]} />
-        <meshBasicMaterial color={t.ground} side={THREE.DoubleSide} />
-      </mesh>
+      {/* Cinematic themed backdrop (neon skyline / dawn islands / lava world /
+          cosmic spire) — replaces the old bare abyss disc. Purely decorative;
+          the environment provides its own floor far below the course. */}
+      <ParkourEnvironment map={map} />
 
       <ParkourGeometry map={map} progressRef={progressRef} crumbleRef={crumbleRef} />
 

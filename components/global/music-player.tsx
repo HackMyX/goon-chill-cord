@@ -15,6 +15,7 @@ const LS_MUTED = "gn_music_muted";
 
 function getPageKey(pathname: string): MusicPageKey {
   if (pathname.startsWith("/snake"))      return "snake";
+  if (pathname.startsWith("/parkour"))    return "parkour";
   if (pathname.startsWith("/don"))        return "don";
   if (pathname.startsWith("/world"))      return "world";
   if (pathname.startsWith("/cases"))      return "cases";

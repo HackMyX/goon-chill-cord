@@ -11,6 +11,9 @@ export type SoundEventKey =
   | "win" | "ultraWin" | "flip" | "streakClaim"
   | "caseOpen" | "caseReveal"
   | "plinkoLand" | "snakeEat" | "snakeDie" | "donFlip"
+  // ── Parkour ──
+  | "pkJump" | "pkDouble" | "pkLand" | "pkDash"
+  | "pkCheckpoint" | "pkFinish" | "pkFall" | "pkHazard"
   // ── Level & XP ──
   | "levelUp" | "xpGain" | "abilityEquip" | "achievementUnlock"
   | "questComplete" | "bpTierClaim" | "bpUnlock" | "bpEliteUnlock"
@@ -74,6 +77,16 @@ export const SOUND_EVENT_META: SoundEventMeta[] = [
   { key: "snakeEat",        label: "Snake — Futter fressen",      group: "Spiele",      defaultFile: "/sounds/tick.wav",      defaultVolume: 0.20 },
   { key: "snakeDie",        label: "Snake — Gestorben",           group: "Spiele",      defaultFile: "/sounds/error.wav",     defaultVolume: 0.28 },
   { key: "donFlip",         label: "DON — Münzwurf",              group: "Spiele",      defaultFile: "/sounds/flip.wav",      defaultVolume: 0.32 },
+
+  // ── Parkour ──────────────────────────────────────────────────────────────
+  { key: "pkJump",          label: "Parkour — Sprung",            group: "Parkour",     defaultFile: "/sounds/whoosh.wav",    defaultVolume: 0.20 },
+  { key: "pkDouble",        label: "Parkour — Doppelsprung",      group: "Parkour",     defaultFile: "/sounds/powerup.wav",   defaultVolume: 0.22 },
+  { key: "pkLand",          label: "Parkour — Landung",           group: "Parkour",     defaultFile: "/sounds/place.wav",     defaultVolume: 0.16 },
+  { key: "pkDash",          label: "Parkour — Dash / Slide",      group: "Parkour",     defaultFile: "/sounds/swoosh.wav",    defaultVolume: 0.22 },
+  { key: "pkCheckpoint",    label: "Parkour — Checkpoint",        group: "Parkour",     defaultFile: "/sounds/chime.wav",     defaultVolume: 0.32 },
+  { key: "pkFinish",        label: "Parkour — Ziel erreicht",     group: "Parkour",     defaultFile: "/sounds/fanfare.wav",   defaultVolume: 0.42 },
+  { key: "pkFall",          label: "Parkour — Abgrund / Sturz",   group: "Parkour",     defaultFile: "/sounds/error.wav",     defaultVolume: 0.30 },
+  { key: "pkHazard",        label: "Parkour — Hindernis-Treffer", group: "Parkour",     defaultFile: "/sounds/boom.wav",      defaultVolume: 0.34 },
 
   // ── Level & XP ───────────────────────────────────────────────────────────
   { key: "levelUp",         label: "Level-Up",                     group: "Level & XP",  defaultFile: "/sounds/win.wav",       defaultVolume: 0.40 },

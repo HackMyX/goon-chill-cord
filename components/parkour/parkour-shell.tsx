@@ -14,6 +14,7 @@ import type { CheckpointProgressRef } from "@/components/parkour/parkour-geometr
 import { MobileControls } from "@/components/world/mobile-controls";
 import { useCameraControls } from "@/components/world/use-camera-controls";
 import { useSoundManager } from "@/lib/sound-manager";
+import { setMusicMode } from "@/lib/music-dynamics";
 import { useLiveConfig } from "@/lib/use-live-config";
 import { StyledUsername } from "@/components/ui/styled-username";
 import {
@@ -167,6 +168,9 @@ export function ParkourShell(props: ParkourShellProps) {
     progressRef.current.current = -1;
     deathsRef.current = 0;
     startMsRef.current = null;
+    // Per-Map-Hintergrundmusik + Sounds vorladen (nach User-Geste, kein Stall).
+    setMusicMode(map.id.split("_")[0]);
+    sound.warmupParkour();
     setRunning(true);
     setActiveMap(map);
     setMultiplayer(mp);
@@ -182,19 +186,19 @@ export function ParkourShell(props: ParkourShellProps) {
   }, []);
 
   const handleCheckpoint = useCallback((index: number) => {
-    sound.win();
+    sound.pkCheckpoint();
     setCheckpointToast(index);
     setTimeout(() => setCheckpointToast(null), 1500);
   }, [sound]);
 
-  const handleFall = useCallback(() => { sound.error(); deathsRef.current += 1; }, [sound]);
+  const handleFall = useCallback(() => { sound.pkFall(); deathsRef.current += 1; }, [sound]);
 
   // Hazard knockback → red screen flash + hit sound (occasional, so re-rendering
   // the shell here is fine; the memoized 3D scene doesn't reconcile).
   const [hazardFlash, setHazardFlash] = useState(false);
   const hazardFlashT = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleHazardHit = useCallback(() => {
-    sound.error();
+    sound.pkHazard();
     setHazardFlash(true);
     if (hazardFlashT.current) clearTimeout(hazardFlashT.current);
     hazardFlashT.current = setTimeout(() => setHazardFlash(false), 240);
@@ -206,7 +210,7 @@ export function ParkourShell(props: ParkourShellProps) {
     setFinalMs(finalMs);
     setRunning(false);
     setView("finished");
-    sound.ultraWin();
+    sound.pkFinish();
     cameraControls.releaseLock();
     setSubmitting(true);
     const checkpointsReached = Math.max(0, (progressRef.current.current ?? -1) + 1);
@@ -242,10 +246,14 @@ export function ParkourShell(props: ParkourShellProps) {
     setRunning(false);
     setView("menu");
     setActiveMap(null);
+    setMusicMode(null); // zurück zum Parkour-Menü-Track
     cameraControls.releaseLock();
     void loadLeaderboard(selectedId);
     sound.click();
   }, [cameraControls, loadLeaderboard, selectedId, sound]);
+
+  // Beim Verlassen der Parkour-Seite den Map-Musik-Modus zurücksetzen.
+  useEffect(() => () => setMusicMode(null), []);
 
 
   // ── Singleplayer / randomizer launch ──

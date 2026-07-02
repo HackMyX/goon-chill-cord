@@ -12,6 +12,7 @@ import { hazardHit, spinnerAngleAt, sliderPosInto, type ParkourMap } from "@/lib
 import type { EquippedItem } from "@/lib/rarity-colors";
 import type { CheckpointProgressRef, CrumbleStateRef } from "@/components/parkour/parkour-geometry";
 import { broadcastParkourGhost, broadcastParkourProfile } from "@/lib/parkour-realtime";
+import { useSoundManager } from "@/lib/sound-manager";
 
 // ── Collider (an AABB the player can land on / be blocked by) ──
 interface Collider {
@@ -148,6 +149,7 @@ export function ParkourPlayer({
   const limbs = useRef<CharacterLimbRefs>(null);
   const keys = useKeyboardControls();
   const { camera } = useThree();
+  const sound = useSoundManager();
 
   // Physics state (refs — mutated in useFrame, no re-renders)
   const vel = useRef(new THREE.Vector3());       // horizontal velocity
@@ -367,6 +369,7 @@ export function ParkourPlayer({
       dashTimer.current = DASH_DURATION;
       dashDirX.current = Math.sin(cc.yaw);
       dashDirZ.current = Math.cos(cc.yaw);
+      sound.pkDash();
     }
     let dashing = false;
     if (dashTimer.current > 0) {
@@ -426,10 +429,12 @@ export function ParkourPlayer({
           vel.current.x += rig.velX[supportMoverIdx.current];
           vel.current.z += rig.velZ[supportMoverIdx.current];
         }
+        sound.pkJump();
       } else if (airJumpsUsed.current < map.airJumps) {
         vv.current = map.jumpVelocity * 0.92;
         airJumpsUsed.current += 1;
         jumpBuffer.current = 0;
+        sound.pkDouble();
       }
     }
 
@@ -516,7 +521,7 @@ export function ParkourPlayer({
     // Bounce pad launches AFTER landing decisions (overrides the grounded snap).
     if (landedBounce > 0) { vv.current = landedBounce; grounded.current = false; }
 
-    if (grounded.current && !wasGrounded) landSquash.current = 1;
+    if (grounded.current && !wasGrounded) { landSquash.current = 1; sound.pkLand(); }
     if (grounded.current) { coyote.current = COYOTE; airJumpsUsed.current = 0; }
 
     g.position.y = feetY.current;
