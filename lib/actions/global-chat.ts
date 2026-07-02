@@ -214,7 +214,32 @@ export async function getGlobalChatMessages(limit = 60): Promise<GlobalChatMessa
     .select("*")
     .order("created_at", { ascending: false })
     .limit(limit);
-  return ((data ?? []) as Record<string, unknown>[]).map(rowToMsg).reverse();
+  const msgs = ((data ?? []) as Record<string, unknown>[]).map(rowToMsg).reverse();
+
+  // Enrich every message with the sender's CURRENT profile picture — the row's
+  // `avatar_url` is only a snapshot from send time (null if they had none then,
+  // stale if they changed it since), so on its own a player's picture would be
+  // missing or outdated. Loading it live from `profiles` here means the homepage
+  // chat AND the big chat panel (both call this) ALWAYS show the up-to-date avatar,
+  // exactly like every other surface (profile popup, community, leaderboards).
+  const userIds = [...new Set(msgs.map((m) => m.userId).filter((id): id is string => !!id))];
+  if (userIds.length > 0) {
+    const { data: profs } = await admin
+      .from("profiles")
+      .select("id, avatar_url")
+      .in("id", userIds);
+    const avatarById = new Map<string, string | null>(
+      (profs ?? []).map((p) => [p.id as string, (p.avatar_url as string | null) ?? null]),
+    );
+    for (const m of msgs) {
+      if (!m.userId) continue;
+      // Current avatar wins; only keep the snapshot as a fallback (e.g. deleted profile).
+      const live = avatarById.get(m.userId);
+      if (live !== undefined && live) m.avatarUrl = live;
+      else if (avatarById.has(m.userId) && !live) m.avatarUrl = null;
+    }
+  }
+  return msgs;
 }
 
 // ── Send message ──────────────────────────────────────────────────────────────
