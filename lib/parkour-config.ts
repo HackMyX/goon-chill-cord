@@ -161,7 +161,7 @@ function reachAirtime(gravity: number, vJ: number, airJumps: number, rise: numbe
   return t;
 }
 
-interface CourseParams {
+export interface CourseParams {
   seed: number;
   steps: number;
   gravity: number;
@@ -201,7 +201,7 @@ interface CourseGeometry {
   finishSize: [number, number, number];
 }
 
-function buildCourse(pr: CourseParams): CourseGeometry {
+export function buildCourse(pr: CourseParams): CourseGeometry {
   const rnd = mulberry32(pr.seed);
   const g = pr.gravity, vJ = pr.jumpVelocity;
   const singleH = (vJ * vJ) / (2 * Math.abs(g));

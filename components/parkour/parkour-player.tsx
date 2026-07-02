@@ -46,6 +46,10 @@ const GHOST_INTERVAL = 0.05; // 20 Hz
 const DASH_DURATION = 0.55;
 const DASH_COOLDOWN = 1.1;
 const DASH_SPEED_FACTOR = 2.2;
+// Keyboard turn speed (rad/s) — A/D rotate the aim yaw IN ADDITION to the mouse,
+// so you can steer with either and they compose on the same yaw. ~183°/s: quick
+// enough to reorient mid-course, calm enough to stay precise.
+const KEY_TURN_RATE = 3.2;
 // Landing catch reach = the body radius R exactly (see the landing block): a
 // descending player catches the top only while its FOOTPRINT still overlaps the
 // platform. That removes the old ledge "pull-in" teleport — which yanked the
@@ -88,6 +92,17 @@ function boxCollider(
     minZ: cz - sz / 2, maxZ: cz + sz / 2,
     topY: cy + sy / 2, kill, ice, bounce, moverIdx, crumbleIndex,
   };
+}
+
+/** Apply an A/D keyboard turn to the shared aim yaw and wrap it to (−π, π].
+ * Lives at module scope (same reason as easeFreeLookToZero) so mutating the
+ * hook-owned `cc` ref stays out of the React-Compiler-flagged component scope.
+ * The mouse writes the SAME `cc.yaw`, so keyboard-turn and mouse-look compose. */
+function applyKeyboardTurn(cc: { yaw: number }, deltaYaw: number): void {
+  let y = cc.yaw + deltaYaw;
+  if (y > Math.PI) y -= Math.PI * 2;
+  else if (y < -Math.PI) y += Math.PI * 2;
+  cc.yaw = y;
 }
 
 /** SOLID side collision: clamp the player out of any block it enters from the
@@ -387,18 +402,25 @@ export function ParkourPlayer({
     }
     const cols = rig.all;
 
-    // ── Input → target horizontal velocity (camera-relative, same basis as the
-    // farm world's Player so movement feels identical) ──
-    let mf = 0, mr = 0;
+    // ── Input → movement + KEYBOARD TURN (premium hybrid) ──────────────────────
+    // The mouse steers the aim yaw (shift-lock: the body faces cc.yaw) AND A/D
+    // ADDITIONALLY rotate that same yaw — turn with the mouse, the keys, or both
+    // at once; they compose on one value so they harmonise perfectly. W/S drive
+    // forward/backward along the aim. On touch there are no A/D keys, so the
+    // joystick keeps classic 2D strafing (mr) instead of turning.
+    let mf = 0, mr = 0, turn = 0;
     if (canMove) {
       if (mobileMode) {
         mf = (mobileInput.forward ? 1 : 0) - (mobileInput.backward ? 1 : 0);
         mr = (mobileInput.strafeRight ? 1 : 0) - (mobileInput.strafeLeft ? 1 : 0);
       } else {
         mf = (keys.state.current.forward ? 1 : 0) - (keys.state.current.backward ? 1 : 0);
-        mr = (keys.state.current.strafeRight ? 1 : 0) - (keys.state.current.strafeLeft ? 1 : 0);
+        // A/D rotate the aim (not strafe). D (strafeRight) turns RIGHT → yaw−,
+        // exactly the sense of a mouse-right flick, so the two never fight.
+        turn = (keys.state.current.strafeRight ? 1 : 0) - (keys.state.current.strafeLeft ? 1 : 0);
       }
     }
+    if (turn !== 0) applyKeyboardTurn(cc, -turn * KEY_TURN_RATE * delta);
     const moving = mf !== 0 || mr !== 0;
     if (moving && !startedMoving.current) {
       startedMoving.current = true;
