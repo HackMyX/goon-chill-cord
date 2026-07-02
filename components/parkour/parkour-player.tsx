@@ -8,10 +8,10 @@ import { useKeyboardControls } from "@/components/world/use-keyboard-controls";
 import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
 import { mobileInput, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
 import { angleDelta } from "@/components/world/player";
-import { type ParkourMap } from "@/lib/parkour-config";
+import { hazardHit, type ParkourMap } from "@/lib/parkour-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
-import type { CheckpointProgressRef } from "@/components/parkour/parkour-geometry";
-import { broadcastParkourGhost } from "@/lib/parkour-realtime";
+import type { CheckpointProgressRef, CrumbleStateRef } from "@/components/parkour/parkour-geometry";
+import { broadcastParkourGhost, broadcastParkourProfile } from "@/lib/parkour-realtime";
 
 // ── Collider (an AABB the player can land on / be blocked by) ──
 interface Collider {
@@ -22,7 +22,8 @@ interface Collider {
   kill: boolean;
   ice: boolean;
   bounce: number;
-  moverIdx: number; // -1 for static
+  moverIdx: number;   // -1 for static
+  crumbleIndex: number; // -1 unless a crumbling platform
 }
 
 const R = 0.42;            // player collision half-width (XZ)
@@ -41,13 +42,18 @@ const DASH_SPEED_FACTOR = 2.2;
 // Ledge-grab forgiveness: how far past a platform edge the footprint may be and
 // still catch the top on a descending landing (a barely-made jump snaps on).
 const LAND_MARGIN = 0.16;
+/** Seconds a crumble platform lasts once stepped on before it collapses. */
+const CRUMBLE_DELAY = 0.5;
+/** Grace window (s) after a respawn where hazards can't kill you — stops instant
+ * death-loops when you respawn next to a spinner/saw. */
+const HAZARD_INVULN = 0.85;
 
 /** Build an axis-aligned collider from a box (center + full size). Called ONCE
  * per platform at map-load (static) and reused; mover colliders are mutated in
  * place each frame instead of rebuilt — zero per-frame allocation. */
 function boxCollider(
   pos: [number, number, number], size: [number, number, number],
-  moverIdx: number, kill: boolean, ice: boolean, bounce: number,
+  moverIdx: number, kill: boolean, ice: boolean, bounce: number, crumbleIndex: number,
 ): Collider {
   const [cx, cy, cz] = pos;
   const [sx, sy, sz] = size;
@@ -55,7 +61,7 @@ function boxCollider(
     minX: cx - sx / 2, maxX: cx + sx / 2,
     minY: cy - sy / 2, maxY: cy + sy / 2,
     minZ: cz - sz / 2, maxZ: cz + sz / 2,
-    topY: cy + sy / 2, kill, ice, bounce, moverIdx,
+    topY: cy + sy / 2, kill, ice, bounce, moverIdx, crumbleIndex,
   };
 }
 
@@ -74,6 +80,8 @@ export interface ParkourPlayerProps {
   /** Broadcast ghost transforms (multiplayer lobby run). */
   multiplayer?: boolean;
   progressRef: React.RefObject<CheckpointProgressRef>;
+  /** Shared crumble-platform state (0=solid, grows once triggered). */
+  crumbleRef: React.RefObject<CrumbleStateRef>;
   onFinish?: () => void;
   onCheckpoint?: (index: number) => void;
   onFall?: () => void;
@@ -92,6 +100,7 @@ export function ParkourPlayer({
   resetSignal,
   multiplayer = false,
   progressRef,
+  crumbleRef,
   onFinish,
   onCheckpoint,
   onFall,
@@ -118,6 +127,7 @@ export function ParkourPlayer({
   const finishedRef = useRef(false);
   const startedMoving = useRef(false);
   const ghostTimer = useRef(0);
+  const profileTimer = useRef(0);
   const walkClock = useRef(0);
   const walkAmp = useRef(0);
   const jumpPose = useRef(0);
@@ -129,6 +139,12 @@ export function ParkourPlayer({
   const dashDirX = useRef(0);
   const dashDirZ = useRef(0);
   const dashPose = useRef(0);
+  const hazardInvuln = useRef(HAZARD_INVULN);
+
+  function resetCrumble() {
+    const st = crumbleRef.current?.states;
+    if (st) st.fill(0);
+  }
 
   // Reset to start (retry / new run)
   const lastReset = useRef(resetSignal);
@@ -143,6 +159,8 @@ export function ParkourPlayer({
     finishedRef.current = false;
     startedMoving.current = false;
     supportMoverIdx.current = -1;
+    hazardInvuln.current = HAZARD_INVULN;
+    resetCrumble();
     if (progressRef.current) progressRef.current.current = -1;
     if (g) {
       g.position.set(map.start[0], map.start[1], map.start[2]);
@@ -166,9 +184,9 @@ export function ParkourPlayer({
   // per-frame heap allocation → no GC stutter even on the 100+-platform maps.
   const rig = useMemo(() => {
     const staticCols: Collider[] = map.platforms.map((pl) =>
-      boxCollider(pl.pos, pl.size, -1, !!pl.kill, !!pl.ice, pl.bounce ?? 0));
-    staticCols.push(boxCollider(map.finish, map.finishSize, -2, false, false, 0));
-    const moverCols: Collider[] = map.movers.map((m, i) => boxCollider(m.pos, m.size, i, false, false, 0));
+      boxCollider(pl.pos, pl.size, -1, !!pl.kill, !!pl.ice, pl.bounce ?? 0, pl.crumbleIndex ?? -1));
+    staticCols.push(boxCollider(map.finish, map.finishSize, -2, false, false, 0, -1));
+    const moverCols: Collider[] = map.movers.map((m, i) => boxCollider(m.pos, m.size, i, false, false, 0, -1));
     const centers = map.movers.map((m) => [m.pos[0], m.pos[1], m.pos[2]] as [number, number, number]);
     const prev = map.movers.map((m) => [m.pos[0], m.pos[1], m.pos[2]] as [number, number, number]);
     return { all: [...staticCols, ...moverCols], moverCols, centers, prev };
@@ -185,6 +203,9 @@ export function ParkourPlayer({
     grounded.current = true;
     airJumpsUsed.current = 0;
     supportMoverIdx.current = -1;
+    hazardInvuln.current = HAZARD_INVULN;
+    // Fresh attempt of the section: broken platforms come back.
+    resetCrumble();
     onFall?.();
   }
 
@@ -196,6 +217,11 @@ export function ParkourPlayer({
     const elapsed = state.clock.elapsedTime;
     const locked = cameraControls.locked || mobileMode;
     const canMove = running && locked && !finishedRef.current;
+
+    // Crumble platforms count down once triggered; post-respawn hazard grace ticks down.
+    const crumbleStates = crumbleRef.current?.states ?? null;
+    if (crumbleStates) { for (let ci = 0; ci < crumbleStates.length; ci++) if (crumbleStates[ci] > 0) crumbleStates[ci] += delta; }
+    hazardInvuln.current = Math.max(0, hazardInvuln.current - delta);
 
     // ── Update mover colliders in place (mover math inlined — no allocation) ──
     const movers = map.movers;
@@ -350,6 +376,8 @@ export function ParkourPlayer({
       // edge instead of being magnetised back onto it ("sticky edge" bug).
       const reach = wasGrounded ? R : R + LAND_MARGIN;
       for (const c of cols) {
+        // A collapsed crumble platform is no longer solid — fall through it.
+        if (c.crumbleIndex >= 0 && crumbleStates && crumbleStates[c.crumbleIndex] >= CRUMBLE_DELAY) continue;
         const nx = Math.max(c.minX, Math.min(px, c.maxX));
         const nz = Math.max(c.minZ, Math.min(pz, c.maxZ));
         const ddx = px - nx, ddz = pz - nz;
@@ -363,6 +391,10 @@ export function ParkourPlayer({
         feetY.current = best.topY;
         vv.current = 0;
         grounded.current = true;
+        // Step onto a crumble platform → start its collapse timer.
+        if (best.crumbleIndex >= 0 && crumbleStates && crumbleStates[best.crumbleIndex] === 0) {
+          crumbleStates[best.crumbleIndex] = 0.0001;
+        }
         // Pull-in ONLY on a fresh landing (not while walking) so a jump that
         // caught the lip is tugged fully onto the platform.
         if (!wasGrounded) {
@@ -392,9 +424,19 @@ export function ParkourPlayer({
 
     g.position.y = feetY.current;
 
-    // ── Hazard tile / void → respawn at checkpoint ──
+    // ── Void / kill-tile → respawn at checkpoint ──
     if (landedKill || feetY.current < map.voidY) {
       respawnAtCheckpoint();
+    }
+
+    // ── Moving hazard contact (spinner bar / saw) = death → respawn, except in
+    // the short grace window right after a respawn (no instant death-loops). ──
+    if (!finishedRef.current && hazardInvuln.current <= 0 && map.hazards.length > 0) {
+      const midY = feetY.current + 0.9;
+      const hx2 = g.position.x, hz2 = g.position.z;
+      for (const h of map.hazards) {
+        if (hazardHit(h, elapsed, hx2, midY, hz2)) { respawnAtCheckpoint(); break; }
+      }
     }
 
     // ── Checkpoints (arm the next one you touch) ──
@@ -471,22 +513,30 @@ export function ParkourPlayer({
     lookTarget.current.set(g.position.x, g.position.y + 1, g.position.z);
     camera.lookAt(lookTarget.current);
 
-    // ── Ghost broadcast (multiplayer) ──
+    // ── Multiplayer sync: high-frequency transform+anim (20 Hz) + low-frequency
+    // profile (name/gender/equipped) so ghosts render the REAL character with
+    // full gear and animations, perfectly in step. ──
     if (multiplayer) {
       ghostTimer.current += delta;
       if (ghostTimer.current >= GHOST_INTERVAL) {
         ghostTimer.current = 0;
         broadcastParkourGhost({
           id: userId,
-          name,
-          gender,
           x: g.position.x,
           y: g.position.y,
           z: g.position.z,
           yaw: g.rotation.y,
           moving,
+          grounded: grounded.current,
+          sprinting: !!sprint,
+          dashing,
           finished: finishedRef.current,
         });
+      }
+      profileTimer.current -= delta;
+      if (profileTimer.current <= 0) {
+        profileTimer.current = 3; // re-announce every 3s so late-joiners get gear
+        broadcastParkourProfile({ id: userId, name, gender, equipped: equippedByCategory });
       }
     }
   });

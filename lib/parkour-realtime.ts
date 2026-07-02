@@ -17,26 +17,38 @@
 
 import { createClient } from "@/lib/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { EquippedItem } from "@/lib/rarity-colors";
 
+/** High-frequency transform + animation state (~20 Hz). */
 export interface ParkourGhostPayload {
   id: string;          // user id
-  name: string;
-  gender: "m" | "w";
   x: number;
   y: number;
   z: number;
   yaw: number;
   moving: boolean;
+  grounded: boolean;
+  sprinting: boolean;
+  dashing: boolean;
   /** true once this player crossed the finish this run. */
   finished: boolean;
-  /** finish time ms, when finished. */
-  timeMs?: number;
+}
+
+/** Low-frequency identity: name, gender AND the full equipped cosmetics, so
+ * ghosts render as the REAL character. Re-broadcast every few seconds so a
+ * late-joiner picks it up. */
+export interface ParkourProfilePayload {
+  id: string;
+  name: string;
+  gender: "m" | "w";
+  equipped: Record<string, EquippedItem | undefined>;
 }
 
 let channel: RealtimeChannel | null = null;
 let channelKey: string | null = null;
 let subscribed = false;
 const ghostListeners = new Set<(p: ParkourGhostPayload) => void>();
+const profileListeners = new Set<(p: ParkourProfilePayload) => void>();
 const leaveListeners = new Set<(id: string) => void>();
 const rosterListeners = new Set<(ids: Set<string>) => void>();
 
@@ -58,6 +70,9 @@ function ensureChannel(lobbyId: string): RealtimeChannel {
 
   ch.on("broadcast", { event: "ghost" }, ({ payload }) => {
     for (const l of ghostListeners) l(payload as ParkourGhostPayload);
+  });
+  ch.on("broadcast", { event: "profile" }, ({ payload }) => {
+    for (const l of profileListeners) l(payload as ParkourProfilePayload);
   });
   ch.on("broadcast", { event: "leave" }, ({ payload }) => {
     const id = (payload as { id?: string })?.id;
@@ -100,9 +115,19 @@ export function broadcastParkourGhost(payload: ParkourGhostPayload): void {
   try { void channel.send({ type: "broadcast", event: "ghost", payload }); } catch { /* noop */ }
 }
 
+export function broadcastParkourProfile(payload: ParkourProfilePayload): void {
+  if (!subscribed || !channel) return;
+  try { void channel.send({ type: "broadcast", event: "profile", payload }); } catch { /* noop */ }
+}
+
 export function subscribeToParkourGhosts(fn: (p: ParkourGhostPayload) => void): () => void {
   ghostListeners.add(fn);
   return () => ghostListeners.delete(fn);
+}
+
+export function subscribeToParkourProfile(fn: (p: ParkourProfilePayload) => void): () => void {
+  profileListeners.add(fn);
+  return () => profileListeners.delete(fn);
 }
 
 export function subscribeToParkourLeave(fn: (id: string) => void): () => void {

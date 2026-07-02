@@ -1,8 +1,9 @@
 "use client";
 
+import { useMemo } from "react";
 import { Sky, Stars } from "@react-three/drei";
 import * as THREE from "three";
-import { ParkourGeometry, type CheckpointProgressRef } from "@/components/parkour/parkour-geometry";
+import { ParkourGeometry, type CheckpointProgressRef, type CrumbleStateRef } from "@/components/parkour/parkour-geometry";
 import { ParkourPlayer } from "@/components/parkour/parkour-player";
 import { ParkourGhosts } from "@/components/parkour/parkour-ghosts";
 import type { ParkourMap } from "@/lib/parkour-config";
@@ -45,6 +46,12 @@ export function ParkourScene({
   onFirstMove,
 }: ParkourSceneProps) {
   const t = map.theme;
+  // Shared crumble-platform state — one stable ref object per map, written by the
+  // player each frame, read by the geometry. (Reset on run reset lives in player.)
+  const crumbleRef = useMemo<React.RefObject<CrumbleStateRef>>(
+    () => ({ current: { states: new Float32Array(map.crumbleCount) } }),
+    [map]
+  );
   return (
     <>
       <color attach="background" args={[t.fog]} />
@@ -66,7 +73,7 @@ export function ParkourScene({
         <meshBasicMaterial color={t.ground} side={THREE.DoubleSide} />
       </mesh>
 
-      <ParkourGeometry map={map} progressRef={progressRef} />
+      <ParkourGeometry map={map} progressRef={progressRef} crumbleRef={crumbleRef} />
 
       <ParkourPlayer
         userId={userId}
@@ -80,6 +87,7 @@ export function ParkourScene({
         resetSignal={resetSignal}
         multiplayer={multiplayer}
         progressRef={progressRef}
+        crumbleRef={crumbleRef}
         onFinish={onFinish}
         onCheckpoint={onCheckpoint}
         onFall={onFall}

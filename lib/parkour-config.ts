@@ -6,12 +6,11 @@
  * parkour.ts). Same "code default, DB override" shape as the rest of the site.
  *
  * The 4 courses are built by a DETERMINISTIC, seeded generator (`buildCourse`)
- * so they are long, wild and varied WITHOUT hand-placing hundreds of platforms —
- * and every client + ghost sees byte-identical geometry. Every jump is proven
- * makeable and every course proven trap-free by scripts/validate-parkour-maps.mjs.
- *
- * Reward VALUES live here as plain numbers; the actual granting maps them onto
- * RewardSpec and calls the central grantReward() dispatcher server-side.
+ * so every client + ghost sees byte-identical geometry. Courses are LONG and
+ * MEAN: crumbling platforms, rotating spinner bars + moving saws (touch = death),
+ * ice, narrow beams, and lots of required moving platforms. Reachability of the
+ * static/mover path is proven by scripts/validate-parkour-maps.mjs (hazards are
+ * avoidable skill-checks, so they don't affect reachability).
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,6 +25,10 @@ export interface ParkourPlatform {
   kill?: boolean;
   ice?: boolean;
   bounce?: number;
+  /** Falls away shortly after you step on it — keep moving! */
+  crumble?: boolean;
+  /** Index into the run's crumble-state array (set by the generator). */
+  crumbleIndex?: number;
 }
 
 export interface ParkourMover extends ParkourPlatform {
@@ -42,9 +45,20 @@ export interface ParkourCheckpoint {
   radius: number;
 }
 
-/** Ordered landing sequence, for the validator only (the engine just lands on
- * whatever collider is under the player). Each node is a static platform or a
- * moving one. */
+/** A moving KILL obstacle. "spinner" = a bar rotating around a pivot (touch the
+ * bar and you die); "slider" = a saw sliding along a path. */
+export interface ParkourHazard {
+  kind: "spinner" | "slider";
+  pos: [number, number, number];
+  to?: [number, number, number];
+  length?: number;
+  period: number;
+  phase?: number;
+  killR: number;
+  color?: string;
+}
+
+/** Ordered landing sequence, for the validator only. */
 export interface RouteNode {
   kind: "platform" | "mover";
   index: number;
@@ -77,27 +91,25 @@ export interface ParkourMap {
   tagline: string;
   difficulty: "Leicht" | "Mittel" | "Schwer" | "Extrem";
   theme: ParkourTheme;
-  // Per-map physics (admin-overridable)
   gravity: number;
   jumpVelocity: number;
   airJumps: number;
   moveSpeed: number;
   sprintMultiplier: number;
   voidY: number;
-  // Geometry (code-generated)
   start: [number, number, number];
   finish: [number, number, number];
   finishSize: [number, number, number];
   platforms: ParkourPlatform[];
   movers: ParkourMover[];
+  hazards: ParkourHazard[];
   checkpoints: ParkourCheckpoint[];
-  /** Validator-only intended route. */
   routeHint?: RouteNode[];
-  // Economy (admin-overridable)
+  /** Number of crumble platforms (size of the run's crumble-state array). */
+  crumbleCount: number;
   rewardCredits: number;
   rewardXp: number;
   bestBonusCredits: number;
-  /** Credits per checkpoint reached (granted at finish, within the daily cap). */
   checkpointCredits: number;
   medals: ParkourMedals;
 }
@@ -137,9 +149,6 @@ function mulberry32(seed: number) {
   };
 }
 
-/** Air time (s) until a jump launched at `vJ` descends back through height
- * `rise` above launch, using an optimal apex double-jump if available. Horizontal
- * reach = maxSpeed × this. */
 function reachAirtime(gravity: number, vJ: number, airJumps: number, rise: number): number {
   const g = gravity;
   let y = 0, vv = vJ, t = 0, used = 0, prev = 0;
@@ -169,6 +178,12 @@ interface CourseParams {
   iceChance: number;
   beamChance: number;
   moverChance: number;
+  crumbleChance: number;
+  spinnerChance: number;
+  sliderChance: number;
+  hazPeriodMin: number;
+  hazPeriodMax: number;
+  hazardCap: number;
   checkpointEvery: number;
   startTop: number;
   accent: string;
@@ -177,8 +192,10 @@ interface CourseParams {
 interface CourseGeometry {
   platforms: ParkourPlatform[];
   movers: ParkourMover[];
+  hazards: ParkourHazard[];
   checkpoints: ParkourCheckpoint[];
   routeHint: RouteNode[];
+  crumbleCount: number;
   start: [number, number, number];
   finish: [number, number, number];
   finishSize: [number, number, number];
@@ -192,24 +209,27 @@ function buildCourse(pr: CourseParams): CourseGeometry {
 
   const platforms: ParkourPlatform[] = [];
   const movers: ParkourMover[] = [];
+  const hazards: ParkourHazard[] = [];
   const checkpoints: ParkourCheckpoint[] = [];
   const routeHint: RouteNode[] = [];
+  let crumbleCount = 0;
 
-  // Spawn pad
-  platforms.push({ pos: [0, pr.startTop - 0.5, 0], size: [6, 1, 6] });
+  platforms.push({ pos: [0, pr.startTop - 0.5, 0], size: [7, 1, 7] });
   routeHint.push({ kind: "platform", index: 0 });
 
-  let hx = 0, hz = -1;        // heading (unit), starts moving -Z
+  let hx = 0, hz = -1;
   let cur = { x: 0, y: pr.startTop, z: 0 };
   let cpIndex = 0;
   let sinceBigTurn = 0;
   let lastWasMover = false;
 
+  const hazPeriod = () => pr.hazPeriodMin + rnd() * (pr.hazPeriodMax - pr.hazPeriodMin);
+
   for (let i = 0; i < pr.steps; i++) {
-    // Gentle heading turn, occasional (non-consecutive) switchback.
-    let turn = (rnd() * 2 - 1) * 0.35;
-    if (rnd() < 0.09 && sinceBigTurn > 3) {
-      turn += (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.35);
+    // Heading turn (+ occasional switchback).
+    let turn = (rnd() * 2 - 1) * 0.4;
+    if (rnd() < 0.1 && sinceBigTurn > 3) {
+      turn += (rnd() < 0.5 ? -1 : 1) * (0.55 + rnd() * 0.4);
       sinceBigTurn = 0;
     } else sinceBigTurn++;
     const ca = Math.cos(turn), sa = Math.sin(turn);
@@ -217,34 +237,30 @@ function buildCourse(pr: CourseParams): CourseGeometry {
     hx = nhx; hz = nhz;
 
     const isCheckpoint = i % pr.checkpointEvery === pr.checkpointEvery - 1;
+    const isLast = i >= pr.steps - 1;
 
-    // Rise (never require a double-jump — single jump always clears; double is
-    // just insurance, so a player can never get permanently stuck "not up").
+    // Rise — never more than a single jump clears (double is only insurance).
     let rise: number;
-    if (!isCheckpoint && rnd() < pr.descendChance) rise = -(0.5 + rnd() * 1.4);
+    if (!isCheckpoint && rnd() < pr.descendChance) rise = -(0.5 + rnd() * 1.5);
     else rise = pr.riseMin + rnd() * (pr.riseMax - pr.riseMin);
     rise = Math.min(rise, singleH * 0.82);
 
     const airtime = reachAirtime(g, vJ, pr.airJumps, Math.max(rise, 0));
-    const maxReach = vXmax * airtime;
-    const gap = Math.max(2.4, maxReach * pr.gapFrac);
+    const gap = Math.max(2.6, vXmax * airtime * pr.gapFrac);
 
-    // Feature selection (never on a checkpoint pad, never on the final step —
-    // the last node must be a solid platform so the finish jump is clean).
-    let ice = false, beam = false, moverThis = false;
-    if (!isCheckpoint && i < pr.steps - 1) {
+    // Feature selection.
+    let ice = false, beam = false, moverThis = false, crumble = false;
+    if (!isCheckpoint && !isLast) {
       if (rnd() < pr.beamChance) beam = true;
       else if (!lastWasMover && rnd() < pr.moverChance) moverThis = true;
-      if (!beam && rnd() < pr.iceChance) ice = true;
+      else if (rnd() < pr.crumbleChance) crumble = true;
+      if (!beam && !crumble && rnd() < pr.iceChance) ice = true;
     }
 
     let sx = pr.platMin + rnd() * (pr.platMax - pr.platMin);
     let sz = sx;
-    if (isCheckpoint) { sx = Math.max(sx, 2.8); sz = sx; }
-    if (beam) {
-      if (Math.abs(hx) > Math.abs(hz)) { sx = 6.5; sz = 1.3; }
-      else { sx = 1.3; sz = 6.5; }
-    }
+    if (isCheckpoint) { sx = Math.max(sx, 2.9); sz = sx; } // checkpoint pads a bit safer
+    if (beam) { if (Math.abs(hx) > Math.abs(hz)) { sx = 7; sz = 1.3; } else { sx = 1.3; sz = 7; } }
 
     const dist = gap + sx / 2 + 1.4;
     const nx = cur.x + hx * dist;
@@ -252,42 +268,66 @@ function buildCourse(pr: CourseParams): CourseGeometry {
     const ny = cur.y + rise;
 
     if (moverThis) {
-      const px = -hz, pz = hx;      // perpendicular oscillation
-      const amp = 1.6;
+      const px = -hz, pz = hx;
+      const amp = 2.1; // bigger swing → real timing challenge
       movers.push({
         mode: "path",
         pos: [nx - px * amp, ny - 0.7, nz - pz * amp],
         to: [nx + px * amp, ny - 0.7, nz + pz * amp],
-        size: [Math.max(2.3, sx * 0.95), 0.6, Math.max(2.3, sz * 0.95)],
-        period: 3 + rnd() * 2,
+        size: [Math.max(2.1, sx * 0.9), 0.6, Math.max(2.1, sz * 0.9)],
+        period: 2.2 + rnd() * 1.8,
         phase: rnd(),
         color: pr.accent, glow: pr.accent,
       });
       routeHint.push({ kind: "mover", index: movers.length - 1 });
       lastWasMover = true;
-      cur = { x: nx, y: ny, z: nz };
-      continue;
+    } else {
+      lastWasMover = false;
+      const plat: ParkourPlatform = { pos: [nx, ny - 0.5, nz], size: [sx, 1, sz] };
+      if (crumble) { plat.crumble = true; plat.crumbleIndex = crumbleCount++; plat.color = "#f59e0b"; plat.glow = "#f59e0b"; }
+      else if (ice) { plat.ice = true; plat.color = "#7dd3fc"; plat.glow = "#38bdf8"; }
+      platforms.push(plat);
+      routeHint.push({ kind: "platform", index: platforms.length - 1 });
+      if (isCheckpoint) checkpoints.push({ index: cpIndex++, pos: [nx, ny, nz], radius: Math.max(sx, sz) / 2 + 0.3 });
     }
-    lastWasMover = false;
 
-    const plat: ParkourPlatform = { pos: [nx, ny - 0.5, nz], size: [sx, 1, sz] };
-    if (ice) { plat.ice = true; plat.color = "#7dd3fc"; plat.glow = "#38bdf8"; }
-    platforms.push(plat);
-    routeHint.push({ kind: "platform", index: platforms.length - 1 });
-    if (isCheckpoint) {
-      checkpoints.push({ index: cpIndex++, pos: [nx, ny, nz], radius: Math.max(sx, sz) / 2 + 0.3 });
+    // ── Hazards (avoidable skill-checks; capped for perf) ──
+    if (!isCheckpoint && !isLast && hazards.length < pr.hazardCap) {
+      if (rnd() < pr.spinnerChance) {
+        hazards.push({
+          kind: "spinner",
+          pos: [nx, ny + 1.25, nz],
+          length: Math.max(1.7, sx * 0.55 + 1.2),
+          period: hazPeriod() * (rnd() < 0.5 ? 1 : -1), // some spin the other way
+          phase: rnd(),
+          killR: 0.5,
+          color: pr.accent,
+        });
+      } else if (rnd() < pr.sliderChance) {
+        const mx = (cur.x + nx) / 2, mz = (cur.z + nz) / 2, my = (cur.y + ny) / 2 + 0.9;
+        const px = -hz, pz = hx, amp = 2.6;
+        hazards.push({
+          kind: "slider",
+          pos: [mx - px * amp, my, mz - pz * amp],
+          to: [mx + px * amp, my, mz + pz * amp],
+          period: hazPeriod(),
+          phase: rnd(),
+          killR: 0.6,
+          color: "#ef4444",
+        });
+      }
     }
+
     cur = { x: nx, y: ny, z: nz };
   }
 
-  // Finish pad — a clean, modest jump up from the last (solid) platform.
   const fRise = 0.8;
   const fAir = reachAirtime(g, vJ, pr.airJumps, fRise);
   const fdist = vXmax * fAir * pr.gapFrac + 3;
   const fx = cur.x + hx * fdist, fz = cur.z + hz * fdist, fy = cur.y + fRise;
 
   return {
-    platforms, movers, checkpoints, routeHint,
+    platforms, movers, hazards, checkpoints, routeHint, crumbleCount,
     start: [0, pr.startTop, 0],
     finish: [fx, fy, fz],
     finishSize: [6, 1, 6],
@@ -295,88 +335,80 @@ function buildCourse(pr: CourseParams): CourseGeometry {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The 4 maps — long, escalating, feature-rich. Seeds chosen so the validator is
-// 100% green (all jumps makeable, no traps/overlaps).
+// The 4 maps — long, mean, mechanic-heavy. Seeds chosen so the validator is 100%
+// green (all jumps makeable; hazards are avoidable and not part of the check).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const NEON_PARAMS: CourseParams = {
-  seed: 10014, steps: 68,
+  seed: 51014, steps: 68,
   gravity: -20, jumpVelocity: 8.4, airJumps: 1, moveSpeed: 6.5, sprintMultiplier: 1.5,
-  platMin: 2.7, platMax: 3.3, riseMin: 0.5, riseMax: 1.15, gapFrac: 0.5,
-  descendChance: 0.12, iceChance: 0.0, beamChance: 0.1, moverChance: 0.12,
-  checkpointEvery: 7, startTop: 1, accent: THEME_NEON_NIGHT.accent,
+  platMin: 2.2, platMax: 2.7, riseMin: 0.6, riseMax: 1.25, gapFrac: 0.66,
+  descendChance: 0.14, iceChance: 0.08, beamChance: 0.14, moverChance: 0.24, crumbleChance: 0.12,
+  spinnerChance: 0.14, sliderChance: 0.1, hazPeriodMin: 2.4, hazPeriodMax: 3.4, hazardCap: 22,
+  checkpointEvery: 6, startTop: 1, accent: THEME_NEON_NIGHT.accent,
 };
 const MAP_NEON: ParkourMap = {
-  id: "neon_ascent",
-  name: "Neon Ascent",
-  tagline: "Der lange leuchtende Aufstieg — 8 Checkpoints, kein Zuckerschlecken mehr.",
-  difficulty: "Leicht",
-  theme: THEME_NEON_NIGHT,
-  gravity: -20, jumpVelocity: 8.4, airJumps: 1, moveSpeed: 6.5, sprintMultiplier: 1.5,
-  voidY: -16,
+  id: "neon_ascent", name: "Neon Ascent",
+  tagline: "Kein Spaziergang mehr: brechende Plattformen, rotierende Balken, wackelige Lifte.",
+  difficulty: "Leicht", theme: THEME_NEON_NIGHT,
+  gravity: -20, jumpVelocity: 8.4, airJumps: 1, moveSpeed: 6.5, sprintMultiplier: 1.5, voidY: -16,
   ...buildCourse(NEON_PARAMS),
-  rewardCredits: 150, rewardXp: 120, bestBonusCredits: 100, checkpointCredits: 12,
-  medals: { diamond: 72000, gold: 95000, silver: 125000, bronze: 170000 },
+  rewardCredits: 160, rewardXp: 130, bestBonusCredits: 110, checkpointCredits: 14,
+  medals: { diamond: 78000, gold: 105000, silver: 140000, bronze: 190000 },
 };
 
 const SKY_PARAMS: CourseParams = {
-  seed: 20028, steps: 82,
+  seed: 52028, steps: 84,
   gravity: -18, jumpVelocity: 8.6, airJumps: 1, moveSpeed: 7, sprintMultiplier: 1.6,
-  platMin: 2.3, platMax: 3.0, riseMin: 0.6, riseMax: 1.25, gapFrac: 0.58,
-  descendChance: 0.14, iceChance: 0.05, beamChance: 0.13, moverChance: 0.16,
-  checkpointEvery: 7, startTop: 1, accent: THEME_SKY_DAWN.accent,
+  platMin: 2.0, platMax: 2.5, riseMin: 0.7, riseMax: 1.35, gapFrac: 0.72,
+  descendChance: 0.16, iceChance: 0.12, beamChance: 0.16, moverChance: 0.3, crumbleChance: 0.15,
+  spinnerChance: 0.18, sliderChance: 0.14, hazPeriodMin: 2.0, hazPeriodMax: 3.0, hazardCap: 28,
+  checkpointEvery: 6, startTop: 1, accent: THEME_SKY_DAWN.accent,
 };
 const MAP_SKY: ParkourMap = {
-  id: "sky_gardens",
-  name: "Sky Gardens",
-  tagline: "Endlose schwebende Gärten, kreisende Scheiben, wackelige Stege.",
-  difficulty: "Mittel",
-  theme: THEME_SKY_DAWN,
-  gravity: -18, jumpVelocity: 8.6, airJumps: 1, moveSpeed: 7, sprintMultiplier: 1.6,
-  voidY: -22,
+  id: "sky_gardens", name: "Sky Gardens",
+  tagline: "Timing-Hölle über den Wolken: kreisende Sägen, brechende Beete, viele bewegliche Stege.",
+  difficulty: "Mittel", theme: THEME_SKY_DAWN,
+  gravity: -18, jumpVelocity: 8.6, airJumps: 1, moveSpeed: 7, sprintMultiplier: 1.6, voidY: -22,
   ...buildCourse(SKY_PARAMS),
-  rewardCredits: 280, rewardXp: 220, bestBonusCredits: 180, checkpointCredits: 20,
-  medals: { diamond: 100000, gold: 130000, silver: 172000, bronze: 230000 },
+  rewardCredits: 300, rewardXp: 240, bestBonusCredits: 200, checkpointCredits: 22,
+  medals: { diamond: 100000, gold: 135000, silver: 180000, bronze: 245000 },
 };
 
 const MAGMA_PARAMS: CourseParams = {
-  seed: 30033, steps: 96,
+  seed: 53033, steps: 98,
   gravity: -24, jumpVelocity: 8.9, airJumps: 0, moveSpeed: 7, sprintMultiplier: 1.7,
-  platMin: 1.9, platMax: 2.5, riseMin: 0.4, riseMax: 1.0, gapFrac: 0.6,
-  descendChance: 0.13, iceChance: 0.06, beamChance: 0.24, moverChance: 0.14,
-  checkpointEvery: 8, startTop: 1, accent: THEME_MAGMA.accent,
+  platMin: 1.7, platMax: 2.2, riseMin: 0.4, riseMax: 1.0, gapFrac: 0.74,
+  descendChance: 0.14, iceChance: 0.1, beamChance: 0.24, moverChance: 0.24, crumbleChance: 0.18,
+  spinnerChance: 0.2, sliderChance: 0.18, hazPeriodMin: 1.8, hazPeriodMax: 2.8, hazardCap: 32,
+  checkpointEvery: 7, startTop: 1, accent: THEME_MAGMA.accent,
 };
 const MAP_MAGMA: ParkourMap = {
-  id: "magma_rush",
-  name: "Magma Rush",
-  tagline: "Schmale Stege & winzige Pads über dem Lava-Abgrund — kein Doppelsprung.",
-  difficulty: "Schwer",
-  theme: THEME_MAGMA,
-  gravity: -24, jumpVelocity: 8.9, airJumps: 0, moveSpeed: 7, sprintMultiplier: 1.7,
-  voidY: -6,
+  id: "magma_rush", name: "Magma Rush",
+  tagline: "Kein Doppelsprung, winzige brechende Stege, rasende Sägeblätter über der Lava. Gnadenlos.",
+  difficulty: "Schwer", theme: THEME_MAGMA,
+  gravity: -24, jumpVelocity: 8.9, airJumps: 0, moveSpeed: 7, sprintMultiplier: 1.7, voidY: -6,
   ...buildCourse(MAGMA_PARAMS),
-  rewardCredits: 460, rewardXp: 340, bestBonusCredits: 320, checkpointCredits: 30,
-  medals: { diamond: 135000, gold: 175000, silver: 235000, bronze: 320000 },
+  rewardCredits: 500, rewardXp: 380, bestBonusCredits: 360, checkpointCredits: 32,
+  medals: { diamond: 130000, gold: 175000, silver: 235000, bronze: 320000 },
 };
 
 const VOID_PARAMS: CourseParams = {
-  seed: 40041, steps: 116,
+  seed: 54041, steps: 118,
   gravity: -21, jumpVelocity: 8.9, airJumps: 1, moveSpeed: 7.2, sprintMultiplier: 1.6,
-  platMin: 1.6, platMax: 2.1, riseMin: 0.6, riseMax: 1.35, gapFrac: 0.66,
-  descendChance: 0.12, iceChance: 0.22, beamChance: 0.16, moverChance: 0.2,
-  checkpointEvery: 8, startTop: 1, accent: THEME_VOID.accent,
+  platMin: 1.4, platMax: 1.9, riseMin: 0.7, riseMax: 1.4, gapFrac: 0.8,
+  descendChance: 0.14, iceChance: 0.3, beamChance: 0.16, moverChance: 0.34, crumbleChance: 0.2,
+  spinnerChance: 0.24, sliderChance: 0.2, hazPeriodMin: 1.6, hazPeriodMax: 2.6, hazardCap: 40,
+  checkpointEvery: 7, startTop: 1, accent: THEME_VOID.accent,
 };
 const MAP_VOID: ParkourMap = {
-  id: "void_spire",
-  name: "Void Spire",
-  tagline: "Der endlose Turm ins Nichts — Eis überall, winzige Landungen, rasende Ringe.",
-  difficulty: "Extrem",
-  theme: THEME_VOID,
-  gravity: -21, jumpVelocity: 8.9, airJumps: 1, moveSpeed: 7.2, sprintMultiplier: 1.6,
-  voidY: -8,
+  id: "void_spire", name: "Void Spire",
+  tagline: "Der Albtraum-Turm: Eis überall, winzige brechende Landungen, ein Wald aus rotierenden Klingen.",
+  difficulty: "Extrem", theme: THEME_VOID,
+  gravity: -21, jumpVelocity: 8.9, airJumps: 1, moveSpeed: 7.2, sprintMultiplier: 1.6, voidY: -8,
   ...buildCourse(VOID_PARAMS),
-  rewardCredits: 700, rewardXp: 520, bestBonusCredits: 500, checkpointCredits: 45,
-  medals: { diamond: 185000, gold: 240000, silver: 320000, bronze: 430000 },
+  rewardCredits: 750, rewardXp: 560, bestBonusCredits: 540, checkpointCredits: 48,
+  medals: { diamond: 165000, gold: 215000, silver: 290000, bronze: 390000 },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -384,9 +416,7 @@ const MAP_VOID: ParkourMap = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const PARKOUR_MAPS: ParkourMap[] = [MAP_NEON, MAP_SKY, MAP_MAGMA, MAP_VOID];
-
 export const PARKOUR_MAP_IDS = PARKOUR_MAPS.map((m) => m.id);
-
 export function getParkourMap(id: string): ParkourMap | undefined {
   return PARKOUR_MAPS.find((m) => m.id === id);
 }
@@ -410,8 +440,6 @@ export interface ParkourConfig {
   adminOnly: boolean;
   maxLobbySize: number;
   dailyRewardedFinishes: number;
-  /** Milliseconds each death adds to the combined T/D score (rankings are by T/D
-   * by default: less time AND fewer deaths = better). Admin-tunable. */
   deathPenaltyMs: number;
   maps: Record<string, ParkourMapOverride>;
 }
@@ -425,9 +453,6 @@ export const DEFAULT_PARKOUR_CONFIG: ParkourConfig = {
   maps: {},
 };
 
-/** Combined T/D score: an "effective time" = run time + a fixed penalty per death.
- * Lower is better. This is what every parkour leaderboard ranks by (with Zeit /
- * Tode as alternative sorts). */
 export function parkourTd(timeMs: number, deaths: number, penaltyMs: number): number {
   return timeMs + Math.max(0, deaths) * Math.max(0, penaltyMs);
 }
@@ -471,9 +496,7 @@ export function medalFor(ms: number, medals: ParkourMedals): "diamond" | "gold" 
   return null;
 }
 
-/** Deterministic center of a moving platform at run-time `t` (seconds). Pure —
- * BOTH the physics AND the render call this every frame; every client shares the
- * same clock so all movers + ghosts stay in lockstep. */
+/** Deterministic center of a moving platform at run-time `t` (seconds). */
 export function moverCenterAt(m: ParkourMover, t: number): [number, number, number] {
   const phase = m.phase ?? 0;
   if (m.mode === "orbit") {
@@ -489,4 +512,38 @@ export function moverCenterAt(m: ParkourMover, t: number): [number, number, numb
     m.pos[1] + (to[1] - m.pos[1]) * tri,
     m.pos[2] + (to[2] - m.pos[2]) * tri,
   ];
+}
+
+// ── Hazard math (deterministic; shared by physics + render) ──
+export function spinnerAngleAt(h: ParkourHazard, t: number): number {
+  return (((t / h.period + (h.phase ?? 0)) % 1) + 1) % 1 * Math.PI * 2;
+}
+export function sliderPosAt(h: ParkourHazard, t: number): [number, number, number] {
+  const to = h.to ?? h.pos;
+  const u = (((t / h.period + (h.phase ?? 0)) % 1) + 1) % 1;
+  const tri = u < 0.5 ? u * 2 : 2 - u * 2;
+  return [
+    h.pos[0] + (to[0] - h.pos[0]) * tri,
+    h.pos[1] + (to[1] - h.pos[1]) * tri,
+    h.pos[2] + (to[2] - h.pos[2]) * tri,
+  ];
+}
+/** Does the player point (px,py,pz — use mid-body height) touch the hazard now? */
+export function hazardHit(h: ParkourHazard, t: number, px: number, py: number, pz: number): boolean {
+  const killR = h.killR;
+  if (h.kind === "slider") {
+    const [x, y, z] = sliderPosAt(h, t);
+    const dx = px - x, dy = py - y, dz = pz - z;
+    return dx * dx + dy * dy + dz * dz < killR * killR;
+  }
+  // spinner: bar from pos to pos + dir*length (horizontal, at pos.y)
+  const a = spinnerAngleAt(h, t);
+  const len = h.length ?? 2.4;
+  const ax = h.pos[0], ay = h.pos[1], az = h.pos[2];
+  const abx = Math.cos(a) * len, abz = Math.sin(a) * len;
+  const denom = abx * abx + abz * abz || 1;
+  const tt = Math.max(0, Math.min(1, ((px - ax) * abx + (pz - az) * abz) / denom));
+  const cxp = ax + abx * tt, czp = az + abz * tt;
+  const dx = px - cxp, dy = py - ay, dz = pz - czp;
+  return dx * dx + dy * dy + dz * dz < killR * killR;
 }
