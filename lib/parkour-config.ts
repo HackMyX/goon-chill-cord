@@ -293,12 +293,17 @@ function buildCourse(pr: CourseParams): CourseGeometry {
 
     // ── Hazards (avoidable skill-checks; capped for perf) ──
     if (!isCheckpoint && !isLast && hazards.length < pr.hazardCap) {
-      if (rnd() < pr.spinnerChance) {
+      const spinRoll = rnd() < pr.spinnerChance;
+      // Spinner only on a SOLID square platform (proper footing). That platform
+      // gets a touch bigger so you have a fair chance to time the jump over the bar.
+      if (spinRoll && !moverThis && !beam) {
+        const sp = platforms[platforms.length - 1];
+        sp.size[0] += 0.5; sp.size[2] += 0.5;
         hazards.push({
           kind: "spinner",
           // LOW bar (just above the platform) → you jump over it as it sweeps.
           pos: [nx, ny + 0.4, nz],
-          length: Math.max(1.7, sx * 0.55 + 1.3),
+          length: Math.max(1.7, sp.size[0] * 0.55 + 1.3),
           period: hazPeriod() * (rnd() < 0.5 ? 1 : -1), // some spin the other way
           phase: rnd(),
           killR: 0.5,
