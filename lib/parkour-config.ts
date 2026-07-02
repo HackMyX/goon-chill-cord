@@ -502,47 +502,62 @@ export function medalFor(ms: number, medals: ParkourMedals): "diamond" | "gold" 
   return null;
 }
 
-/** Deterministic center of a moving platform at run-time `t` (seconds). */
-export function moverCenterAt(m: ParkourMover, t: number): [number, number, number] {
+/** Deterministic center of a moving platform at run-time `t`, written INTO `out`
+ * (no allocation — call this from per-frame code). */
+export function moverCenterInto(m: ParkourMover, t: number, out: [number, number, number]): void {
   const phase = m.phase ?? 0;
   if (m.mode === "orbit") {
     const r = m.radius ?? 4;
     const ang = ((t / m.period + phase) % 1) * Math.PI * 2;
-    return [m.pos[0] + Math.cos(ang) * r, m.pos[1], m.pos[2] + Math.sin(ang) * r];
+    out[0] = m.pos[0] + Math.cos(ang) * r; out[1] = m.pos[1]; out[2] = m.pos[2] + Math.sin(ang) * r;
+    return;
   }
   const to = m.to ?? m.pos;
   const u = (((t / m.period + phase) % 1) + 1) % 1;
   const tri = u < 0.5 ? u * 2 : 2 - u * 2;
-  return [
-    m.pos[0] + (to[0] - m.pos[0]) * tri,
-    m.pos[1] + (to[1] - m.pos[1]) * tri,
-    m.pos[2] + (to[2] - m.pos[2]) * tri,
-  ];
+  out[0] = m.pos[0] + (to[0] - m.pos[0]) * tri;
+  out[1] = m.pos[1] + (to[1] - m.pos[1]) * tri;
+  out[2] = m.pos[2] + (to[2] - m.pos[2]) * tri;
+}
+/** Allocating convenience wrapper (do NOT use in per-frame hot paths). */
+export function moverCenterAt(m: ParkourMover, t: number): [number, number, number] {
+  const out: [number, number, number] = [0, 0, 0];
+  moverCenterInto(m, t, out);
+  return out;
 }
 
 // ── Hazard math (deterministic; shared by physics + render) ──
 export function spinnerAngleAt(h: ParkourHazard, t: number): number {
   return (((t / h.period + (h.phase ?? 0)) % 1) + 1) % 1 * Math.PI * 2;
 }
-export function sliderPosAt(h: ParkourHazard, t: number): [number, number, number] {
+/** Slider (saw) position at `t`, written INTO `out` (no allocation). */
+export function sliderPosInto(h: ParkourHazard, t: number, out: [number, number, number]): void {
   const to = h.to ?? h.pos;
   const u = (((t / h.period + (h.phase ?? 0)) % 1) + 1) % 1;
   const tri = u < 0.5 ? u * 2 : 2 - u * 2;
-  return [
-    h.pos[0] + (to[0] - h.pos[0]) * tri,
-    h.pos[1] + (to[1] - h.pos[1]) * tri,
-    h.pos[2] + (to[2] - h.pos[2]) * tri,
-  ];
+  out[0] = h.pos[0] + (to[0] - h.pos[0]) * tri;
+  out[1] = h.pos[1] + (to[1] - h.pos[1]) * tri;
+  out[2] = h.pos[2] + (to[2] - h.pos[2]) * tri;
+}
+export function sliderPosAt(h: ParkourHazard, t: number): [number, number, number] {
+  const out: [number, number, number] = [0, 0, 0];
+  sliderPosInto(h, t, out);
+  return out;
 }
 /** Does the hazard touch the player's body right now? `feetY` = the player's
- * feet; the body cylinder spans [feetY-0.1 .. feetY+1.7]. The vertical band test
- * means a LOW sweeping bar only hits you while grounded — jump and it passes
- * harmlessly beneath you (that's the whole "jump over the bar" mechanic). */
+ * feet; the body cylinder spans [feetY-0.1 .. feetY+1.7]. Allocation-free (safe
+ * to call every frame for every hazard). */
 export function hazardHit(h: ParkourHazard, t: number, px: number, feetY: number, pz: number): boolean {
   const killR = h.killR;
   const bodyBot = feetY - 0.1, bodyTop = feetY + 1.7;
   if (h.kind === "slider") {
-    const [x, y, z] = sliderPosAt(h, t);
+    // Inline slider position (NO array allocation).
+    const to = h.to ?? h.pos;
+    const u = (((t / h.period + (h.phase ?? 0)) % 1) + 1) % 1;
+    const tri = u < 0.5 ? u * 2 : 2 - u * 2;
+    const x = h.pos[0] + (to[0] - h.pos[0]) * tri;
+    const y = h.pos[1] + (to[1] - h.pos[1]) * tri;
+    const z = h.pos[2] + (to[2] - h.pos[2]) * tri;
     const dyBand = y < bodyBot ? bodyBot - y : y > bodyTop ? y - bodyTop : 0;
     const dx = px - x, dz = pz - z;
     return dx * dx + dyBand * dyBand + dz * dz < killR * killR;

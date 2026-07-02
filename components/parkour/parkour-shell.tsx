@@ -4,7 +4,6 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import Link from "next/link";
 import { Canvas } from "@react-three/fiber";
 import { Preload } from "@react-three/drei";
-import * as THREE from "three";
 import {
   ArrowLeft, MousePointerClick, Timer, Flag, RotateCcw, Trophy, Crown, Medal,
   Users, Shuffle, Play, Loader2, LogOut, UserPlus, Home, Zap,
@@ -49,7 +48,6 @@ export interface ParkourShellProps {
 
 const CANVAS_DPR: [number, number] = [1, 2];
 const CANVAS_DPR_MOBILE: [number, number] = [1, 1.5];
-const CANVAS_SHADOWS = { type: THREE.PCFShadowMap } as const;
 const CANVAS_CAMERA = { position: [0, 4, 8] as [number, number, number], fov: 60 };
 
 const DIFF_COLOR: Record<ParkourMap["difficulty"], string> = {
@@ -437,7 +435,7 @@ export function ParkourShell(props: ParkourShellProps) {
             />
           )}
 
-          <Canvas shadows={CANVAS_SHADOWS} dpr={isMobile ? CANVAS_DPR_MOBILE : CANVAS_DPR} camera={CANVAS_CAMERA} className="absolute inset-0">
+          <Canvas dpr={isMobile ? CANVAS_DPR_MOBILE : CANVAS_DPR} camera={CANVAS_CAMERA} className="absolute inset-0">
             <Suspense fallback={null}>
               <ParkourScene
                 userId={userId} username={username} map={map}
@@ -603,22 +601,22 @@ export function ParkourShell(props: ParkourShellProps) {
 // Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The live run clock. Self-contained: it re-renders ONLY itself (a single text
- * node) via requestAnimationFrame, reading the shared start-time ref — so the run
- * timer never re-renders the shell or reconciles the 3D scene. This is what keeps
- * jumping/landing perfectly smooth (no per-tick stutter). */
+/** The live run clock. Writes the time straight into its own DOM node via rAF —
+ * NO React state, so it never re-renders (not even itself). Zero React work per
+ * frame → nothing to hitch the run. */
 function RunTimer({ startMsRef }: { startMsRef: React.RefObject<number | null> }) {
-  const [ms, setMs] = useState(0);
+  const spanRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     let raf = 0;
     const tick = () => {
-      setMs(startMsRef.current !== null ? performance.now() - startMsRef.current : 0);
+      const el = spanRef.current;
+      if (el) el.textContent = formatParkourTime(startMsRef.current !== null ? performance.now() - startMsRef.current : 0);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [startMsRef]);
-  return <>{formatParkourTime(ms)}</>;
+  return <span ref={spanRef}>0:00.000</span>;
 }
 
 function GateScreen({ message }: { message: string }) {

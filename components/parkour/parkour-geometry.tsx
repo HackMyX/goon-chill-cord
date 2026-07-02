@@ -1,10 +1,10 @@
 "use client";
 
-import { memo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import {
-  moverCenterAt, spinnerAngleAt, sliderPosAt,
+  moverCenterInto, spinnerAngleAt, sliderPosInto,
   type ParkourMap, type ParkourMover, type ParkourPlatform, type ParkourHazard,
 } from "@/lib/parkour-config";
 
@@ -22,25 +22,15 @@ export interface CrumbleStateRef {
 /** Must match parkour-player.tsx's CRUMBLE_DELAY. */
 const CRUMBLE_DELAY = 0.5;
 
-function platformColor(pl: ParkourPlatform, theme: ParkourMap["theme"]): string {
-  return pl.color ?? theme.platform;
-}
+interface PlatMats { base: THREE.MeshStandardMaterial; ice: THREE.MeshStandardMaterial }
 
-/** A static (non-crumble) platform — NO useFrame, so 100+ of them cost nothing. */
-function PlatformMesh({ pl, theme }: { pl: ParkourPlatform; theme: ParkourMap["theme"] }) {
-  const color = platformColor(pl, theme);
+/** A static (non-crumble) platform — NO useFrame, and it shares ONE of two
+ * material instances (plain / ice) instead of creating its own, so ~90 platforms
+ * cost 2 materials + zero per-frame work. */
+function PlatformMesh({ pl, mats }: { pl: ParkourPlatform; mats: PlatMats }) {
   return (
-    <mesh position={pl.pos} receiveShadow>
+    <mesh position={pl.pos} material={pl.ice ? mats.ice : mats.base}>
       <boxGeometry args={pl.size} />
-      <meshStandardMaterial
-        color={color}
-        emissive={pl.glow ?? "#000000"}
-        emissiveIntensity={pl.glow ? 0.45 : 0}
-        metalness={pl.ice ? 0.1 : 0.15}
-        roughness={pl.ice ? 0.05 : 0.7}
-        transparent={pl.ice}
-        opacity={pl.ice ? 0.72 : 1}
-      />
     </mesh>
   );
 }
@@ -52,7 +42,7 @@ function CrumblePlatform({ pl, crumbleRef }: { pl: ParkourPlatform; crumbleRef: 
   const matRef = useRef<THREE.MeshStandardMaterial>(null);
   const idx = pl.crumbleIndex ?? -1;
   const [bx, by, bz] = pl.pos;
-  useFrame(() => {
+  useFrame(({ clock }) => {
     const g = group.current;
     const st = crumbleRef.current?.states;
     if (!g) return;
@@ -70,9 +60,16 @@ function CrumblePlatform({ pl, crumbleRef }: { pl: ParkourPlatform; crumbleRef: 
       if (matRef.current) matRef.current.opacity = Math.max(0, 1 - drop * 2);
       return;
     }
-    // Crumbling: shake harder as it approaches collapse + flash red.
+    // Crumbling: shake harder as it approaches collapse + flash red. Deterministic
+    // time-indexed sine (per-platform phase via idx) — no Math.random() churn and
+    // identical on every client.
     const k = s / CRUMBLE_DELAY;
-    g.position.set(bx + (Math.random() - 0.5) * 0.09 * k, by + (Math.random() - 0.5) * 0.07 * k, bz + (Math.random() - 0.5) * 0.09 * k);
+    const t = clock.elapsedTime;
+    g.position.set(
+      bx + Math.sin(t * 39 + idx) * 0.09 * k,
+      by + Math.sin(t * 47 + idx * 1.7) * 0.07 * k,
+      bz + Math.sin(t * 43 + idx * 2.3) * 0.09 * k,
+    );
     if (matRef.current) matRef.current.emissiveIntensity = 0.5 + k * 1.2;
   });
   return (
@@ -87,11 +84,12 @@ function CrumblePlatform({ pl, crumbleRef }: { pl: ParkourPlatform; crumbleRef: 
 
 function MoverMesh({ mover, theme }: { mover: ParkourMover; theme: ParkourMap["theme"] }) {
   const ref = useRef<THREE.Mesh>(null);
+  const scratch = useRef<[number, number, number]>([0, 0, 0]);
   const color = mover.color ?? theme.accent;
   useFrame(({ clock }) => {
     if (!ref.current) return;
-    const [x, y, z] = moverCenterAt(mover, clock.elapsedTime);
-    ref.current.position.set(x, y, z);
+    moverCenterInto(mover, clock.elapsedTime, scratch.current);
+    ref.current.position.set(scratch.current[0], scratch.current[1], scratch.current[2]);
   });
   return (
     <mesh ref={ref} position={mover.pos} receiveShadow>
@@ -128,11 +126,12 @@ function SpinnerHazard({ h }: { h: ParkourHazard }) {
 /** Moving saw disc that slides along a path. */
 function SliderHazard({ h }: { h: ParkourHazard }) {
   const ref = useRef<THREE.Mesh>(null);
+  const scratch = useRef<[number, number, number]>([0, 0, 0]);
   const col = h.color ?? "#ef4444";
   useFrame(({ clock }) => {
     if (!ref.current) return;
-    const [x, y, z] = sliderPosAt(h, clock.elapsedTime);
-    ref.current.position.set(x, y, z);
+    sliderPosInto(h, clock.elapsedTime, scratch.current);
+    ref.current.position.set(scratch.current[0], scratch.current[1], scratch.current[2]);
     ref.current.rotation.y += 0.4;
   });
   return (
@@ -154,11 +153,12 @@ function CheckpointRing({
   useFrame(({ clock }) => {
     const reached = (progressRef.current?.current ?? -1) >= index;
     const t = clock.elapsedTime;
+    const sinT = reached ? 0 : Math.sin(t * 2);
     if (ringRef.current) {
       ringRef.current.rotation.z = t * (reached ? 1.6 : 0.5);
-      (ringRef.current.material as THREE.MeshBasicMaterial).opacity = reached ? 0.85 : 0.3 + Math.sin(t * 2) * 0.12;
+      (ringRef.current.material as THREE.MeshBasicMaterial).opacity = reached ? 0.85 : 0.3 + sinT * 0.12;
     }
-    if (pillarRef.current) pillarRef.current.emissiveIntensity = reached ? 1.1 : 0.35 + Math.sin(t * 2) * 0.15;
+    if (pillarRef.current) pillarRef.current.emissiveIntensity = reached ? 1.1 : 0.35 + sinT * 0.15;
   });
   return (
     <group position={pos}>
@@ -185,7 +185,7 @@ function FinishPad({ pos, size, accent }: { pos: [number, number, number]; size:
   const topY = pos[1] + size[1] / 2;
   return (
     <group>
-      <mesh position={pos} receiveShadow castShadow>
+      <mesh position={pos}>
         <boxGeometry args={size} />
         <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.7} metalness={0.3} roughness={0.4} />
       </mesh>
@@ -223,13 +223,21 @@ export const ParkourGeometry = memo(function ParkourGeometry({
   progressRef: React.RefObject<CheckpointProgressRef>;
   crumbleRef: React.RefObject<CrumbleStateRef>;
 }) {
+  // Two shared platform materials (plain + ice) instead of ~90 unique ones →
+  // far fewer GPU state changes. Disposed on map change / unmount.
+  const mats = useMemo<PlatMats>(() => ({
+    base: new THREE.MeshStandardMaterial({ color: map.theme.platform, metalness: 0.15, roughness: 0.7 }),
+    ice: new THREE.MeshStandardMaterial({ color: "#7dd3fc", emissive: new THREE.Color("#38bdf8"), emissiveIntensity: 0.45, metalness: 0.1, roughness: 0.05, transparent: true, opacity: 0.72 }),
+  }), [map.theme.platform]);
+  useEffect(() => () => { mats.base.dispose(); mats.ice.dispose(); }, [mats]);
+
   return (
     <group>
       <StartMarker pos={map.start} accent={map.theme.accent} />
       {map.platforms.map((pl, i) =>
         pl.crumble
           ? <CrumblePlatform key={`p${i}`} pl={pl} crumbleRef={crumbleRef} />
-          : <PlatformMesh key={`p${i}`} pl={pl} theme={map.theme} />
+          : <PlatformMesh key={`p${i}`} pl={pl} mats={mats} />
       )}
       {map.movers.map((m, i) => <MoverMesh key={`m${i}`} mover={m} theme={map.theme} />)}
       {map.hazards.map((h, i) =>

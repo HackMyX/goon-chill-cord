@@ -8,7 +8,7 @@ import { useKeyboardControls } from "@/components/world/use-keyboard-controls";
 import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
 import { mobileInput, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
 import { angleDelta } from "@/components/world/player";
-import { hazardHit, spinnerAngleAt, sliderPosAt, type ParkourMap } from "@/lib/parkour-config";
+import { hazardHit, spinnerAngleAt, sliderPosInto, type ParkourMap } from "@/lib/parkour-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import type { CheckpointProgressRef, CrumbleStateRef } from "@/components/parkour/parkour-geometry";
 import { broadcastParkourGhost, broadcastParkourProfile } from "@/lib/parkour-realtime";
@@ -161,6 +161,7 @@ export function ParkourPlayer({
   const hitVel = useRef(new Float32Array(HIT_N * 3));
   const hitAge = useRef<Float32Array>((() => { const a = new Float32Array(HIT_N); a.fill(-1); return a; })());
   const hitPointsRef = useRef<THREE.Points>(null);
+  const hazScratch = useRef<[number, number, number]>([0, 0, 0]);
 
   function resetCrumble() {
     const st = crumbleRef.current?.states;
@@ -519,8 +520,8 @@ export function ParkourPlayer({
             const rl = Math.hypot(rx, rz) || 1;
             pdx += (rx / rl) * 0.7; pdz += (rz / rl) * 0.7; // + outward shove
           } else {
-            const [sxp, , szp] = sliderPosAt(h, elapsed);
-            const rx = pxn - sxp, rz = pzn - szp, rl = Math.hypot(rx, rz) || 1;
+            sliderPosInto(h, elapsed, hazScratch.current);
+            const rx = pxn - hazScratch.current[0], rz = pzn - hazScratch.current[2], rl = Math.hypot(rx, rz) || 1;
             pdx = rx / rl; pdz = rz / rl;
           }
           const pl = Math.hypot(pdx, pdz) || 1;

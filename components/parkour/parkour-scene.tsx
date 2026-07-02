@@ -58,14 +58,16 @@ export function ParkourScene({
     <>
       <color attach="background" args={[t.fog]} />
       <fog attach="fog" args={[t.fog, 40, 200]} />
-      <Sky distance={450000} sunPosition={t.sunPosition} turbidity={8} rayleigh={t.stars > 0 ? 0.4 : 2.2} mieCoefficient={0.02} mieDirectionalG={0.9} />
-      {t.stars > 0 && <Stars radius={160} depth={60} count={t.stars} factor={3} fade speed={0.4} />}
+      <Sky distance={450000} sunPosition={t.sunPosition} turbidity={t.stars > 0 ? 4 : 6} rayleigh={t.stars > 0 ? 0.4 : 2.2} mieCoefficient={0.02} mieDirectionalG={0.9} />
+      {t.stars > 0 && <Stars radius={160} depth={60} count={Math.min(t.stars, 1600)} factor={3} fade speed={0.4} />}
 
-      <ambientLight intensity={0.85} color={t.ambient} />
-      <hemisphereLight args={[t.ambient, t.ground, 0.7]} />
-      <directionalLight position={t.sunPosition} intensity={1.5} color="#ffffff" castShadow shadow-mapSize={[1024, 1024]}>
-        <orthographicCamera attach="shadow-camera" args={[-40, 40, 40, -40, 0.1, 200]} />
-      </directionalLight>
+      {/* No real-time shadows in parkour: platforms float in the void (almost
+          nothing receives them) and a moving caster (the player) forces a full
+          shadow-map re-render EVERY frame — the biggest per-frame GPU cost. We
+          brighten the fill lights a touch to compensate. Result: rock-steady FPS. */}
+      <ambientLight intensity={0.95} color={t.ambient} />
+      <hemisphereLight args={[t.ambient, t.ground, 0.85]} />
+      <directionalLight position={t.sunPosition} intensity={1.7} color="#ffffff" />
       <pointLight position={[map.start[0], map.start[1] + 6, map.start[2]]} intensity={8} color={t.accent} distance={30} decay={2} />
 
       {/* Abyss floor far below — a dark disc so the void reads as a drop, not
