@@ -296,8 +296,9 @@ function buildCourse(pr: CourseParams): CourseGeometry {
       if (rnd() < pr.spinnerChance) {
         hazards.push({
           kind: "spinner",
-          pos: [nx, ny + 1.25, nz],
-          length: Math.max(1.7, sx * 0.55 + 1.2),
+          // LOW bar (just above the platform) → you jump over it as it sweeps.
+          pos: [nx, ny + 0.4, nz],
+          length: Math.max(1.7, sx * 0.55 + 1.3),
           period: hazPeriod() * (rnd() < 0.5 ? 1 : -1), // some spin the other way
           phase: rnd(),
           killR: 0.5,
@@ -528,22 +529,30 @@ export function sliderPosAt(h: ParkourHazard, t: number): [number, number, numbe
     h.pos[2] + (to[2] - h.pos[2]) * tri,
   ];
 }
-/** Does the player point (px,py,pz — use mid-body height) touch the hazard now? */
-export function hazardHit(h: ParkourHazard, t: number, px: number, py: number, pz: number): boolean {
+/** Does the hazard touch the player's body right now? `feetY` = the player's
+ * feet; the body cylinder spans [feetY-0.1 .. feetY+1.7]. The vertical band test
+ * means a LOW sweeping bar only hits you while grounded — jump and it passes
+ * harmlessly beneath you (that's the whole "jump over the bar" mechanic). */
+export function hazardHit(h: ParkourHazard, t: number, px: number, feetY: number, pz: number): boolean {
   const killR = h.killR;
+  const bodyBot = feetY - 0.1, bodyTop = feetY + 1.7;
   if (h.kind === "slider") {
     const [x, y, z] = sliderPosAt(h, t);
-    const dx = px - x, dy = py - y, dz = pz - z;
-    return dx * dx + dy * dy + dz * dz < killR * killR;
+    const dyBand = y < bodyBot ? bodyBot - y : y > bodyTop ? y - bodyTop : 0;
+    const dx = px - x, dz = pz - z;
+    return dx * dx + dyBand * dyBand + dz * dz < killR * killR;
   }
-  // spinner: bar from pos to pos + dir*length (horizontal, at pos.y)
+  // spinner: horizontal bar at height h.pos[1].
+  const barY = h.pos[1];
+  if (barY < bodyBot - killR || barY > bodyTop + killR) return false;
   const a = spinnerAngleAt(h, t);
   const len = h.length ?? 2.4;
-  const ax = h.pos[0], ay = h.pos[1], az = h.pos[2];
+  const ax = h.pos[0], az = h.pos[2];
   const abx = Math.cos(a) * len, abz = Math.sin(a) * len;
   const denom = abx * abx + abz * abz || 1;
   const tt = Math.max(0, Math.min(1, ((px - ax) * abx + (pz - az) * abz) / denom));
   const cxp = ax + abx * tt, czp = az + abz * tt;
-  const dx = px - cxp, dy = py - ay, dz = pz - czp;
-  return dx * dx + dy * dy + dz * dz < killR * killR;
+  const dx = px - cxp, dz = pz - czp;
+  const dyBand = barY < bodyBot ? bodyBot - barY : barY > bodyTop ? barY - bodyTop : 0;
+  return dx * dx + dyBand * dyBand + dz * dz < killR * killR;
 }

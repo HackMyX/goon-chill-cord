@@ -8,7 +8,7 @@ import { useKeyboardControls } from "@/components/world/use-keyboard-controls";
 import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
 import { mobileInput, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
 import { angleDelta } from "@/components/world/player";
-import { hazardHit, type ParkourMap } from "@/lib/parkour-config";
+import { hazardHit, spinnerAngleAt, sliderPosAt, type ParkourMap } from "@/lib/parkour-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import type { CheckpointProgressRef, CrumbleStateRef } from "@/components/parkour/parkour-geometry";
 import { broadcastParkourGhost, broadcastParkourProfile } from "@/lib/parkour-realtime";
@@ -44,9 +44,11 @@ const DASH_SPEED_FACTOR = 2.2;
 const LAND_MARGIN = 0.16;
 /** Seconds a crumble platform lasts once stepped on before it collapses. */
 const CRUMBLE_DELAY = 0.5;
-/** Grace window (s) after a respawn where hazards can't kill you — stops instant
- * death-loops when you respawn next to a spinner/saw. */
+/** Grace window (s) after a respawn where hazards can't shove you — stops being
+ * knocked straight off again when you respawn next to a spinner/saw. */
 const HAZARD_INVULN = 0.85;
+/** How hard a hazard shoves the player on contact (world units/sec). */
+const HAZARD_KNOCKBACK = 11;
 
 /** Build an axis-aligned collider from a box (center + full size). Called ONCE
  * per platform at map-load (static) and reused; mover colliders are mutated in
@@ -86,6 +88,8 @@ export interface ParkourPlayerProps {
   onCheckpoint?: (index: number) => void;
   onFall?: () => void;
   onFirstMove?: () => void;
+  /** Fired when a hazard shoves the player — for a screen flash + sound. */
+  onHazardHit?: () => void;
 }
 
 export function ParkourPlayer({
@@ -105,6 +109,7 @@ export function ParkourPlayer({
   onCheckpoint,
   onFall,
   onFirstMove,
+  onHazardHit,
 }: ParkourPlayerProps) {
   const group = useRef<THREE.Group>(null);
   const limbs = useRef<CharacterLimbRefs>(null);
@@ -140,6 +145,9 @@ export function ParkourPlayer({
   const dashDirZ = useRef(0);
   const dashPose = useRef(0);
   const hazardInvuln = useRef(HAZARD_INVULN);
+  const hazardHitCooldown = useRef(0);
+  const hurtTimer = useRef(0);
+  const cameraShake = useRef(0);
 
   function resetCrumble() {
     const st = crumbleRef.current?.states;
@@ -189,7 +197,9 @@ export function ParkourPlayer({
     const moverCols: Collider[] = map.movers.map((m, i) => boxCollider(m.pos, m.size, i, false, false, 0, -1));
     const centers = map.movers.map((m) => [m.pos[0], m.pos[1], m.pos[2]] as [number, number, number]);
     const prev = map.movers.map((m) => [m.pos[0], m.pos[1], m.pos[2]] as [number, number, number]);
-    return { all: [...staticCols, ...moverCols], moverCols, centers, prev };
+    const velX = new Float64Array(map.movers.length);
+    const velZ = new Float64Array(map.movers.length);
+    return { all: [...staticCols, ...moverCols], moverCols, centers, prev, velX, velZ };
   }, [map]);
 
   function respawnAtCheckpoint() {
@@ -222,6 +232,9 @@ export function ParkourPlayer({
     const crumbleStates = crumbleRef.current?.states ?? null;
     if (crumbleStates) { for (let ci = 0; ci < crumbleStates.length; ci++) if (crumbleStates[ci] > 0) crumbleStates[ci] += delta; }
     hazardInvuln.current = Math.max(0, hazardInvuln.current - delta);
+    hazardHitCooldown.current = Math.max(0, hazardHitCooldown.current - delta);
+    hurtTimer.current = Math.max(0, hurtTimer.current - delta);
+    cameraShake.current = Math.max(0, cameraShake.current - delta * 4);
 
     // ── Update mover colliders in place (mover math inlined — no allocation) ──
     const movers = map.movers;
@@ -257,8 +270,12 @@ export function ParkourPlayer({
       g.position.z += cur[2] - prev[2];
       feetY.current += cur[1] - prev[1];
     }
+    // Record each mover's velocity this frame (for jump momentum inheritance) +
+    // roll prev → cur.
     for (let i = 0; i < movers.length; i++) {
       const cen = rig.centers[i], prev = rig.prev[i];
+      rig.velX[i] = delta > 0 ? (cen[0] - prev[0]) / delta : 0;
+      rig.velZ[i] = delta > 0 ? (cen[2] - prev[2]) / delta : 0;
       prev[0] = cen[0]; prev[1] = cen[1]; prev[2] = cen[2];
     }
     const cols = rig.all;
@@ -340,6 +357,12 @@ export function ParkourPlayer({
         coyote.current = 0;
         jumpBuffer.current = 0;
         airJumpsUsed.current = 0;
+        // Inherit the moving platform's velocity so jumping off a mover carries
+        // its momentum (no "left behind"/snap-back).
+        if (supportMoverIdx.current >= 0 && supportMoverIdx.current < movers.length) {
+          vel.current.x += rig.velX[supportMoverIdx.current];
+          vel.current.z += rig.velZ[supportMoverIdx.current];
+        }
       } else if (airJumpsUsed.current < map.airJumps) {
         vv.current = map.jumpVelocity * 0.92;
         airJumpsUsed.current += 1;
@@ -395,14 +418,14 @@ export function ParkourPlayer({
         if (best.crumbleIndex >= 0 && crumbleStates && crumbleStates[best.crumbleIndex] === 0) {
           crumbleStates[best.crumbleIndex] = 0.0001;
         }
-        // Pull-in ONLY on a fresh landing (not while walking) so a jump that
-        // caught the lip is tugged fully onto the platform.
+        // Ledge-grab pull-in: ONLY when landing from the air AND the centre is
+        // genuinely PAST the platform edge (hanging over). Tugs it a hair inside.
+        // Landing safely inside the platform never moves you → no snap-back pop.
         if (!wasGrounded) {
-          const inset = R * 0.55;
-          if (px < best.minX + inset) g.position.x = best.minX + inset;
-          else if (px > best.maxX - inset) g.position.x = best.maxX - inset;
-          if (pz < best.minZ + inset) g.position.z = best.minZ + inset;
-          else if (pz > best.maxZ - inset) g.position.z = best.maxZ - inset;
+          if (px > best.maxX) g.position.x = best.maxX - 0.05;
+          else if (px < best.minX) g.position.x = best.minX + 0.05;
+          if (pz > best.maxZ) g.position.z = best.maxZ - 0.05;
+          else if (pz < best.minZ) g.position.z = best.minZ + 0.05;
         }
         if (best.bounce > 0) landedBounce = best.bounce;
         else if (best.ice) onIce.current = true;
@@ -429,13 +452,54 @@ export function ParkourPlayer({
       respawnAtCheckpoint();
     }
 
-    // ── Moving hazard contact (spinner bar / saw) = death → respawn, except in
-    // the short grace window right after a respawn (no instant death-loops). ──
-    if (!finishedRef.current && hazardInvuln.current <= 0 && map.hazards.length > 0) {
-      const midY = feetY.current + 0.9;
-      const hx2 = g.position.x, hz2 = g.position.z;
-      for (const h of map.hazards) {
-        if (hazardHit(h, elapsed, hx2, midY, hz2)) { respawnAtCheckpoint(); break; }
+    // ── Moving hazards PUSH you (they don't insta-kill). A spinning bar / saw
+    // SHOVES you in its sweep direction (+ outward) — get knocked off a small
+    // platform and you fall (that's the logical death, not a cheap hit). Spinner
+    // pivots are un-standable: you slide off the centre, so you MUST be out on the
+    // platform and time-jump over the bar. ──
+    if (!finishedRef.current && map.hazards.length > 0) {
+      const feet = feetY.current;
+      const pxn = g.position.x, pzn = g.position.z;
+      // Slide off spinner pivots while grounded (can't camp the centre).
+      if (grounded.current) {
+        for (const h of map.hazards) {
+          if (h.kind !== "spinner") continue;
+          const rx = pxn - h.pos[0], rz = pzn - h.pos[2];
+          const d = Math.hypot(rx, rz);
+          if (d > 0.001 && d < 0.7) {
+            const push = (0.7 - d) * 7;
+            vel.current.x += (rx / d) * push;
+            vel.current.z += (rz / d) * push;
+          }
+        }
+      }
+      // Contact → knockback (once per pass; grace right after respawn).
+      if (hazardInvuln.current <= 0 && hazardHitCooldown.current <= 0) {
+        for (const h of map.hazards) {
+          if (!hazardHit(h, elapsed, pxn, feet, pzn)) continue;
+          let pdx: number, pdz: number;
+          if (h.kind === "spinner") {
+            const a = spinnerAngleAt(h, elapsed);
+            const spin = h.period < 0 ? -1 : 1;         // tangential sweep dir
+            pdx = -Math.sin(a) * spin; pdz = Math.cos(a) * spin;
+            const rx = pxn - h.pos[0], rz = pzn - h.pos[2];
+            const rl = Math.hypot(rx, rz) || 1;
+            pdx += (rx / rl) * 0.7; pdz += (rz / rl) * 0.7; // + outward shove
+          } else {
+            const [sxp, , szp] = sliderPosAt(h, elapsed);
+            const rx = pxn - sxp, rz = pzn - szp, rl = Math.hypot(rx, rz) || 1;
+            pdx = rx / rl; pdz = rz / rl;
+          }
+          const pl = Math.hypot(pdx, pdz) || 1;
+          vel.current.x = (pdx / pl) * HAZARD_KNOCKBACK;
+          vel.current.z = (pdz / pl) * HAZARD_KNOCKBACK;
+          if (grounded.current) { vv.current = 4; grounded.current = false; } // little pop
+          hurtTimer.current = 0.5;
+          cameraShake.current = 1;
+          hazardHitCooldown.current = 0.45;
+          onHazardHit?.();
+          break;
+        }
       }
     }
 
@@ -480,6 +544,8 @@ export function ParkourPlayer({
     // chaining land→jump stays snappy, never reads as "sticking") ──
     landSquash.current = Math.max(0, landSquash.current - delta * 14);
     g.scale.y = (1 - landSquash.current * 0.11) * (1 - dashPose.current * 0.2);
+    // Stumble-back tilt while hurt (shoved by a hazard).
+    g.rotation.x = -(hurtTimer.current > 0 ? Math.min(1, hurtTimer.current / 0.5) : 0) * 0.45;
 
     // ── Limb animation (walk cycle + airborne splay) ──
     jumpPose.current = THREE.MathUtils.lerp(jumpPose.current, grounded.current ? 0 : 1, Math.min(1, delta * 10));
@@ -512,6 +578,13 @@ export function ParkourPlayer({
     camera.position.copy(cameraTarget.current);
     lookTarget.current.set(g.position.x, g.position.y + 1, g.position.z);
     camera.lookAt(lookTarget.current);
+    // Screen-shake "thump" when a hazard hits (applied after lookAt so it nudges
+    // position without fighting the aim).
+    if (cameraShake.current > 0) {
+      const s = cameraShake.current * 0.18;
+      camera.position.x += (Math.random() - 0.5) * s;
+      camera.position.y += (Math.random() - 0.5) * s;
+    }
 
     // ── Multiplayer sync: high-frequency transform+anim (20 Hz) + low-frequency
     // profile (name/gender/equipped) so ghosts render the REAL character with
@@ -530,6 +603,7 @@ export function ParkourPlayer({
           grounded: grounded.current,
           sprinting: !!sprint,
           dashing,
+          hurt: hurtTimer.current > 0,
           finished: finishedRef.current,
         });
       }

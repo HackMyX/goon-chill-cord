@@ -24,6 +24,7 @@ interface GhostRuntime {
   grounded: boolean;
   sprinting: boolean;
   dashing: boolean;
+  hurt: boolean;
   finished: boolean;
   hasPos: boolean;
   // per-ghost animation accumulators (mirror the local player's)
@@ -31,6 +32,7 @@ interface GhostRuntime {
   walkAmp: number;
   jumpPose: number;
   dashPose: number;
+  hurtPose: number;
 }
 
 interface GhostView {
@@ -46,8 +48,8 @@ const EMPTY_EQUIP: Record<string, EquippedItem | undefined> = {};
 function newRuntime(): GhostRuntime {
   return {
     target: new THREE.Vector3(0, -999, 0), yaw: 0,
-    moving: false, grounded: true, sprinting: false, dashing: false, finished: false, hasPos: false,
-    walkClock: 0, walkAmp: 0, jumpPose: 0, dashPose: 0,
+    moving: false, grounded: true, sprinting: false, dashing: false, hurt: false, finished: false, hasPos: false,
+    walkClock: 0, walkAmp: 0, jumpPose: 0, dashPose: 0, hurtPose: 0,
   };
 }
 
@@ -75,6 +77,7 @@ export function ParkourGhosts({ selfId }: { selfId: string }) {
       gr.grounded = p.grounded;
       gr.sprinting = p.sprinting;
       gr.dashing = p.dashing;
+      gr.hurt = p.hurt;
       const finishChanged = gr.finished !== p.finished;
       gr.finished = p.finished;
       if (!gr.hasPos) {
@@ -133,22 +136,26 @@ function GhostAvatar({
     g.position.lerp(gr.target, 1 - Math.exp(-delta * 14));
     g.rotation.y += angleDelta(g.rotation.y, gr.yaw) * (1 - Math.exp(-delta * 16));
 
-    // Dash crouch.
+    // Dash crouch + hurt recoil.
     gr.dashPose = THREE.MathUtils.lerp(gr.dashPose, gr.dashing ? 1 : 0, Math.min(1, delta * 12));
+    gr.hurtPose = THREE.MathUtils.lerp(gr.hurtPose, gr.hurt ? 1 : 0, Math.min(1, delta * (gr.hurt ? 22 : 8)));
     g.scale.y = 1 - gr.dashPose * 0.2;
+    // A wild stumble-back when knocked: tilt the body backward.
+    g.rotation.x = -gr.hurtPose * 0.5;
 
-    // Limb animation — identical maths to the local player.
+    // Limb animation — identical maths to the local player, + hurt flail.
     gr.jumpPose = THREE.MathUtils.lerp(gr.jumpPose, gr.grounded ? 0 : 1, Math.min(1, delta * 10));
     gr.walkClock += delta * (gr.sprinting ? 13 : 9);
     gr.walkAmp = THREE.MathUtils.lerp(gr.walkAmp, gr.moving && gr.grounded ? 1 : 0, Math.min(1, delta * 8));
     const swing = Math.sin(gr.walkClock) * gr.walkAmp * 0.6;
+    const hp = gr.hurtPose;
     const l = limbs.current;
     if (l) {
       const jp = gr.jumpPose;
       if (l.legL.current) l.legL.current.rotation.x = THREE.MathUtils.lerp(swing, -0.3, jp);
       if (l.legR.current) l.legR.current.rotation.x = THREE.MathUtils.lerp(-swing, 0.3, jp);
-      if (l.armL.current) { l.armL.current.rotation.x = THREE.MathUtils.lerp(-swing, -0.5, jp); l.armL.current.rotation.z = -0.15 - jp * 0.5; }
-      if (l.armR.current) { l.armR.current.rotation.x = THREE.MathUtils.lerp(swing, -0.5, jp); l.armR.current.rotation.z = 0.15 + jp * 0.5; }
+      if (l.armL.current) { l.armL.current.rotation.x = THREE.MathUtils.lerp(-swing, -0.5, jp) - hp * 1.4; l.armL.current.rotation.z = -0.15 - jp * 0.5 - hp * 0.5; }
+      if (l.armR.current) { l.armR.current.rotation.x = THREE.MathUtils.lerp(swing, -0.5, jp) - hp * 1.4; l.armR.current.rotation.z = 0.15 + jp * 0.5 + hp * 0.5; }
     }
   });
 

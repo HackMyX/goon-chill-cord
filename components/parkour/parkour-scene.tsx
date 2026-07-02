@@ -26,6 +26,7 @@ export interface ParkourSceneProps {
   onCheckpoint?: (index: number) => void;
   onFall?: () => void;
   onFirstMove?: () => void;
+  onHazardHit?: () => void;
 }
 
 export function ParkourScene({
@@ -44,6 +45,7 @@ export function ParkourScene({
   onCheckpoint,
   onFall,
   onFirstMove,
+  onHazardHit,
 }: ParkourSceneProps) {
   const t = map.theme;
   // Shared crumble-platform state — one stable ref object per map, written by the
@@ -92,6 +94,7 @@ export function ParkourScene({
         onCheckpoint={onCheckpoint}
         onFall={onFall}
         onFirstMove={onFirstMove}
+        onHazardHit={onHazardHit}
       />
 
       {multiplayer && <ParkourGhosts selfId={userId} />}

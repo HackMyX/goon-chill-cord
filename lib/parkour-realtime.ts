@@ -30,6 +30,8 @@ export interface ParkourGhostPayload {
   grounded: boolean;
   sprinting: boolean;
   dashing: boolean;
+  /** true for a brief window after a hazard knockback → ghosts recoil. */
+  hurt: boolean;
   /** true once this player crossed the finish this run. */
   finished: boolean;
 }

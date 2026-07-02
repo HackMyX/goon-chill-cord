@@ -191,6 +191,17 @@ export function ParkourShell(props: ParkourShellProps) {
 
   const handleFall = useCallback(() => { sound.error(); deathsRef.current += 1; }, [sound]);
 
+  // Hazard knockback → red screen flash + hit sound (occasional, so re-rendering
+  // the shell here is fine; the memoized 3D scene doesn't reconcile).
+  const [hazardFlash, setHazardFlash] = useState(false);
+  const hazardFlashT = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleHazardHit = useCallback(() => {
+    sound.error();
+    setHazardFlash(true);
+    if (hazardFlashT.current) clearTimeout(hazardFlashT.current);
+    hazardFlashT.current = setTimeout(() => setHazardFlash(false), 240);
+  }, [sound]);
+
   const handleFinish = useCallback(async () => {
     if (!activeMap) return;
     const finalMs = startMsRef.current !== null ? performance.now() - startMsRef.current : 0;
@@ -337,6 +348,11 @@ export function ParkourShell(props: ParkourShellProps) {
             )}
           </div>
 
+          {/* Hazard-hit red flash (you got shoved) */}
+          {view === "playing" && hazardFlash && (
+            <div className="pointer-events-none absolute inset-0 z-[12]" style={{ boxShadow: "inset 0 0 130px 34px rgba(239,68,68,0.55)" }} />
+          )}
+
           {/* Checkpoint toast */}
           {checkpointToast !== null && (
             <div className="pointer-events-none absolute top-1/3 left-1/2 z-30 -translate-x-1/2 animate-[float-up_1.5s_ease-out_forwards] text-center">
@@ -429,7 +445,7 @@ export function ParkourShell(props: ParkourShellProps) {
                 cameraControls={cameraControls} running={running && view === "playing"}
                 mobileMode={isMobile} resetSignal={resetSignal} multiplayer={multiplayer}
                 progressRef={progressRef}
-                onFinish={handleFinish} onCheckpoint={handleCheckpoint} onFall={handleFall} onFirstMove={handleFirstMove}
+                onFinish={handleFinish} onCheckpoint={handleCheckpoint} onFall={handleFall} onFirstMove={handleFirstMove} onHazardHit={handleHazardHit}
               />
               <Preload all />
             </Suspense>
