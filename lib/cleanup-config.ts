@@ -41,6 +41,7 @@ export const PLAYER_ACTIVITY_ACTIONS = [
   "snake_game",
   // Parkour (3D Jump & Run) — Spieler-Aktivität (kurze Retention)
   "parkour_finish",
+  "parkour_invite",
   // Plinko (schreibt aktuell in plinko_plays — Vorwärts-Kompatibilität)
   "plinko_play",
   // Mine

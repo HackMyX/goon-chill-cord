@@ -634,10 +634,16 @@ export async function adminResetParkourMap(mapId: string): Promise<{ success: bo
   return { success: true, removed: count ?? 0 };
 }
 
+/** Seconds a user must wait before re-inviting the SAME friend again (across any
+ * lobby) — stops invite-spam. On top of that, each friend can only be invited
+ * ONCE per lobby (they already have the link + can join any time). */
+const PARKOUR_INVITE_COOLDOWN_SEC = 45;
+
 export async function inviteFriendToParkour(lobbyId: string, friendId: string): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Nicht eingeloggt." };
+  if (friendId === user.id) return { ok: false, error: "Du kannst dich nicht selbst einladen." };
   const admin = createAdminClient();
 
   // Must actually be friends (a friendship row from me → friend exists).
@@ -648,6 +654,31 @@ export async function inviteFriendToParkour(lobbyId: string, friendId: string): 
   const { data: lobby } = await admin.from("parkour_lobbies").select("id, status").eq("id", lobbyId).maybeSingle();
   if (!lobby || lobby.status === "closed") return { ok: false, error: "Lobby nicht verfügbar." };
 
+  // Already in the lobby? Nothing to invite.
+  const { data: alreadyMember } = await admin
+    .from("parkour_lobby_members").select("id").eq("lobby_id", lobbyId).eq("user_id", friendId).maybeSingle();
+  if (alreadyMember) return { ok: false, error: "Ist schon in der Lobby." };
+
+  // ── Anti-spam: block a re-invite to the same friend within the cooldown, and
+  // never invite the same friend to the SAME lobby twice. Both checked against
+  // the persistent audit log of past invites. ──
+  const since = new Date(Date.now() - PARKOUR_INVITE_COOLDOWN_SEC * 1000).toISOString();
+  const { data: recent } = await admin
+    .from("audit_logs")
+    .select("payload, created_at")
+    .eq("user_id", user.id)
+    .eq("action", "parkour_invite")
+    .eq("payload->>friend_id", friendId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  for (const r of recent ?? []) {
+    const p = (r.payload as Record<string, unknown> | null) ?? {};
+    if (p.lobby_id === lobbyId) return { ok: false, error: "Diesen Freund hast du bereits eingeladen." };
+    if (typeof r.created_at === "string" && r.created_at > since) {
+      return { ok: false, error: `Zu schnell — bitte kurz warten, bevor du erneut einlädst.` };
+    }
+  }
+
   const { data: me } = await admin.from("profiles").select("username").eq("id", user.id).maybeSingle();
   await notifyUser({
     userId: friendId,
@@ -656,5 +687,13 @@ export async function inviteFriendToParkour(lobbyId: string, friendId: string): 
     message: `${me?.username ?? "Ein Freund"} lädt dich in eine Parkour-Lobby ein.`,
     link: `/parkour?lobby=${lobbyId}`,
   });
+  // Record the invite so the cooldown + one-per-lobby rules above can enforce.
+  try {
+    await admin.from("audit_logs").insert({
+      user_id: user.id,
+      action: "parkour_invite",
+      payload: { lobby_id: lobbyId, friend_id: friendId },
+    });
+  } catch { /* non-fatal */ }
   return { ok: true };
 }

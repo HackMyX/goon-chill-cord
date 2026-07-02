@@ -285,10 +285,11 @@ export function ParkourShell(props: ParkourShellProps) {
     }
   }, [lobby, config, beginRun]);
 
-  const handleInvite = useCallback(async (friendId: string) => {
-    if (!lobby) return;
+  const handleInvite = useCallback(async (friendId: string): Promise<{ ok: boolean; error?: string }> => {
+    if (!lobby) return { ok: false, error: "Keine Lobby." };
     const res = await inviteFriendToParkour(lobby.id, friendId);
     if (res.ok) sound.win(); else sound.error();
+    return res;
   }, [lobby, sound]);
 
   const selectedMap = useMemo(() => resolveMap(PARKOUR_MAPS.find((m) => m.id === selectedId) ?? PARKOUR_MAPS[0], config), [selectedId, config]);
@@ -677,10 +678,22 @@ function LobbyPanel({
   lobby: ParkourLobbyState | null; isHost: boolean; userId: string; onlineIds: Set<string>;
   friends: ParkourFriend[]; busy: boolean; inviteOpen: boolean; setInviteOpen: (v: boolean) => void;
   onCreate: () => void; onLeave: () => void; onStart: () => void;
-  onSetMap: (mapId: string, rnd: boolean) => void; onInvite: (friendId: string) => void;
+  onSetMap: (mapId: string, rnd: boolean) => void; onInvite: (friendId: string) => Promise<{ ok: boolean; error?: string }>;
   selectedId: string; randomizer: boolean; config: ParkourConfig;
 }) {
   const memberIds = new Set(lobby?.members.map((m) => m.userId));
+  // Per-friend invite state + a transient confirmation message, so a player can't
+  // spam-invite (button locks after sending) and always sees it went through.
+  const [inviteState, setInviteState] = useState<Record<string, "sending" | "sent" | "error">>({});
+  const [inviteMsg, setInviteMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  async function doInvite(friendId: string) {
+    if (inviteState[friendId] === "sending" || inviteState[friendId] === "sent") return;
+    setInviteState((s) => ({ ...s, [friendId]: "sending" }));
+    const res = await onInvite(friendId);
+    setInviteState((s) => ({ ...s, [friendId]: res.ok ? "sent" : "error" }));
+    setInviteMsg({ text: res.ok ? "Einladung gesendet ✓" : (res.error ?? "Einladung fehlgeschlagen."), ok: res.ok });
+    setTimeout(() => setInviteMsg(null), 3500);
+  }
   return (
     <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
       <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100"><Users className="h-5 w-5 text-purple-400" /> Multiplayer-Lobby</h2>
@@ -733,19 +746,40 @@ function LobbyPanel({
 
           {inviteOpen && (
             <div className="rounded-xl border border-white/10 bg-black/40 p-3">
+              {inviteMsg && (
+                <div className={`mb-2 rounded-lg px-3 py-1.5 text-xs font-semibold ${inviteMsg.ok ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>
+                  {inviteMsg.text}
+                </div>
+              )}
               {friends.length === 0 ? (
                 <p className="text-xs text-zinc-500">Keine Freunde gefunden. Füge über <Link href="/friends" className="text-purple-400 underline">/friends</Link> welche hinzu.</p>
               ) : (
                 <div className="flex flex-col gap-1">
-                  {friends.map((f) => (
-                    <div key={f.userId} className="flex items-center gap-2 text-sm">
-                      <StyledUsername name={f.username} styleKey={f.nameStyleKey} userId={f.userId} size="sm" />
-                      <button disabled={memberIds.has(f.userId)} onClick={() => onInvite(f.userId)}
-                        className="ml-auto rounded-md bg-purple-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-40">
-                        {memberIds.has(f.userId) ? "Dabei" : "Einladen"}
-                      </button>
-                    </div>
-                  ))}
+                  {friends.map((f) => {
+                    const st = inviteState[f.userId];
+                    const isMember = memberIds.has(f.userId);
+                    const locked = isMember || st === "sending" || st === "sent";
+                    const label = isMember ? "Dabei"
+                      : st === "sending" ? "Sende…"
+                      : st === "sent" ? "Eingeladen ✓"
+                      : st === "error" ? "Erneut"
+                      : "Einladen";
+                    return (
+                      <div key={f.userId} className="flex items-center gap-2 text-sm">
+                        <StyledUsername name={f.username} styleKey={f.nameStyleKey} userId={f.userId} size="sm" />
+                        <button
+                          disabled={locked}
+                          onClick={() => doInvite(f.userId)}
+                          className={`ml-auto inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold text-white transition-colors disabled:cursor-default ${
+                            st === "sent" ? "bg-emerald-600/70" : st === "error" ? "bg-amber-600 hover:bg-amber-500" : "bg-purple-600 hover:bg-purple-500"
+                          } ${isMember ? "opacity-40" : ""}`}
+                        >
+                          {st === "sending" && <Loader2 className="h-3 w-3 animate-spin" />}
+                          {label}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

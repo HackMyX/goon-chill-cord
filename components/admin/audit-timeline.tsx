@@ -379,6 +379,14 @@ const ACTION_META: Record<string, ActionMeta> = {
     border: "border-red-500/30",
     format: (p) => `Parkour-Bestenliste zurückgesetzt: ${str(p.map_id)} (${str(p.removed)} Einträge)`,
   },
+  parkour_invite: {
+    icon: Gamepad2,
+    color: "text-fuchsia-300",
+    bg: "bg-fuchsia-500/10",
+    border: "border-fuchsia-500/30",
+    groupNoun: "Parkour-Einladungen",
+    format: () => `Parkour-Lobby-Einladung verschickt`,
+  },
   ticket_reward_granted: {
     icon: Trophy,
     color: "text-amber-300",
