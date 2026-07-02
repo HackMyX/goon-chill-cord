@@ -140,8 +140,9 @@ function GhostAvatar({
     gr.dashPose = THREE.MathUtils.lerp(gr.dashPose, gr.dashing ? 1 : 0, Math.min(1, delta * 12));
     gr.hurtPose = THREE.MathUtils.lerp(gr.hurtPose, gr.hurt ? 1 : 0, Math.min(1, delta * (gr.hurt ? 22 : 8)));
     g.scale.y = 1 - gr.dashPose * 0.2;
-    // A wild stumble-back when knocked: tilt the body backward.
-    g.rotation.x = -gr.hurtPose * 0.5;
+    // A wild stumble-back when knocked: tilt the body backward + a little lean.
+    g.rotation.x = -gr.hurtPose * 0.7;
+    g.rotation.z = gr.hurtPose * 0.25;
 
     // Limb animation — identical maths to the local player, + hurt flail.
     gr.jumpPose = THREE.MathUtils.lerp(gr.jumpPose, gr.grounded ? 0 : 1, Math.min(1, delta * 10));

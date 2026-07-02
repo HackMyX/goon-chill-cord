@@ -48,7 +48,14 @@ const CRUMBLE_DELAY = 0.5;
  * knocked straight off again when you respawn next to a spinner/saw. */
 const HAZARD_INVULN = 0.85;
 /** How hard a hazard shoves the player on contact (world units/sec). */
-const HAZARD_KNOCKBACK = 11;
+const HAZARD_KNOCKBACK = 19;
+/** Upward pop on a hazard hit — you get LAUNCHED. */
+const HAZARD_POP = 7.5;
+/** Seconds of near-zero air control after a hit → hard to save yourself. */
+const STUN = 0.5;
+/** Impact particle burst. */
+const HIT_N = 26;
+const HIT_PARTICLE_LIFE = 0.7;
 
 /** Build an axis-aligned collider from a box (center + full size). Called ONCE
  * per platform at map-load (static) and reused; mover colliders are mutated in
@@ -147,7 +154,13 @@ export function ParkourPlayer({
   const hazardInvuln = useRef(HAZARD_INVULN);
   const hazardHitCooldown = useRef(0);
   const hurtTimer = useRef(0);
+  const stunTimer = useRef(0);
   const cameraShake = useRef(0);
+  // Impact particle burst (imperative — no per-frame allocation).
+  const hitPos = useRef<Float32Array>((() => { const a = new Float32Array(HIT_N * 3); a.fill(-9999); return a; })());
+  const hitVel = useRef(new Float32Array(HIT_N * 3));
+  const hitAge = useRef<Float32Array>((() => { const a = new Float32Array(HIT_N); a.fill(-1); return a; })());
+  const hitPointsRef = useRef<THREE.Points>(null);
 
   function resetCrumble() {
     const st = crumbleRef.current?.states;
@@ -234,7 +247,24 @@ export function ParkourPlayer({
     hazardInvuln.current = Math.max(0, hazardInvuln.current - delta);
     hazardHitCooldown.current = Math.max(0, hazardHitCooldown.current - delta);
     hurtTimer.current = Math.max(0, hurtTimer.current - delta);
+    stunTimer.current = Math.max(0, stunTimer.current - delta);
     cameraShake.current = Math.max(0, cameraShake.current - delta * 4);
+
+    // Advance the impact particle burst (imperative — no allocation).
+    for (let k = 0; k < HIT_N; k++) {
+      if (hitAge.current[k] < 0) continue;
+      hitAge.current[k] += delta;
+      const i3 = k * 3;
+      if (hitAge.current[k] >= HIT_PARTICLE_LIFE) { hitAge.current[k] = -1; hitPos.current[i3 + 1] = -9999; continue; }
+      hitVel.current[i3 + 1] += -18 * delta;
+      hitPos.current[i3] += hitVel.current[i3] * delta;
+      hitPos.current[i3 + 1] += hitVel.current[i3 + 1] * delta;
+      hitPos.current[i3 + 2] += hitVel.current[i3 + 2] * delta;
+    }
+    if (hitPointsRef.current) {
+      const attr = hitPointsRef.current.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
+      if (attr) { attr.array.set(hitPos.current); attr.needsUpdate = true; }
+    }
 
     // ── Update mover colliders in place (mover math inlined — no allocation) ──
     const movers = map.movers;
@@ -306,7 +336,7 @@ export function ParkourPlayer({
     // long-jump for big gaps. Optional — only fires if you press C while moving. ──
     dashCooldown.current = Math.max(0, dashCooldown.current - delta);
     const dashPressed = canMove && (keys.consumeSlide() || consumeMobileSlide());
-    if (dashPressed && grounded.current && dashTimer.current <= 0 && dashCooldown.current <= 0 && moving) {
+    if (dashPressed && grounded.current && dashTimer.current <= 0 && dashCooldown.current <= 0 && moving && stunTimer.current <= 0) {
       dashTimer.current = DASH_DURATION;
       dashDirX.current = Math.sin(cc.yaw);
       dashDirZ.current = Math.cos(cc.yaw);
@@ -334,9 +364,12 @@ export function ParkourPlayer({
       } else {
         targetVel.current.set(0, 0, 0);
       }
+      // Stunned by a hazard hit → almost no control, so the knockback throws you
+      // and it's genuinely hard to save yourself.
+      if (stunTimer.current > 0) targetVel.current.multiplyScalar(0.1);
     }
     dashPose.current = THREE.MathUtils.lerp(dashPose.current, dashing ? 1 : 0, Math.min(1, delta * 12));
-    const accel = dashing ? 40 : !grounded.current ? ACCEL_AIR : onIce.current ? ACCEL_ICE : ACCEL_GROUND;
+    const accel = stunTimer.current > 0 ? 2.5 : dashing ? 40 : !grounded.current ? ACCEL_AIR : onIce.current ? ACCEL_ICE : ACCEL_GROUND;
     vel.current.lerp(targetVel.current, 1 - Math.exp(-delta * accel));
 
     // ── Horizontal move (side-resolution deliberately runs AFTER the vertical
@@ -493,10 +526,26 @@ export function ParkourPlayer({
           const pl = Math.hypot(pdx, pdz) || 1;
           vel.current.x = (pdx / pl) * HAZARD_KNOCKBACK;
           vel.current.z = (pdz / pl) * HAZARD_KNOCKBACK;
-          if (grounded.current) { vv.current = 4; grounded.current = false; } // little pop
-          hurtTimer.current = 0.5;
-          cameraShake.current = 1;
-          hazardHitCooldown.current = 0.45;
+          vv.current = HAZARD_POP;          // LAUNCHED into the air every time
+          grounded.current = false;
+          hurtTimer.current = 0.7;
+          stunTimer.current = STUN;         // near-zero control → hard to save yourself
+          cameraShake.current = 2;
+          hazardHitCooldown.current = 0.5;
+          // Particle burst at the impact.
+          for (let k = 0; k < HIT_N; k++) {
+            hitAge.current[k] = 0;
+            const i3 = k * 3;
+            const ang = Math.random() * Math.PI * 2;
+            const ele = Math.random() * Math.PI - Math.PI / 2;
+            const sp = 5 + Math.random() * 8;
+            hitVel.current[i3] = Math.cos(ang) * Math.cos(ele) * sp;
+            hitVel.current[i3 + 1] = Math.abs(Math.sin(ele)) * sp + 4;
+            hitVel.current[i3 + 2] = Math.sin(ang) * Math.cos(ele) * sp;
+            hitPos.current[i3] = pxn;
+            hitPos.current[i3 + 1] = feet + 0.9;
+            hitPos.current[i3 + 2] = pzn;
+          }
           onHazardHit?.();
           break;
         }
@@ -544,8 +593,8 @@ export function ParkourPlayer({
     // chaining land→jump stays snappy, never reads as "sticking") ──
     landSquash.current = Math.max(0, landSquash.current - delta * 14);
     g.scale.y = (1 - landSquash.current * 0.11) * (1 - dashPose.current * 0.2);
-    // Stumble-back tilt while hurt (shoved by a hazard).
-    g.rotation.x = -(hurtTimer.current > 0 ? Math.min(1, hurtTimer.current / 0.5) : 0) * 0.45;
+    // Wild stumble-back tilt while hurt (shoved by a hazard).
+    g.rotation.x = -(hurtTimer.current > 0 ? Math.min(1, hurtTimer.current / 0.7) : 0) * 0.7;
 
     // ── Limb animation (walk cycle + airborne splay) ──
     jumpPose.current = THREE.MathUtils.lerp(jumpPose.current, grounded.current ? 0 : 1, Math.min(1, delta * 10));
@@ -616,8 +665,17 @@ export function ParkourPlayer({
   });
 
   return (
-    <group ref={group} position={map.start}>
-      <CharacterModel ref={limbs} equippedByCategory={equippedByCategory} gender={gender} />
-    </group>
+    <>
+      <group ref={group} position={map.start}>
+        <CharacterModel ref={limbs} equippedByCategory={equippedByCategory} gender={gender} />
+      </group>
+      {/* Impact spark burst (world-space) — updated imperatively each frame. */}
+      <points ref={hitPointsRef} frustumCulled={false}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[hitPos.current, 3]} />
+        </bufferGeometry>
+        <pointsMaterial color="#fca5a5" size={0.3} transparent opacity={0.95} sizeAttenuation toneMapped={false} depthWrite={false} />
+      </points>
+    </>
   );
 }

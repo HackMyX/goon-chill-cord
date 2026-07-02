@@ -269,13 +269,13 @@ function buildCourse(pr: CourseParams): CourseGeometry {
 
     if (moverThis) {
       const px = -hz, pz = hx;
-      const amp = 2.1; // bigger swing → real timing challenge
+      const amp = 2.7; // big, fast swing → wild timing challenge
       movers.push({
         mode: "path",
         pos: [nx - px * amp, ny - 0.7, nz - pz * amp],
         to: [nx + px * amp, ny - 0.7, nz + pz * amp],
-        size: [Math.max(2.1, sx * 0.9), 0.6, Math.max(2.1, sz * 0.9)],
-        period: 2.2 + rnd() * 1.8,
+        size: [Math.max(2.0, sx * 0.85), 0.6, Math.max(2.0, sz * 0.85)],
+        period: 1.3 + rnd() * 1.3, // much faster back-and-forth
         phase: rnd(),
         color: pr.accent, glow: pr.accent,
       });
@@ -344,8 +344,8 @@ const NEON_PARAMS: CourseParams = {
   seed: 51014, steps: 68,
   gravity: -20, jumpVelocity: 8.4, airJumps: 1, moveSpeed: 6.5, sprintMultiplier: 1.5,
   platMin: 2.2, platMax: 2.7, riseMin: 0.6, riseMax: 1.25, gapFrac: 0.66,
-  descendChance: 0.14, iceChance: 0.08, beamChance: 0.14, moverChance: 0.24, crumbleChance: 0.12,
-  spinnerChance: 0.14, sliderChance: 0.1, hazPeriodMin: 2.4, hazPeriodMax: 3.4, hazardCap: 22,
+  descendChance: 0.14, iceChance: 0.08, beamChance: 0.14, moverChance: 0.26, crumbleChance: 0.12,
+  spinnerChance: 0.16, sliderChance: 0.12, hazPeriodMin: 1.5, hazPeriodMax: 2.3, hazardCap: 24,
   checkpointEvery: 6, startTop: 1, accent: THEME_NEON_NIGHT.accent,
 };
 const MAP_NEON: ParkourMap = {
@@ -363,7 +363,7 @@ const SKY_PARAMS: CourseParams = {
   gravity: -18, jumpVelocity: 8.6, airJumps: 1, moveSpeed: 7, sprintMultiplier: 1.6,
   platMin: 2.0, platMax: 2.5, riseMin: 0.7, riseMax: 1.35, gapFrac: 0.72,
   descendChance: 0.16, iceChance: 0.12, beamChance: 0.16, moverChance: 0.3, crumbleChance: 0.15,
-  spinnerChance: 0.18, sliderChance: 0.14, hazPeriodMin: 2.0, hazPeriodMax: 3.0, hazardCap: 28,
+  spinnerChance: 0.2, sliderChance: 0.16, hazPeriodMin: 1.2, hazPeriodMax: 2.0, hazardCap: 32,
   checkpointEvery: 6, startTop: 1, accent: THEME_SKY_DAWN.accent,
 };
 const MAP_SKY: ParkourMap = {
@@ -380,8 +380,8 @@ const MAGMA_PARAMS: CourseParams = {
   seed: 53033, steps: 98,
   gravity: -24, jumpVelocity: 8.9, airJumps: 0, moveSpeed: 7, sprintMultiplier: 1.7,
   platMin: 1.7, platMax: 2.2, riseMin: 0.4, riseMax: 1.0, gapFrac: 0.74,
-  descendChance: 0.14, iceChance: 0.1, beamChance: 0.24, moverChance: 0.24, crumbleChance: 0.18,
-  spinnerChance: 0.2, sliderChance: 0.18, hazPeriodMin: 1.8, hazPeriodMax: 2.8, hazardCap: 32,
+  descendChance: 0.14, iceChance: 0.1, beamChance: 0.24, moverChance: 0.26, crumbleChance: 0.18,
+  spinnerChance: 0.24, sliderChance: 0.2, hazPeriodMin: 1.0, hazPeriodMax: 1.7, hazardCap: 38,
   checkpointEvery: 7, startTop: 1, accent: THEME_MAGMA.accent,
 };
 const MAP_MAGMA: ParkourMap = {
@@ -399,7 +399,7 @@ const VOID_PARAMS: CourseParams = {
   gravity: -21, jumpVelocity: 8.9, airJumps: 1, moveSpeed: 7.2, sprintMultiplier: 1.6,
   platMin: 1.4, platMax: 1.9, riseMin: 0.7, riseMax: 1.4, gapFrac: 0.8,
   descendChance: 0.14, iceChance: 0.3, beamChance: 0.16, moverChance: 0.34, crumbleChance: 0.2,
-  spinnerChance: 0.24, sliderChance: 0.2, hazPeriodMin: 1.6, hazPeriodMax: 2.6, hazardCap: 40,
+  spinnerChance: 0.28, sliderChance: 0.22, hazPeriodMin: 0.9, hazPeriodMax: 1.5, hazardCap: 44,
   checkpointEvery: 7, startTop: 1, accent: THEME_VOID.accent,
 };
 const MAP_VOID: ParkourMap = {
