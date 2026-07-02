@@ -125,8 +125,9 @@ function minPlausibleMs(diamondMs: number): number {
   return Math.round(diamondMs * 0.45);
 }
 
-export async function submitParkourRun(mapId: string, timeMs: number, checkpointsReached = 0): Promise<ParkourSubmitResult> {
+export async function submitParkourRun(mapId: string, timeMs: number, checkpointsReached = 0, deaths = 0): Promise<ParkourSubmitResult> {
   if (!Number.isFinite(timeMs) || timeMs <= 0) return { success: false, error: "Ungültige Zeit." };
+  const safeDeaths = Number.isFinite(deaths) ? Math.max(0, Math.min(9999, Math.round(deaths))) : 0;
 
   const map = getParkourMap(mapId);
   if (!map) return { success: false, error: "Unbekannte Map." };
@@ -151,7 +152,7 @@ export async function submitParkourRun(mapId: string, timeMs: number, checkpoint
   // ── Best time upsert (leaderboard) ──
   const { data: current } = await admin
     .from("parkour_best_times")
-    .select("best_time_ms, runs, finishes")
+    .select("best_time_ms, runs, finishes, deaths")
     .eq("user_id", user.id)
     .eq("map_id", mapId)
     .maybeSingle();
@@ -164,6 +165,8 @@ export async function submitParkourRun(mapId: string, timeMs: number, checkpoint
     user_id: user.id,
     map_id: mapId,
     best_time_ms: newBestMs,
+    // Deaths shown on the leaderboard are those of the best-time run.
+    deaths: isNewRecord ? safeDeaths : (current?.deaths ?? 0),
     runs: (current?.runs ?? 0) + 1,
     finishes: (current?.finishes ?? 0) + 1,
     updated_at: new Date().toISOString(),
@@ -211,6 +214,7 @@ export async function submitParkourRun(mapId: string, timeMs: number, checkpoint
         map_id: mapId,
         map_name: map.name,
         time_ms: clampedMs,
+        deaths: safeDeaths,
         is_new_record: isNewRecord,
         credits_awarded: creditsAwarded,
         xp_awarded: xpAwarded,
@@ -265,29 +269,115 @@ export interface ParkourLeaderboardEntry {
   username: string;
   nameStyleKey?: string | null;
   bestTimeMs: number;
+  deaths: number;
   finishes: number;
 }
 
-export async function getParkourLeaderboard(mapId: string, limit = 20): Promise<ParkourLeaderboardEntry[]> {
+/** In-game/side leaderboard for a single map. `sortBy` = "time" (fastest) or
+ * "deaths" (fewest, tiebreak by time). */
+export async function getParkourLeaderboard(mapId: string, limit = 20, sortBy: "time" | "deaths" = "time"): Promise<ParkourLeaderboardEntry[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("parkour_best_times")
-    .select("user_id, best_time_ms, finishes, profiles(username, active_name_style_key)")
+    .select("user_id, best_time_ms, deaths, finishes, profiles(username, active_name_style_key)")
     .eq("map_id", mapId)
     .order("best_time_ms", { ascending: true })
-    .limit(Math.max(1, Math.min(100, limit)));
+    .limit(Math.max(1, Math.min(100, limit * 3)));
   if (error || !data) return [];
-  return (data as unknown as {
-    user_id: string; best_time_ms: number; finishes: number;
+  const rows = (data as unknown as {
+    user_id: string; best_time_ms: number; deaths: number; finishes: number;
     profiles: { username: string | null; active_name_style_key: string | null } | null;
-  }[]).map((row, i) => ({
+  }[]);
+  rows.sort((a, b) =>
+    sortBy === "deaths"
+      ? (a.deaths - b.deaths) || (a.best_time_ms - b.best_time_ms)
+      : (a.best_time_ms - b.best_time_ms) || (a.deaths - b.deaths));
+  return rows.slice(0, Math.max(1, Math.min(100, limit))).map((row, i) => ({
     rank: i + 1,
     userId: row.user_id,
     username: row.profiles?.username ?? "Unbekannt",
     nameStyleKey: row.profiles?.active_name_style_key ?? null,
     bestTimeMs: row.best_time_ms,
+    deaths: row.deaths ?? 0,
     finishes: row.finishes,
   }));
+}
+
+// ── Homepage leaderboard (per-map + „Gesamt" über alle Maps) ──────────────────
+
+export interface ParkourHomeEntry {
+  rank: number;
+  userId: string;
+  username: string;
+  nameStyleKey: string | null;
+  avatarUrl: string | null;
+  prioBadges: string[];
+  /** Map: Bestzeit in ms · Gesamt: Summe der Bestzeiten aller absolvierten Maps. */
+  timeMs: number;
+  deaths: number;
+  /** Nur „Gesamt": Anzahl absolvierter Maps. */
+  mapsDone?: number;
+}
+
+/** `scope` = a map id OR "overall". Map: rank by time (tiebreak deaths). Overall:
+ * rank by maps completed desc, then total best-time asc — der Allround-König. */
+export async function getParkourHomeLeaderboard(scope: string, limit = 10): Promise<ParkourHomeEntry[]> {
+  const admin = createAdminClient();
+  const lim = Math.max(1, Math.min(50, limit));
+
+  if (scope !== "overall") {
+    const { data } = await admin
+      .from("parkour_best_times")
+      .select("user_id, best_time_ms, deaths, profiles(username, active_name_style_key, avatar_url, prio_badges)")
+      .eq("map_id", scope)
+      .order("best_time_ms", { ascending: true })
+      .limit(lim);
+    return (data as unknown as {
+      user_id: string; best_time_ms: number; deaths: number;
+      profiles: { username: string | null; active_name_style_key: string | null; avatar_url: string | null; prio_badges: string[] | null } | null;
+    }[] ?? []).map((row, i) => ({
+      rank: i + 1,
+      userId: row.user_id,
+      username: row.profiles?.username ?? "Unbekannt",
+      nameStyleKey: row.profiles?.active_name_style_key ?? null,
+      avatarUrl: row.profiles?.avatar_url ?? null,
+      prioBadges: row.profiles?.prio_badges ?? [],
+      timeMs: row.best_time_ms,
+      deaths: row.deaths ?? 0,
+    }));
+  }
+
+  // Overall: aggregate every user's rows in JS (bounded by #players × 4 maps).
+  const { data } = await admin
+    .from("parkour_best_times")
+    .select("user_id, best_time_ms, deaths, profiles(username, active_name_style_key, avatar_url, prio_badges)")
+    .limit(5000);
+  const byUser = new Map<string, { total: number; deaths: number; maps: number; p: { username: string | null; active_name_style_key: string | null; avatar_url: string | null; prio_badges: string[] | null } | null }>();
+  for (const row of (data as unknown as {
+    user_id: string; best_time_ms: number; deaths: number;
+    profiles: { username: string | null; active_name_style_key: string | null; avatar_url: string | null; prio_badges: string[] | null } | null;
+  }[] ?? [])) {
+    const e = byUser.get(row.user_id) ?? { total: 0, deaths: 0, maps: 0, p: row.profiles };
+    e.total += row.best_time_ms;
+    e.deaths += row.deaths ?? 0;
+    e.maps += 1;
+    e.p = row.profiles ?? e.p;
+    byUser.set(row.user_id, e);
+  }
+  return Array.from(byUser.entries())
+    .sort((a, b) => (b[1].maps - a[1].maps) || (a[1].total - b[1].total))
+    .slice(0, lim)
+    .map(([userId, e], i) => ({
+      rank: i + 1,
+      userId,
+      username: e.p?.username ?? "Unbekannt",
+      nameStyleKey: e.p?.active_name_style_key ?? null,
+      avatarUrl: e.p?.avatar_url ?? null,
+      prioBadges: e.p?.prio_badges ?? [],
+      timeMs: e.total,
+      deaths: e.deaths,
+      mapsDone: e.maps,
+    }));
 }
 
 /** This user's best time per map (map_id → ms). */

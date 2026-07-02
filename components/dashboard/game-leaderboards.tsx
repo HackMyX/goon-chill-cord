@@ -9,6 +9,7 @@ import { StyledUsername } from "@/components/ui/styled-username";
 import { PrioBadgeRow } from "@/components/ui/prio-badge-row";
 import type { GameLeaderboardSection, GameLeaderboardListId, HomepageAvatarMode } from "@/lib/actions/homepage-leaderboards";
 import { fetchHomepageLeaderboardData } from "@/lib/actions/homepage-leaderboards";
+import { ParkourHomeLeaderboard } from "@/components/dashboard/parkour-home-leaderboard";
 import { useLiveConfig } from "@/lib/use-live-config";
 
 export type { GameLeaderboardSection };
@@ -86,6 +87,14 @@ const GAME_VISUALS: Record<GameLeaderboardListId, GameVisual> = {
     accent: "text-sky-400", border: "border-sky-500/25", bg: "bg-sky-500/5",
     headerBg: "bg-sky-500/10", rankOneBg: "bg-sky-500/10", rankOneText: "text-sky-300",
     barFrom: "from-sky-600", barTo: "to-sky-400", metricSuffix: "XP", metricFormat: "xp",
+  },
+  // Parkour renders via the custom <ParkourHomeLeaderboard> block, not this
+  // generic card — this entry only satisfies the Record's exhaustiveness.
+  parkour: {
+    icon: Zap, label: "Parkour", sublabel: "Bestzeit", href: "/parkour",
+    accent: "text-fuchsia-400", border: "border-fuchsia-500/25", bg: "bg-fuchsia-500/5",
+    headerBg: "bg-fuchsia-500/10", rankOneBg: "bg-fuchsia-500/10", rankOneText: "text-fuchsia-300",
+    barFrom: "from-fuchsia-600", barTo: "to-fuchsia-400", metricSuffix: "",
   },
 };
 
@@ -426,15 +435,19 @@ export function GameLeaderboards({
       </div>
 
       <div className="flex flex-col gap-5">
-        {sections.map((section, i) => (
-          <GameLeaderboardCard
-            key={section.item.id}
-            section={section}
-            sectionIndex={i}
-            currencyName={currencyName}
-            avatarMode={avatarMode}
-          />
-        ))}
+        {sections.map((section, i) =>
+          section.item.id === "parkour" ? (
+            <ParkourHomeLeaderboard key="parkour" label={section.item.label} limit={section.item.limit} />
+          ) : (
+            <GameLeaderboardCard
+              key={section.item.id}
+              section={section}
+              sectionIndex={i}
+              currencyName={currencyName}
+              avatarMode={avatarMode}
+            />
+          )
+        )}
       </div>
     </section>
   );

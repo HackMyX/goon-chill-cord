@@ -32,7 +32,7 @@ function PlatformMesh({ pl, theme }: { pl: ParkourPlatform; theme: ParkourMap["t
     }
   });
   return (
-    <mesh position={pl.pos} castShadow receiveShadow>
+    <mesh position={pl.pos} receiveShadow>
       <boxGeometry args={pl.size} />
       <meshStandardMaterial
         ref={killRef}
@@ -60,7 +60,7 @@ function MoverMesh({ mover, theme }: { mover: ParkourMover; theme: ParkourMap["t
     ref.current.position.set(x, y, z);
   });
   return (
-    <mesh ref={ref} position={mover.pos} castShadow receiveShadow>
+    <mesh ref={ref} position={mover.pos} receiveShadow>
       <boxGeometry args={mover.size} />
       <meshStandardMaterial
         color={color}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { CharacterModel, type CharacterLimbRefs } from "@/components/world/character-model";
@@ -8,7 +8,7 @@ import { useKeyboardControls } from "@/components/world/use-keyboard-controls";
 import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
 import { mobileInput, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
 import { angleDelta } from "@/components/world/player";
-import { moverCenterAt, type ParkourMap } from "@/lib/parkour-config";
+import { type ParkourMap } from "@/lib/parkour-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import type { CheckpointProgressRef } from "@/components/parkour/parkour-geometry";
 import { broadcastParkourGhost } from "@/lib/parkour-realtime";
@@ -27,7 +27,6 @@ interface Collider {
 
 const R = 0.42;            // player collision half-width (XZ)
 const H = 1.7;             // player collision height
-const STEP_TOL = 0.06;     // vertical epsilon so standing-on-top isn't a side hit
 const COYOTE = 0.12;       // seconds after leaving ground you can still jump
 const JUMP_BUFFER = 0.14;  // seconds a jump press is remembered before landing
 const ACCEL_GROUND = 16;
@@ -42,6 +41,23 @@ const DASH_SPEED_FACTOR = 2.2;
 // Ledge-grab forgiveness: how far past a platform edge the footprint may be and
 // still catch the top on a descending landing (a barely-made jump snaps on).
 const LAND_MARGIN = 0.16;
+
+/** Build an axis-aligned collider from a box (center + full size). Called ONCE
+ * per platform at map-load (static) and reused; mover colliders are mutated in
+ * place each frame instead of rebuilt — zero per-frame allocation. */
+function boxCollider(
+  pos: [number, number, number], size: [number, number, number],
+  moverIdx: number, kill: boolean, ice: boolean, bounce: number,
+): Collider {
+  const [cx, cy, cz] = pos;
+  const [sx, sy, sz] = size;
+  return {
+    minX: cx - sx / 2, maxX: cx + sx / 2,
+    minY: cy - sy / 2, maxY: cy + sy / 2,
+    minZ: cz - sz / 2, maxZ: cz + sz / 2,
+    topY: cy + sy / 2, kill, ice, bounce, moverIdx,
+  };
+}
 
 export interface ParkourPlayerProps {
   userId: string;
@@ -98,7 +114,6 @@ export function ParkourPlayer({
   const jumpBuffer = useRef(0);
   const airJumpsUsed = useRef(0);
   const supportMoverIdx = useRef(-1);
-  const prevMoverCenters = useRef<[number, number, number][]>(map.movers.map((m) => [...m.pos]));
   const respawnPoint = useRef<[number, number, number]>([...map.start]);
   const finishedRef = useRef(false);
   const startedMoving = useRef(false);
@@ -146,47 +161,18 @@ export function ParkourPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetSignal]);
 
-  // Build the collider list for the current frame (static platforms + movers +
-  // finish pad). Reused between horizontal + vertical resolution.
-  function buildColliders(elapsed: number, out: Collider[]): void {
-    out.length = 0;
-    for (const pl of map.platforms) {
-      const [cx, cy, cz] = pl.pos;
-      const [sx, sy, sz] = pl.size;
-      out.push({
-        minX: cx - sx / 2, maxX: cx + sx / 2,
-        minY: cy - sy / 2, maxY: cy + sy / 2,
-        minZ: cz - sz / 2, maxZ: cz + sz / 2,
-        topY: cy + sy / 2,
-        kill: !!pl.kill, ice: !!pl.ice, bounce: pl.bounce ?? 0, moverIdx: -1,
-      });
-    }
-    map.movers.forEach((m, i) => {
-      const [cx, cy, cz] = moverCenterAt(m, elapsed);
-      const [sx, sy, sz] = m.size;
-      out.push({
-        minX: cx - sx / 2, maxX: cx + sx / 2,
-        minY: cy - sy / 2, maxY: cy + sy / 2,
-        minZ: cz - sz / 2, maxZ: cz + sz / 2,
-        topY: cy + sy / 2,
-        kill: false, ice: false, bounce: 0, moverIdx: i,
-      });
-    });
-    // Finish pad as a landable platform
-    {
-      const [cx, cy, cz] = map.finish;
-      const [sx, sy, sz] = map.finishSize;
-      out.push({
-        minX: cx - sx / 2, maxX: cx + sx / 2,
-        minY: cy - sy / 2, maxY: cy + sy / 2,
-        minZ: cz - sz / 2, maxZ: cz + sz / 2,
-        topY: cy + sy / 2,
-        kill: false, ice: false, bounce: 0, moverIdx: -2,
-      });
-    }
-  }
-
-  const colliders = useRef<Collider[]>([]);
+  // Pre-built collider rig — static platforms + finish are built ONCE at map
+  // load; only the mover colliders are mutated in place each frame. Zero
+  // per-frame heap allocation → no GC stutter even on the 100+-platform maps.
+  const rig = useMemo(() => {
+    const staticCols: Collider[] = map.platforms.map((pl) =>
+      boxCollider(pl.pos, pl.size, -1, !!pl.kill, !!pl.ice, pl.bounce ?? 0));
+    staticCols.push(boxCollider(map.finish, map.finishSize, -2, false, false, 0));
+    const moverCols: Collider[] = map.movers.map((m, i) => boxCollider(m.pos, m.size, i, false, false, 0));
+    const centers = map.movers.map((m) => [m.pos[0], m.pos[1], m.pos[2]] as [number, number, number]);
+    const prev = map.movers.map((m) => [m.pos[0], m.pos[1], m.pos[2]] as [number, number, number]);
+    return { all: [...staticCols, ...moverCols], moverCols, centers, prev };
+  }, [map]);
 
   function respawnAtCheckpoint() {
     const g = group.current;
@@ -211,22 +197,45 @@ export function ParkourPlayer({
     const locked = cameraControls.locked || mobileMode;
     const canMove = running && locked && !finishedRef.current;
 
-    // ── Ride moving platforms: apply the delta of whatever mover we stood on ──
-    const curMovers: [number, number, number][] = map.movers.map((m) => moverCenterAt(m, elapsed));
-    if (supportMoverIdx.current >= 0 && supportMoverIdx.current < curMovers.length) {
-      const i = supportMoverIdx.current;
-      const prev = prevMoverCenters.current[i];
-      const cur = curMovers[i];
-      if (prev) {
-        g.position.x += cur[0] - prev[0];
-        g.position.z += cur[2] - prev[2];
-        feetY.current += cur[1] - prev[1];
+    // ── Update mover colliders in place (mover math inlined — no allocation) ──
+    const movers = map.movers;
+    for (let i = 0; i < movers.length; i++) {
+      const m = movers[i];
+      const phase = m.phase ?? 0;
+      let mxc: number, myc: number, mzc: number;
+      if (m.mode === "orbit") {
+        const r = m.radius ?? 4;
+        const ang = ((elapsed / m.period + phase) % 1) * Math.PI * 2;
+        mxc = m.pos[0] + Math.cos(ang) * r; myc = m.pos[1]; mzc = m.pos[2] + Math.sin(ang) * r;
+      } else {
+        const to = m.to ?? m.pos;
+        const u = (((elapsed / m.period + phase) % 1) + 1) % 1;
+        const tri = u < 0.5 ? u * 2 : 2 - u * 2;
+        mxc = m.pos[0] + (to[0] - m.pos[0]) * tri;
+        myc = m.pos[1] + (to[1] - m.pos[1]) * tri;
+        mzc = m.pos[2] + (to[2] - m.pos[2]) * tri;
       }
+      const cen = rig.centers[i]; cen[0] = mxc; cen[1] = myc; cen[2] = mzc;
+      const col = rig.moverCols[i];
+      const hx = m.size[0] / 2, hy = m.size[1] / 2, hz = m.size[2] / 2;
+      col.minX = mxc - hx; col.maxX = mxc + hx;
+      col.minY = myc - hy; col.maxY = myc + hy;
+      col.minZ = mzc - hz; col.maxZ = mzc + hz;
+      col.topY = myc + hy;
     }
-    prevMoverCenters.current = curMovers;
-
-    buildColliders(elapsed, colliders.current);
-    const cols = colliders.current;
+    // Ride the mover we were standing on (its delta this frame carries us).
+    if (supportMoverIdx.current >= 0 && supportMoverIdx.current < movers.length) {
+      const i = supportMoverIdx.current;
+      const cur = rig.centers[i], prev = rig.prev[i];
+      g.position.x += cur[0] - prev[0];
+      g.position.z += cur[2] - prev[2];
+      feetY.current += cur[1] - prev[1];
+    }
+    for (let i = 0; i < movers.length; i++) {
+      const cen = rig.centers[i], prev = rig.prev[i];
+      prev[0] = cen[0]; prev[1] = cen[1]; prev[2] = cen[2];
+    }
+    const cols = rig.all;
 
     // ── Input → target horizontal velocity (camera-relative, same basis as the
     // farm world's Player so movement feels identical) ──
@@ -370,21 +379,10 @@ export function ParkourPlayer({
       }
     }
 
-    // (B) HEAD BONK — rising into a ceiling. Only when the centre is clearly
-    // INSIDE the box (footprint shrunk by R*0.5), so jumping up alongside a ledge
-    // grazes past its side without being knocked back down.
-    if (!grounded.current && vv.current > 0) {
-      const prevHead = prevFeet + H;
-      for (const c of cols) {
-        if (px <= c.minX + R * 0.5 || px >= c.maxX - R * 0.5) continue;
-        if (pz <= c.minZ + R * 0.5 || pz >= c.maxZ - R * 0.5) continue;
-        if (prevHead - 0.02 <= c.minY && feetY.current + H >= c.minY) {
-          feetY.current = c.minY - H;
-          vv.current = 0;
-          break;
-        }
-      }
-    }
+    // ONE-WAY PLATFORMS: no head-bonk, no side collision. The player always
+    // passes the sides/bottom freely and can ONLY land on a top face. This is the
+    // clean parkour model — you can never be shoved off, stuck against an edge, or
+    // blocked from jumping up onto the next platform (the "kleben/festbuggen" bug).
 
     // Bounce pad launches AFTER landing decisions (overrides the grounded snap).
     if (landedBounce > 0) { vv.current = landedBounce; grounded.current = false; }
@@ -393,12 +391,6 @@ export function ParkourPlayer({
     if (grounded.current) { coyote.current = COYOTE; airJumpsUsed.current = 0; }
 
     g.position.y = feetY.current;
-
-    // (C) HORIZONTAL side-resolution — runs LAST so the platform you're standing
-    // on (feet == top, excluded by the STEP_TOL Y-gate) can never push you off,
-    // while genuine walls beside you still block.
-    resolveAxis(g, cols, "x", feetY.current);
-    resolveAxis(g, cols, "z", feetY.current);
 
     // ── Hazard tile / void → respawn at checkpoint ──
     if (landedKill || feetY.current < map.voidY) {
@@ -503,31 +495,4 @@ export function ParkourPlayer({
       <CharacterModel ref={limbs} equippedByCategory={equippedByCategory} gender={gender} />
     </group>
   );
-}
-
-/** Push the player box out of any collider it now overlaps on a single axis.
- * Called right after moving on that axis (X or Z). The Y-overlap gate uses
- * STEP_TOL so a platform you're standing ON (feet == top) never counts as a
- * side hit. */
-function resolveAxis(g: THREE.Group, cols: Collider[], axis: "x" | "z", feet: number): void {
-  const minY = feet, maxY = feet + H;
-  for (const c of cols) {
-    if (minY >= c.maxY - STEP_TOL || maxY <= c.minY + STEP_TOL) continue; // no vertical overlap
-    // Re-read live position each iteration — an earlier push this loop may have
-    // already moved the player (wedged between two colliders).
-    const px = g.position.x, pz = g.position.z;
-    if (px + R <= c.minX || px - R >= c.maxX) continue;
-    if (pz + R <= c.minZ || pz - R >= c.maxZ) continue;
-    if (axis === "x") {
-      const penRight = c.maxX - (g.position.x - R); // push +x
-      const penLeft = (g.position.x + R) - c.minX;  // push -x
-      if (penRight < penLeft) g.position.x += penRight;
-      else g.position.x -= penLeft;
-    } else {
-      const penFwd = c.maxZ - (g.position.z - R);
-      const penBack = (g.position.z + R) - c.minZ;
-      if (penFwd < penBack) g.position.z += penFwd;
-      else g.position.z -= penBack;
-    }
-  }
 }

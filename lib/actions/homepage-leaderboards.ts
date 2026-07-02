@@ -391,6 +391,10 @@ export async function fetchGameLeaderboards(
           entries = await fetchCasesEntries(item.limit);
         } else if (item.id === "xp") {
           entries = await fetchXpEntries(item.limit);
+        } else if (item.id === "parkour") {
+          // Rendered by the custom <ParkourHomeLeaderboard> block (map switcher +
+          // Gesamt), which fetches its own data — the section just needs to exist.
+          entries = [];
         } else {
           const mode = item.id.replace("snake_", "") as "x1" | "x2" | "grind" | "farm";
           entries = await fetchSnakeEntries(mode, item.limit);

@@ -1,6 +1,6 @@
 export type GameLeaderboardListId =
   | "snake_x1" | "snake_x2" | "snake_grind" | "snake_farm"
-  | "mine" | "plinko" | "world" | "cases" | "xp";
+  | "mine" | "plinko" | "world" | "cases" | "xp" | "parkour";
 
 /**
  * Steuert, für welche Plätze auf der STARTSEITE Profilbilder angezeigt werden.
@@ -51,4 +51,5 @@ export const DEFAULT_GAME_LEADERBOARD_CONFIG: GameLeaderboardItem[] = [
   { id: "world",       label: "Farmwelt",          enabled: true,  limit: 10, sort: 6 },
   { id: "cases",       label: "Cases",             enabled: false, limit: 10, sort: 7 },
   { id: "xp",          label: "Level & XP",        enabled: false, limit: 10, sort: 8 },
+  { id: "parkour",     label: "Parkour",           enabled: true,  limit: 10, sort: 9 },
 ];

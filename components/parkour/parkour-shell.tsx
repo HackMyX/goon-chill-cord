@@ -100,6 +100,15 @@ export function ParkourShell(props: ParkourShellProps) {
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const cameraControls = useCameraControls(canvasWrapRef);
   const progressRef = useRef<CheckpointProgressRef>({ current: -1 });
+  const deathsRef = useRef(0);
+
+  // In-run side leaderboard (time / deaths)
+  const [sideLb, setSideLb] = useState<ParkourLeaderboardEntry[]>([]);
+  const [sideLbSort, setSideLbSort] = useState<"time" | "deaths">("time");
+  const [sideLbOpen, setSideLbOpen] = useState(true);
+  const loadSideLb = useCallback(async (mapId: string, sort: "time" | "deaths") => {
+    setSideLb(await getParkourLeaderboard(mapId, 10, sort));
+  }, []);
 
   // Timer
   const startMsRef = useRef<number | null>(null);
@@ -157,6 +166,7 @@ export function ParkourShell(props: ParkourShellProps) {
   // ── Run lifecycle ──
   const beginRun = useCallback((map: ParkourMap, mp: boolean) => {
     progressRef.current.current = -1;
+    deathsRef.current = 0;
     startMsRef.current = null;
     setDisplayMs(0);
     setRunning(true);
@@ -165,8 +175,9 @@ export function ParkourShell(props: ParkourShellProps) {
     setFinishResult(null);
     setResetSignal((s) => s + 1);
     setView("playing");
+    void loadSideLb(map.id, sideLbSort);
     sound.click();
-  }, [sound]);
+  }, [sound, loadSideLb, sideLbSort]);
 
   const handleFirstMove = useCallback(() => {
     if (startMsRef.current === null) {
@@ -184,7 +195,7 @@ export function ParkourShell(props: ParkourShellProps) {
     setTimeout(() => setCheckpointToast(null), 1500);
   }, [sound]);
 
-  const handleFall = useCallback(() => { sound.error(); }, [sound]);
+  const handleFall = useCallback(() => { sound.error(); deathsRef.current += 1; }, [sound]);
 
   const handleFinish = useCallback(async () => {
     if (!activeMap) return;
@@ -197,18 +208,20 @@ export function ParkourShell(props: ParkourShellProps) {
     cameraControls.releaseLock();
     setSubmitting(true);
     const checkpointsReached = Math.max(0, (progressRef.current.current ?? -1) + 1);
-    const res = await submitParkourRun(activeMap.id, Math.max(1, Math.round(finalMs)), checkpointsReached);
+    const res = await submitParkourRun(activeMap.id, Math.max(1, Math.round(finalMs)), checkpointsReached, deathsRef.current);
     setFinishResult(res);
     setSubmitting(false);
     if (res.success && res.timeMs) {
       setBests((b) => ({ ...b, [activeMap.id]: res.isNewRecord ? res.timeMs! : Math.min(b[activeMap.id] ?? Infinity, res.timeMs!) }));
       if (multiplayer && lobby) void reportParkourLobbyTime(lobby.id, res.timeMs);
+      void loadSideLb(activeMap.id, sideLbSort);
     }
-  }, [activeMap, sound, cameraControls, multiplayer, lobby]);
+  }, [activeMap, sound, cameraControls, multiplayer, lobby, loadSideLb, sideLbSort]);
 
   const handleRetry = useCallback(() => {
     if (!activeMap) return;
     progressRef.current.current = -1;
+    deathsRef.current = 0;
     startMsRef.current = null;
     setDisplayMs(0);
     setFinishResult(null);
@@ -217,6 +230,12 @@ export function ParkourShell(props: ParkourShellProps) {
     setView("playing");
     sound.click();
   }, [activeMap, sound]);
+
+  // Reload the in-run side leaderboard when the sort toggle changes mid-run.
+  useEffect(() => {
+    if ((view === "playing" || view === "finished") && activeMap) void loadSideLb(activeMap.id, sideLbSort);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sideLbSort]);
 
   const handleExitRun = useCallback(() => {
     if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
@@ -334,17 +353,56 @@ export function ParkourShell(props: ParkourShellProps) {
             </div>
           )}
 
-          {/* Multiplayer roster */}
-          {multiplayer && lobby && (
-            <div className="absolute top-16 right-3 z-20 flex flex-col gap-1 rounded-xl border border-white/10 bg-black/50 px-3 py-2 backdrop-blur">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-purple-300"><Users className="h-3.5 w-3.5" /> Lobby</div>
-              {lobby.members.map((m) => (
-                <div key={m.userId} className="flex items-center gap-2 text-xs">
-                  <span className={`h-1.5 w-1.5 rounded-full ${onlineIds.has(m.userId) ? "bg-emerald-400" : "bg-zinc-600"}`} />
-                  <span className="text-zinc-300">{m.username}</span>
-                  {m.bestTimeMs != null && <span className="ml-auto font-mono text-emerald-300">{formatParkourTime(m.bestTimeMs)}</span>}
+          {/* Right column: lobby roster (MP) + live in-run leaderboard (Zeit/Tode) */}
+          {view === "playing" && (
+            <div className="absolute top-16 right-3 z-20 flex w-52 flex-col gap-2">
+              {multiplayer && lobby && (
+                <div className="flex flex-col gap-1 rounded-xl border border-white/10 bg-black/50 px-3 py-2 backdrop-blur">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-purple-300"><Users className="h-3.5 w-3.5" /> Lobby</div>
+                  {lobby.members.map((m) => (
+                    <div key={m.userId} className="flex items-center gap-2 text-xs">
+                      <span className={`h-1.5 w-1.5 rounded-full ${onlineIds.has(m.userId) ? "bg-emerald-400" : "bg-zinc-600"}`} />
+                      <span className="text-zinc-300">{m.username}</span>
+                      {m.bestTimeMs != null && <span className="ml-auto font-mono text-emerald-300">{formatParkourTime(m.bestTimeMs)}</span>}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+              <div className="rounded-xl border border-white/10 bg-black/50 backdrop-blur">
+                <button onClick={() => setSideLbOpen((o) => !o)} className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-bold text-amber-300">
+                  <Trophy className="h-3.5 w-3.5" /> Bestenliste
+                  <span className="ml-auto text-zinc-500">{sideLbOpen ? "▾" : "▸"}</span>
+                </button>
+                {sideLbOpen && (
+                  <div className="px-2 pb-2">
+                    <div className="mb-1.5 flex gap-1">
+                      {(["time", "deaths"] as const).map((s) => (
+                        <button key={s} onClick={() => setSideLbSort(s)}
+                          className={`flex-1 rounded-md px-2 py-0.5 text-[10px] font-bold transition-colors ${sideLbSort === s ? "bg-amber-500/20 text-amber-200" : "text-zinc-500 hover:text-zinc-300"}`}>
+                          {s === "time" ? "Zeit" : "Tode"}
+                        </button>
+                      ))}
+                    </div>
+                    {sideLb.length === 0 ? (
+                      <p className="px-1 py-2 text-[10px] text-zinc-600">Noch keine Zeiten.</p>
+                    ) : (
+                      <div className="flex flex-col gap-0.5">
+                        {sideLb.map((e) => {
+                          const self = e.userId === userId;
+                          return (
+                            <div key={e.userId} className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] ${self ? "bg-amber-500/15 ring-1 ring-inset ring-amber-500/25" : ""}`}>
+                              <span className="w-4 text-zinc-600">{e.rank}</span>
+                              <span className="flex-1 truncate text-zinc-300">{e.username}</span>
+                              <span className="font-mono text-emerald-300">{formatParkourTime(e.bestTimeMs)}</span>
+                              <span className="w-7 text-right text-red-300/80" title="Tode">☠{e.deaths}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -365,7 +423,7 @@ export function ParkourShell(props: ParkourShellProps) {
           {/* Finish screen */}
           {view === "finished" && (
             <FinishScreen
-              map={map} timeMs={displayMs} result={finishResult} submitting={submitting}
+              map={map} timeMs={displayMs} deaths={deathsRef.current} result={finishResult} submitting={submitting}
               onRetry={handleRetry} onExit={handleExitRun}
             />
           )}
@@ -546,9 +604,9 @@ function GateScreen({ message }: { message: string }) {
 }
 
 function FinishScreen({
-  map, timeMs, result, submitting, onRetry, onExit,
+  map, timeMs, deaths, result, submitting, onRetry, onExit,
 }: {
-  map: ParkourMap; timeMs: number; result: ParkourSubmitResult | null; submitting: boolean;
+  map: ParkourMap; timeMs: number; deaths: number; result: ParkourSubmitResult | null; submitting: boolean;
   onRetry: () => void; onExit: () => void;
 }) {
   const medal = medalFor(timeMs, map.medals);
@@ -563,6 +621,9 @@ function FinishScreen({
         <Timer className="h-6 w-6 text-cyan-300" />
         <span className="font-mono text-4xl font-black tabular-nums text-white">{formatParkourTime(timeMs)}</span>
         {medal && <span className="text-3xl" title={MEDAL_META[medal].label}>{MEDAL_META[medal].icon}</span>}
+      </div>
+      <div className="-mt-2 flex items-center gap-1.5 text-sm text-red-300/90">
+        <span>☠</span> {deaths} {deaths === 1 ? "Tod" : "Tode"}
       </div>
 
       {submitting ? (
