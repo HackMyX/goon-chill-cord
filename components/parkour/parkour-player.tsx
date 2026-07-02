@@ -684,10 +684,21 @@ export function ParkourPlayer({
       }
     }
 
-    // ── Body heading eases toward movement (or dash) direction ──
-    if (moving || dashing) {
+    // ── Body faces where the MOUSE aims (camera yaw) — Roblox shift-lock. The
+    // mouse directly steers the character's facing = the direction you run: W
+    // runs forward into that aim, A/D strafe around it, the camera stays behind.
+    // Standing still and moving the mouse pivots the character too, so the mouse
+    // always controls "wo man hinläuft". Eased (not instant) → a smooth pivot,
+    // never a snap. Uses cc.yaw (the committed aim), NOT the RMB free-look offset,
+    // so glancing around with right-mouse never spins the body. Before pointer-
+    // lock (the intro), fall back to movement-direction facing so the avatar
+    // still looks alive. This is ADDITIVE — camera + camera-relative movement are
+    // unchanged; only the facing now follows the mouse. ──
+    if (locked) {
+      g.rotation.y += angleDelta(g.rotation.y, cc.yaw) * (1 - Math.exp(-delta * (dashing ? 22 : 16)));
+    } else if (moving || dashing) {
       const heading = Math.atan2(moveDir.current.x, moveDir.current.z);
-      g.rotation.y += angleDelta(g.rotation.y, heading) * (1 - Math.exp(-delta * (dashing ? 22 : 15)));
+      g.rotation.y += angleDelta(g.rotation.y, heading) * (1 - Math.exp(-delta * 15));
     }
 
     // ── Squash on landing + crouch during a dash (subtle + fast recovery so
