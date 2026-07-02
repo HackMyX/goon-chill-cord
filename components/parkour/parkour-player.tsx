@@ -7,7 +7,7 @@ import { CharacterModel, type CharacterLimbRefs } from "@/components/world/chara
 import { useKeyboardControls } from "@/components/world/use-keyboard-controls";
 import { PITCH_MIN, PITCH_MAX, type CameraControls } from "@/components/world/use-camera-controls";
 import { mobileInput, consumeMobileJump, consumeMobileSlide } from "@/lib/mobile-input";
-import { angleDelta } from "@/components/world/player";
+import { angleDelta, easeFreeLookToZero, FREE_LOOK_RESET_RATE } from "@/components/world/player";
 import { hazardHit, spinnerAngleAt, sliderPosInto, type ParkourMap } from "@/lib/parkour-config";
 import type { EquippedItem } from "@/lib/rarity-colors";
 import type { CheckpointProgressRef, CrumbleStateRef } from "@/components/parkour/parkour-geometry";
@@ -32,7 +32,12 @@ const H = 1.7;             // player collision height
 const COYOTE = 0.16;       // seconds after leaving ground you can still ground-jump
 const JUMP_BUFFER = 0.16;  // seconds a jump press is remembered before landing
 const ACCEL_GROUND = 16;
-const ACCEL_AIR = 7;
+// Air control matches the farm world's single ACCEL_RATE (14) — a jump-and-run
+// wants the SAME crisp, responsive steering in the air as on the ground (the old
+// 7 read as floaty/sluggish mid-jump and made precise landings feel unfair). Max
+// speed + jump height are unchanged, so every map stays solvable (only landings
+// get more forgiving, never harder). This is the "Steuerung von der Farmwelt".
+const ACCEL_AIR = 14;
 const ACCEL_ICE = 3.5;
 const MIN_CAMERA_WORLD_Y = 0.6;
 const GHOST_INTERVAL = 0.05; // 20 Hz
@@ -40,9 +45,18 @@ const GHOST_INTERVAL = 0.05; // 20 Hz
 const DASH_DURATION = 0.55;
 const DASH_COOLDOWN = 1.1;
 const DASH_SPEED_FACTOR = 2.2;
-// Ledge-grab forgiveness: how far past a platform edge the footprint may be and
-// still catch the top on a descending landing (a barely-made jump snaps on).
-const LAND_MARGIN = 0.16;
+// Landing catch reach = the body radius R exactly (see the landing block): a
+// descending player catches the top only while its FOOTPRINT still overlaps the
+// platform. That removes the old ledge "pull-in" teleport — which yanked the
+// centre up to ~0.6 units inward the instant you caught an edge/corner and was
+// the real cause of the "briefly sticks / jerks at edges & corners" bug. The map
+// validator (scripts/validate-parkour-maps.mjs) is proven solvable at this exact
+// reach, so nothing becomes unreachable. Walk-off and jump-landing now use the
+// SAME reach (R) → fully consistent, jerk-free ledge behaviour.
+/** Shared top tolerance: the side-push skip gate and the landing face-crossing
+ * test use the SAME value, so a barely-low side approach resolves as a ledge-grab
+ * landing instead of falling into a dead band (no pop-out, no corner clip). */
+const TOP_GRAB = 0.06;
 /** Seconds a crumble platform lasts once stepped on before it collapses. */
 const CRUMBLE_DELAY = 0.5;
 /** Grace window (s) after a respawn where hazards can't shove you — stops being
@@ -81,22 +95,42 @@ function boxCollider(
  * genuine side approach pushes. Clamps to the exact edge each frame → no jitter. */
 function resolveSideAxis(
   g: THREE.Group, cols: Collider[], axis: "x" | "z", feetY: number,
-  crumbleStates: Float32Array | null,
+  crumbleStates: Float32Array | null, prev: number,
 ): void {
   const bodyTop = feetY + H;
   for (const c of cols) {
     if (c.crumbleIndex >= 0 && crumbleStates && crumbleStates[c.crumbleIndex] >= CRUMBLE_DELAY) continue;
-    if (feetY >= c.topY - 0.06) continue;     // at/above the top → landing handles it, no side push
-    if (bodyTop <= c.minY + 0.05) continue;   // body entirely below the block
+    if (feetY >= c.topY - TOP_GRAB) continue;  // at/above the top → landing handles it, no side push
+    if (bodyTop <= c.minY + 0.05) continue;    // body entirely below the block
     const px = g.position.x, pz = g.position.z;
     if (px + R <= c.minX || px - R >= c.maxX) continue; // no X footprint overlap
     if (pz + R <= c.minZ || pz - R >= c.maxZ) continue; // no Z footprint overlap
     if (axis === "x") {
-      if (px >= c.minX && px <= c.maxX) continue; // centre over/under the block, not an X-side hit
-      g.position.x = px > c.maxX ? c.maxX + R : c.minX - R;
+      // An overhang corner grazed from BELOW (centre outside on both axes AND feet
+      // under the block) is a head/under approach — a side push would spit you
+      // sideways out of the corner, so skip it (the ceiling clamp handles it).
+      if ((pz <= c.minZ || pz >= c.maxZ) && feetY < c.minY) continue;
+      if (px >= c.minX && px <= c.maxX) {
+        // A fast step planted the centre INSIDE the box this frame → eject back to
+        // the side we came FROM (pre-move centre), never through to the far side.
+        if (prev < c.minX) g.position.x = c.minX - R;
+        else if (prev > c.maxX) g.position.x = c.maxX + R;
+        continue;
+      }
+      // Normal side clamp, biased to the entry side for a full thin-beam overshoot.
+      g.position.x = px > c.maxX
+        ? (prev < c.minX ? c.minX - R : c.maxX + R)
+        : (prev > c.maxX ? c.maxX + R : c.minX - R);
     } else {
-      if (pz >= c.minZ && pz <= c.maxZ) continue;
-      g.position.z = pz > c.maxZ ? c.maxZ + R : c.minZ - R;
+      if ((px <= c.minX || px >= c.maxX) && feetY < c.minY) continue;
+      if (pz >= c.minZ && pz <= c.maxZ) {
+        if (prev < c.minZ) g.position.z = c.minZ - R;
+        else if (prev > c.maxZ) g.position.z = c.maxZ + R;
+        continue;
+      }
+      g.position.z = pz > c.maxZ
+        ? (prev < c.minZ ? c.minZ - R : c.maxZ + R)
+        : (prev > c.maxZ ? c.maxZ + R : c.minZ - R);
     }
   }
 }
@@ -266,6 +300,10 @@ export function ParkourPlayer({
     const g = group.current;
     if (!g) return;
     const cc = cameraControls.state.current;
+    // Ease right-click free-look back to 0 once RMB is released — identical to the
+    // farm world (shared helper) so the camera returns behind your aim instead of
+    // staying permanently offset (this was missing in parkour).
+    if (!cc.freeLookActive) easeFreeLookToZero(cc, Math.min(1, delta * FREE_LOOK_RESET_RATE));
     const elapsed = state.clock.elapsedTime;
     const locked = cameraControls.locked || mobileMode;
     const canMove = running && locked && !finishedRef.current;
@@ -322,12 +360,21 @@ export function ParkourPlayer({
       col.topY = myc + hy;
     }
     // Ride the mover we were standing on (its delta this frame carries us).
+    // Capture the PRE-ride centre + the vertical lift: the side-resolver needs the
+    // "came from" side if the ride plants us in a wall, and the ceiling clamp must
+    // fire while a rising mover carries a grounded player up into an overhang.
+    const preX = g.position.x, preZ = g.position.z;
+    let riderLift = 0;
     if (supportMoverIdx.current >= 0 && supportMoverIdx.current < movers.length) {
       const i = supportMoverIdx.current;
       const cur = rig.centers[i], prev = rig.prev[i];
       g.position.x += cur[0] - prev[0];
       g.position.z += cur[2] - prev[2];
-      feetY.current += cur[1] - prev[1];
+      riderLift = cur[1] - prev[1];
+      feetY.current += riderLift;
+      // If the ride shoved us into the side of a static block, eject back out.
+      resolveSideAxis(g, rig.all, "x", feetY.current, crumbleStates, preX);
+      resolveSideAxis(g, rig.all, "z", feetY.current, crumbleStates, preZ);
     }
     // Record each mover's velocity this frame (for jump momentum inheritance) +
     // roll prev → cur.
@@ -402,14 +449,21 @@ export function ParkourPlayer({
     const accel = stunTimer.current > 0 ? 2.5 : dashing ? 40 : !grounded.current ? ACCEL_AIR : onIce.current ? ACCEL_ICE : ACCEL_GROUND;
     vel.current.lerp(targetVel.current, 1 - Math.exp(-delta * accel));
 
-    // ── Horizontal move + SOLID side collision. Platforms are full blocks: you
-    // bounce off their sides (can't clip through the side/head). The gate
-    // (feet clearly below the top AND centre outside the box) means landing on a
-    // top or standing never triggers a side push → zero sticking / jitter. ──
-    g.position.x += vel.current.x * delta;
-    resolveSideAxis(g, cols, "x", feetY.current, crumbleStates);
-    g.position.z += vel.current.z * delta;
-    resolveSideAxis(g, cols, "z", feetY.current, crumbleStates);
+    // ── Horizontal move + SOLID side collision, SUB-STEPPED. A fast dash/sprint
+    // step can (at a 20 fps hitch) exceed the body radius R and, in one shot, leap
+    // from outside a block to deep inside it — tunnelling straight through. Moving
+    // in sub-steps no larger than R*0.9 guarantees the centre always lands inside
+    // the push window and clamps to the face exactly like slow play. Move-then-
+    // resolve order is preserved (no pre-move resolve → no sticky-edge/back-pop on
+    // walk-off), and each sub-step passes its own entry position for edge biasing. ──
+    const stepX = vel.current.x * delta, stepZ = vel.current.z * delta;
+    const maxStep = R * 0.9; // 0.378 < R → a face-clamped player creeps < 0.042/substep, never in
+    const sub = Math.min(8, Math.max(1, Math.ceil(Math.max(Math.abs(stepX), Math.abs(stepZ)) / maxStep)));
+    const sx = stepX / sub, sz = stepZ / sub;
+    for (let s = 0; s < sub; s++) {
+      const pX = g.position.x; g.position.x += sx; resolveSideAxis(g, cols, "x", feetY.current, crumbleStates, pX);
+      const pZ = g.position.z; g.position.z += sz; resolveSideAxis(g, cols, "z", feetY.current, crumbleStates, pZ);
+    }
 
     // ── Jump input (buffered) ──
     coyote.current = Math.max(0, coyote.current - delta);
@@ -453,19 +507,22 @@ export function ParkourPlayer({
     const px = g.position.x, pz = g.position.z;
 
     // (A) LANDING — while descending, snap onto the HIGHEST top face the player
-    // is crossing this frame. Ledge-forgiving: the footprint may reach up to
-    // LAND_MARGIN past the platform edge and still catch (a barely-made jump is
-    // pulled up onto the ledge instead of clipping the corner and dropping).
+    // is crossing this frame. Ledge-forgiving: the footprint may reach up to R
+    // past the platform edge and still catch (a barely-made jump snaps onto the
+    // lip) — but never further, so a caught landing always overlaps the platform
+    // and needs no inward correction (the jerk-free ledge behaviour).
     // The face-crossing test (prevFeet above top, new feet at/below top) is
     // thickness-independent → a fast fall can never tunnel through a thin mover.
     if (vv.current <= 0) {
       let bestTop = -Infinity;
       let best: Collider | null = null;
-      // Ledge-grab: only the frame you actually land from the air gets the
-      // generous reach (a barely-made jump snaps onto the lip). While already
-      // grounded, reach is just the body radius, so you can freely walk off an
-      // edge instead of being magnetised back onto it ("sticky edge" bug).
-      const reach = wasGrounded ? R : R + LAND_MARGIN;
+      // Catch reach is the body radius R for BOTH walking-off and landing-from-
+      // air: you catch a top only while your footprint genuinely overlaps it. No
+      // separate "generous air reach", so there is never a caught landing that
+      // sits far past the edge needing a correction — the source of the edge/
+      // corner jerk. R (0.42) is already very forgiving; the validator proves
+      // every jump lands cleanly within it.
+      const reach = R;
       for (const c of cols) {
         // A collapsed crumble platform is no longer solid — fall through it.
         if (c.crumbleIndex >= 0 && crumbleStates && crumbleStates[c.crumbleIndex] >= CRUMBLE_DELAY) continue;
@@ -486,15 +543,12 @@ export function ParkourPlayer({
         if (best.crumbleIndex >= 0 && crumbleStates && crumbleStates[best.crumbleIndex] === 0) {
           crumbleStates[best.crumbleIndex] = 0.0001;
         }
-        // Ledge-grab pull-in: ONLY when landing from the air AND the centre is
-        // genuinely PAST the platform edge (hanging over). Tugs it a hair inside.
-        // Landing safely inside the platform never moves you → no snap-back pop.
-        if (!wasGrounded) {
-          if (px > best.maxX) g.position.x = best.maxX - 0.05;
-          else if (px < best.minX) g.position.x = best.minX + 0.05;
-          if (pz > best.maxZ) g.position.z = best.maxZ - 0.05;
-          else if (pz < best.minZ) g.position.z = best.minZ + 0.05;
-        }
+        // NO horizontal pull-in on landing. Because `reach === R`, a caught top
+        // always overlaps the footprint, so the character rests at the lip at
+        // worst — exactly like walking off an edge into coyote time. Teleporting
+        // the centre inward (the old behaviour) is what jerked/"stuck" the player
+        // at edges & corners; leaving the horizontal position untouched is
+        // smooth and reads as a clean landing every time.
         if (best.bounce > 0) landedBounce = best.bounce;
         else if (best.ice) onIce.current = true;
         if (best.moverIdx >= 0) supportMoverIdx.current = best.moverIdx;
@@ -666,7 +720,7 @@ export function ParkourPlayer({
     const dist = cc.distance;
     cameraTarget.current.set(
       g.position.x + dirX * dist,
-      g.position.y + dirY * dist + 0.8,
+      g.position.y + dirY * dist,
       g.position.z + dirZ * dist,
     );
     cameraTarget.current.y = Math.max(cameraTarget.current.y, MIN_CAMERA_WORLD_Y);

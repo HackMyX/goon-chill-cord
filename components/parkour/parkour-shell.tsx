@@ -6,11 +6,13 @@ import { Canvas } from "@react-three/fiber";
 import { Preload } from "@react-three/drei";
 import {
   ArrowLeft, MousePointerClick, Timer, Flag, RotateCcw, Trophy, Crown, Medal,
-  Users, Shuffle, Play, Loader2, LogOut, UserPlus, Home, Zap,
+  Users, Shuffle, Play, Loader2, LogOut, UserPlus, Home, Zap, Eye,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { ParkourScene } from "@/components/parkour/parkour-scene";
+import { ParkourSpectatorScene } from "@/components/parkour/parkour-spectator";
 import type { CheckpointProgressRef } from "@/components/parkour/parkour-geometry";
+import type { GhostRuntime, GhostView } from "@/components/parkour/parkour-ghosts";
 import { MobileControls } from "@/components/world/mobile-controls";
 import { useCameraControls } from "@/components/world/use-camera-controls";
 import { useSoundManager } from "@/lib/sound-manager";
@@ -24,10 +26,17 @@ import {
 import {
   getParkourConfig, submitParkourRun, getParkourLeaderboard, type ParkourLeaderboardEntry, type ParkourSubmitResult,
   createParkourLobby, joinParkourLobby, leaveParkourLobby, getParkourLobby, setParkourLobbyMap,
-  startParkourLobbyRun, reportParkourLobbyTime, inviteFriendToParkour, type ParkourLobbyState,
+  startParkourLobbyRun, endParkourLobbyRun, reportParkourLobbyTime, inviteFriendToParkour,
+  heartbeatParkourLobby, type ParkourLobbyState,
 } from "@/lib/actions/parkour";
 import { joinParkourRoom, subscribeToParkourRoster } from "@/lib/parkour-realtime";
 import type { EquippedItem } from "@/lib/rarity-colors";
+
+/** How long the host may be absent from the lobby's presence roster before
+ * non-host members treat the room as abandoned and leave (covers a hard
+ * disconnect / tab-crash where the host never runs an explicit leave). Long
+ * enough to ride out a brief network blip and the initial presence-sync delay. */
+const HOST_GONE_GRACE_MS = 10000;
 
 export interface ParkourFriend { userId: string; username: string; nameStyleKey: string | null }
 
@@ -43,6 +52,10 @@ export interface ParkourShellProps {
   myBests: Record<string, number>;
   friends: ParkourFriend[];
   initialLobby: ParkourLobbyState | null;
+  /** The raw `?lobby=` query param (invite deep-link). Reflected as a prop so a
+   * CLIENT-side navigation to `/parkour?lobby=…` (e.g. clicking an invite in the
+   * notification bell while already on the page) re-fires the join effect. */
+  initialLobbyId?: string | null;
   isAdmin?: boolean;
   isModerator?: boolean;
 }
@@ -64,7 +77,8 @@ const MEDAL_META = {
 export function ParkourShell(props: ParkourShellProps) {
   const {
     userId, username, gender, equippedByCategory, credits: initialCredits, streakDays, inventoryCount,
-    config: initialConfig, myBests: initialBests, friends, initialLobby, isAdmin = false, isModerator = false,
+    config: initialConfig, myBests: initialBests, friends, initialLobby, initialLobbyId = null,
+    isAdmin = false, isModerator = false,
   } = props;
 
   const [config, setConfig] = useState(initialConfig);
@@ -77,16 +91,49 @@ export function ParkourShell(props: ParkourShellProps) {
   const [selectedId, setSelectedId] = useState(enabledMaps[0]?.id ?? PARKOUR_MAPS[0].id);
   const [randomizer, setRandomizer] = useState(false);
 
-  // view: menu → playing → finished (playing renders the Canvas)
-  const [view, setView] = useState<"menu" | "playing" | "finished">("menu");
+  // view: menu → playing → finished (playing/spectating render the Canvas)
+  const [view, setView] = useState<"menu" | "playing" | "finished" | "spectating">("menu");
   const [activeMap, setActiveMap] = useState<ParkourMap | null>(null);
   const [multiplayer, setMultiplayer] = useState(false);
   const [resetSignal, setResetSignal] = useState(0);
 
-  // Lobby
-  const [lobby, setLobby] = useState<ParkourLobbyState | null>(initialLobby);
+  // Lobby — only adopt the invite-linked lobby as our own state if we're ALREADY a
+  // member; otherwise we start with none and join it via the effect below (so a
+  // failed/rejected join can never leave a phantom lobby on screen).
+  const [lobby, setLobby] = useState<ParkourLobbyState | null>(
+    initialLobby && initialLobby.members.some((m) => m.userId === userId) ? initialLobby : null,
+  );
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
   const [inviteOpen, setInviteOpen] = useState(false);
+  // A transient banner for lobby lifecycle events (host closed, kicked, join failed).
+  const [lobbyToast, setLobbyToast] = useState<string | null>(null);
+
+  // ── Play-vs-spectate bookkeeping ──
+  // "resident" = we were sitting in this lobby (status open) → we race every run.
+  // A late joiner (first seen while a run is already live) is NOT resident → they
+  // spectate the current run, and become resident once it ends (status open).
+  const residentRef = useRef<boolean>(
+    !!(initialLobby && initialLobby.status === "open" && initialLobby.members.some((m) => m.userId === userId)),
+  );
+  // The run_seed we're currently engaged with (playing OR spectating) — guards
+  // against re-entering the same run on every broadcast.
+  const activeRunSeedRef = useRef<number | null>(null);
+  // Latest lobby id for the page-leave cleanup (leaving /parkour leaves the lobby).
+  const lobbyIdRef = useRef<string | null>(lobby?.id ?? null);
+  lobbyIdRef.current = lobby?.id ?? null;
+  // Latest view, mirrored into a ref so realtime callbacks can read it without
+  // taking `view` as a dependency (which would rebuild the callback every frame
+  // of a run and churn the useLiveConfig subscription).
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  // Grace-timer anchor for host-gone (presence) detection.
+  const hostGoneSinceRef = useRef<number | null>(null);
+
+  // ── Spectator state ──
+  const [spectateMap, setSpectateMap] = useState<ParkourMap | null>(null);
+  const [spectateTargetId, setSpectateTargetId] = useState<string | null>(null);
+  const [spectateViews, setSpectateViews] = useState<GhostView[]>([]);
+  const spectateGhostsRef = useRef<Map<string, GhostRuntime>>(new Map());
 
   // Mobile detection (same coarse/fine heuristic as the farm world)
   const [isMobile, setIsMobile] = useState(false);
@@ -130,38 +177,14 @@ export function ParkourShell(props: ParkourShellProps) {
   }, []);
   useEffect(() => { if (view === "menu") void loadLeaderboard(selectedId); }, [selectedId, view, loadLeaderboard]);
 
-  // ── Lobby realtime: presence roster + config-change refetch ──
-  useLiveConfig(
-    lobby ? `parkour-lobby:${lobby.id}` : "parkour-lobby:none",
-    async () => (lobby ? await getParkourLobby(lobby.id) : null),
-    (fresh) => {
-      if (!fresh) return;
-      setLobby(fresh);
-      // Members auto-launch when the host starts the run.
-      if (fresh.status === "in_run" && fresh.activeMapId && view === "menu") {
-        const m = PARKOUR_MAPS.find((x) => x.id === fresh.activeMapId);
-        if (m) beginRun(resolveMap(m, config), true);
-      }
-    }
-  );
+  // Presence roster: everyone currently connected to this lobby's realtime room.
   useEffect(() => {
-    if (!lobby) return;
+    if (!lobby) { setOnlineIds(new Set()); return; }
     const untrack = joinParkourRoom(lobby.id, userId);
     const unsub = subscribeToParkourRoster(setOnlineIds);
     return () => { untrack(); unsub(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lobby?.id, userId]);
-
-  // Arrived via an invite deep-link (?lobby=…) but not yet a member → join it.
-  useEffect(() => {
-    if (!initialLobby) return;
-    if (initialLobby.members.some((m) => m.userId === userId)) return;
-    void joinParkourLobby(initialLobby.id).then(async () => {
-      const fresh = await getParkourLobby(initialLobby.id);
-      if (fresh) setLobby(fresh);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // ── Run lifecycle ──
   const beginRun = useCallback((map: ParkourMap, mp: boolean) => {
@@ -180,6 +203,148 @@ export function ParkourShell(props: ParkourShellProps) {
     void loadSideLb(map.id, sideLbSort);
     sound.click();
   }, [sound, loadSideLb, sideLbSort]);
+
+  // ── Spectator: watch the ongoing race instead of running it (late joiner, or a
+  // finished/exited player watching the rest). Joins nothing new — the lobby room
+  // is already subscribed, so ghost broadcasts flow straight in. ──
+  const enterSpectate = useCallback((map: ParkourMap) => {
+    spectateGhostsRef.current.clear();
+    setSpectateViews([]);
+    setSpectateTargetId(null);
+    setSpectateMap(map);
+    setActiveMap(map);
+    setMultiplayer(true);
+    setRunning(false);
+    setMusicMode(map.id.split("_")[0]);
+    sound.warmupParkour();
+    cameraControls.releaseLock();
+    setView("spectating");
+    sound.click();
+  }, [sound, cameraControls]);
+
+  // Torn out of the lobby (host closed it, kicked, disconnected) — reset EVERYTHING
+  // back to a clean menu and surface why.
+  const ejectFromLobby = useCallback((msg: string) => {
+    residentRef.current = false;
+    activeRunSeedRef.current = null;
+    hostGoneSinceRef.current = null;
+    setLobby(null);
+    setOnlineIds(new Set());
+    setMultiplayer(false);
+    setRunning(false);
+    setSpectateMap(null);
+    spectateGhostsRef.current.clear();
+    setSpectateViews([]);
+    setView("menu");
+    setActiveMap(null);
+    setMusicMode(null);
+    cameraControls.releaseLock();
+    setLobbyToast(msg);
+    window.setTimeout(() => setLobbyToast((t) => (t === msg ? null : t)), 5000);
+  }, [cameraControls]);
+
+  // Single source of truth for every lobby state change (initial join, host
+  // start, run end, close, kick). Decides play-vs-spectate and ejection.
+  const handleLobbyUpdate = useCallback((fresh: ParkourLobbyState | null) => {
+    if (!fresh || fresh.status === "closed") {
+      ejectFromLobby(fresh ? "Der Host hat die Lobby geschlossen." : "Die Lobby wurde geschlossen.");
+      return;
+    }
+    if (!fresh.members.some((m) => m.userId === userId)) {
+      ejectFromLobby("Du bist nicht mehr in der Lobby.");
+      return;
+    }
+    setLobby(fresh);
+    if (fresh.status === "open") {
+      residentRef.current = true;         // sitting in the waiting room → we race every run
+      activeRunSeedRef.current = null;
+      // A run just ended → spectators fall back to the lobby waiting room.
+      if (viewRef.current === "spectating") {
+        setSpectateMap(null); setMultiplayer(false); setRunning(false); setMusicMode(null); setView("menu");
+      }
+      return;
+    }
+    if (fresh.status === "in_run" && fresh.activeMapId) {
+      const seed = fresh.runSeed ?? 0;
+      if (activeRunSeedRef.current === seed) return; // already engaged with this run
+      activeRunSeedRef.current = seed;
+      const m = PARKOUR_MAPS.find((x) => x.id === fresh.activeMapId);
+      if (!m) return;
+      const resolved = resolveMap(m, config);
+      if (residentRef.current) beginRun(resolved, true); // present at start → race
+      else enterSpectate(resolved);                       // joined mid-run → watch
+    }
+  }, [userId, config, beginRun, enterSpectate, ejectFromLobby]);
+
+  // Lobby realtime: refetch + re-decide on every broadcast (join/leave/start/end/close).
+  const loadLobbyState = useCallback(
+    async () => (lobbyIdRef.current ? await getParkourLobby(lobbyIdRef.current) : null),
+    [],
+  );
+  useLiveConfig(
+    lobby ? `parkour-lobby:${lobby.id}` : "parkour-lobby:none",
+    loadLobbyState,
+    handleLobbyUpdate,
+  );
+
+  // Join an invite-linked lobby (deep-link on load OR a client-side nav to
+  // ?lobby=… while already on the page). A rejected join never mounts a lobby.
+  useEffect(() => {
+    if (!initialLobbyId) return;
+    if (lobbyIdRef.current === initialLobbyId) return; // already in it
+    let cancelled = false;
+    void (async () => {
+      const res = await joinParkourLobby(initialLobbyId);
+      if (cancelled) return;
+      if (!res.ok) {
+        setLobbyToast(res.error ?? "Beitritt zur Lobby fehlgeschlagen.");
+        window.setTimeout(() => setLobbyToast(null), 5000);
+        return;
+      }
+      const fresh = await getParkourLobby(initialLobbyId);
+      if (cancelled || !fresh) return;
+      residentRef.current = fresh.status === "open";
+      activeRunSeedRef.current = null;
+      handleLobbyUpdate(fresh);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLobbyId]);
+
+  // Host-gone detection (presence): if the host vanishes from the room roster for
+  // the grace window, non-host members leave the abandoned lobby. Covers a hard
+  // disconnect / crash where the host never runs an explicit "leave".
+  useEffect(() => {
+    if (!lobby || lobby.hostId === userId || lobby.status === "closed") { hostGoneSinceRef.current = null; return; }
+    if (onlineIds.size === 0) return;                 // roster not synced yet
+    if (onlineIds.has(lobby.hostId)) { hostGoneSinceRef.current = null; return; }
+    if (hostGoneSinceRef.current === null) hostGoneSinceRef.current = Date.now();
+    const remaining = Math.max(0, HOST_GONE_GRACE_MS - (Date.now() - hostGoneSinceRef.current));
+    const t = window.setTimeout(() => ejectFromLobby("Der Host hat die Lobby verlassen."), remaining);
+    return () => window.clearTimeout(t);
+  }, [lobby, onlineIds, userId, ejectFromLobby]);
+
+  // Host heartbeat: while we host a lobby and sit on /parkour, keep bumping
+  // `last_seen_at` so the server-side cleanup never mistakes an active lobby for
+  // an abandoned one (and closes a truly crashed host's room after it goes stale).
+  useEffect(() => {
+    if (!lobby || lobby.hostId !== userId) return;
+    const id = lobby.id;
+    void heartbeatParkourLobby(id);
+    const t = window.setInterval(() => void heartbeatParkourLobby(id), 20000);
+    return () => window.clearInterval(t);
+  }, [lobby?.id, lobby?.hostId, userId]);
+
+  // Leaving the /parkour page (tab close OR in-app navigation) leaves the lobby;
+  // if we're the host, that also closes it for everyone. Best-effort on unload.
+  useEffect(() => {
+    const leaveNow = () => {
+      const id = lobbyIdRef.current;
+      if (id) { try { void leaveParkourLobby(id); } catch { /* unloading */ } }
+    };
+    window.addEventListener("pagehide", leaveNow);
+    return () => { window.removeEventListener("pagehide", leaveNow); leaveNow(); };
+  }, []);
 
   const handleFirstMove = useCallback(() => {
     if (startMsRef.current === null) startMsRef.current = performance.now();
@@ -243,14 +408,39 @@ export function ParkourShell(props: ParkourShellProps) {
   }, [sideLbSort]);
 
   const handleExitRun = useCallback(() => {
+    const wasHostMp = multiplayer && lobby?.hostId === userId && !!lobby;
     setRunning(false);
     setView("menu");
     setActiveMap(null);
-    setMusicMode(null); // zurück zum Parkour-Menü-Track
+    setMusicMode(null); // zurück zum Parkour-/Lobby-Track
     cameraControls.releaseLock();
-    void loadLeaderboard(selectedId);
+    // Host leaving a multiplayer run reopens the lobby waiting room for everyone
+    // (so it can be re-raced and any spectators fall back to the lobby).
+    if (wasHostMp && lobby) {
+      activeRunSeedRef.current = null;
+      void endParkourLobbyRun(lobby.id);
+    } else if (!multiplayer) {
+      void loadLeaderboard(selectedId);
+    }
     sound.click();
-  }, [cameraControls, loadLeaderboard, selectedId, sound]);
+  }, [multiplayer, lobby, userId, cameraControls, loadLeaderboard, selectedId, sound]);
+
+  // Spectate the run currently in progress (finished/exited member wants to watch
+  // the rest) — does NOT leave the lobby.
+  const handleSpectateCurrent = useCallback(() => {
+    if (!lobby || lobby.status !== "in_run" || !lobby.activeMapId) return;
+    const m = PARKOUR_MAPS.find((x) => x.id === lobby.activeMapId);
+    if (m) enterSpectate(resolveMap(m, config));
+  }, [lobby, config, enterSpectate]);
+
+  // Stop spectating → back to the lobby waiting room (still a member).
+  const handleLeaveSpectate = useCallback(() => {
+    setSpectateMap(null);
+    setMultiplayer(false);
+    setView("menu");
+    setMusicMode(null);
+    sound.click();
+  }, [sound]);
 
   // Beim Verlassen der Parkour-Seite den Map-Musik-Modus zurücksetzen.
   useEffect(() => () => setMusicMode(null), []);
@@ -277,12 +467,25 @@ export function ParkourShell(props: ParkourShellProps) {
   }, [randomizer, selectedId, sound]);
 
   const handleLeaveLobby = useCallback(async () => {
-    if (!lobby) return;
-    await leaveParkourLobby(lobby.id);
+    const id = lobbyIdRef.current;
+    if (!id) return;
+    residentRef.current = false;
+    activeRunSeedRef.current = null;
+    hostGoneSinceRef.current = null;
     setLobby(null);
     setOnlineIds(new Set());
+    setMultiplayer(false);
+    setRunning(false);
+    setSpectateMap(null);
+    spectateGhostsRef.current.clear();
+    setSpectateViews([]);
+    setView((v) => (v === "playing" || v === "spectating" || v === "finished" ? "menu" : v));
+    setActiveMap(null);
+    setMusicMode(null);
+    cameraControls.releaseLock();
+    await leaveParkourLobby(id);
     sound.click();
-  }, [lobby, sound]);
+  }, [cameraControls, sound]);
 
   const isHost = lobby?.hostId === userId;
   const handleHostSetMap = useCallback(async (mapId: string, rnd: boolean) => {
@@ -297,10 +500,16 @@ export function ParkourShell(props: ParkourShellProps) {
     const res = await startParkourLobbyRun(lobby.id, seed);
     setLobbyBusy(false);
     if (res.ok && res.activeMapId) {
+      // Claim this run locally BEFORE the broadcast round-trips so handleLobbyUpdate
+      // sees the same seed and doesn't beginRun a second time.
+      residentRef.current = true;
+      activeRunSeedRef.current = seed;
       const m = PARKOUR_MAPS.find((x) => x.id === res.activeMapId);
       if (m) beginRun(resolveMap(m, config), true);
+    } else {
+      sound.error();
     }
-  }, [lobby, config, beginRun]);
+  }, [lobby, config, beginRun, sound]);
 
   const handleInvite = useCallback(async (friendId: string): Promise<{ ok: boolean; error?: string }> => {
     if (!lobby) return { ok: false, error: "Keine Lobby." };
@@ -317,6 +526,72 @@ export function ParkourShell(props: ParkourShellProps) {
   }
   if (config.adminOnly && !isAdmin) {
     return <GateScreen message="Parkour ist gerade nur für Admins verfügbar (Soft-Launch)." />;
+  }
+
+  // ════════════════════════════════ SPECTATING ════════════════════════════════
+  if (view === "spectating" && spectateMap) {
+    const followName = spectateTargetId ? (spectateViews.find((v) => v.id === spectateTargetId)?.name ?? null) : null;
+    return (
+      <div className={isMobile ? "fixed inset-0 z-40 bg-black" : "flex h-dvh flex-col"}>
+        {!isMobile && <TopBar credits={credits} streakDays={streakDays} inventoryCount={inventoryCount} isAdmin={isAdmin} isModerator={isModerator} />}
+        <div ref={canvasWrapRef} className={`bg-black ${isMobile ? "absolute inset-0" : "relative min-h-0 flex-1"}`}>
+
+          {/* Top-left: back to lobby + spectator badge + map */}
+          <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-2">
+            <button onClick={handleLeaveSpectate} onMouseEnter={sound.hover}
+              className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-black/50 px-3 py-1.5 text-sm text-zinc-200 backdrop-blur transition-colors hover:border-white/30">
+              <ArrowLeft className="h-4 w-4" /> Zur Lobby
+            </button>
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-fuchsia-400/40 bg-fuchsia-500/20 px-3 py-1.5 text-sm font-bold text-fuchsia-100 backdrop-blur">
+              <Eye className="h-4 w-4" /> Zuschauermodus
+            </span>
+            <span className="rounded-lg border border-white/10 bg-black/50 px-3 py-1.5 text-sm font-bold text-zinc-100 backdrop-blur">
+              {spectateMap.name}
+            </span>
+          </div>
+
+          {/* Currently watching */}
+          {followName && (
+            <div className="pointer-events-none absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-xl border border-white/15 bg-black/60 px-4 py-2 backdrop-blur">
+              <span className="text-sm text-zinc-300">Kamera folgt <span className="font-bold text-white">{followName}</span></span>
+            </div>
+          )}
+
+          {/* Right: who to watch */}
+          <div className="absolute top-16 right-3 z-20 flex w-52 flex-col gap-2 rounded-xl border border-white/10 bg-black/50 p-2 backdrop-blur">
+            <div className="flex items-center gap-1.5 px-1 text-xs font-bold text-fuchsia-300"><Eye className="h-3.5 w-3.5" /> Kamera</div>
+            <button onClick={() => { setSpectateTargetId(null); sound.click(); }}
+              className={`rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-colors ${spectateTargetId === null ? "bg-fuchsia-500/25 text-fuchsia-100" : "text-zinc-300 hover:bg-white/5"}`}>
+              🎥 Übersicht (Auto-Orbit)
+            </button>
+            {spectateViews.length === 0 ? (
+              <p className="px-1 py-1 text-[11px] text-zinc-500">Warte auf Läufer…</p>
+            ) : spectateViews.map((v) => (
+              <button key={v.id} onClick={() => { setSpectateTargetId(v.id); sound.click(); }}
+                className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-colors ${spectateTargetId === v.id ? "bg-fuchsia-500/25 text-fuchsia-100" : "text-zinc-300 hover:bg-white/5"}`}>
+                <span className="flex-1 truncate">{v.name}</span>
+                {v.finished && <span title="Im Ziel">🏁</span>}
+              </button>
+            ))}
+          </div>
+
+          <Canvas dpr={isMobile ? CANVAS_DPR_MOBILE : CANVAS_DPR} camera={CANVAS_CAMERA} className="absolute inset-0">
+            <Suspense fallback={null}>
+              <ParkourSpectatorScene
+                key={spectateMap.id}
+                selfId={userId}
+                map={spectateMap}
+                ghostsRef={spectateGhostsRef}
+                targetId={spectateTargetId}
+                cameraControls={cameraControls}
+                onViewsChange={setSpectateViews}
+              />
+              <Preload all />
+            </Suspense>
+          </Canvas>
+        </div>
+      </div>
+    );
   }
 
   // ════════════════════════════ PLAYING / FINISHED ════════════════════════════
@@ -440,6 +715,7 @@ export function ParkourShell(props: ParkourShellProps) {
             <FinishScreen
               map={map} timeMs={finalMs} deaths={deathsRef.current} result={finishResult} submitting={submitting}
               onRetry={handleRetry} onExit={handleExitRun}
+              onSpectate={multiplayer && lobby?.status === "in_run" ? handleSpectateCurrent : undefined}
             />
           )}
 
@@ -465,6 +741,12 @@ export function ParkourShell(props: ParkourShellProps) {
   return (
     <div className="flex min-h-dvh flex-col">
       <TopBar credits={credits} streakDays={streakDays} inventoryCount={inventoryCount} isAdmin={isAdmin} isModerator={isModerator} />
+      {/* Lobby lifecycle banner (host closed, kicked, join failed) */}
+      {lobbyToast && (
+        <div className="fixed top-20 left-1/2 z-50 -translate-x-1/2 animate-[float-up_0.3s_ease-out] rounded-xl border border-amber-400/40 bg-amber-500/15 px-5 py-2.5 text-sm font-semibold text-amber-200 shadow-lg backdrop-blur">
+          {lobbyToast}
+        </div>
+      )}
       <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -545,7 +827,7 @@ export function ParkourShell(props: ParkourShellProps) {
               friends={friends} busy={lobbyBusy} inviteOpen={inviteOpen} setInviteOpen={setInviteOpen}
               onCreate={handleCreateLobby} onLeave={handleLeaveLobby} onStart={handleHostStart}
               onSetMap={handleHostSetMap} onInvite={handleInvite} selectedId={selectedId} randomizer={randomizer}
-              config={config}
+              config={config} onSpectate={handleSpectateCurrent}
             />
           </div>
 
@@ -640,10 +922,12 @@ function GateScreen({ message }: { message: string }) {
 }
 
 function FinishScreen({
-  map, timeMs, deaths, result, submitting, onRetry, onExit,
+  map, timeMs, deaths, result, submitting, onRetry, onExit, onSpectate,
 }: {
   map: ParkourMap; timeMs: number; deaths: number; result: ParkourSubmitResult | null; submitting: boolean;
   onRetry: () => void; onExit: () => void;
+  /** MP only: watch the rest of the race instead of retrying/leaving. */
+  onSpectate?: () => void;
 }) {
   const medal = medalFor(timeMs, map.medals);
   return (
@@ -681,10 +965,15 @@ function FinishScreen({
         <span className="text-sm text-red-400">{result.error}</span>
       ) : null}
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-center gap-3">
         <button onClick={onRetry} className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-6 py-3 text-base font-bold text-white shadow-[0_0_20px_rgba(147,51,234,0.5)] hover:bg-purple-500">
           <RotateCcw className="h-5 w-5" /> Nochmal
         </button>
+        {onSpectate && (
+          <button onClick={onSpectate} className="inline-flex items-center gap-2 rounded-xl border border-fuchsia-400/40 bg-fuchsia-500/15 px-6 py-3 text-base font-semibold text-fuchsia-100 hover:bg-fuchsia-500/25">
+            <Eye className="h-5 w-5" /> Zuschauen
+          </button>
+        )}
         <button onClick={onExit} className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-6 py-3 text-base font-semibold text-zinc-200 hover:bg-white/5">
           <ArrowLeft className="h-5 w-5" /> Menü
         </button>
@@ -695,13 +984,13 @@ function FinishScreen({
 
 function LobbyPanel({
   lobby, isHost, userId, onlineIds, friends, busy, inviteOpen, setInviteOpen,
-  onCreate, onLeave, onStart, onSetMap, onInvite, selectedId, randomizer, config,
+  onCreate, onLeave, onStart, onSetMap, onInvite, selectedId, randomizer, config, onSpectate,
 }: {
   lobby: ParkourLobbyState | null; isHost: boolean; userId: string; onlineIds: Set<string>;
   friends: ParkourFriend[]; busy: boolean; inviteOpen: boolean; setInviteOpen: (v: boolean) => void;
   onCreate: () => void; onLeave: () => void; onStart: () => void;
   onSetMap: (mapId: string, rnd: boolean) => void; onInvite: (friendId: string) => Promise<{ ok: boolean; error?: string }>;
-  selectedId: string; randomizer: boolean; config: ParkourConfig;
+  selectedId: string; randomizer: boolean; config: ParkourConfig; onSpectate: () => void;
 }) {
   const memberIds = new Set(lobby?.members.map((m) => m.userId));
   // Per-friend invite state + a transient confirmation message, so a player can't
@@ -754,9 +1043,14 @@ function LobbyPanel({
                 </button>
                 <button onClick={onStart} disabled={busy}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-60">
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Rennen starten
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} {lobby.status === "in_run" ? "Neu starten" : "Rennen starten"}
                 </button>
               </>
+            )}
+            {lobby.status === "in_run" && (
+              <button onClick={onSpectate} className="inline-flex items-center gap-1.5 rounded-lg border border-fuchsia-400/40 bg-fuchsia-500/15 px-3 py-1.5 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/25">
+                <Eye className="h-3.5 w-3.5" /> Zuschauen
+              </button>
             )}
             <button onClick={() => setInviteOpen(!inviteOpen)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:border-white/30">
               <UserPlus className="h-3.5 w-3.5" /> Freunde einladen

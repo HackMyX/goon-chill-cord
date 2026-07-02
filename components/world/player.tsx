@@ -182,7 +182,7 @@ const ATTACK_SWING_DURATION = 0.32;
  * button is released — fast enough to feel like a deliberate "snap back to
  * standard", not a lingering drift, but still a visible ease rather than an
  * instant teleport of the camera. */
-const FREE_LOOK_RESET_RATE = 9;
+export const FREE_LOOK_RESET_RATE = 9;
 
 /** Lives outside the component on purpose — the React Compiler's
  * immutability check flags direct `camera.position.x/y +=` mutation
@@ -203,7 +203,7 @@ function applyCameraShake(cam: THREE.Camera, shakeAmount: number) {
  * immutability check flags; routing the actual field writes through a
  * plain module-scope function keeps that mutation out of the flagged
  * scope without changing what it does. */
-function easeFreeLookToZero(cc: { freeLookYaw: number; freeLookPitch: number }, t: number) {
+export function easeFreeLookToZero(cc: { freeLookYaw: number; freeLookPitch: number }, t: number) {
   cc.freeLookYaw = THREE.MathUtils.lerp(cc.freeLookYaw, 0, t);
   cc.freeLookPitch = THREE.MathUtils.lerp(cc.freeLookPitch, 0, t);
 }

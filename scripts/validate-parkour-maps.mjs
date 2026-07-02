@@ -11,9 +11,11 @@ import { PARKOUR_MAPS, moverCenterAt } from "../lib/parkour-config.ts";
 
 // ── Engine-Konstanten (müssen mit parkour-player.tsx übereinstimmen) ──
 const R = 0.42;
-const LAND_MARGIN = 0.16;
 const H = 1.7;
-const REACH = R + LAND_MARGIN;
+// Landing catch reach = the body radius exactly (matches parkour-player.tsx: a
+// descending player catches a top only while its footprint overlaps it — no
+// generous ledge margin + pull-in anymore, which removed the edge/corner jerk).
+const REACH = R;
 
 function aabb(pos, size) {
   const [cx, cy, cz] = pos;

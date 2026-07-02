@@ -252,6 +252,18 @@ Void-Respawn, Eis/Sprungpad/Hazard). **4 Maps** sind Code-Daten in `lib/parkour-
 (client-safe; Physik/Rewards per Admin-Override, Geometrie NIE in der DB). Bestenliste ms-genau
 (`parkour_best_times`), Solo + Randomizer + **Multiplayer-Lobbys** (`parkour_lobbies`/
 `_lobby_members` + `lib/parkour-realtime.ts` Ghost-Sync, Freunde-Einladung via `notifyUser`).
+**Lobby-Lifecycle (parkour-shell.tsx):** EINE Quelle der Wahrheit `handleLobbyUpdate` (aus dem
+`parkour-lobby:<id>`-Broadcast) entscheidet **Spielen vs. Zuschauen vs. Rauswurf**: „Resident"
+(war bei Status `open` dabei) → rennt jeden Lauf; Spät-Beitritt mitten im Lauf → **Zuschauermodus**
+(`parkour-spectator.tsx`, cinematische Follow-Kamera, kein Pointer-Lock, Spielerwahl). Host-Weg
+schließt die Lobby für alle: (a) explizit `leaveParkourLobby`/`endParkourLobbyRun`, (b) Seite
+verlassen = pagehide/unmount-Leave, (c) Presence-Grace-Rauswurf der Mitglieder, (d) Host-Heartbeat
+`last_seen_at` + Cron/`scripts/close-stale-parkour-lobbies.cjs` schließt hart abgestürzte Hosts
+false-positive-frei. Einladung: Notification-Link `/parkour?lobby=` → Prop `initialLobbyId` (auch
+bei Client-Nav) → Join-Effekt (abgelehnter Join = kein Phantom, nur Toast). **Physik-Vertrag:**
+Lande-Reichweite = R (Fußabdruck), KEIN Pull-in-Teleport mehr (das war der Kanten/Ecken-Ruck);
+Luft-Steuerung = Farmwelt (ACCEL 14). `scripts/validate-parkour-maps.mjs` MUSS synchron zu den
+Engine-Konstanten bleiben und alle 4 Maps beweisen.
 Rewards über `grantReward` (credits/xp), gedeckelt per Tages-Cap. Admin-Tab „Parkour", Cockpit-
 Einnahmequelle, System-Health-Block, Audit `parkour_finish`.
 **Solide Blöcke:** Plattformen sind volle AABB-Körper — Seiten-Kollision (`resolveSideAxis`) +

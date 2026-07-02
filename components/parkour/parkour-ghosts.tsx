@@ -16,8 +16,10 @@ import {
 import type { EquippedItem } from "@/lib/rarity-colors";
 
 /** Live transform + animation state for one remote player (mutated on every 20 Hz
- * broadcast; the avatar's useFrame reads it — no React re-render per tick). */
-interface GhostRuntime {
+ * broadcast; the avatar's useFrame reads it — no React re-render per tick).
+ * Exported so the spectator camera (parkour-spectator.tsx) can read the same
+ * runtime map to follow a player. */
+export interface GhostRuntime {
   target: THREE.Vector3;
   yaw: number;
   moving: boolean;
@@ -35,7 +37,7 @@ interface GhostRuntime {
   hurtPose: number;
 }
 
-interface GhostView {
+export interface GhostView {
   id: string;
   name: string;
   gender: "m" | "w";
@@ -57,9 +59,23 @@ function newRuntime(): GhostRuntime {
  * gender), fully animated (walk cycle / airborne splay / dash crouch) and smoothly
  * interpolated from their 20 Hz transform broadcast — so players see each other's
  * gear + movements perfectly in sync. */
-export function ParkourGhosts({ selfId }: { selfId: string }) {
-  const ghosts = useRef<Map<string, GhostRuntime>>(new Map());
+export function ParkourGhosts({
+  selfId,
+  ghostsRef,
+  onViewsChange,
+}: {
+  selfId: string;
+  /** Optional external runtime map so a spectator camera can follow a player by
+   * reading the SAME live positions the avatars render from. */
+  ghostsRef?: React.RefObject<Map<string, GhostRuntime>>;
+  /** Fired whenever the set of visible players changes (name/finish updates
+   * included) — lets the spectator UI list players + pick a follow target. */
+  onViewsChange?: (views: GhostView[]) => void;
+}) {
+  const internal = useRef<Map<string, GhostRuntime>>(new Map());
+  const ghosts = ghostsRef ?? internal;
   const [views, setViews] = useState<GhostView[]>([]);
+  useEffect(() => { onViewsChange?.(views); }, [views, onViewsChange]);
 
   useEffect(() => {
     const ensure = (id: string) => {
@@ -105,6 +121,9 @@ export function ParkourGhosts({ selfId }: { selfId: string }) {
     });
 
     return () => { unGhost(); unProfile(); unLeave(); };
+    // `ghosts` is a stable ref (either the internal one or the parent's stable
+    // spectate ref) — intentionally not a dependency; only `selfId` re-subscribes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selfId]);
 
   return (

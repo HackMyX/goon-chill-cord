@@ -386,6 +386,7 @@ const COLUMN_CHECKS: Array<{
   { id: "col_gba_card_subtitle", category: "Spiel-Boni", table: "game_bonus_allowances", col: "card_subtitle", detail: "node scripts/add-bonus-card-fields.cjs" },
   { id: "col_parkour_deaths",    category: "Parkour",     table: "parkour_best_times",    col: "deaths",        detail: "node scripts/add-parkour-deaths.cjs" },
   { id: "col_parkour_penalty",   category: "Parkour",     table: "parkour_config",        col: "death_penalty_ms", detail: "node scripts/add-parkour-td.cjs" },
+  { id: "col_parkour_heartbeat", category: "Parkour",     table: "parkour_lobbies",       col: "last_seen_at",  detail: "node scripts/add-parkour-lobby-heartbeat.cjs" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

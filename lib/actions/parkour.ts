@@ -525,20 +525,22 @@ export async function joinParkourLobby(lobbyId: string): Promise<{ ok: boolean; 
   return { ok: true };
 }
 
-export async function leaveParkourLobby(lobbyId: string): Promise<{ ok: boolean }> {
+export async function leaveParkourLobby(lobbyId: string): Promise<{ ok: boolean; wasHost?: boolean }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false };
   const admin = createAdminClient();
-  const { data: lobby } = await admin.from("parkour_lobbies").select("host_id").eq("id", lobbyId).maybeSingle();
+  const { data: lobby } = await admin.from("parkour_lobbies").select("host_id, status").eq("id", lobbyId).maybeSingle();
+  const wasHost = lobby?.host_id === user.id;
   await admin.from("parkour_lobby_members").delete().eq("lobby_id", lobbyId).eq("user_id", user.id);
-  // Host leaving closes the lobby for everyone.
-  if (lobby?.host_id === user.id) {
+  // Host leaving (or disconnecting) closes the lobby for EVERYONE — at any status,
+  // including mid-run — so nobody is left stranded in a hostless room.
+  if (wasHost) {
     await admin.from("parkour_lobbies").update({ status: "closed", closed_at: new Date().toISOString() }).eq("id", lobbyId);
     await admin.from("parkour_lobby_members").delete().eq("lobby_id", lobbyId);
   }
   await broadcastLive(`parkour-lobby:${lobbyId}`);
-  return { ok: true };
+  return { ok: true, wasHost };
 }
 
 export async function getParkourLobby(lobbyId: string): Promise<ParkourLobbyState | null> {
@@ -591,6 +593,42 @@ export async function startParkourLobbyRun(lobbyId: string, seed: number): Promi
   await admin.from("parkour_lobby_members").update({ best_time_ms: null }).eq("lobby_id", lobbyId);
   await broadcastLive(`parkour-lobby:${lobbyId}`);
   return { ok: true, activeMapId };
+}
+
+/** Host heartbeat — the host's client pings this periodically while it sits on
+ * /parkour, bumping `last_seen_at`. The cleanup (cron + maintenance script) closes
+ * lobbies whose heartbeat has gone stale, so a hard-crashed host's room self-heals
+ * WITHOUT ever false-closing a genuinely active lobby. No-op for non-hosts. */
+export async function heartbeatParkourLobby(lobbyId: string): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+  const admin = createAdminClient();
+  await admin.from("parkour_lobbies")
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq("id", lobbyId)
+    .eq("host_id", user.id)
+    .neq("status", "closed");
+  return { ok: true };
+}
+
+/** Host-only: end the current race and return the lobby to the "open" waiting
+ * room so it can be re-raced (and any spectators become normal members again).
+ * Clears the run fields; keeps the members + their last race times. */
+export async function endParkourLobbyRun(lobbyId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Nicht eingeloggt." };
+  const admin = createAdminClient();
+  const { data: lobby } = await admin.from("parkour_lobbies").select("host_id, status").eq("id", lobbyId).maybeSingle();
+  if (!lobby) return { ok: false, error: "Lobby nicht gefunden." };
+  if (lobby.host_id !== user.id) return { ok: false, error: "Nur der Host darf das Rennen beenden." };
+  if (lobby.status !== "in_run") return { ok: true }; // already back in the waiting room — idempotent
+  await admin.from("parkour_lobbies")
+    .update({ status: "open", run_seed: null, active_map_id: null })
+    .eq("id", lobbyId);
+  await broadcastLive(`parkour-lobby:${lobbyId}`);
+  return { ok: true };
 }
 
 /** Report a lobby-race finish time (for the in-lobby race board; the global

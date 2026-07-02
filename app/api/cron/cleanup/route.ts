@@ -1,5 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runAllEnabledCleanups } from "@/lib/actions/cleanup-config";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+/** Self-heal abandoned parkour lobbies whose host heartbeat (`last_seen_at`) has
+ * gone stale — covers a hard-crashed host that never ran an explicit leave.
+ * False-positive-free: an active lobby keeps heartbeating so it's never touched.
+ * Fully non-fatal — a failure here must never break the log cleanup above. */
+async function closeStaleParkourLobbies(): Promise<number> {
+  try {
+    const admin = createAdminClient();
+    const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString(); // 3 min stale
+    const { data: doomed } = await admin
+      .from("parkour_lobbies")
+      .select("id")
+      .in("status", ["open", "in_run"])
+      .lt("last_seen_at", cutoff);
+    const ids = (doomed ?? []).map((r) => r.id as string);
+    if (ids.length === 0) return 0;
+    await admin.from("parkour_lobby_members").delete().in("lobby_id", ids);
+    await admin.from("parkour_lobbies").update({ status: "closed", closed_at: new Date().toISOString() }).in("id", ids);
+    return ids.length;
+  } catch {
+    return 0;
+  }
+}
 
 // Cron-Endpunkt darf nicht statisch optimiert werden — er muss bei jedem
 // Aufruf laufen (Vercel Cron ruft ihn stündlich auf, siehe vercel.json).
@@ -31,11 +55,13 @@ export async function GET(req: NextRequest) {
 
     const result = await runAllEnabledCleanups({ system: true });
     const totalDeleted = result.results.reduce((sum, r) => sum + (r.deleted ?? 0), 0);
+    const staleLobbiesClosed = await closeStaleParkourLobbies();
 
     return NextResponse.json({
       ok: result.success,
       ranAt: new Date().toISOString(),
       totalDeleted,
+      staleLobbiesClosed,
       results: result.results,
     });
   } catch (e) {

@@ -91,6 +91,7 @@ export default async function ParkourPage({
       myBests={bests}
       friends={friends}
       initialLobby={initialLobby}
+      initialLobbyId={sp?.lobby ?? null}
       isAdmin={isAdmin(profile)}
       isModerator={isModerator(profile)}
     />
