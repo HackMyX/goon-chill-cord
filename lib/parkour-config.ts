@@ -345,76 +345,78 @@ export function buildCourse(pr: CourseParams): CourseGeometry {
 // green (all jumps makeable; hazards are avoidable and not part of the check).
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Seeds validator-PROVEN (scripts/search-parkour-seed.mjs) — deutlich härter &
+// wilder als zuvor: mehr Hazards/Movers/Crumble/Ice, längere Kurse, engere Gaps.
 const NEON_PARAMS: CourseParams = {
-  seed: 51014, steps: 68,
+  seed: 1, steps: 94,
   gravity: -20, jumpVelocity: 8.4, airJumps: 1, moveSpeed: 6.5, sprintMultiplier: 1.5,
-  platMin: 2.2, platMax: 2.7, riseMin: 0.6, riseMax: 1.25, gapFrac: 0.66,
-  descendChance: 0.14, iceChance: 0.08, beamChance: 0.14, moverChance: 0.26, crumbleChance: 0.12,
-  spinnerChance: 0.16, sliderChance: 0.12, hazPeriodMin: 1.5, hazPeriodMax: 2.3, hazardCap: 24,
-  checkpointEvery: 6, startTop: 1, accent: THEME_NEON_NIGHT.accent,
+  platMin: 1.7, platMax: 2.6, riseMin: 0.6, riseMax: 1.25, gapFrac: 0.79,
+  descendChance: 0.15, iceChance: 0.18, beamChance: 0.2, moverChance: 0.34, crumbleChance: 0.22,
+  spinnerChance: 0.28, sliderChance: 0.22, hazPeriodMin: 1.15, hazPeriodMax: 1.95, hazardCap: 40,
+  checkpointEvery: 7, startTop: 1, accent: THEME_NEON_NIGHT.accent,
 };
 const MAP_NEON: ParkourMap = {
   id: "neon_ascent", name: "Neon Ascent",
-  tagline: "Kein Spaziergang mehr: brechende Plattformen, rotierende Balken, wackelige Lifte.",
-  difficulty: "Leicht", theme: THEME_NEON_NIGHT,
+  tagline: "Neon-Skyline mit Zähnen: brechende Stege, rasende Sägen und wackelige Lifte — der härteste sanfte Einstieg deines Lebens.",
+  difficulty: "Schwer", theme: THEME_NEON_NIGHT,
   gravity: -20, jumpVelocity: 8.4, airJumps: 1, moveSpeed: 6.5, sprintMultiplier: 1.5, voidY: -16,
   ...buildCourse(NEON_PARAMS),
   rewardCredits: 160, rewardXp: 130, bestBonusCredits: 110, checkpointCredits: 14,
-  medals: { diamond: 78000, gold: 105000, silver: 140000, bronze: 190000 },
+  medals: { diamond: 133000, gold: 179000, silver: 238000, bronze: 323000 },
 };
 
 const SKY_PARAMS: CourseParams = {
-  seed: 52028, steps: 84,
+  seed: 1, steps: 106,
   gravity: -18, jumpVelocity: 8.6, airJumps: 1, moveSpeed: 7, sprintMultiplier: 1.6,
-  platMin: 2.0, platMax: 2.5, riseMin: 0.7, riseMax: 1.35, gapFrac: 0.72,
-  descendChance: 0.16, iceChance: 0.12, beamChance: 0.16, moverChance: 0.3, crumbleChance: 0.15,
-  spinnerChance: 0.2, sliderChance: 0.16, hazPeriodMin: 1.2, hazPeriodMax: 2.0, hazardCap: 32,
-  checkpointEvery: 6, startTop: 1, accent: THEME_SKY_DAWN.accent,
+  platMin: 1.45, platMax: 2.35, riseMin: 0.7, riseMax: 1.35, gapFrac: 0.92,
+  descendChance: 0.18, iceChance: 0.24, beamChance: 0.24, moverChance: 0.4, crumbleChance: 0.26,
+  spinnerChance: 0.32, sliderChance: 0.28, hazPeriodMin: 0.8, hazPeriodMax: 1.5, hazardCap: 52,
+  checkpointEvery: 7, startTop: 1, accent: THEME_SKY_DAWN.accent,
 };
 const MAP_SKY: ParkourMap = {
   id: "sky_gardens", name: "Sky Gardens",
-  tagline: "Timing-Hölle über den Wolken: kreisende Sägen, brechende Beete, viele bewegliche Stege.",
-  difficulty: "Mittel", theme: THEME_SKY_DAWN,
+  tagline: "Timing-Hölle über den Wolken: 106 Sprünge, ein Meer aus beweglichen Stegen, kreisende Sägen und brechende Beete — jeder Gap sitzt auf Messers Schneide.",
+  difficulty: "Schwer", theme: THEME_SKY_DAWN,
   gravity: -18, jumpVelocity: 8.6, airJumps: 1, moveSpeed: 7, sprintMultiplier: 1.6, voidY: -22,
   ...buildCourse(SKY_PARAMS),
   rewardCredits: 300, rewardXp: 240, bestBonusCredits: 200, checkpointCredits: 22,
-  medals: { diamond: 100000, gold: 135000, silver: 180000, bronze: 245000 },
+  medals: { diamond: 155000, gold: 209000, silver: 279000, bronze: 380000 },
 };
 
 const MAGMA_PARAMS: CourseParams = {
-  seed: 53033, steps: 98,
+  seed: 7, steps: 116,
   gravity: -24, jumpVelocity: 8.9, airJumps: 0, moveSpeed: 7, sprintMultiplier: 1.7,
-  platMin: 1.7, platMax: 2.2, riseMin: 0.4, riseMax: 1.0, gapFrac: 0.74,
-  descendChance: 0.14, iceChance: 0.1, beamChance: 0.24, moverChance: 0.26, crumbleChance: 0.18,
-  spinnerChance: 0.24, sliderChance: 0.2, hazPeriodMin: 1.0, hazPeriodMax: 1.7, hazardCap: 38,
+  platMin: 1.5, platMax: 2.2, riseMin: 0.4, riseMax: 1.0, gapFrac: 0.82,
+  descendChance: 0.14, iceChance: 0.16, beamChance: 0.26, moverChance: 0.34, crumbleChance: 0.28,
+  spinnerChance: 0.34, sliderChance: 0.28, hazPeriodMin: 0.9, hazPeriodMax: 1.6, hazardCap: 60,
   checkpointEvery: 7, startTop: 1, accent: THEME_MAGMA.accent,
 };
 const MAP_MAGMA: ParkourMap = {
   id: "magma_rush", name: "Magma Rush",
-  tagline: "Kein Doppelsprung, winzige brechende Stege, rasende Sägeblätter über der Lava. Gnadenlos.",
-  difficulty: "Schwer", theme: THEME_MAGMA,
+  tagline: "116 Sprünge, KEIN Doppelsprung, nur Vollgas: rasende Sägeblätter, rotierende Balken und zerbröselnder Boden über glühender Lava. Gnadenlos.",
+  difficulty: "Extrem", theme: THEME_MAGMA,
   gravity: -24, jumpVelocity: 8.9, airJumps: 0, moveSpeed: 7, sprintMultiplier: 1.7, voidY: -6,
   ...buildCourse(MAGMA_PARAMS),
   rewardCredits: 500, rewardXp: 380, bestBonusCredits: 360, checkpointCredits: 32,
-  medals: { diamond: 130000, gold: 175000, silver: 235000, bronze: 320000 },
+  medals: { diamond: 189000, gold: 254000, silver: 341000, bronze: 464000 },
 };
 
 const VOID_PARAMS: CourseParams = {
-  seed: 54041, steps: 118,
+  seed: 929, steps: 140,
   gravity: -21, jumpVelocity: 8.9, airJumps: 1, moveSpeed: 7.2, sprintMultiplier: 1.6,
-  platMin: 1.4, platMax: 1.9, riseMin: 0.7, riseMax: 1.4, gapFrac: 0.8,
-  descendChance: 0.14, iceChance: 0.3, beamChance: 0.16, moverChance: 0.34, crumbleChance: 0.2,
-  spinnerChance: 0.28, sliderChance: 0.22, hazPeriodMin: 0.9, hazPeriodMax: 1.5, hazardCap: 44,
+  platMin: 1.35, platMax: 1.7, riseMin: 0.7, riseMax: 1.4, gapFrac: 1.08,
+  descendChance: 0.14, iceChance: 0.46, beamChance: 0.26, moverChance: 0.48, crumbleChance: 0.36,
+  spinnerChance: 0.42, sliderChance: 0.36, hazPeriodMin: 0.6, hazPeriodMax: 1.05, hazardCap: 80,
   checkpointEvery: 7, startTop: 1, accent: THEME_VOID.accent,
 };
 const MAP_VOID: ParkourMap = {
   id: "void_spire", name: "Void Spire",
-  tagline: "Der Albtraum-Turm: Eis überall, winzige brechende Landungen, ein Wald aus rotierenden Klingen.",
+  tagline: "Der Albtraum-Turm: 140 Sprünge über Eis, brechende Splitter und einen Wald aus rotierenden Klingen — hier stirbst du nicht am Fall, sondern an deinem eigenen Timing.",
   difficulty: "Extrem", theme: THEME_VOID,
   gravity: -21, jumpVelocity: 8.9, airJumps: 1, moveSpeed: 7.2, sprintMultiplier: 1.6, voidY: -8,
   ...buildCourse(VOID_PARAMS),
   rewardCredits: 750, rewardXp: 560, bestBonusCredits: 540, checkpointCredits: 48,
-  medals: { diamond: 165000, gold: 215000, silver: 290000, bronze: 390000 },
+  medals: { diamond: 239000, gold: 312000, silver: 421000, bronze: 566000 },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
